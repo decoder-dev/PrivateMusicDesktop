@@ -77,7 +77,7 @@ fn run(url: &str, config: &FetchConfig, buffer: &SharedBuffer) -> Result<()> {
         .timeout(Duration::from_secs(60))
         .redirect(reqwest::redirect::Policy::custom(move |attempt| {
             let url = attempt.url();
-            let ok = url.scheme() == "https" || (allow_loopback && is_loopback(url));
+            let ok = (url.scheme() == "https" && !is_local_host(url)) || (allow_loopback && is_loopback(url));
             if attempt.previous().len() >= 3 || !ok {
                 attempt.stop()
             } else {
@@ -93,6 +93,33 @@ fn is_loopback(url: &Url) -> bool {
     matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]" | "::1"))
 }
 
+/// Literal local addresses (loopback, private, link-local, unspecified) and
+/// `localhost`: a stream address handed over by the window must not be able to
+/// make the engine knock on the user's own machine or network.
+fn is_local_host(url: &Url) -> bool {
+    use std::net::{Ipv4Addr, Ipv6Addr};
+    fn v4(a: Ipv4Addr) -> bool {
+        a.is_loopback() || a.is_private() || a.is_link_local() || a.is_unspecified() || a.is_broadcast()
+    }
+    fn v6(a: Ipv6Addr) -> bool {
+        let first = a.segments()[0];
+        a.is_loopback()
+            || a.is_unspecified()
+            || first & 0xfe00 == 0xfc00 // unique local
+            || first & 0xffc0 == 0xfe80 // link local
+            || a.to_ipv4_mapped().is_some_and(v4)
+    }
+    match url.host() {
+        Some(url::Host::Domain(d)) => {
+            let d = d.trim_end_matches('.').to_ascii_lowercase();
+            d == "localhost" || d.ends_with(".localhost")
+        }
+        Some(url::Host::Ipv4(a)) => v4(a),
+        Some(url::Host::Ipv6(a)) => v6(a),
+        None => true,
+    }
+}
+
 fn parse_url(raw: &str, config: &FetchConfig) -> Result<Url> {
     let url = Url::parse(raw).map_err(|_| Error::Stream("invalid stream address".into()))?;
     check_url(url, config)
@@ -100,7 +127,7 @@ fn parse_url(raw: &str, config: &FetchConfig) -> Result<Url> {
 
 fn check_url(url: Url, config: &FetchConfig) -> Result<Url> {
     let allowed = match url.scheme() {
-        "https" => true,
+        "https" => !is_local_host(&url),
         "http" => config.allow_loopback_http && is_loopback(&url),
         _ => false,
     };
@@ -618,7 +645,10 @@ mod tests {
     #[test]
     fn hostile_addresses_are_refused() {
         let config = FetchConfig::new("ua");
-        for bad in ["http://cdn.example/a", "file:///etc/passwd", "ftp://x/y", "https://user:pw@cdn.example/a", "javascript:alert(1)"] {
+        for bad in ["http://cdn.example/a", "file:///etc/passwd", "ftp://x/y", "https://user:pw@cdn.example/a", "javascript:alert(1)",
+            "https://127.0.0.1/a", "https://192.168.1.1/a", "https://10.0.0.5/a", "https://169.254.169.254/a",
+            "https://[::1]/a", "https://[fd00::1]/a", "https://[::ffff:10.0.0.1]/a", "https://localhost/a",
+            "https://x.localhost/a"] {
             assert!(parse_url(bad, &config).is_err(), "{bad}");
         }
         assert!(parse_url("https://cdn.example/a/index.m3u8", &config).is_ok());

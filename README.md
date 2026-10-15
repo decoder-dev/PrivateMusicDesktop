@@ -46,8 +46,8 @@ Optional tests: `live_vk` (real VK endpoints, needs network) and `cpal_smoke`
 - **CSP** is strict (`default-src 'self'`, no inline script, no `eval`);
   capabilities grant the main window only the app's own commands.
 - **IPC** arguments are validated in the engine (numbers finite and in range,
-  URLs https-only with a host allow-list, no redirects to other hosts when a
-  token or body is attached).
+  stream URLs https-only and never loopback, private or link-local addresses (also across redirects); no redirects on VK API calls, where a
+  token is attached).
 - Logs never contain tokens or cookies.
 
 ## Known limits
