@@ -14,6 +14,11 @@ way. `native/` is a copy of the one in decoder-dev/PrivateMusic2: keep them in s
   position survive a restart.
 - Hearts: add any track to My music or take it out, from lists, the player bar
   or the full-screen view.
+- For you: VK's personal mix and recommendations; "similar tracks" on any row
+  plays VK's radio seeded with that track.
+- Downloads: any track can be saved to the app's folder and then plays with no
+  internet (the file is the decrypted audio, not VK's encrypted stream).
+- A ten-band equaliser with presets.
 - Full-screen "now playing": blurred cover backdrop in the cover's colours, a
   live spectrum of what is actually playing (bars, mirror, wave, radial), and
   synced lyrics (LRCLIB, else VK's text) that follow the song; click a line to
@@ -21,8 +26,8 @@ way. `native/` is a copy of the one in decoder-dev/PrivateMusic2: keep them in s
 - OS integration: media keys and Now Playing (MPRIS / SMTC / MediaRemote), a
   tray icon with controls, keep-running-in-the-tray on close, one instance only,
   window size and position remembered.
-- Settings: sound output device (switches without losing the place), tray,
-  full-screen defaults, keyboard shortcuts.
+- Settings: sound output device (switches without losing the place), equaliser,
+  tray, full-screen defaults, keyboard shortcuts.
 
 ## Install
 
@@ -106,5 +111,5 @@ Optional tests: `live_vk` (real VK endpoints, needs network) and `cpal_smoke`
 - Windows and macOS are compiled in CI but not hand-tested yet (WebView2 cookie
   access for sign-in, SMTC window handle, MediaRemote).
 - CMAF streams with encryption are untested against real VK data.
-- Mixes/recommendations, offline downloads and an equaliser are not there yet.
+- Mood/genre mixes from VK's catalogue (the iOS app has them) are not there yet.
 - `install.ps1` has not been run on a real Windows machine yet.
