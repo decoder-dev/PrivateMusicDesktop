@@ -75,6 +75,7 @@ fn run(url: &str, config: &FetchConfig, buffer: &SharedBuffer) -> Result<()> {
     let http = Client::builder()
         .connect_timeout(Duration::from_secs(15))
         .timeout(Duration::from_secs(60))
+        .dns_resolver(std::sync::Arc::new(PublicResolver { allow_loopback }))
         .redirect(reqwest::redirect::Policy::custom(move |attempt| {
             let url = attempt.url();
             let ok = (url.scheme() == "https" && !is_local_host(url)) || (allow_loopback && is_loopback(url));
@@ -93,11 +94,10 @@ fn is_loopback(url: &Url) -> bool {
     matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]" | "::1"))
 }
 
-/// Literal local addresses (loopback, private, link-local, unspecified) and
-/// `localhost`: a stream address handed over by the window must not be able to
-/// make the engine knock on the user's own machine or network.
-pub(crate) fn is_local_host(url: &Url) -> bool {
-    use std::net::{Ipv4Addr, Ipv6Addr};
+/// Loopback, private, link-local, unique-local, unspecified and broadcast
+/// addresses: the user's own machine and network.
+pub(crate) fn is_local_ip(ip: std::net::IpAddr) -> bool {
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
     fn v4(a: Ipv4Addr) -> bool {
         a.is_loopback() || a.is_private() || a.is_link_local() || a.is_unspecified() || a.is_broadcast()
     }
@@ -109,14 +109,49 @@ pub(crate) fn is_local_host(url: &Url) -> bool {
             || first & 0xffc0 == 0xfe80 // link local
             || a.to_ipv4_mapped().is_some_and(v4)
     }
+    match ip {
+        IpAddr::V4(a) => v4(a),
+        IpAddr::V6(a) => v6(a),
+    }
+}
+
+/// Literal local addresses and `localhost`: a stream address handed over by
+/// the window must not be able to make the engine knock on the user's own
+/// machine or network. Names are checked again after DNS ([`PublicResolver`]).
+pub(crate) fn is_local_host(url: &Url) -> bool {
     match url.host() {
         Some(url::Host::Domain(d)) => {
             let d = d.trim_end_matches('.').to_ascii_lowercase();
             d == "localhost" || d.ends_with(".localhost")
         }
-        Some(url::Host::Ipv4(a)) => v4(a),
-        Some(url::Host::Ipv6(a)) => v6(a),
+        Some(url::Host::Ipv4(a)) => is_local_ip(a.into()),
+        Some(url::Host::Ipv6(a)) => is_local_ip(a.into()),
         None => true,
+    }
+}
+
+/// DNS that refuses names resolving to local addresses (`127.0.0.1.nip.io`,
+/// DNS rebinding), so the literal-address check cannot be walked around.
+pub(crate) struct PublicResolver {
+    pub allow_loopback: bool,
+}
+
+impl reqwest::dns::Resolve for PublicResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        let host = name.as_str().to_string();
+        let allow_loopback = self.allow_loopback;
+        Box::pin(async move {
+            use std::net::ToSocketAddrs;
+            let found: Vec<std::net::SocketAddr> = (host.as_str(), 0).to_socket_addrs()?.collect();
+            let public: Vec<_> = found
+                .into_iter()
+                .filter(|a| !is_local_ip(a.ip()) || (allow_loopback && a.ip().is_loopback()))
+                .collect();
+            if public.is_empty() {
+                return Err(format!("{host} does not resolve to a public address").into());
+            }
+            Ok(Box::new(public.into_iter()) as reqwest::dns::Addrs)
+        })
     }
 }
 
@@ -598,6 +633,40 @@ fn demux_ts(data: &[u8]) -> Result<(ElementaryKind, Vec<u8>)> {
 
 #[cfg(test)]
 mod tests {
+    /// The resolver's future does its work synchronously; poll it once.
+    fn resolve_now(resolver: &PublicResolver, host: &str) -> std::result::Result<Vec<std::net::SocketAddr>, String> {
+        use reqwest::dns::Resolve;
+        use std::str::FromStr;
+        use std::task::{Context, Poll, Waker};
+        let name = reqwest::dns::Name::from_str(host).unwrap();
+        let mut future = resolver.resolve(name);
+        match future.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
+            Poll::Ready(Ok(addrs)) => Ok(addrs.collect()),
+            Poll::Ready(Err(e)) => Err(e.to_string()),
+            Poll::Pending => Err("pending".into()),
+        }
+    }
+
+    #[test]
+    fn names_that_resolve_to_local_addresses_are_refused() {
+        let strict = PublicResolver { allow_loopback: false };
+        let error = resolve_now(&strict, "localhost").unwrap_err();
+        assert!(error.contains("public address"), "{error}");
+        // Tests (and only tests) may talk to a local server.
+        let lab = PublicResolver { allow_loopback: true };
+        assert!(resolve_now(&lab, "localhost").unwrap().iter().all(|a| a.ip().is_loopback()));
+    }
+
+    #[test]
+    fn local_ip_ranges() {
+        for local in ["127.0.0.1", "10.1.2.3", "172.16.0.1", "192.168.1.1", "169.254.1.1", "0.0.0.0", "::1", "fd00::1", "fe80::1", "::ffff:192.168.0.1"] {
+            assert!(is_local_ip(local.parse().unwrap()), "{local}");
+        }
+        for public in ["93.184.216.34", "2a00:1450::1", "8.8.8.8"] {
+            assert!(!is_local_ip(public.parse().unwrap()), "{public}");
+        }
+    }
+
     use super::*;
 
     #[test]

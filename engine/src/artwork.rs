@@ -11,7 +11,7 @@ use image::imageops::FilterType;
 use serde::Serialize;
 use url::Url;
 
-use crate::stream::fetch::is_local_host;
+use crate::stream::fetch::{is_local_host, PublicResolver};
 use crate::{Error, Result};
 
 const MAX_BYTES: u64 = 3 * 1024 * 1024;
@@ -32,6 +32,7 @@ pub fn palette_from_url(raw: &str) -> Result<Palette> {
     let client = reqwest::blocking::Client::builder()
         .connect_timeout(Duration::from_secs(8))
         .timeout(Duration::from_secs(15))
+        .dns_resolver(std::sync::Arc::new(PublicResolver { allow_loopback: false }))
         .redirect(reqwest::redirect::Policy::custom(|attempt| {
             if attempt.previous().len() >= 3 || attempt.url().scheme() != "https" || is_local_host(attempt.url()) {
                 attempt.stop()

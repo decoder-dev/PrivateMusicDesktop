@@ -73,23 +73,33 @@ fn parse_stamp(text: &str) -> Option<f64> {
     Some(f64::from(minutes) * 60.0 + seconds)
 }
 
-/// Lower-case letters and digits only, with "(feat. …)", "[…]" and
-/// "- remastered"-style tails removed.
+/// Lower-case words of a title, without "(…)"/"[…]" parts, a " - Remastered"
+/// style suffix or a "feat." tail. Punctuation inside the title is kept as a
+/// word break: "Mr. Brightside" is "mr brightside", not "mr".
 fn normalize(text: &str) -> String {
-    let mut out = String::new();
+    let mut plain = String::new();
     let mut depth = 0u32;
     for ch in text.chars() {
         match ch {
             '(' | '[' => depth += 1,
             ')' | ']' => depth = depth.saturating_sub(1),
             _ if depth > 0 => {}
-            c if c.is_alphanumeric() => out.extend(c.to_lowercase()),
-            _ => out.push(' '),
+            c => plain.extend(c.to_lowercase()),
         }
     }
-    let cut = out.find(" feat").or_else(|| out.find(" ft ")).or_else(|| out.find("  "));
-    let trimmed = cut.map_or(out.as_str(), |i| &out[..i]);
-    trimmed.split_whitespace().collect::<Vec<_>>().join(" ")
+    let mut cut = plain.len();
+    for marker in [" - ", " – ", " — ", " feat.", " feat ", " ft. ", " ft "] {
+        if let Some(i) = plain.find(marker) {
+            cut = cut.min(i);
+        }
+    }
+    plain[..cut]
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { ' ' })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn artists(text: &str) -> Vec<String> {
@@ -274,6 +284,19 @@ mod tests {
             track_name: Some(title.into()), artist_name: Some(artist.into()), duration: Some(duration),
             plain_lyrics: plain.map(Into::into), synced_lyrics: synced.map(Into::into), instrumental: false,
         }
+    }
+
+    #[test]
+    fn punctuation_inside_a_title_is_not_an_end() {
+        assert_eq!(normalize("Mr. Brightside"), "mr brightside");
+        assert_eq!(normalize("Rock & Roll"), "rock roll");
+        assert_eq!(normalize("Song - Remastered 2011"), "song");
+        assert_eq!(normalize("Song (feat. X) [Live]"), "song");
+        assert_eq!(normalize("Song feat. X"), "song");
+        assert_eq!(normalize("Он, она и я"), "он она и я");
+        let t = track("The Killers", "Mr. Brightside", 222);
+        assert!(score(&t, &candidate("The Killers", "Mr. Brightside", 222.0, Some("x"), None)).is_some());
+        assert!(score(&t, &candidate("The Killers", "Mr Something Else", 222.0, Some("x"), None)).is_none());
     }
 
     #[test]
