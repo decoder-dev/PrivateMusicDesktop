@@ -76,6 +76,29 @@ jobs:
         # The npm package ships a prebuilt CLI: no ten-minute `cargo install`.
         run: npx --yes @tauri-apps/cli@2 build --bundles ${{ matrix.bundles }} ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
 
+      # The VK sign-in window must load on every system, from the real build.
+      - name: Sign-in window loads (Linux, macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          binary=$(find target -path '*release/bundle/macos/*.app/Contents/MacOS/private-music-desktop' -print -quit)
+          [ -n "$binary" ] || binary=target/release/private-music-desktop
+          scripts/smoke-login.sh "$binary"
+
+      - name: Sign-in window loads (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $report = Join-Path $env:RUNNER_TEMP 'smoke.txt'
+          $env:PM_SMOKE_LOGIN = $report
+          $app = Start-Process -FilePath 'target\release\private-music-desktop.exe' -PassThru
+          if (-not $app.WaitForExit(150000)) { $app.Kill(); Write-Host 'the app did not finish in time' }
+          Write-Host "app exited with $($app.ExitCode)"
+          if (Test-Path $report) { Get-Content $report } else { Write-Host '(no report)' }
+          $log = Join-Path $env:LOCALAPPDATA 'com.dec.privatemusic2.desktop\logs\private-music.log'
+          if (Test-Path $log) { Write-Host "--- $log"; Get-Content $log }
+          if (-not ((Test-Path $report) -and (Select-String -Path $report -Pattern '^loaded ' -Quiet))) { exit 1 }
+
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: installers-${{ matrix.name }}

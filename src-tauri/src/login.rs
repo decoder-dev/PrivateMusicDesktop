@@ -8,16 +8,22 @@
 //! The window is isolated: private storage, no app capabilities, and it may
 //! only navigate within vk.ru / vk.com over https.
 
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use pm_engine::vk::exchange_web_session;
 use pm_engine::Error;
+use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use url::Url;
 
 use crate::AppState;
+
+/// Set by the CI smoke test: when VK's page has loaded, write a line here and
+/// quit. It proves the sign-in window really loads on every platform.
+pub static SMOKE_REPORT: OnceLock<PathBuf> = OnceLock::new();
 
 const LOGIN_URL: &str = "https://vk.ru/login";
 const COOKIE_URL: &str = "https://vk.ru/";
@@ -42,7 +48,14 @@ fn is_vk_host(host: &str) -> bool {
 }
 
 fn is_allowed_navigation(url: &Url) -> bool {
-    url.scheme() == "https" && url.host_str().map(is_vk_host).unwrap_or(false)
+    match url.scheme() {
+        "https" => url.host_str().map(is_vk_host).unwrap_or(false),
+        // Blank frames VK's page creates for itself carry no content.
+        "about" => matches!(url.path(), "blank" | "srcdoc"),
+        // Object URLs made by VK's own page: blob:https://id.vk.ru/<uuid>.
+        "blob" => Url::parse(url.path()).is_ok_and(|inner| is_allowed_navigation(&inner) && inner.scheme() == "https"),
+        _ => false,
+    }
 }
 
 /// `name=value; …` for the cookies, or `None` while no session cookie exists.
@@ -68,7 +81,27 @@ pub fn start(handle: &AppHandle, state: &AppState) -> Result<(), String> {
         .inner_size(520.0, 760.0)
         .user_agent(WEB_USER_AGENT)
         .incognito(true)
-        .on_navigation(is_allowed_navigation)
+        .on_navigation(|url| {
+            let allowed = is_allowed_navigation(url);
+            if !allowed {
+                // Only the host: sign-in addresses can carry one-time codes.
+                log::warn!("sign-in window: blocked a {} page on {:?}", url.scheme(), url.host_str());
+            }
+            allowed
+        })
+        .on_page_load(|window, payload| {
+            if payload.event() != PageLoadEvent::Finished {
+                return;
+            }
+            let host = payload.url().host_str().unwrap_or("").to_string();
+            log::info!("sign-in window: page loaded on {host}");
+            if let Some(report) = SMOKE_REPORT.get() {
+                if is_vk_host(&host) {
+                    let _ = std::fs::write(report, format!("loaded {host}\n"));
+                    window.app_handle().exit(0);
+                }
+            }
+        })
         .build()
         .map_err(|e| {
             running.store(false, Ordering::SeqCst);
@@ -135,7 +168,14 @@ mod tests {
 
     #[test]
     fn only_vk_over_https_may_be_navigated_to() {
-        for ok in ["https://vk.ru/login", "https://id.vk.com/auth", "https://login.vk.ru/?act=x", "https://VK.com/"] {
+        for ok in [
+            "https://vk.ru/login",
+            "https://id.vk.com/auth",
+            "https://login.vk.ru/?act=x",
+            "https://VK.com/",
+            "about:blank",
+            "blob:https://id.vk.ru/6b1f0f7e-0000-4000-8000-000000000000",
+        ] {
             assert!(is_allowed_navigation(&ok.parse().unwrap()), "{ok}");
         }
         for bad in [
@@ -146,6 +186,10 @@ mod tests {
             "file:///etc/passwd",
             "javascript:alert(1)",
             "https://accounts.google.com/",
+            "about:config",
+            "blob:https://evil.example/123",
+            "blob:http://vk.ru/123",
+            "data:text/html,<script>1</script>",
         ] {
             assert!(!is_allowed_navigation(&bad.parse().unwrap()), "{bad}");
         }

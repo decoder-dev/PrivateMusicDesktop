@@ -36,9 +36,48 @@ fn is_app_url(url: &url::Url) -> bool {
         || url.host_str() == Some("tauri.localhost")
 }
 
-fn main() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
+/// Logs go to `<app log dir>/private-music.log` (rewritten at each start), so
+/// a problem on someone's machine can be read afterwards. `RUST_LOG` overrides
+/// the level.
+fn init_logging(handle: &tauri::AppHandle) {
+    let mut builder = env_logger::Builder::from_env(
+        env_logger::Env::default().default_filter_or("warn,private_music_desktop=info,pm_engine=info"),
+    );
+    if let Ok(dir) = handle.path().app_log_dir() {
+        if std::fs::create_dir_all(&dir).is_ok() {
+            if let Ok(file) = std::fs::File::create(dir.join("private-music.log")) {
+                builder.target(env_logger::Target::Pipe(Box::new(file)));
+            }
+        }
+    }
+    let _ = builder.try_init();
+}
 
+/// CI: open the sign-in window the way the button does (from the async
+/// runtime, never the main thread) and report whether VK's page loads.
+fn start_login_smoke_test(handle: &tauri::AppHandle, report: std::path::PathBuf) {
+    let _ = login::SMOKE_REPORT.set(report.clone());
+    let opener = handle.clone();
+    tauri::async_runtime::spawn(async move {
+        let state = opener.state::<AppState>();
+        if let Err(error) = login::start(&opener, &state) {
+            let _ = std::fs::write(&report, format!("error {error}\n"));
+            opener.exit(1);
+        }
+    });
+    let timer = handle.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(90));
+        if let Some(report) = login::SMOKE_REPORT.get() {
+            if !report.exists() {
+                let _ = std::fs::write(report, "timeout\n");
+            }
+        }
+        timer.exit(2);
+    });
+}
+
+fn main() {
     tauri::Builder::default()
         // First: a second launch hands over to the running app and exits.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| tray::show_main(app)))
@@ -52,6 +91,8 @@ fn main() {
         )
         .setup(|tauri_app| {
             let handle = tauri_app.handle().clone();
+            init_logging(&handle);
+            log::info!("Private Music {} starting", handle.package_info().version);
 
             let store: Box<dyn SecretStore> = Box::new(KeyringStore::new(KEYRING_SERVICE));
             // If the OS secret store cannot be used at all, keep the sign-in
@@ -135,6 +176,9 @@ fn main() {
             has_tray.store(tray::create(&handle), Ordering::Relaxed);
             // After the window exists: Windows needs its handle.
             let _ = media.set(media::Media::new(&handle));
+            if let Some(report) = std::env::var_os("PM_SMOKE_LOGIN") {
+                start_login_smoke_test(&handle, report.into());
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
