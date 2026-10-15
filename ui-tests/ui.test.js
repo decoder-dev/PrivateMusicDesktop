@@ -457,3 +457,103 @@ test("full screen: reduced motion starts with the visualizer off", async () => {
     assert.equal(await app.page.evaluate(() => window.__mock.state.visualizer), false);
   } finally { await app.close(); }
 });
+
+// ------------------------------------------------------------------ lyrics
+
+const at = (page, position) =>
+  page.evaluate((p) => window.__mock.emit("pm-event", { type: "state", ...window.__mock.state.player, position: p }), position);
+
+test("lyrics: timed lines follow the song, click to jump, gaps show a note", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await playAndOpen(app); // "Трек 1": timed
+    await page.waitForFunction(() => document.querySelectorAll(".ly-line").length === 40);
+    assert.equal(await page.locator(".ly-line.gap").innerText(), "♪");
+    assert.match(await page.locator(".ly-source").innerText(), /LRCLIB/);
+    await at(page, 17);
+    await page.waitForSelector(".ly-line.active");
+    assert.equal(await page.locator(".ly-line.active").innerText(), "Строка 2");
+    assert.equal(await page.locator(".ly-line.active").count(), 1);
+    await at(page, 100);
+    await page.waitForFunction(() => document.querySelector(".ly-line.active")?.textContent === "Строка 19");
+    if (process.env.PM_SCREENSHOTS) await page.screenshot({ path: `${process.env.PM_SCREENSHOTS}/np-lyrics.png` });
+    await page.locator(".ly-line", { hasText: "Строка 10" }).click();
+    assert.equal(await page.evaluate(() => window.__mock.last("seek").args.seconds), 55);
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("lyrics: the active line is brought into view", async () => {
+  const app = await openApp({ config: { signedIn: true }, reducedMotion: "reduce" });
+  try {
+    const { page } = app;
+    await playAndOpen(app);
+    await page.waitForFunction(() => document.querySelectorAll(".ly-line").length === 40);
+    await at(page, 180);
+    await page.waitForFunction(() => {
+      const line = document.querySelector(".ly-line.active");
+      const body = document.querySelector(".ly-body").getBoundingClientRect();
+      if (!line) return false;
+      const box = line.getBoundingClientRect();
+      return box.top >= body.top && box.bottom <= body.bottom;
+    });
+  } finally { await app.close(); }
+});
+
+test("lyrics: text from the service is shown as text, plain lyrics have no timing", async () => {
+  const hostile = "<img src=x onerror=alert(1)>";
+  const app = await openApp({ config: { signedIn: true, hostileLyric: hostile } });
+  try {
+    const { page } = app;
+    await playAndOpen(app);
+    await page.waitForFunction(() => document.querySelectorAll(".ly-line").length === 40);
+    assert.equal(await page.locator(".ly-line").first().innerText(), hostile);
+    assert.equal(await page.locator(".ly img").count(), 0);
+    await page.click(".np-controls .np-btn:nth-child(4)"); // next: "Трек 2" has plain lyrics
+    await page.waitForSelector(".ly-text");
+    assert.match(await page.locator(".ly-text").innerText(), /вторая <b>строка<\/b>/);
+    assert.equal(await page.locator(".ly b").count(), 0);
+    assert.equal(await page.locator(".ly-line").count(), 0);
+    assert.match(await page.locator(".ly-source").innerText(), /VK/);
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("lyrics: 'not found' and failures are different messages, and a failure can be retried", async () => {
+  let app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await playAndOpen(app, { index: 4 }); // "Трек 5": none exist
+    await page.waitForSelector(".ly-message");
+    assert.equal(await page.locator(".ly-message").innerText(), "Текст не найден.");
+  } finally { await app.close(); }
+
+  app = await openApp({ config: { signedIn: true, lyricsFail: true } });
+  try {
+    const { page } = app;
+    await playAndOpen(app);
+    await page.waitForSelector(".ly-message .np-chip");
+    assert.match(await page.locator(".ly-message").innerText(), /Не удалось загрузить текст/);
+    await page.click(".ly-message .np-chip");
+    await page.waitForFunction(() => window.__mock.count("lyrics") === 2);
+  } finally { await app.close(); }
+});
+
+test("lyrics: L toggles the panel and the choice sticks; hidden lyrics are not fetched", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await playAndOpen(app);
+    await page.waitForSelector(".ly-line");
+    await page.keyboard.press("l");
+    assert.equal(await page.locator(".ly").isVisible(), false);
+    assert.equal(JSON.parse(await page.evaluate(() => localStorage.getItem("pm.settings.v1"))).lyrics, false);
+    const before = await page.evaluate(() => window.__mock.count("lyrics"));
+    await page.click(".np-controls .np-btn:nth-child(4)");
+    await page.waitForFunction(() => document.querySelector(".np-title")?.textContent === "Трек 2");
+    assert.equal(await page.evaluate(() => window.__mock.count("lyrics")), before);
+    await page.keyboard.press("l");
+    await page.waitForSelector(".ly-text");
+  } finally { await app.close(); }
+});

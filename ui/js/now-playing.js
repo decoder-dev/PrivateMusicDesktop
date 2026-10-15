@@ -4,6 +4,7 @@ import { t } from "./i18n.js";
 import { api } from "./api.js";
 import { store, subscribe } from "./store.js";
 import { createVisualizer, MODES } from "./visualizer.js";
+import { createLyricsPanel } from "./lyrics-panel.js";
 
 const IDLE_MS = 3000;
 const PALETTES = new Map();
@@ -38,6 +39,7 @@ export function createNowPlaying({ settings, onSettingsChange }) {
   let paletteToken = 0;
   let coverUrl = null;
   let windowFullscreen = false;
+  let lyricsOn = settings.lyrics !== false;
   let mode = MODES.includes(settings.visualizer) ? settings.visualizer : reduceMotion ? "off" : "bars";
 
   const backdrop = h("div", { class: "np-backdrop" });
@@ -49,6 +51,9 @@ export function createNowPlaying({ settings, onSettingsChange }) {
 
   const closeButton = h("button", { class: "np-btn", type: "button", title: t("np.close"), "aria-label": t("np.close"), onclick: () => close() }, icon("chevron", 22));
   const modeButton = h("button", { class: "np-btn", type: "button", onclick: () => cycleMode() }, icon("visualizer", 20));
+  const lyricsButton = h("button", { class: "np-btn", type: "button", title: t("ly.toggle"), "aria-label": t("ly.toggle"), "aria-pressed": String(lyricsOn),
+    onclick: () => setLyrics(!lyricsOn) }, icon("lyrics", 20));
+  const lyrics = createLyricsPanel();
   const windowButton = h("button", { class: "np-btn", type: "button", title: t("np.fullscreen"), "aria-label": t("np.fullscreen"), "aria-pressed": "false",
     onclick: () => toggleWindowFullscreen() }, icon("expand", 20));
 
@@ -65,14 +70,14 @@ export function createNowPlaying({ settings, onSettingsChange }) {
   const seek = h("input", {
     type: "range", min: "0", max: "0", step: "1", value: "0", "aria-label": t("seek"),
     oninput: () => { dragging = true; elapsed.textContent = formatTime(Number(seek.value)); },
-    onchange: () => { api.seek(Number(seek.value)); dragging = false; },
+    onchange: () => { api.seek(Number(seek.value)); dragging = false; lyrics.snap(Number(seek.value)); },
   });
 
   const element = h("div", { class: "np", role: "dialog", "aria-modal": "true", "aria-label": t("np.open"), hidden: true },
     backdrop,
     canvas,
-    h("div", { class: "np-top" }, closeButton, h("div", { class: "np-spacer" }), modeButton, windowButton),
-    h("div", { class: "np-stage" }, coverBox, h("div", { class: "np-info" }, title, artist, upNext)),
+    h("div", { class: "np-top" }, closeButton, h("div", { class: "np-spacer" }), lyricsButton, modeButton, windowButton),
+    h("div", { class: "np-stage" }, coverBox, h("div", { class: "np-info" }, title, artist, upNext), lyrics.element),
     h("div", { class: "np-bottom" },
       h("div", { class: "np-seek" }, elapsed, seek, total),
       h("div", { class: "np-controls" }, shuffleButton, previousButton, playButton, nextButton, repeatButton)));
@@ -105,6 +110,18 @@ export function createNowPlaying({ settings, onSettingsChange }) {
     onSettingsChange?.({ visualizer: mode });
     renderMode();
     syncEngine();
+  }
+
+  function setLyrics(on) {
+    lyricsOn = on;
+    lyricsButton.setAttribute("aria-pressed", String(on));
+    element.dataset.lyrics = on ? "on" : "off";
+    lyrics.setVisible(on);
+    onSettingsChange?.({ lyrics: on });
+    if (on && open) {
+      lyrics.setTrack(store.player.track);
+      lyrics.snap(store.player.position || 0);
+    }
   }
 
   // -------------------------------------------------------------- palette
@@ -151,6 +168,10 @@ export function createNowPlaying({ settings, onSettingsChange }) {
     title.textContent = track ? track.title : t("nothing");
     artist.textContent = track ? track.artist : "";
     updateCover(track);
+    if (lyricsOn) {
+      lyrics.setTrack(track);
+      lyrics.update(player.position || 0);
+    }
 
     const playing = player.status === "playing" || player.status === "buffering";
     const showPause = playing || player.status === "loading";
@@ -221,6 +242,9 @@ export function createNowPlaying({ settings, onSettingsChange }) {
       event.preventDefault();
       event.stopPropagation();
       close();
+    } else if (event.key === "l" || event.key === "L") {
+      event.preventDefault();
+      setLyrics(!lyricsOn);
     } else if (event.key === "v" || event.key === "V") {
       event.preventDefault();
       cycleMode();
@@ -244,6 +268,8 @@ export function createNowPlaying({ settings, onSettingsChange }) {
     open = true;
     element.hidden = false;
     renderMode();
+    element.dataset.lyrics = lyricsOn ? "on" : "off";
+    lyrics.setVisible(lyricsOn);
     visualizer.start();
     render(store.player);
     renderQueue();
@@ -258,6 +284,7 @@ export function createNowPlaying({ settings, onSettingsChange }) {
     element.hidden = true;
     clearTimeout(idleTimer);
     visualizer.stop();
+    lyrics.forget();
     syncEngine();
     if (windowFullscreen) toggleWindowFullscreen(false);
   }

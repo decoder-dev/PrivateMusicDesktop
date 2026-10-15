@@ -94,6 +94,7 @@ fn main() {
             commands::seek,
             commands::set_volume,
             commands::set_visualizer,
+            commands::lyrics,
             commands::artwork_palette,
             commands::set_fullscreen,
             commands::set_shuffle,

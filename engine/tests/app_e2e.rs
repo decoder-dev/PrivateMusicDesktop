@@ -40,7 +40,7 @@ fn app(api_base: &str, token_url: String, store: Arc<MemoryStore>) -> (App, Arc<
         || Ok(Box::new(SimulatedSink::new(44_100, 2, 1.0)) as Box<dyn Sink>),
         Box::new(Shared(store)),
         move |e| log.lock().unwrap().push(e),
-        AppOptions { fetch: lab_config(), token_url, volume: 1.0 },
+        AppOptions { fetch: lab_config(), token_url, volume: 1.0, ..AppOptions::default() },
     );
     (app, events)
 }
@@ -267,7 +267,7 @@ fn the_app_says_when_the_sign_in_will_not_survive_a_restart() {
         || Ok(Box::new(SimulatedSink::new(44_100, 2, 1.0)) as Box<dyn Sink>),
         Box::new(MemoryStore::default()), // forgets at exit
         move |e| events.lock().unwrap().push(e),
-        AppOptions { fetch: lab_config(), token_url: "http://127.0.0.1:9/never".into(), volume: 1.0 },
+        AppOptions { fetch: lab_config(), token_url: "http://127.0.0.1:9/never".into(), volume: 1.0, ..AppOptions::default() },
     );
     assert!(!app.session_state().persistent);
     app.sign_in(session("tokentokentoken-1"));

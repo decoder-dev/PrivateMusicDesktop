@@ -228,3 +228,36 @@ input[type="search"] { -webkit-appearance: none; appearance: none; }
 @media (prefers-reduced-motion: reduce) {
   .np-canvas { opacity: 0.85; }
 }
+
+/* ---------- lyrics in the full-screen view ---------- */
+.np-chip { margin-top: 12px; padding: 8px 16px; border-radius: 999px; background: rgb(255 255 255 / 0.16); color: #fff; }
+.np-chip:hover { background: rgb(255 255 255 / 0.26); }
+.ly { display: none; position: relative; flex: 1 1 0; min-width: 0; max-width: 640px; height: 100%; max-height: min(64vh, 640px); flex-direction: column; }
+.np[data-lyrics="on"] .ly { display: flex; }
+.np[data-lyrics="on"] .np-stage { justify-content: center; }
+.np[data-lyrics="on"] .np-cover { width: min(34vh, 28vw); }
+.np[data-lyrics="on"] .np-info { flex: 0 1 260px; }
+.np[data-lyrics="on"] .np-title { font-size: clamp(22px, 2.6vw, 34px); }
+.np[data-lyrics="on"] .np-artist { font-size: clamp(15px, 1.5vw, 19px); }
+.ly-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: none; padding: 0 8px;
+  mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 84%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 84%, transparent 100%); }
+.ly-body::-webkit-scrollbar { display: none; }
+.ly-pad { height: 40%; }
+.ly-line { display: block; width: 100%; text-align: left; padding: 7px 0; font-size: clamp(20px, 2.5vw, 32px); line-height: 1.25; font-weight: 700; letter-spacing: -0.01em;
+  color: rgb(255 255 255 / 0.38); overflow-wrap: anywhere; }
+.ly-line:hover { color: rgb(255 255 255 / 0.7); }
+.ly-line.active { color: #fff; text-shadow: 0 0 28px var(--np-a); }
+.ly-line.gap { font-weight: 400; }
+.ly-body.plain { mask-image: none; -webkit-mask-image: none; }
+.ly-text { white-space: pre-wrap; font-size: clamp(16px, 1.7vw, 21px); line-height: 1.6; color: rgb(255 255 255 / 0.88); padding: 8px 0 24px; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+.ly-message { height: 100%; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; color: rgb(255 255 255 / 0.7); font-size: 18px; }
+.ly-source { flex: none; padding: 8px 8px 0; font-size: 12px; color: rgb(255 255 255 / 0.5); }
+@media (max-width: 860px), (max-aspect-ratio: 1/1) {
+  .np[data-lyrics="on"] .np-stage { flex-direction: column; gap: 10px; }
+  .np[data-lyrics="on"] .np-cover { width: min(22vh, 40vw); }
+  .np[data-lyrics="on"] .np-info { flex: none; }
+  .np[data-lyrics="on"] .np-next { display: none; }
+  .ly { width: 100%; max-height: none; flex: 1 1 0; }
+  .ly-line { text-align: center; }
+}
