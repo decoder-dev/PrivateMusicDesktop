@@ -28,7 +28,7 @@ impl Media {
         #[cfg(target_os = "windows")]
         let hwnd = {
             let window = handle.get_webview_window("main")?;
-            Some(window.hwnd().ok()?.0 as *mut std::ffi::c_void)
+            Some(window.hwnd().ok()?.0)
         };
         #[cfg(not(target_os = "windows"))]
         let hwnd = None;
