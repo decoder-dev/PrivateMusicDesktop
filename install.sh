@@ -46,8 +46,15 @@ TOKEN="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
 if [ -z "$TOKEN" ] && command -v gh >/dev/null 2>&1; then
   TOKEN="$(gh auth token 2>/dev/null || true)"
 fi
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+# The token goes to curl through a private file, never on its command line,
+# where any local user could read it in the process list.
 AUTH=()
-[ -n "$TOKEN" ] && AUTH=(-H "Authorization: Bearer $TOKEN")
+if [ -n "$TOKEN" ]; then
+  (umask 077; printf 'Authorization: Bearer %s\n' "$TOKEN" > "$TMP/auth")
+  AUTH=(-H "@$TMP/auth")
+fi
 
 api() { curl -fsSL "${AUTH[@]+"${AUTH[@]}"}" -H "Accept: application/vnd.github+json" "$@"; }
 
@@ -67,9 +74,6 @@ ASSETS="$(printf '%s\n' "$RELEASE" | awk '
 asset_id() { printf '%s\n' "$ASSETS" | awk -F'\t' -v pat="$1" '$2 ~ pat { print $1; exit }'; }
 asset_name() { printf '%s\n' "$ASSETS" | awk -F'\t' -v pat="$1" '$2 ~ pat { print $2; exit }'; }
 
-TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
-
 fetch() { # pattern -> downloads the matching asset into $TMP, prints its path
   local id name
   id="$(asset_id "$1")"; name="$(asset_name "$1")"
@@ -83,7 +87,7 @@ fetch() { # pattern -> downloads the matching asset into $TMP, prints its path
 verify() { # path
   local sums id name want got
   id="$(asset_id '^SHA256SUMS\.txt$')"
-  [ -n "$id" ] || { say "no checksum file in the release, skipping verification"; return 0; }
+  [ -n "$id" ] || die "the release has no SHA256SUMS.txt; refusing to install an unverified file."
   curl -fsSL "${AUTH[@]+"${AUTH[@]}"}" -H "Accept: application/octet-stream" -o "$TMP/SHA256SUMS.txt" \
     "$API/repos/$REPO/releases/assets/$id"
   name="$(basename "$1")"

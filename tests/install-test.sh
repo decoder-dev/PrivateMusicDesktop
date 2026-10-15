@@ -15,6 +15,8 @@ cat > "$work/server.py" <<'PY'
 import http.server, json, os, sys
 root, port = sys.argv[1], int(sys.argv[2])
 names = sorted(os.listdir(os.path.join(root, "assets")))
+if os.environ.get("NOSUMS"):
+    names = [n for n in names if n != "SHA256SUMS.txt"]
 class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def do_GET(self):
@@ -40,7 +42,11 @@ PY
 port=$((20000 + RANDOM % 20000))
 start_server() { # $1: "tamper" to serve a corrupted AppImage
   if [ -n "${server:-}" ]; then kill "$server" 2>/dev/null || true; wait "$server" 2>/dev/null || true; fi
-  if [ "${1:-}" = tamper ]; then TAMPER=1 python3 "$work/server.py" "$work" "$port" & else python3 "$work/server.py" "$work" "$port" & fi
+  case "${1:-}" in
+    tamper) TAMPER=1 python3 "$work/server.py" "$work" "$port" & ;;
+    nosums) NOSUMS=1 python3 "$work/server.py" "$work" "$port" & ;;
+    *) python3 "$work/server.py" "$work" "$port" & ;;
+  esac
   server=$!
   for _ in $(seq 1 50); do curl -s "http://127.0.0.1:$port/" >/dev/null 2>&1 && return; sleep 0.1; done
   echo "FAIL: fake API did not start"; exit 1
@@ -59,10 +65,19 @@ echo "-- tampered download: checksum mismatch"
 if GITHUB_TOKEN=test-token "$here/install.sh" >"$work/out" 2>&1; then echo "FAIL: installed a tampered file"; exit 1; fi
 grep -q "checksum mismatch" "$work/out" || { cat "$work/out"; echo "FAIL: mismatch not reported"; exit 1; }
 [ ! -e "$HOME/.local/share/private-music/PrivateMusic.AppImage" ] || { echo "FAIL: tampered file was installed"; exit 1; }
+echo "-- no checksum file: refused"
+start_server nosums
+if GITHUB_TOKEN=test-token "$here/install.sh" >"$work/out" 2>&1; then echo "FAIL: installed without a checksum"; exit 1; fi
+grep -q "unverified" "$work/out" || { cat "$work/out"; echo "FAIL: missing checksum not reported"; exit 1; }
+
+echo "-- the token never appears on a command line"
 start_server
+( while :; do ps -eo args 2>/dev/null | grep "test-toke[n]" > "$work/seen" && { cp "$work/seen" "$work/leak"; break; }; sleep 0.02; done ) & watcher=$!
 
 echo "-- good download: installs the AppImage"
 GITHUB_TOKEN=test-token "$here/install.sh" >"$work/out" 2>&1 || { cat "$work/out"; echo "FAIL: install failed"; exit 1; }
+kill "$watcher" 2>/dev/null || true
+[ ! -e "$work/leak" ] || { cat "$work/leak"; echo "FAIL: the token was visible in the process list"; exit 1; }
 "$HOME/.local/bin/private-music" | grep -q private-music-ok || { echo "FAIL: installed program does not run"; exit 1; }
 grep -q "^Exec=$HOME/.local/share/private-music/PrivateMusic.AppImage" "$HOME/.local/share/applications/private-music.desktop" || { echo "FAIL: desktop entry"; exit 1; }
 
