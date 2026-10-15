@@ -3,6 +3,7 @@
 
 mod commands;
 mod login;
+mod media;
 
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -47,11 +48,16 @@ fn main() {
             };
 
             let emitter = handle.clone();
+            let media: Arc<std::sync::OnceLock<Option<media::Media>>> = Arc::new(std::sync::OnceLock::new());
+            let media_for_events = media.clone();
             let app = App::new(
                 VkClient::new().expect("the built-in API address is valid"),
                 || CpalSink::open_default().map(|sink| Box::new(sink) as Box<dyn Sink>),
                 store,
                 move |event| {
+                    if let Some(Some(media)) = media_for_events.get() {
+                        media.on_event(&event);
+                    }
                     let _ = emitter.emit("pm-event", &event);
                 },
                 AppOptions::default(),
@@ -62,8 +68,10 @@ fn main() {
                 .title("Private Music")
                 .inner_size(1120.0, 740.0)
                 .min_inner_size(780.0, 540.0)
-                .on_navigation(|url| is_app_url(url))
+                .on_navigation(is_app_url)
                 .build()?;
+            // After the window exists: Windows needs its handle.
+            let _ = media.set(media::Media::new(&handle));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
