@@ -627,3 +627,51 @@ test("hearts: a refused change says why and leaves the heart as it was", async (
     assert.equal(await rows(page).first().locator(".like").getAttribute("aria-pressed"), "false");
   } finally { await app.close(); }
 });
+
+// ------------------------------------------------------------- review fixes
+
+test("arrow keys on the focused volume slider change the volume, not the position", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await rows(page).first().dblclick();
+    await page.waitForFunction(() => window.__mock.state.player.status === "playing");
+    await page.focus(".player .volume input[type=range]");
+    const seeks = await page.evaluate(() => window.__mock.count("seek"));
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowLeft");
+    await page.waitForFunction(() => window.__mock.state.player.volume < 1);
+    assert.equal(await page.evaluate(() => window.__mock.count("seek")), seeks);
+  } finally { await app.close(); }
+});
+
+test("signing out and in again does not leave the old screens listening", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    const count = () => page.evaluate(async () => (await import("./js/store.js")).listenerCount("player"));
+    const first = await count();
+    for (let i = 0; i < 3; i += 1) {
+      await page.click(".account .link");
+      await page.waitForSelector(".login");
+      await page.click(".login .btn");
+      await page.waitForSelector(".shell");
+      await waitForLibrary(page);
+    }
+    assert.equal(await count(), first);
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("hearts wait until My music is known, so a click cannot add a duplicate", async () => {
+  const app = await openApp({ config: { signedIn: true, pageDelay: 400 } });
+  try {
+    const { page } = app;
+    await page.waitForFunction(() => document.querySelectorAll(".row").length > 0);
+    await searchFor(page, "песня");
+    assert.equal(await rows(page).first().locator(".like").isDisabled(), true);
+    await page.waitForFunction(() => !document.querySelector(".main > .view:not([hidden]) .row .like")?.disabled, null, { timeout: 15000 });
+  } finally { await app.close(); }
+});

@@ -3,7 +3,7 @@ import { icon } from "./icons.js";
 import { t, errorText } from "./i18n.js";
 import { api } from "./api.js";
 import { listen } from "./bridge.js";
-import { store, set, publish, subscribe } from "./store.js";
+import { store, set, publish, subscribe, withScope } from "./store.js";
 import { toast } from "./toast.js";
 import { createPlayerBar } from "./player-bar.js";
 import { createNowPlaying } from "./now-playing.js";
@@ -68,6 +68,11 @@ function persistSettings(patch) {
 // ------------------------------------------------------------------ shell
 
 function buildShell() {
+  const { value, dispose } = withScope(buildShellParts);
+  return { ...value, dispose };
+}
+
+function buildShellParts() {
   const ctx = { play, onTrackAction, toast };
   const views = {
     library: createLibraryView(ctx),
@@ -121,6 +126,7 @@ function buildShell() {
 function showLogin() {
   nowPlaying?.close();
   nowPlaying = null;
+  shell?.dispose();
   shell = null;
   clear(root);
   login ??= createLoginView({ onError: (error) => toast(errorText(error), { error: true }) });
@@ -131,6 +137,7 @@ function showLogin() {
 
 async function showApp() {
   login = null;
+  shell?.dispose();
   clear(root);
   shell = buildShell();
   root.append(shell.element);
@@ -225,6 +232,8 @@ function typing(event) {
 
 document.addEventListener("keydown", (event) => {
   if (!shell || typing(event) || event.altKey) return;
+  // A focused slider (volume, position) uses the arrow keys itself.
+  if (event.target instanceof HTMLInputElement && event.target.type === "range" && event.key.startsWith("Arrow")) return;
   const mod = event.ctrlKey || event.metaKey;
   if (nowPlaying?.isOpen() && (event.key === "/" || (mod && (event.key === "f" || event.key === "F")))) return;
   switch (event.key) {

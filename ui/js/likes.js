@@ -3,22 +3,26 @@
 // track it came from, and either one shows as liked.
 
 import { api, trackKey } from "./api.js";
-import { publish } from "./store.js";
+import { publish, own } from "./store.js";
 
 const inLibrary = new Map(); // key of a library track -> the track
 const copies = new Map(); // key of the source track -> its library copy
 const pending = new Set();
 const listeners = new Set();
+/** Until the library is loaded a heart cannot know whether a click adds a duplicate. */
+let known = false;
 
 /** The library view reports what it loaded. */
 export function setLibrary(tracks) {
   inLibrary.clear();
   for (const track of tracks) inLibrary.set(trackKey(track), track);
+  known = true;
   for (const [source, copy] of copies) if (!inLibrary.has(trackKey(copy))) copies.delete(source);
   publish("likes");
 }
 
 export function forgetLibrary() {
+  known = false;
   inLibrary.clear();
   copies.clear();
   publish("likes");
@@ -30,18 +34,18 @@ function libraryCopy(track) {
 }
 
 export const isLiked = (track) => !!track && libraryCopy(track) !== null;
-export const isBusy = (track) => !!track && pending.has(trackKey(track));
+export const isBusy = (track) => !known || (!!track && pending.has(trackKey(track)));
 
 /** `listener({ added } | { removed })` — the library view keeps its list in step. */
 export function onLibraryChange(listener) {
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  return own(() => listeners.delete(listener));
 }
 
 /** Adds or removes; resolves to "added" / "removed", rejects with the API error. */
 export async function toggleLike(track) {
   const key = trackKey(track);
-  if (pending.has(key)) return null;
+  if (!known || pending.has(key)) return null;
   pending.add(key);
   publish("likes");
   try {
