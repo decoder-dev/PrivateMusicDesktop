@@ -7,7 +7,7 @@ publish.workspace = true
 description = "Private Music desktop engine: VK client, HLS fetching, decoding and playback."
 
 [dependencies]
-pm_native = { path = "../../native/pm-native" }
+pm_native = { path = "../native/pm-native" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
