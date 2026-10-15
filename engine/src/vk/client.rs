@@ -224,6 +224,43 @@ impl VkClient {
         Ok(())
     }
 
+    /// VK's recommendations for the user, or "more like this" when a seed
+    /// track is given (VK's own radio-from-a-track).
+    pub fn recommendations(&self, session: &Session, seed: Option<&Track>) -> Result<Vec<Track>> {
+        let user = match session.user_id {
+            Some(user) => Some(user),
+            None => self.user_id(session).ok(),
+        };
+        let mut params = vec![("count", "100".to_string()), ("shuffle", "0".to_string())];
+        if let Some(user) = user {
+            params.push(("user_id", user.to_string()));
+        }
+        if let Some(seed) = seed {
+            params.push(("target_audio", format!("{}_{}", seed.owner_id, seed.track_id)));
+        }
+        let value = self.call(session, "audio.getRecommendations", &params)?;
+        let mut tracks = tracks_page(&value, 0, user).items;
+        if let Some(seed) = seed {
+            tracks.retain(|t| t.id() != seed.id());
+        }
+        Ok(dedupe(tracks))
+    }
+
+    /// One page of the user's personal VK mix (an endless stream).
+    pub fn mix(&self, session: &Session, offset: u32, count: u32) -> Result<Vec<Track>> {
+        let user = session.user_id;
+        let value = self.call(
+            session,
+            "audio.getStreamMixAudios",
+            &[("mix_id", "common".into()), ("count", count.to_string()), ("offset", offset.to_string())],
+        )?;
+        // The response shape varies (a list, or tracks nested in blocks), so
+        // every track-shaped object is collected wherever it sits.
+        let mut found = Vec::new();
+        collect_tracks(&value, user, &mut found);
+        Ok(dedupe(found))
+    }
+
     /// VK's own plain text for a track's `lyrics_id`.
     pub fn lyrics_text(&self, session: &Session, lyrics_id: i64) -> Result<Option<String>> {
         let value = self.call(session, "audio.getLyrics", &[("lyrics_id", lyrics_id.to_string())])?;
@@ -299,6 +336,28 @@ impl VkClient {
 
 fn sleep(seconds: f64) {
     std::thread::sleep(Duration::from_secs_f64(seconds));
+}
+
+fn dedupe(tracks: Vec<Track>) -> Vec<Track> {
+    let mut seen = std::collections::HashSet::new();
+    tracks.into_iter().filter(|t| seen.insert(t.id())).collect()
+}
+
+fn collect_tracks(value: &Value, user: Option<i64>, out: &mut Vec<Track>) {
+    match value {
+        Value::Array(list) => list.iter().for_each(|v| collect_tracks(v, user, out)),
+        Value::Object(object) => {
+            let track_shaped = ["owner_id", "artist", "title"].iter().all(|k| object.contains_key(*k));
+            if track_shaped {
+                if let Some(track) = model::parse_track(value, user) {
+                    out.push(track);
+                    return;
+                }
+            }
+            object.values().for_each(|v| collect_tracks(v, user, out));
+        }
+        _ => {}
+    }
 }
 
 fn tracks_page(value: &Value, offset: u32, user: Option<i64>) -> Page<Track> {

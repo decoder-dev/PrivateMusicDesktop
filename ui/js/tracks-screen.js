@@ -63,7 +63,7 @@ export function createTracksScreen({ title, filterable = false, playable = true,
   });
 
   const element = h("section", { class: "view" },
-    h("header", { class: "view-header" }, hooks.back ?? null, heading, meta, filter, playButton, shuffleButton),
+    h("header", { class: "view-header" }, hooks.back ?? null, heading, hooks.headerExtra ?? null, meta, filter, playButton, shuffleButton),
     status, empty, list.element);
 
   function applyFilter() {

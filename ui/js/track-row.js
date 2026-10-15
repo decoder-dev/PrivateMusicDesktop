@@ -22,6 +22,7 @@ export function trackRow(track, { selected = false, actions, liked = false, busy
   const buttons = (actions ?? [
     ["play-next", "play-next", t("playNext")],
     ["queue-add", "play-last", t("playLast")],
+    ["radio", "radio", t("radio")],
   ]).map(([name, action, label]) =>
     h("button", { class: "icon-btn", type: "button", "data-action": action, title: label, "aria-label": label }, icon(name, 16)));
   return h("div", { class: "row", role: "option", "aria-selected": selected ? "true" : "false", tabindex: "0" },

@@ -98,6 +98,17 @@
       state.player.queue_len = state.queue.length; emitQueue(); emitState();
     },
     stop: () => { state.player.status = "idle"; emitState(); },
+    mix: async () => {
+      await delay(20);
+      if (config.forYouFails) throw { kind: "offline", message: "No internet connection." };
+      return Array.from({ length: 100 }, (_, i) => makeTrack(7000 + i, { title: `Микс ${i + 1}` }));
+    },
+    recommendations: async () => { await delay(20); return Array.from({ length: 30 }, (_, i) => makeTrack(8000 + i, { title: `Рек ${i + 1}` })); },
+    similar: async ({ track }) => {
+      await delay(10);
+      if (config.noSimilar) return [];
+      return Array.from({ length: 20 }, (_, i) => makeTrack(9000 + i, { title: `Похожий ${i + 1}` }));
+    },
     add_to_library: async ({ track }) => {
       await delay(10);
       if (config.libraryWriteFails) throw { kind: "vk", message: "VK error 15: Access denied" };

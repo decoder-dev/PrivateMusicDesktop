@@ -14,6 +14,7 @@ import { createSearchView } from "./views/search.js";
 import { createQueueView } from "./views/queue.js";
 import { createLoginView } from "./views/login.js";
 import { createSettingsView } from "./views/settings.js";
+import { createForYouView } from "./views/for-you.js";
 import { loadSettings, saveSettings, saveQueue, loadQueue, clearQueue } from "./persist.js";
 
 const root = document.getElementById("app");
@@ -46,8 +47,21 @@ export async function like(track) {
   }
 }
 
+/** "More like this": the track, then VK's radio from it. */
+async function playSimilar(track) {
+  toast(t("radio.loading"));
+  try {
+    const similar = await api.similar(track);
+    if (!similar.length) return toast(t("radio.none"));
+    await api.playTracks([track, ...similar], 0);
+  } catch (error) {
+    toast(errorText(error), { error: true });
+  }
+}
+
 async function onTrackAction(action, track) {
   if (action === "like") return like(track);
+  if (action === "radio") return playSimilar(track);
   try {
     if (action === "play-next") {
       await api.playNext(track);
@@ -83,6 +97,7 @@ function buildShellParts() {
   const ctx = { play, onTrackAction, toast };
   const views = {
     library: createLibraryView(ctx),
+    forYou: createForYouView(ctx),
     playlists: createPlaylistsView(ctx),
     search: createSearchView(ctx),
     queue: createQueueView(),
@@ -90,6 +105,7 @@ function buildShellParts() {
   };
   const items = [
     ["library", "nav.library", "note"],
+    ["forYou", "nav.forYou", "sparkles"],
     ["playlists", "nav.playlists", "playlist"],
     ["search", "nav.search", "search"],
     ["queue", "nav.queue", "queue"],
