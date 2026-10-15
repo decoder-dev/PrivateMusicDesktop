@@ -95,7 +95,7 @@ try {
     if ($want -ne $got) { Fail "checksum mismatch for $($installer.name); the download is damaged or was tampered with." }
     Say 'checksum ok'
   } else {
-    Say 'no checksum file in the release, skipping verification'
+    Fail 'the release has no SHA256SUMS.txt; refusing to install an unverified file.'
   }
 
   Unblock-File -Path $file
