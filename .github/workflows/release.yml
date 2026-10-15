@@ -1,0 +1,132 @@
+name: Release
+
+# Pushing a tag such as v0.2.0 builds the installers and attaches them to a
+# GitHub release (as a draft, so nothing goes out before it is looked at).
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (must match the version in tauri.conf.json), e.g. v0.2.0"
+        required: true
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Check the tag
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          tag="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          version="${tag#v}"
+          declared=$(python3 -c "import json;print(json.load(open('src-tauri/tauri.conf.json'))['version'])")
+          cargo_version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          if [ "$version" != "$declared" ] || [ "$version" != "$cargo_version" ]; then
+            echo "Tag $tag, tauri.conf.json $declared, Cargo.toml $cargo_version must agree." >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs: version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { name: Linux, os: ubuntu-latest, bundles: "deb appimage", target: "" }
+          - { name: Windows, os: windows-latest, bundles: "nsis", target: "" }
+          - { name: macOS, os: macos-latest, bundles: "dmg", target: "universal-apple-darwin" }
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.version.outputs.tag }}
+
+      - name: Linux system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libasound2-dev libdbus-1-dev \
+            libssl-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev
+
+      - name: macOS targets
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Build
+        shell: bash
+        working-directory: src-tauri
+        run: cargo tauri build --bundles ${{ matrix.bundles }} ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: installers-${{ matrix.name }}
+          path: |
+            target/**/release/bundle/**/*-setup.exe
+            target/**/release/bundle/**/*.dmg
+            target/**/release/bundle/**/*.deb
+            target/**/release/bundle/**/*.AppImage
+          if-no-files-found: error
+
+  publish:
+    name: Draft release
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Download the installers built above
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: gh run download "$GITHUB_RUN_ID" --repo "$REPO" --pattern 'installers-*' --dir parts
+
+      - name: Give the files plain names and checksum them
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          mkdir out
+          find parts -type f | while read -r file; do
+            case "$file" in
+              *-setup.exe)  name="PrivateMusic_${VERSION}_windows-x64-setup.exe" ;;
+              *.dmg)        name="PrivateMusic_${VERSION}_macos-universal.dmg" ;;
+              *.deb)        name="PrivateMusic_${VERSION}_linux-amd64.deb" ;;
+              *.AppImage)   name="PrivateMusic_${VERSION}_linux-amd64.AppImage" ;;
+              *) continue ;;
+            esac
+            cp "$file" "out/$name"
+          done
+          cd out
+          ls -l
+          [ "$(ls | wc -l)" -eq 4 ] || { echo "expected four installers" >&2; exit 1; }
+          sha256sum * > SHA256SUMS.txt
+
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh release create "$TAG" out/* --repo "$REPO" --draft --verify-tag \
+            --title "Private Music ${TAG#v}" \
+            --notes "Unofficial VK Music player for Windows, macOS and Linux. Installers are not code-signed: use the install scripts in the README, or see the notes there for the first-run warning."

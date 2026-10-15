@@ -24,6 +24,63 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "publisher": "decoder-dev",
+    "copyright": "Copyright © 2026 decoder-dev",
+    "longDescription": "Private Music for the desktop: an unofficial VK Music player with a library, search, queue, synced lyrics and a live full-screen visualizer.",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "Russian",
+          "English"
+        ],
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "installer/header.bmp",
+        "sidebarImage": "installer/sidebar.bmp",
+        "startMenuFolder": "Private Music",
+        "compression": "lzma"
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "dmg": {
+        "background": "installer/dmg-background.png",
+        "windowSize": {
+          "width": 660,
+          "height": 400
+        },
+        "appPosition": {
+          "x": 170,
+          "y": 205
+        },
+        "applicationFolderPosition": {
+          "x": 490,
+          "y": 205
+        }
+      }
+    },
+    "linux": {
+      "deb": {
+        "section": "sound",
+        "priority": "optional",
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0",
+          "libasound2 | libasound2t64"
+        ],
+        "recommends": [
+          "gnome-keyring | kwalletmanager"
+        ]
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    }
   }
 }
