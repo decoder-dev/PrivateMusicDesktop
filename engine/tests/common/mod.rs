@@ -162,3 +162,54 @@ pub fn read_file(path: &Path) -> Vec<u8> {
     fs::File::open(path).unwrap().read_to_end(&mut data).unwrap();
     data
 }
+
+/// A scriptable fake HTTP API. The handler gets (path+query, body, headers as
+/// "name: value" lines) and returns (status, json body).
+pub struct FakeApi {
+    pub base: String,
+    pub calls: Arc<std::sync::Mutex<Vec<(String, String)>>>,
+    stop: Arc<AtomicBool>,
+    handle: Option<JoinHandle<()>>,
+}
+
+impl FakeApi {
+    pub fn start<F>(handler: F) -> Self
+    where
+        F: Fn(&str, &str, &str) -> (u16, String) + Send + 'static,
+    {
+        let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let port = server.server_addr().to_ip().unwrap().port();
+        let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let stop = Arc::new(AtomicBool::new(false));
+        let (log, flag) = (calls.clone(), stop.clone());
+        let handle = std::thread::spawn(move || {
+            while !flag.load(Ordering::Relaxed) {
+                let Ok(Some(mut request)) = server.recv_timeout(std::time::Duration::from_millis(30)) else { continue };
+                let mut body = String::new();
+                let _ = Read::read_to_string(request.as_reader(), &mut body);
+                let headers: String =
+                    request.headers().iter().map(|h| format!("{}: {}\n", h.field, h.value)).collect();
+                let url = request.url().to_string();
+                log.lock().unwrap().push((url.clone(), body.clone()));
+                let (status, json) = handler(&url, &body, &headers);
+                let mut response = tiny_http::Response::from_string(json).with_status_code(status);
+                response.add_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap());
+                let _ = request.respond(response);
+            }
+        });
+        Self { base: format!("http://127.0.0.1:{port}"), calls, stop, handle: Some(handle) }
+    }
+
+    pub fn call_count(&self, needle: &str) -> usize {
+        self.calls.lock().unwrap().iter().filter(|(u, _)| u.contains(needle)).count()
+    }
+}
+
+impl Drop for FakeApi {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        if let Some(h) = self.handle.take() {
+            let _ = h.join();
+        }
+    }
+}

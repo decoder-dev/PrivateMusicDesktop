@@ -66,8 +66,7 @@ impl FakeVk {
                     .split('&')
                     .find_map(|p| p.strip_prefix("audios="))
                     .unwrap_or("")
-                    .replace("%5F", "_")
-                    .replace("_", "_");
+                    .replace("%5F", "_");
                 let (owner, id) = {
                     let mut parts = audios.split('_');
                     (parts.next().unwrap_or("7").to_string(), parts.next().unwrap_or("1").to_string())

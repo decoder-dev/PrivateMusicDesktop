@@ -8,6 +8,7 @@
 //! one must be https (loopback http only for tests), carry no credentials and
 //! stay under the size limits below.
 
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::io::Read;
 use std::thread::JoinHandle;
@@ -367,6 +368,47 @@ impl Fetcher<'_> {
         Ok(())
     }
 
+    /// Downloads, decrypts and parses one `EXT-X-MAP` initialization section.
+    fn load_init(
+        &self,
+        base: &Url,
+        text: &str,
+        playlist: &MediaPlaylist,
+        map_index: i32,
+        keys: &mut HashMap<i32, [u8; 16]>,
+    ) -> Result<Cmaf> {
+        let map = usize::try_from(map_index)
+            .ok()
+            .and_then(|i| playlist.maps.get(i))
+            .ok_or_else(|| Error::Stream("segment has no initialization section".into()))?;
+        let uri = slice_text(text, map.uri).ok_or_else(|| Error::Stream("bad initialization address".into()))?;
+        let url = self.resolve(base, uri)?;
+        // A map range without an offset starts at byte 0, never at the
+        // media-segment cursor.
+        let range = if map.has_range {
+            if map.range_length <= 0 {
+                return Err(Error::Stream("invalid byte range".into()));
+            }
+            let start = if map.has_range_offset && map.range_offset >= 0 { map.range_offset as u64 } else { 0 };
+            Some((start, map.range_length as u64))
+        } else {
+            None
+        };
+        let mut data = self.get_bytes(&url, range, MAX_SEGMENT_BYTES)?;
+        if map.key_index >= 0 {
+            let key_info = playlist
+                .keys
+                .get(map.key_index as usize)
+                .ok_or_else(|| Error::Stream("initialization refers to a missing key".into()))?;
+            // RFC 8216: an encrypted init section needs an explicit IV.
+            if !key_info.has_iv {
+                return Err(Error::Stream("encrypted initialization section has no IV".into()));
+            }
+            data = self.decrypt_with_key(base, text, playlist, map.key_index, 0, Some(key_info.iv), keys, data)?;
+        }
+        Cmaf::parse_init(&data)
+    }
+
     fn run_cmaf(&self, base: &Url, text: &str, playlist: &MediaPlaylist) -> Result<()> {
         let mut keys: HashMap<i32, [u8; 16]> = HashMap::new();
         let mut next_offset: HashMap<String, u64> = HashMap::new();
@@ -375,40 +417,12 @@ impl Fetcher<'_> {
         for index in 0..playlist.segments.len() {
             self.check_cancel()?;
             let map_index = playlist.segments[index].map_index;
-            if !inits.contains_key(&map_index) {
-                let map = usize::try_from(map_index)
-                    .ok()
-                    .and_then(|i| playlist.maps.get(i))
-                    .ok_or_else(|| Error::Stream("segment has no initialization section".into()))?;
-                let uri = slice_text(text, map.uri).ok_or_else(|| Error::Stream("bad initialization address".into()))?;
-                let url = self.resolve(base, uri)?;
-                // A map range without an offset starts at byte 0, never at
-                // the media-segment cursor.
-                let range = if map.has_range {
-                    if map.range_length <= 0 {
-                        return Err(Error::Stream("invalid byte range".into()));
-                    }
-                    let start = if map.has_range_offset && map.range_offset >= 0 { map.range_offset as u64 } else { 0 };
-                    Some((start, map.range_length as u64))
-                } else {
-                    None
-                };
-                let mut data = self.get_bytes(&url, range, MAX_SEGMENT_BYTES)?;
-                if map.key_index >= 0 {
-                    let key_info = playlist
-                        .keys
-                        .get(map.key_index as usize)
-                        .ok_or_else(|| Error::Stream("initialization refers to a missing key".into()))?;
-                    // RFC 8216: an encrypted init section needs an explicit IV.
-                    if !key_info.has_iv {
-                        return Err(Error::Stream("encrypted initialization section has no IV".into()));
-                    }
-                    data = self.decrypt_with_key(base, text, playlist, map.key_index, 0, Some(key_info.iv), &mut keys, data)?;
-                }
-                inits.insert(map_index, Cmaf::parse_init(&data)?);
-            }
+            let cmaf = match inits.entry(map_index) {
+                Entry::Occupied(slot) => slot.into_mut(),
+                Entry::Vacant(slot) => slot.insert(self.load_init(base, text, playlist, map_index, &mut keys)?),
+            };
             let data = self.segment_bytes(base, text, playlist, index, &mut keys, &mut next_offset)?;
-            let adts = inits.get_mut(&map_index).expect("inserted above").fragment_to_adts(&data)?;
+            let adts = cmaf.fragment_to_adts(&data)?;
             if index == 0 {
                 self.buffer.set_kind(ElementaryKind::AdtsAac);
             }
@@ -510,7 +524,7 @@ fn id3_length(data: &[u8]) -> Option<usize> {
     if data.len() < 10 || &data[..3] != b"ID3" {
         return None;
     }
-    let size = data[6..10].iter().try_fold(0usize, |acc, b| (b & 0x80 == 0).then(|| (acc << 7) | *b as usize))?;
+    let size = data[6..10].iter().try_fold(0usize, |acc, b| (b & 0x80 == 0).then_some((acc << 7) | *b as usize))?;
     let footer = if data[5] & 0x10 != 0 { 10 } else { 0 };
     Some(10 + size + footer)
 }
