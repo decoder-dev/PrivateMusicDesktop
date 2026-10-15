@@ -1,0 +1,25 @@
+[package]
+name = "pm_engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Private Music desktop engine: VK client, HLS fetching, decoding and playback."
+
+[dependencies]
+pm_native = { path = "../../native/pm-native" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+url = "2"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "gzip", "blocking"] }
+symphonia = { version = "0.5", default-features = false, features = ["aac", "mp3", "isomp4"] }
+cpal = "0.15"
+ringbuf = "0.4"
+rubato = "0.16"
+rand = "0.8"
+log = "0.4"
+
+[dev-dependencies]
+tiny_http = "0.12"
+tempfile = "3"
