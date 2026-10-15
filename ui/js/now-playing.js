@@ -2,7 +2,7 @@ import { h, formatTime } from "./dom.js";
 import { icon } from "./icons.js";
 import { t } from "./i18n.js";
 import { api } from "./api.js";
-import { store, subscribe } from "./store.js";
+import { store, subscribe, own } from "./store.js";
 import { createVisualizer, MODES } from "./visualizer.js";
 import { createLyricsPanel } from "./lyrics-panel.js";
 import { isLiked, isBusy } from "./likes.js";
@@ -273,8 +273,14 @@ export function createNowPlaying({ settings, onSettingsChange, onLike }) {
     }
     wake();
   }
+  const onVisibility = () => { if (open) syncEngine(); };
   document.addEventListener("keydown", onKey, true);
-  document.addEventListener("visibilitychange", () => { if (open) syncEngine(); });
+  document.addEventListener("visibilitychange", onVisibility);
+  own(() => {
+    document.removeEventListener("keydown", onKey, true);
+    document.removeEventListener("visibilitychange", onVisibility);
+    visualizer.destroy();
+  });
 
   // ----------------------------------------------------------- open/close
 
