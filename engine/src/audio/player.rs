@@ -11,10 +11,12 @@
 //!   network or on decoding, so Pause and Stop always answer immediately.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, SyncSender, TrySendError};
+use std::sync::mpsc::{self, Receiver as StdReceiver, RecvTimeoutError, Sender as StdSender};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
+
+use crossbeam_channel::{bounded, unbounded, Receiver, SendTimeoutError, Sender, TryRecvError};
 
 use super::convert::Converter;
 use super::sink::Sink;
@@ -95,7 +97,7 @@ impl Drop for Session {
 }
 
 pub struct PlayerHandle {
-    commands: Sender<Command>,
+    commands: StdSender<Command>,
     thread: Option<JoinHandle<()>>,
 }
 
@@ -103,7 +105,7 @@ pub struct PlayerHandle {
 /// from worker threads). It does not own the thread.
 #[derive(Clone)]
 pub struct Remote {
-    commands: Sender<Command>,
+    commands: StdSender<Command>,
 }
 
 impl Remote {
@@ -166,11 +168,16 @@ impl Drop for PlayerHandle {
 }
 
 const POSITION_INTERVAL: Duration = Duration::from_millis(250);
-const TICK: Duration = Duration::from_millis(5);
-/// Keep this much decoded audio queued in the sink before pausing writes.
-const SINK_TARGET_SECONDS: f64 = 0.4;
+/// Refill the sink when it holds less than this, up to `HIGH_WATER`. Filling
+/// in batches lets every thread sleep for a few hundred milliseconds at a
+/// time instead of waking dozens of times a second, which is what keeps a
+/// playing track from costing battery.
+const LOW_WATER_SECONDS: f64 = 0.2;
+const HIGH_WATER_SECONDS: f64 = 0.45;
+/// Decoded chunks (about 23 ms each) the decoder may run ahead of the sink.
+const CHUNK_QUEUE: usize = 24;
 
-fn run<F>(commands: Receiver<Command>, mut make_sink: F, events: impl Fn(PlayerEvent))
+fn run<F>(commands: StdReceiver<Command>, mut make_sink: F, events: impl Fn(PlayerEvent))
 where
     F: FnMut() -> crate::Result<Box<dyn Sink>>,
 {
@@ -182,7 +189,11 @@ where
 
     loop {
         // Commands first, so Pause/Stop never wait behind audio work.
-        let timeout = if session.is_some() && !paused { TICK } else { Duration::from_millis(50) };
+        let timeout = match (session.as_ref(), sink.as_ref()) {
+            (Some(active), Some(output)) if !paused => wake_after(active, output.as_ref(), last_position),
+            (Some(_), _) => Duration::from_millis(250),
+            _ => Duration::from_millis(500),
+        };
         let mut next = match commands.recv_timeout(timeout) {
             Ok(command) => Some(command),
             Err(RecvTimeoutError::Timeout) => None,
@@ -308,6 +319,23 @@ fn position_event(session: &Session, sink: &dyn Sink) -> PlayerEvent {
     }
 }
 
+/// How long the audio thread can sleep before it has work again: until the
+/// sink drains to the low-water mark (or sooner while it waits for the
+/// decoder), and never past the next position report.
+fn wake_after(session: &Session, sink: &dyn Sink, last_position: Instant) -> Duration {
+    let scale = sink.time_scale().max(1.0);
+    let queued = sink.queued_frames() as f64 / sink.sample_rate() as f64;
+    let until_refill = if session.pending_offset < session.pending.len() || queued < LOW_WATER_SECONDS {
+        // Work is waiting or the device is about to run dry.
+        0.008
+    } else {
+        (queued - LOW_WATER_SECONDS) / scale
+    };
+    let until_report = POSITION_INTERVAL.saturating_sub(last_position.elapsed()).as_secs_f64();
+    let end_check = if session.ended { 0.05 } else { f64::INFINITY };
+    Duration::from_secs_f64(until_refill.min(until_report).min(end_check).clamp(0.005, 0.25))
+}
+
 /// Moves chunks from the decoder thread into the sink.
 fn pump(session: &mut Session, sink: &mut dyn Sink, events: &impl Fn(PlayerEvent)) {
     loop {
@@ -330,8 +358,8 @@ fn pump(session: &mut Session, sink: &mut dyn Sink, events: &impl Fn(PlayerEvent
             session.pending.clear();
             session.pending_offset = 0;
         }
-        // Do not queue more than the target: a seek should flush little.
-        if sink.queued_frames() as f64 / sink.sample_rate() as f64 > SINK_TARGET_SECONDS {
+        // Do not queue more than the high-water mark: a seek should flush little.
+        if sink.queued_frames() as f64 / sink.sample_rate() as f64 > HIGH_WATER_SECONDS {
             return;
         }
         match session.chunks.try_recv() {
@@ -350,7 +378,7 @@ fn pump(session: &mut Session, sink: &mut dyn Sink, events: &impl Fn(PlayerEvent
                 return;
             }
             Ok(_) => {} // stale chunk from before a seek
-            Err(mpsc::TryRecvError::Empty) => {
+            Err(TryRecvError::Empty) => {
                 // Nothing decoded and the sink is nearly dry: buffering.
                 if !session.ended && session.started && !session.buffering && sink.queued_frames() == 0 {
                     session.buffering = true;
@@ -358,7 +386,7 @@ fn pump(session: &mut Session, sink: &mut dyn Sink, events: &impl Fn(PlayerEvent
                 }
                 return;
             }
-            Err(mpsc::TryRecvError::Disconnected) => {
+            Err(TryRecvError::Disconnected) => {
                 // The decoder thread is gone. After End that is normal; any
                 // other time it died, which must not look like a finished track.
                 if !session.ended {
@@ -396,8 +424,8 @@ fn start_session(
 ) -> crate::Result<Session> {
     let buffer = SharedBuffer::new(fetch.max_stream_bytes);
     let fetch_thread = spawn_fetch(url.to_string(), fetch, buffer.clone());
-    let (chunk_sender, chunks) = mpsc::sync_channel::<Chunk>(6);
-    let (decoder_commands, command_receiver) = mpsc::channel::<DecoderCommand>();
+    let (chunk_sender, chunks) = bounded::<Chunk>(CHUNK_QUEUE);
+    let (decoder_commands, command_receiver) = unbounded::<DecoderCommand>();
     let stop = Arc::new(AtomicBool::new(false));
     let start = if start.is_finite() { start.max(0.0) } else { 0.0 };
 
@@ -429,19 +457,18 @@ fn start_session(
     })
 }
 
-/// Sends a chunk, giving up if the session is cancelled meanwhile.
-fn send_chunk(sender: &SyncSender<Chunk>, stop: &AtomicBool, mut chunk: Chunk) -> bool {
+/// Sends a chunk, blocking until there is room. It wakes when the audio
+/// thread takes a chunk (no polling), and gives up if the session is
+/// cancelled meanwhile.
+fn send_chunk(sender: &Sender<Chunk>, stop: &AtomicBool, mut chunk: Chunk) -> bool {
     loop {
         if stop.load(Ordering::Relaxed) {
             return false;
         }
-        match sender.try_send(chunk) {
+        match sender.send_timeout(chunk, Duration::from_millis(250)) {
             Ok(()) => return true,
-            Err(TrySendError::Full(back)) => {
-                chunk = back;
-                std::thread::sleep(Duration::from_millis(4));
-            }
-            Err(TrySendError::Disconnected(_)) => return false,
+            Err(SendTimeoutError::Timeout(back)) => chunk = back,
+            Err(SendTimeoutError::Disconnected(_)) => return false,
         }
     }
 }
@@ -449,7 +476,7 @@ fn send_chunk(sender: &SyncSender<Chunk>, stop: &AtomicBool, mut chunk: Chunk) -
 fn decode_loop(
     buffer: SharedBuffer,
     stop: Arc<AtomicBool>,
-    sender: SyncSender<Chunk>,
+    sender: Sender<Chunk>,
     commands: Receiver<DecoderCommand>,
     start: f64,
     out_rate: u32,
@@ -486,6 +513,14 @@ fn decode_loop(
         while let Ok(DecoderCommand::Seek { generation: g, seconds }) = commands.try_recv() {
             seek = Some((g, seconds));
         }
+        // At the end of the stream there is nothing to decode: sleep until a
+        // Seek arrives (or the session is dropped), without polling.
+        if at_end && seek.is_none() {
+            match commands.recv_timeout(Duration::from_millis(250)) {
+                Ok(DecoderCommand::Seek { generation: g, seconds }) => seek = Some((g, seconds)),
+                Err(_) => continue,
+            }
+        }
         if let Some((g, seconds)) = seek {
             generation = g;
             at_end = false;
@@ -499,8 +534,6 @@ fn decode_loop(
             }
         }
         if at_end {
-            // Wait for a Seek or for the session to be dropped.
-            std::thread::sleep(Duration::from_millis(10));
             continue;
         }
         decoded.clear();
