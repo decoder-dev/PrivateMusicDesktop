@@ -26,6 +26,7 @@ fn session(token: &str) -> Session {
 
 struct Shared(Arc<MemoryStore>);
 impl SecretStore for Shared {
+    fn is_durable(&self) -> bool { true }
     fn load(&self) -> pm_engine::Result<Option<Session>> { self.0.load() }
     fn save(&self, s: &Session) -> pm_engine::Result<()> { self.0.save(s) }
     fn clear(&self) -> pm_engine::Result<()> { self.0.clear() }
@@ -255,4 +256,21 @@ fn rate_limit_is_retried_with_a_bounded_wait() {
     assert_eq!(app.library(0, 10).unwrap().items.len(), 1);
     assert!(started.elapsed() < std::time::Duration::from_secs(3));
     assert_eq!(hits.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn the_app_says_when_the_sign_in_will_not_survive_a_restart() {
+    let api = FakeApi::start(|_, _, _| (200, page_json(&[1], 1)));
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let app = App::new(
+        VkClient::with_base(&api.base).unwrap(),
+        || Ok(Box::new(SimulatedSink::new(44_100, 2, 1.0)) as Box<dyn Sink>),
+        Box::new(MemoryStore::default()), // forgets at exit
+        move |e| events.lock().unwrap().push(e),
+        AppOptions { fetch: lab_config(), token_url: "http://127.0.0.1:9/never".into(), volume: 1.0 },
+    );
+    assert!(!app.session_state().persistent);
+    app.sign_in(session("tokentokentoken-1"));
+    assert!(app.session_state().signed_in);
+    assert!(!app.session_state().persistent);
 }

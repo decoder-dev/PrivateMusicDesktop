@@ -242,3 +242,20 @@ fn no_audio_device_is_reported_as_a_failure() {
     }
     assert!(matches!(events.lock().unwrap()[0], PlayerEvent::Failed { .. }));
 }
+
+#[test]
+fn a_nan_volume_never_reaches_the_device() {
+    let rig = rig(44_100, 1.0);
+    rig.player.set_volume(f32::NAN);
+    rig.player.set_volume(f32::INFINITY);
+    std::thread::sleep(Duration::from_millis(100));
+    // The sink is created lazily at the first Play, so ask the thread to open it.
+    rig.player.play("1_1", "http://127.0.0.1:9/nothing.m3u8", 1.0, 0.0, lab_config());
+    let start = Instant::now();
+    while !rig.has(|e| matches!(e, PlayerEvent::Failed { .. })) {
+        assert!(start.elapsed() < Duration::from_secs(5));
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let gain = f32::from_bits(rig.volume.load(Ordering::Relaxed));
+    assert!(gain.is_finite() && (0.0..=1.0).contains(&gain), "gain {gain}");
+}

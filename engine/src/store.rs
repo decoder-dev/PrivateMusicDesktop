@@ -14,6 +14,10 @@ pub trait SecretStore: Send + Sync {
     fn load(&self) -> Result<Option<Session>>;
     fn save(&self, session: &Session) -> Result<()>;
     fn clear(&self) -> Result<()>;
+    /// False for stores that forget everything at exit.
+    fn is_durable(&self) -> bool {
+        true
+    }
 }
 
 /// Keeps the session in memory only. Used in tests and as the fallback when
@@ -22,6 +26,10 @@ pub trait SecretStore: Send + Sync {
 pub struct MemoryStore(Mutex<Option<Session>>);
 
 impl SecretStore for MemoryStore {
+    fn is_durable(&self) -> bool {
+        false
+    }
+
     fn load(&self) -> Result<Option<Session>> {
         Ok(self.0.lock().unwrap_or_else(|p| p.into_inner()).clone())
     }

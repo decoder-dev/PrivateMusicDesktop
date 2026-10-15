@@ -192,7 +192,7 @@ where
             match command {
                 Command::Shutdown => return,
                 Command::SetVolume(v) => {
-                    volume = v.clamp(0.0, 1.0);
+                    volume = if v.is_finite() { v.clamp(0.0, 1.0) } else { 1.0 };
                     if let Some(sink) = sink.as_mut() {
                         sink.set_volume(volume);
                     }
