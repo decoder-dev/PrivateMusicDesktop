@@ -2,11 +2,27 @@
 
 The desktop twin of the iOS app: an unofficial VK Music player for Windows,
 Linux and macOS. Rust engine + [Tauri](https://tauri.app) shell + a small flat
-web UI. It reuses the iOS app's `native/` crate (a copy of the one in decoder-dev/PrivateMusic2; keep them in sync) (HLS parsing, AES-128, MPEG-TS
+web UI. It reuses the iOS app's `native/` crate (HLS parsing, AES-128, MPEG-TS
 and CMAF demuxing, VK stream unmasking), so both clients play streams the same
-way.
+way. `native/` is a copy of the one in decoder-dev/PrivateMusic2: keep them in sync.
 
-v1: VK sign-in, library, playlists, search, queue, playback, OS media keys.
+## Features
+
+- VK sign-in in an isolated window; the token lives in the OS keyring and is
+  renewed from the session cookie when it expires.
+- My music, playlists, search, a queue with shuffle and repeat; the queue and
+  position survive a restart.
+- Hearts: add any track to My music or take it out, from lists, the player bar
+  or the full-screen view.
+- Full-screen "now playing": blurred cover backdrop in the cover's colours, a
+  live spectrum of what is actually playing (bars, mirror, wave, radial), and
+  synced lyrics (LRCLIB, else VK's text) that follow the song; click a line to
+  jump there.
+- OS integration: media keys and Now Playing (MPRIS / SMTC / MediaRemote), a
+  tray icon with controls, keep-running-in-the-tray on close, one instance only,
+  window size and position remembered.
+- Settings: sound output device (switches without losing the place), tray,
+  full-screen defaults, keyboard shortcuts.
 
 ## Install
 
@@ -90,4 +106,5 @@ Optional tests: `live_vk` (real VK endpoints, needs network) and `cpal_smoke`
 - Windows and macOS are compiled in CI but not hand-tested yet (WebView2 cookie
   access for sign-in, SMTC window handle, MediaRemote).
 - CMAF streams with encryption are untested against real VK data.
-- Lyrics, mixes, downloads and equaliser are not part of v1.
+- Mixes/recommendations, offline downloads and an equaliser are not there yet.
+- `install.ps1` has not been run on a real Windows machine yet.
