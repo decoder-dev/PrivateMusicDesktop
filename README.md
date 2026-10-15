@@ -1,0 +1,58 @@
+# Private Music for desktop
+
+The desktop twin of the iOS app: an unofficial VK Music player for Windows,
+Linux and macOS. Rust engine + [Tauri](https://tauri.app) shell + a small flat
+web UI. It reuses the iOS app's `native/` crate (HLS parsing, AES-128, MPEG-TS
+and CMAF demuxing, VK stream unmasking), so both clients play streams the same
+way.
+
+v1: VK sign-in, library, playlists, search, queue, playback, OS media keys.
+
+## Layout
+
+| Path | What |
+| --- | --- |
+| `engine/` | Everything except pixels: VK client, stream fetch/decrypt/demux, decode (symphonia), resample (rubato), output (cpal), queue and playback policy (`controller`), sign-in/token refresh (`app`), secret store (OS keyring). No UI or Tauri dependency; fully testable headless. |
+| `src-tauri/` | The shell: window, IPC commands, isolated VK sign-in window, media keys (`souvlaki`). |
+| `ui/` | Plain ES modules, no framework, no build step. Flat: no transitions or animations. |
+| `ui-tests/` | Playwright tests of the UI against a mock backend. |
+
+## Run and test
+
+Linux needs `libwebkit2gtk-4.1-dev libgtk-3-dev libasound2-dev libdbus-1-dev libssl-dev`; the
+tests also need `ffmpeg` (they generate HLS fixtures).
+
+```sh
+cd desktop
+cargo run -p private-music-desktop                    # debug app
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace                                # uses a simulated sound card
+cargo test --release --test cpu_cost -- --nocapture   # CPU / wake-up budget
+(cd ui-tests && npm install && npx playwright install chromium && npm test)
+cd src-tauri && cargo tauri build                     # installers
+```
+
+Optional tests: `live_vk` (real VK endpoints, needs network) and `cpal_smoke`
+(real audio backend, e.g. ALSA null device) are `#[ignore]`d by default.
+
+## Security model
+
+- **Tokens** live only in the OS keyring (Secret Service / Credential Manager /
+  Keychain). If it is unavailable the sign-in is kept in memory for the run and
+  the UI says it will not persist; nothing is ever written to disk in clear.
+- **Sign-in** happens on vk.ru in a separate, incognito webview whose
+  navigation is restricted to VK hosts over https; only the `web_token` exchange
+  result leaves it. The main window cannot be navigated away from the bundled UI.
+- **CSP** is strict (`default-src 'self'`, no inline script, no `eval`);
+  capabilities grant the main window only the app's own commands.
+- **IPC** arguments are validated in the engine (numbers finite and in range,
+  URLs https-only with a host allow-list, no redirects to other hosts when a
+  token or body is attached).
+- Logs never contain tokens or cookies.
+
+## Known limits
+
+- Windows and macOS are compiled in CI but not hand-tested yet (WebView2 cookie
+  access for sign-in, SMTC window handle, MediaRemote).
+- CMAF streams with encryption are untested against real VK data.
+- Lyrics, mixes, downloads and equaliser are not part of v1.
