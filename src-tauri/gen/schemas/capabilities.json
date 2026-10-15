@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"The main window may use the app's own commands and basic window functions. The VK sign-in window loads a remote page and gets no capabilities at all.","local":true,"windows":["main"],"permissions":["core:default"]}}
