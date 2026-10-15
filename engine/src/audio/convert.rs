@@ -22,13 +22,11 @@ fn map_channels(input: &[f32], in_channels: usize, out_channels: usize, out: &mu
     }
     for frame in input.chunks_exact(in_channels) {
         match (in_channels, out_channels) {
-            (1, n) => out.extend(std::iter::repeat(frame[0]).take(n)),
+            (1, n) => out.extend(std::iter::repeat_n(frame[0], n)),
             (_, 1) => out.push(frame.iter().take(2).sum::<f32>() / frame.len().min(2) as f32),
             (_, n) => {
                 // Keep front left/right, silence anything the device has more of.
-                for channel in 0..n {
-                    out.push(if channel < 2 { frame[channel] } else { 0.0 });
-                }
+                out.extend((0..n).map(|channel| if channel < 2 { frame[channel] } else { 0.0 }));
             }
         }
     }
@@ -101,7 +99,7 @@ mod tests {
         let mut out = Vec::with_capacity(frames * channels);
         for n in 0..frames {
             let v = (2.0 * std::f64::consts::PI * hz * n as f64 / rate as f64).sin() as f32 * 0.5;
-            out.extend(std::iter::repeat(v).take(channels));
+            out.extend(std::iter::repeat_n(v, channels));
         }
         out
     }

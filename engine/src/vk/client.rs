@@ -35,6 +35,7 @@ impl std::fmt::Debug for Session {
     }
 }
 
+#[derive(Clone)]
 pub struct VkClient {
     http: Client,
     base: Url,
@@ -205,7 +206,7 @@ impl VkClient {
             &[("owner_id", user.to_string()), ("count", count.to_string()), ("offset", offset.to_string())],
         )?;
         let (entries, raw_count) = collect_entries(&value);
-        let items: Vec<Playlist> = entries.iter().filter_map(|e| model::parse_playlist(e)).collect();
+        let items: Vec<Playlist> = entries.iter().filter_map(model::parse_playlist).collect();
         let total = value.get("count").and_then(model::int).unwrap_or(0).max(0) as u32;
         let total = total.max(offset + raw_count);
         Ok(Page { items, total, next_offset: model::next_offset(offset, raw_count, total) })

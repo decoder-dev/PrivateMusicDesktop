@@ -5,10 +5,12 @@
 //! the iOS app for playlist parsing, AES-128 and MPEG-TS demuxing), the
 //! decoder, the queue and the player thread.
 
+pub mod app;
 pub mod audio;
 pub mod controller;
 pub mod error;
 pub mod queue;
+pub mod store;
 pub mod stream;
 pub mod unmask;
 pub mod vk;

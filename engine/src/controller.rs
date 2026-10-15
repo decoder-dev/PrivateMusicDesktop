@@ -52,6 +52,7 @@ pub struct State {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[allow(clippy::large_enum_variant)] // events are short-lived and moved once
 pub enum UiEvent {
     State(State),
     Queue { tracks: Vec<Track>, current: Option<usize> },
