@@ -84,7 +84,11 @@ struct Shared {
     remote: OnceLock<Remote>,
     emit: Box<dyn Fn(UiEvent) + Send + Sync>,
     fetch_template: FetchConfig,
+    refresher: OnceLock<Refresher>,
 }
+
+/// Renews an expired session (see [`Controller::set_refresher`]).
+pub type Refresher = Arc<dyn Fn(&Session) -> crate::Result<Session> + Send + Sync>;
 
 pub struct Controller {
     shared: Arc<Shared>,
@@ -177,7 +181,14 @@ impl Shared {
         inner.refreshed.insert(track.id());
         let shared = self.clone();
         std::thread::spawn(move || {
-            let result = shared.client.refreshed_track(&session, &track);
+            let mut result = shared.client.refreshed_track(&session, &track);
+            // An expired token is renewed from the stored cookie, not treated
+            // as a sign-out, exactly like the app's own calls.
+            if result == Err(Error::Unauthorized) {
+                if let Some(refresh) = shared.refresher.get() {
+                    result = refresh(&session).and_then(|fresh| shared.client.refreshed_track(&fresh, &track));
+                }
+            }
             match result {
                 Ok(fresh) => shared.with(|inner, events| {
                     // The user may have moved on while VK was answering.
@@ -287,6 +298,8 @@ impl Shared {
                         && !inner.refreshed.contains(&track_id)
                         && matches!(error, Error::Stream(_) | Error::Http(_));
                     if can_refresh {
+                        // Carry on where it broke, not from the beginning.
+                        inner.pending_start = inner.position;
                         self.refresh_then_play(&mut inner, track.clone());
                     }
                     can_refresh
@@ -343,6 +356,7 @@ impl Controller {
             remote: OnceLock::new(),
             emit: Box::new(emit),
             fetch_template,
+            refresher: OnceLock::new(),
         });
         let callback_shared = shared.clone();
         let player = PlayerHandle::spawn(make_sink, move |event| callback_shared.on_player_event(event));
@@ -363,6 +377,12 @@ impl Controller {
                 events.push(UiEvent::State(inner.state()));
             }
         });
+    }
+
+    /// How the controller renews an expired token when it asks VK for a
+    /// fresh stream address. Set once by the app.
+    pub fn set_refresher(&self, refresher: Refresher) {
+        let _ = self.shared.refresher.set(refresher);
     }
 
     pub fn session(&self) -> Option<Session> {
@@ -431,6 +451,10 @@ impl Controller {
             }
             let target = seconds.max(0.0);
             inner.position = if inner.duration > 0.0 { target.min(inner.duration) } else { target };
+            if inner.status == Status::Idle {
+                // Nothing is playing: the next Play starts here.
+                inner.pending_start = inner.position;
+            }
             events.push(UiEvent::State(inner.state()));
         });
         self.shared.remote().seek(seconds);
@@ -532,7 +556,22 @@ impl Controller {
 
     pub fn remove_from_queue(&self, index: usize) {
         self.shared.with(|inner, events| {
+            let was_last = inner.queue.at_last();
             let was_current = inner.queue.remove(index);
+            if was_current && was_last && !inner.queue.is_empty() {
+                // Removing the last track of the queue while it plays: the
+                // queue is over, unless it repeats. Never replay the previous one.
+                if inner.queue.repeat() == Repeat::All {
+                    inner.queue.rewind();
+                } else {
+                    events.push(inner.queue_event());
+                    inner.status = Status::Idle;
+                    inner.position = 0.0;
+                    self.shared.remote().stop();
+                    events.push(UiEvent::State(inner.state()));
+                    return;
+                }
+            }
             events.push(inner.queue_event());
             if was_current {
                 if inner.queue.is_empty() {
