@@ -6,6 +6,7 @@ import { listen } from "./bridge.js";
 import { store, set, publish, subscribe } from "./store.js";
 import { toast } from "./toast.js";
 import { createPlayerBar } from "./player-bar.js";
+import { createNowPlaying } from "./now-playing.js";
 import { createLibraryView } from "./views/library.js";
 import { createPlaylistsView } from "./views/playlists.js";
 import { createSearchView } from "./views/search.js";
@@ -16,6 +17,7 @@ import { loadSettings, saveSettings, saveQueue, loadQueue, clearQueue } from "./
 const root = document.getElementById("app");
 const settings = loadSettings();
 let shell = null;
+let nowPlaying = null;
 let login = null;
 let unlisten = [];
 let lastQueueSave = 0;
@@ -76,12 +78,14 @@ function buildShell() {
   const account = h("div", { class: "account" }, name,
     h("button", { class: "link", type: "button", onclick: signOut }, t("account.signOut")));
   const main = h("main", { class: "main" }, ...Object.values(views).map((v) => v.element));
-  const bar = createPlayerBar({ onSettingsChange: persistSettings });
+  nowPlaying = createNowPlaying({ settings, onSettingsChange: persistSettings });
+  const bar = createPlayerBar({ onSettingsChange: persistSettings, onExpand: () => nowPlaying.show() });
 
   const element = h("div", { class: "shell" },
     h("aside", { class: "sidebar" }, h("div", { class: "brand", text: t("app.name") }), nav, h("div", { class: "spacer" }), account),
     main,
-    h("footer", { class: "player" }, bar.element));
+    h("footer", { class: "player" }, bar.element),
+    nowPlaying.element);
 
   function show(id) {
     set("view", id);
@@ -102,6 +106,8 @@ function buildShell() {
 // ----------------------------------------------------------- screen routing
 
 function showLogin() {
+  nowPlaying?.close();
+  nowPlaying = null;
   shell = null;
   clear(root);
   login ??= createLoginView({ onError: (error) => toast(errorText(error), { error: true }) });
@@ -168,6 +174,9 @@ function onBackendEvent(event) {
     case "queue":
       set("queue", { tracks: event.tracks, current: event.current });
       break;
+    case "spectrum":
+      nowPlaying?.feed(event.bands);
+      break;
     case "error":
       toast(errorText(event), { error: true });
       break;
@@ -204,6 +213,7 @@ function typing(event) {
 document.addEventListener("keydown", (event) => {
   if (!shell || typing(event) || event.altKey) return;
   const mod = event.ctrlKey || event.metaKey;
+  if (nowPlaying?.isOpen() && (event.key === "/" || (mod && (event.key === "f" || event.key === "F")))) return;
   switch (event.key) {
     case " ":
       if (event.target instanceof HTMLButtonElement) return; // a focused button handles Space itself
@@ -237,7 +247,10 @@ document.addEventListener("keydown", (event) => {
       break;
     case "f":
     case "F":
-      if (mod) {
+      if (!mod) {
+        event.preventDefault();
+        nowPlaying?.show();
+      } else {
         event.preventDefault();
         shell.show("library");
         document.querySelector(".view:not([hidden]) input[type='search']")?.focus();

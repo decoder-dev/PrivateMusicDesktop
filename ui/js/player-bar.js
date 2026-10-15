@@ -5,7 +5,7 @@ import { api } from "./api.js";
 import { store, subscribe } from "./store.js";
 
 /** The bottom bar: what is playing, transport, position and volume. */
-export function createPlayerBar({ onSettingsChange }) {
+export function createPlayerBar({ onSettingsChange, onExpand }) {
   let dragging = false;
   let lastVolume = 1;
 
@@ -48,13 +48,17 @@ export function createPlayerBar({ onSettingsChange }) {
     setVolume(store.player.volume > 0 ? 0 : lastVolume || 1);
   }
 
+  const expandButton = h("button", { class: "icon-btn", type: "button", title: t("np.open"), "aria-label": t("np.open"),
+    onclick: () => onExpand?.() }, icon("expand", 18));
+  const coverButton = h("button", { class: "cover-button", type: "button", title: t("np.open"), "aria-label": t("np.open"), onclick: () => onExpand?.() }, coverSlot);
+
   const element = h("div", { class: "player-inner" },
-    h("div", { class: "now" }, coverSlot, h("div", { class: "titles" }, title, artist)),
+    h("div", { class: "now" }, coverButton, h("div", { class: "titles" }, title, artist)),
     h("div", { class: "transport" },
       h("div", { class: "controls" }, shuffleButton, previousButton, playButton, nextButton, repeatButton),
       h("div", { class: "seek" }, elapsed, seek, total),
       buffering),
-    h("div", { class: "volume" }, muteButton, volume));
+    h("div", { class: "volume" }, muteButton, volume, expandButton));
 
   let coverUrl;
 

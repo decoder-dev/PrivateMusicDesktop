@@ -259,3 +259,37 @@ fn a_nan_volume_never_reaches_the_device() {
     let gain = f32::from_bits(rig.volume.load(Ordering::Relaxed));
     assert!(gain.is_finite() && (0.0..=1.0).contains(&gain), "gain {gain}");
 }
+
+fn spectra(rig: &Rig) -> Vec<[f32; pm_engine::audio::spectrum::BANDS]> {
+    rig.events
+        .lock()
+        .unwrap()
+        .iter()
+        .filter_map(|e| if let PlayerEvent::Spectrum { bands } = e { Some(*bands) } else { None })
+        .collect()
+}
+
+#[test]
+fn the_visualizer_is_silent_until_asked_and_then_follows_the_tone() {
+    if !require_ffmpeg() { return; }
+    let dir = tempfile::tempdir().unwrap();
+    hls(dir.path());
+    let server = Server::start(dir.path().to_path_buf());
+    let rig = rig(48_000, 1.0);
+    rig.player.play("1_1", &format!("{}/index.m3u8", server.base), 12.0, 0.0, lab_config());
+    rig.wait("playing", |e| e.iter().any(|x| matches!(x, PlayerEvent::Playing { .. })));
+    std::thread::sleep(Duration::from_millis(400));
+    assert!(spectra(&rig).is_empty(), "nothing is analysed unless the window asks");
+
+    rig.player.set_visualizer(true);
+    rig.wait("spectrum", |e| e.iter().filter(|x| matches!(x, PlayerEvent::Spectrum { .. })).count() >= 15);
+    let last = *spectra(&rig).last().unwrap();
+    let loudest = last.iter().cloned().fold(0.0, f32::max);
+    assert!(loudest > 0.4, "the test tone should show: {last:?}");
+
+    rig.player.set_visualizer(false);
+    std::thread::sleep(Duration::from_millis(150));
+    let count = spectra(&rig).len();
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(spectra(&rig).len(), count, "events stop when the visualizer is turned off");
+}

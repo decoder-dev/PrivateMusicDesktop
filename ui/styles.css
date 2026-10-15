@@ -1,5 +1,6 @@
-/* Flat on purpose: no transitions, no animations, no shadows, no blur.
-   State changes are instant. Colours follow the iOS app's accent. */
+/* The app itself is flat: no transitions, no animations. State changes are
+   instant. The only motion is the live spectrum in the full-screen view, and
+   that view is the only place with blur, gradients and shadows. */
 :root {
   color-scheme: light dark;
   --accent: #1a6be0;
@@ -141,8 +142,8 @@ input[type="range"] { accent-color: var(--accent); width: 100%; margin: 0; }
   :root { --sidebar: 64px; }
   .brand, .nav button span.label, .account .name, .account .link { display: none; }
   .nav button { text-align: center; }
-  .player-inner { grid-template-columns: minmax(120px, 1fr) minmax(260px, 2fr) 0; }
-  .volume { display: none; }
+  .player-inner { grid-template-columns: minmax(120px, 1fr) minmax(260px, 2fr) auto; }
+  .volume input, .volume .icon-btn:first-child { display: none; }
 }
 
 /* ---------- additions ---------- */
@@ -160,3 +161,70 @@ input[type="search"] { -webkit-appearance: none; appearance: none; }
 .icon-btn:disabled { opacity: 0.4; cursor: default; }
 .view-header .field { flex: 1 1 140px; max-width: 280px; }
 .view-header .btn { flex: none; }
+
+/* ---------- player bar extras ---------- */
+.cover-button { flex: none; display: block; border-radius: 6px; }
+.cover-button:hover .cover { filter: brightness(1.12); }
+.volume .icon-btn:last-child { margin-left: 4px; }
+
+/* ---------- full-screen now playing ---------- */
+.np {
+  --np-a: #3385fa; --np-b: #1a6be0;
+  position: fixed; inset: 0; z-index: 50; overflow: hidden;
+  background: #0b0c10; color: #fff; display: grid;
+  grid-template-rows: auto 1fr auto; user-select: none;
+}
+.np[hidden] { display: none !important; }
+.np-backdrop { position: absolute; inset: 0; overflow: hidden; background: linear-gradient(135deg, var(--np-a), var(--np-b)); }
+.np-backdrop img { position: absolute; inset: -12%; width: 124%; height: 124%; object-fit: cover; filter: blur(64px) saturate(1.5) brightness(0.62); }
+.np-backdrop::after { content: ""; position: absolute; inset: 0; background:
+  radial-gradient(120% 90% at 50% 0%, transparent 0%, rgb(0 0 0 / 0.35) 100%),
+  linear-gradient(180deg, rgb(0 0 0 / 0.15) 0%, rgb(0 0 0 / 0.55) 100%); }
+.np-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.np[data-mode="off"] .np-canvas { display: none; }
+
+.np-top, .np-bottom { position: relative; z-index: 1; }
+.np-top { display: flex; align-items: center; gap: 4px; padding: 18px 22px; }
+.np-spacer { flex: 1; }
+.np-stage { position: relative; z-index: 1; min-height: 0; display: flex; align-items: center; justify-content: center; gap: clamp(24px, 5vw, 72px); padding: 0 6vw; }
+.np-cover {
+  flex: none; width: min(46vh, 38vw); aspect-ratio: 1; border-radius: 18px; overflow: hidden;
+  background: rgb(255 255 255 / 0.08);
+  box-shadow: 0 30px 80px -20px var(--np-a), 0 12px 32px rgb(0 0 0 / 0.5);
+}
+.np[data-mode="radial"] .np-cover { border-radius: 50%; box-shadow: 0 0 60px -10px var(--np-a); }
+.np-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.np-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: rgb(255 255 255 / 0.5); }
+.np-info { min-width: 0; max-width: 520px; display: flex; flex-direction: column; gap: 10px; }
+.np-title { font-size: clamp(26px, 4.2vw, 52px); line-height: 1.08; font-weight: 800; letter-spacing: -0.02em; overflow-wrap: anywhere; text-shadow: 0 2px 24px rgb(0 0 0 / 0.35); }
+.np-artist { font-size: clamp(16px, 2vw, 24px); color: rgb(255 255 255 / 0.82); overflow-wrap: anywhere; }
+.np-next { margin-top: 14px; font-size: 14px; color: rgb(255 255 255 / 0.6); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.np-bottom { padding: 0 max(6vw, 28px) 26px; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.np-seek { width: min(100%, 760px); display: grid; grid-template-columns: 48px 1fr 48px; gap: 10px; align-items: center; color: rgb(255 255 255 / 0.75); font-variant-numeric: tabular-nums; }
+.np-seek span:first-child { text-align: right; }
+.np input[type="range"] { accent-color: #fff; height: 18px; }
+.np-controls { display: flex; align-items: center; gap: 14px; }
+.np-btn { width: 44px; height: 44px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: rgb(255 255 255 / 0.85); position: relative; }
+.np-btn:hover { background: rgb(255 255 255 / 0.14); color: #fff; }
+.np-btn.on { color: var(--np-a); filter: brightness(1.6); }
+.np-btn:disabled { opacity: 0.4; cursor: default; }
+.np-btn[aria-pressed="true"]:not(.on) { color: #fff; background: rgb(255 255 255 / 0.18); }
+.np-one { position: absolute; font-size: 10px; font-weight: 800; right: 10px; top: 9px; }
+.np-play { width: 68px; height: 68px; border-radius: 50%; background: #fff; color: #0b0c10; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 8px 28px -6px var(--np-a); }
+.np-play:hover { background: rgb(255 255 255 / 0.9); }
+.np-play:disabled { opacity: 0.5; cursor: default; }
+.np :focus-visible { outline-color: #fff; }
+
+/* Controls step aside while music plays and nothing is touched. */
+.np.idle { cursor: none; }
+.np.idle .np-top, .np.idle .np-bottom, .np.idle .np-next { visibility: hidden; }
+
+@media (max-width: 860px), (max-aspect-ratio: 1/1) {
+  .np-stage { flex-direction: column; justify-content: center; text-align: center; gap: 20px; }
+  .np-cover { width: min(40vh, 70vw); }
+  .np-info { align-items: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .np-canvas { opacity: 0.85; }
+}

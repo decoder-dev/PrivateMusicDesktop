@@ -182,3 +182,22 @@ pub fn remove_from_queue(state: TauriState<'_, AppState>, index: usize) {
 pub fn stop(state: TauriState<'_, AppState>) {
     state.app.controller().stop();
 }
+
+#[tauri::command]
+pub fn set_visualizer(state: TauriState<'_, AppState>, on: bool) {
+    state.app.controller().set_visualizer(on);
+}
+
+#[tauri::command]
+pub async fn artwork_palette(url: String) -> CommandResult<pm_engine::artwork::Palette> {
+    if url.len() > 2048 {
+        return Err(Error::InvalidRequest.into());
+    }
+    blocking(move || pm_engine::artwork::palette_from_url(&url)).await
+}
+
+/// Full-screen for the whole window (the UI's own "full screen" view is separate).
+#[tauri::command]
+pub fn set_fullscreen(window: tauri::WebviewWindow, on: bool) -> CommandResult<()> {
+    window.set_fullscreen(on).map_err(|e| CommandError { kind: "window".into(), message: e.to_string() })
+}
