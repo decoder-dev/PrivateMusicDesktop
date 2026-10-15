@@ -219,3 +219,23 @@ pub async fn remove_from_library(state: TauriState<'_, AppState>, track: Track) 
     let app = state.app.clone();
     blocking(move || app.remove_from_library(&track)).await
 }
+
+#[tauri::command]
+pub fn set_close_to_tray(state: TauriState<'_, AppState>, on: bool) {
+    state.close_to_tray.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[derive(Serialize)]
+pub struct AppInfo {
+    version: String,
+    /// False when the desktop has no tray: "close to tray" cannot work there.
+    has_tray: bool,
+}
+
+#[tauri::command]
+pub fn app_info(handle: AppHandle, state: TauriState<'_, AppState>) -> AppInfo {
+    AppInfo {
+        version: handle.package_info().version.to_string(),
+        has_tray: state.has_tray.load(std::sync::atomic::Ordering::Relaxed),
+    }
+}
