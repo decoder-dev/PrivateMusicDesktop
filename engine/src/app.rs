@@ -299,6 +299,26 @@ impl Core {
         self.api(|client, session| client.recommendations(session, Some(track)))
     }
 
+    pub fn create_playlist(&self, title: &str, description: &str) -> Result<Playlist> {
+        self.api(|client, session| client.create_playlist(session, title, description))
+    }
+
+    pub fn edit_playlist(&self, playlist: &Playlist, title: &str, description: &str) -> Result<Playlist> {
+        self.api(|client, session| client.edit_playlist(session, playlist, title, description))
+    }
+
+    pub fn delete_playlist(&self, playlist: &Playlist) -> Result<()> {
+        self.api(|client, session| client.delete_playlist(session, playlist))
+    }
+
+    pub fn add_to_playlist(&self, playlist: &Playlist, track: &Track) -> Result<()> {
+        self.api(|client, session| client.change_playlist(session, playlist, track, true))
+    }
+
+    pub fn remove_from_playlist(&self, playlist: &Playlist, track: &Track) -> Result<()> {
+        self.api(|client, session| client.change_playlist(session, playlist, track, false))
+    }
+
     pub fn add_to_library(&self, track: &Track) -> Result<Track> {
         self.api(|client, session| client.add_track(session, track))
     }

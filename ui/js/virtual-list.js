@@ -43,7 +43,7 @@ export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
   root.addEventListener("scroll", schedule, { passive: true });
   new ResizeObserver(schedule).observe(root);
 
-  for (const type of ["click", "dblclick", "keydown"]) {
+  for (const type of ["click", "dblclick", "keydown", "contextmenu"]) {
     root.addEventListener(type, (event) => {
       const row = event.target.closest?.(".row");
       if (!row || !windowEl.contains(row)) return;

@@ -297,6 +297,97 @@ impl VkClient {
         Ok(Page { items, total, next_offset: model::next_offset(offset, raw_count, total) })
     }
 
+    fn own_playlist(&self, session: &Session, playlist: &Playlist) -> Result<()> {
+        let user = self.user_id(session)?;
+        if playlist.owner_id != user || playlist.playlist_id <= 0 {
+            return Err(Error::InvalidRequest);
+        }
+        Ok(())
+    }
+
+    fn clean_title(title: &str) -> Result<String> {
+        let title = title.trim();
+        if title.is_empty() || title.chars().count() > 128 {
+            return Err(Error::InvalidRequest);
+        }
+        Ok(title.to_string())
+    }
+
+    fn clean_description(description: &str) -> Result<String> {
+        let description = description.trim();
+        if description.chars().count() > 2000 {
+            return Err(Error::InvalidRequest);
+        }
+        Ok(description.to_string())
+    }
+
+    pub fn create_playlist(&self, session: &Session, title: &str, description: &str) -> Result<Playlist> {
+        let title = Self::clean_title(title)?;
+        let description = Self::clean_description(description)?;
+        let user = self.user_id(session)?;
+        let value = self.call_once(
+            session,
+            "audio.createPlaylist",
+            &[("owner_id", user.to_string()), ("title", title.clone()), ("description", description.clone())],
+        )?;
+        // VK answers with the new playlist; fill in what it may leave out.
+        let mut playlist = model::parse_playlist(&value).ok_or_else(|| Error::Format("audio.createPlaylist".into()))?;
+        playlist.owner_id = user;
+        if playlist.title.is_empty() || playlist.title == "Playlist" {
+            playlist.title = title;
+        }
+        if playlist.description.is_none() && !description.is_empty() {
+            playlist.description = Some(description);
+        }
+        Ok(playlist)
+    }
+
+    pub fn edit_playlist(&self, session: &Session, playlist: &Playlist, title: &str, description: &str) -> Result<Playlist> {
+        self.own_playlist(session, playlist)?;
+        let title = Self::clean_title(title)?;
+        let description = Self::clean_description(description)?;
+        self.call_once(
+            session,
+            "audio.editPlaylist",
+            &[
+                ("owner_id", playlist.owner_id.to_string()),
+                ("playlist_id", playlist.playlist_id.to_string()),
+                ("title", title.clone()),
+                ("description", description.clone()),
+            ],
+        )?;
+        Ok(Playlist { title, description: (!description.is_empty()).then_some(description), ..playlist.clone() })
+    }
+
+    pub fn delete_playlist(&self, session: &Session, playlist: &Playlist) -> Result<()> {
+        self.own_playlist(session, playlist)?;
+        self.call_once(
+            session,
+            "audio.deletePlaylist",
+            &[("owner_id", playlist.owner_id.to_string()), ("playlist_id", playlist.playlist_id.to_string())],
+        )?;
+        Ok(())
+    }
+
+    /// Adds (`add = true`) or removes a track in one of the user's playlists.
+    pub fn change_playlist(&self, session: &Session, playlist: &Playlist, track: &Track, add: bool) -> Result<()> {
+        self.own_playlist(session, playlist)?;
+        if track.track_id <= 0 || track.owner_id == 0 {
+            return Err(Error::InvalidRequest);
+        }
+        let method = if add { "audio.addToPlaylist" } else { "audio.removeFromPlaylist" };
+        self.call_once(
+            session,
+            method,
+            &[
+                ("owner_id", playlist.owner_id.to_string()),
+                ("playlist_id", playlist.playlist_id.to_string()),
+                ("audio_ids", format!("{}_{}", track.owner_id, track.track_id)),
+            ],
+        )?;
+        Ok(())
+    }
+
     pub fn playlist_tracks(
         &self,
         session: &Session,

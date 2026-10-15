@@ -22,7 +22,9 @@
   const playlists = [
     { playlist_id: 1, owner_id: 7, title: "Дорога", description: null, count: 3, artwork_url: null, access_key: null },
     { playlist_id: 2, owner_id: 7, title: "Работа", description: null, count: 2, artwork_url: "https://cdn.example/p.jpg", access_key: "k" },
+    { playlist_id: 9, owner_id: -50, title: "Чужой", description: null, count: 2, artwork_url: null, access_key: null },
   ];
+  const playlistTracks = new Map();
 
   const state = {
     session: { signed_in: !!config.signedIn, profile: null, persistent: config.persistent !== false },
@@ -60,8 +62,37 @@
     logout: () => { state.session = { signed_in: false, profile: null, persistent: true }; state.queue = []; },
     library: async ({ offset, count }) => { await delay(config.pageDelay ?? 5); return page(library, offset, count); },
     playlists: async ({ offset, count }) => page(playlists, offset, count),
-    playlist_tracks: async ({ playlist, offset, count }) =>
-      page(library.slice(0, playlist.count).map((t) => ({ ...t, title: `${playlist.title}: ${t.title}` })), offset, count),
+    playlist_tracks: async ({ playlist, offset, count }) => {
+      const key = `${playlist.owner_id}_${playlist.playlist_id}`;
+      if (!playlistTracks.has(key)) playlistTracks.set(key, library.slice(0, playlist.count).map((t) => ({ ...t, title: `${playlist.title}: ${t.title}` })));
+      return page(playlistTracks.get(key), offset, count);
+    },
+    create_playlist: async ({ title, description }) => {
+      await delay(10);
+      const created = { playlist_id: 100 + playlists.length, owner_id: 7, title, description: description || null, count: 0, artwork_url: null, access_key: null };
+      playlists.unshift(created);
+      return created;
+    },
+    edit_playlist: async ({ playlist, title, description }) => {
+      if (playlist.owner_id !== 7) throw { kind: "invalid", message: "Invalid request." };
+      const found = playlists.find((p) => p.playlist_id === playlist.playlist_id && p.owner_id === playlist.owner_id);
+      Object.assign(found, { title, description: description || null });
+      return { ...found };
+    },
+    delete_playlist: async ({ playlist }) => {
+      const index = playlists.findIndex((p) => p.playlist_id === playlist.playlist_id && p.owner_id === playlist.owner_id);
+      playlists.splice(index, 1);
+    },
+    add_to_playlist: async ({ playlist, track }) => {
+      if (playlist.owner_id !== 7) throw { kind: "invalid", message: "Invalid request." };
+      const key = `${playlist.owner_id}_${playlist.playlist_id}`;
+      playlistTracks.set(key, [...(playlistTracks.get(key) ?? []), track]);
+      state.lastAdded = { playlist: playlist.title, track: track.title };
+    },
+    remove_from_playlist: async ({ playlist, track }) => {
+      const key = `${playlist.owner_id}_${playlist.playlist_id}`;
+      playlistTracks.set(key, (playlistTracks.get(key) ?? []).filter((t) => t.track_id !== track.track_id || t.owner_id !== track.owner_id));
+    },
     search: async ({ query, offset, count }) => {
       await delay(query === "slow" ? 300 : 10);
       const all = query === "empty" ? [] : Array.from({ length: 120 }, (_, i) => makeTrack(5000 + i, { title: `${query} ${i + 1}` }));

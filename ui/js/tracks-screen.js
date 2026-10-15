@@ -18,6 +18,10 @@ import { isDownloaded, isDownloading } from "./downloads.js";
  *   rowActions                           [[icon, action, label], …] or undefined for the default pair
  *   isSelected(track, index)             default: the playing track
  */
+// The track menu every list uses unless a screen brings its own (set by main).
+let defaultMenu = null;
+export function setDefaultTrackMenu(fn) { defaultMenu = fn; }
+
 export function createTracksScreen({ title, filterable = false, playable = true, hooks }) {
   let all = [];
   let visible = [];
@@ -54,7 +58,14 @@ export function createTracksScreen({ title, filterable = false, playable = true,
       }),
     onRowEvent: (type, event, track, index) => {
       const button = event.target.closest?.("[data-action]");
-      if (type === "click" && button) {
+      if (type === "contextmenu") {
+        event.preventDefault();
+        (hooks.onMenu ?? defaultMenu)?.(track, { x: event.clientX, y: event.clientY }, index);
+      } else if (type === "click" && button?.dataset.action === "menu") {
+        event.stopPropagation();
+        const box = button.getBoundingClientRect();
+        (hooks.onMenu ?? defaultMenu)?.(track, { x: box.right - 4, y: box.bottom + 2 }, index);
+      } else if (type === "click" && button) {
         event.stopPropagation();
         hooks.onAction?.(button.dataset.action, track, index);
       } else if (type === "dblclick" && !button) {
