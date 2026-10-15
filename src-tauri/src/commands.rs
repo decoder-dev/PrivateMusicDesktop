@@ -55,7 +55,9 @@ pub async fn profile(state: TauriState<'_, AppState>) -> CommandResult<Profile> 
 }
 
 #[tauri::command]
-pub fn login_start(handle: AppHandle, state: TauriState<'_, AppState>) -> CommandResult<()> {
+// Async on purpose: on Windows, creating a window from a synchronous command
+// deadlocks WebView2 (the window opens but its page never loads).
+pub async fn login_start(handle: AppHandle, state: TauriState<'_, AppState>) -> CommandResult<()> {
     crate::login::start(&handle, &state).map_err(|message| CommandError { kind: "login".into(), message })
 }
 
