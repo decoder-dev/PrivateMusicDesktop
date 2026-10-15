@@ -526,8 +526,8 @@ test("lyrics: 'not found' and failures are different messages, and a failure can
   try {
     const { page } = app;
     await playAndOpen(app, { index: 4 }); // "Трек 5": none exist
-    await page.waitForSelector(".ly-message");
-    assert.equal(await page.locator(".ly-message").innerText(), "Текст не найден.");
+    // The same element shows "Ищем текст…" while the request is in flight.
+    await page.waitForFunction(() => document.querySelector(".ly-message")?.textContent === "Текст не найден.");
   } finally { await app.close(); }
 
   app = await openApp({ config: { signedIn: true, lyricsFail: true } });
