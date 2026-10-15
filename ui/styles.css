@@ -261,3 +261,14 @@ input[type="search"] { -webkit-appearance: none; appearance: none; }
   .ly { width: 100%; max-height: none; flex: 1 1 0; }
   .ly-line { text-align: center; }
 }
+
+/* ---------- hearts ---------- */
+.row .actions .like.pinned { visibility: visible; }
+.like.on, .row .like.on { color: #e5484d; }
+.now .like { flex: none; }
+.row { grid-template-columns: 40px 1fr 56px 92px; }
+.np-artist-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.np-artist-row .np-artist { min-width: 0; }
+.np-like { width: 36px; height: 36px; flex: none; }
+.np-like.on { color: #ff5a63; filter: none; }
+@media (max-width: 860px), (max-aspect-ratio: 1/1) { .np-artist-row { justify-content: center; } }

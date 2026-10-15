@@ -83,8 +83,19 @@ impl VkClient {
         self.base.join(&format!("method/{method}")).map_err(|_| Error::InvalidRequest)
     }
 
-    /// POSTs a VK method and returns the `response` value.
+    /// POSTs a VK method and returns the `response` value. Read-only calls
+    /// are retried on transient failures.
     pub fn call(&self, session: &Session, method: &str, params: &[(&str, String)]) -> Result<Value> {
+        self.call_with(session, method, params, 3)
+    }
+
+    /// For calls that change something (add, delete): a retry after a timeout
+    /// or a 5xx could apply the change twice, so there is exactly one attempt.
+    pub fn call_once(&self, session: &Session, method: &str, params: &[(&str, String)]) -> Result<Value> {
+        self.call_with(session, method, params, 1)
+    }
+
+    fn call_with(&self, session: &Session, method: &str, params: &[(&str, String)], attempts: u32) -> Result<Value> {
         let url = self.url(method)?;
         let mut form: Vec<(&str, String)> = vec![
             ("access_token", session.access_token.clone()),
@@ -94,11 +105,10 @@ impl VkClient {
         ];
         form.extend(params.iter().map(|(k, v)| (*k, v.clone())));
 
-        const ATTEMPTS: u32 = 3;
         let mut attempt = 0;
         loop {
             attempt += 1;
-            let last = attempt >= ATTEMPTS;
+            let last = attempt >= attempts;
             let response = self
                 .http
                 .post(url.clone())
@@ -180,6 +190,38 @@ impl VkClient {
             &[("owner_id", user.to_string()), ("count", count.to_string()), ("offset", offset.to_string())],
         )?;
         Ok(tracks_page(&value, offset, Some(user)))
+    }
+
+    /// Copies a track into the user's "My music". Returns the copy, which has
+    /// its own id and the user as owner.
+    pub fn add_track(&self, session: &Session, track: &Track) -> Result<Track> {
+        if track.track_id <= 0 || track.owner_id == 0 {
+            return Err(Error::InvalidRequest);
+        }
+        let mut params = vec![("audio_id", track.track_id.to_string()), ("owner_id", track.owner_id.to_string())];
+        if let Some(key) = track.access_key.as_deref().filter(|k| !k.is_empty()) {
+            params.push(("access_key", key.to_string()));
+        }
+        let value = self.call_once(session, "audio.add", &params)?;
+        let id = model::int(&value).filter(|id| *id > 0).ok_or_else(|| Error::Format("audio.add: no id".into()))?;
+        let owner = match session.user_id {
+            Some(user) => user,
+            None => self.user_id(session)?,
+        };
+        Ok(Track { track_id: id, owner_id: owner, access_key: None, ..track.clone() })
+    }
+
+    /// Removes a track from the user's "My music" (`track` is the user's copy).
+    pub fn delete_track(&self, session: &Session, track: &Track) -> Result<()> {
+        if track.track_id <= 0 || track.owner_id == 0 {
+            return Err(Error::InvalidRequest);
+        }
+        self.call_once(
+            session,
+            "audio.delete",
+            &[("audio_id", track.track_id.to_string()), ("owner_id", track.owner_id.to_string())],
+        )?;
+        Ok(())
     }
 
     /// VK's own plain text for a track's `lyrics_id`.

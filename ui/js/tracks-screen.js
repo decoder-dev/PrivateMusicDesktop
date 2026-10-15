@@ -5,6 +5,7 @@ import { createVirtualList } from "./virtual-list.js";
 import { trackRow, ROW_HEIGHT } from "./track-row.js";
 import { store, subscribe } from "./store.js";
 import { trackKey } from "./api.js";
+import { isLiked, isBusy } from "./likes.js";
 
 /**
  * The common screen for every list of tracks: header, optional filter,
@@ -44,6 +45,9 @@ export function createTracksScreen({ title, filterable = false, playable = true,
       trackRow(track, {
         selected: hooks.isSelected ? hooks.isSelected(track, index) : store.player.track && trackKey(store.player.track) === trackKey(track),
         actions: hooks.rowActions,
+        liked: isLiked(track),
+        busy: isBusy(track),
+        pinLiked: hooks.pinLiked ?? true,
       }),
     onRowEvent: (type, event, track, index) => {
       const button = event.target.closest?.("[data-action]");
@@ -87,6 +91,8 @@ export function createTracksScreen({ title, filterable = false, playable = true,
       list.refresh();
     }
   });
+
+  subscribe("likes", () => list.refresh());
 
   return {
     element,

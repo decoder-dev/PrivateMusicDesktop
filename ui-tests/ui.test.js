@@ -557,3 +557,73 @@ test("lyrics: L toggles the panel and the choice sticks; hidden lyrics are not f
     await page.waitForSelector(".ly-text");
   } finally { await app.close(); }
 });
+
+// ------------------------------------------------------------------- hearts
+
+async function searchFor(page, query) {
+  await page.click(".nav button[data-view=search]");
+  await page.locator(".main > .view:not([hidden]) input[type=search]").fill(query);
+  await page.waitForFunction((q) => document.querySelector(".main > .view:not([hidden]) .row .title")?.textContent.startsWith(q), query);
+}
+
+test("hearts: adding from search puts the copy on top of My music, a second click takes it out", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await searchFor(page, "песня");
+    const heart = rows(page).first().locator(".like");
+    assert.equal(await heart.getAttribute("aria-pressed"), "false");
+    await rows(page).first().hover();
+    await heart.click();
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .like")?.getAttribute("aria-pressed") === "true");
+    assert.equal(await page.locator(".toast").innerText(), "Добавлено в «Моя музыка»");
+    assert.equal(await heart.isVisible(), true, "a liked heart stays visible without hover");
+
+    await page.click(".nav button[data-view=library]");
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .title")?.textContent === "песня 1");
+    assert.match(await page.locator(".main > .view:not([hidden]) .meta").innerText(), /1235/);
+
+    await searchFor(page, "песня");
+    await rows(page).first().hover();
+    await rows(page).first().locator(".like").click();
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .like")?.getAttribute("aria-pressed") === "false");
+    const removed = await page.evaluate(() => window.__mock.last("remove_from_library").args.track);
+    assert.equal(removed.owner_id, 7, "the library copy is removed, not the search result");
+    await page.click(".nav button[data-view=library]");
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .title")?.textContent === "Трек 1");
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("hearts: the player bar and full screen show and change the state of the playing track", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await rows(page).first().dblclick();
+    await page.waitForSelector(".player .like.on");
+    await page.click(".player .volume .icon-btn:last-child");
+    await page.waitForSelector(".np-like.on");
+    await page.click(".np-like");
+    await page.waitForSelector(".np-like:not(.on)");
+    await page.keyboard.press("Escape");
+    await page.waitForSelector(".player .like:not(.on)");
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .title")?.textContent === "Трек 2");
+    assert.equal(await page.evaluate(() => window.__mock.count("remove_from_library")), 1);
+  } finally { await app.close(); }
+});
+
+test("hearts: a refused change says why and leaves the heart as it was", async () => {
+  const app = await openApp({ config: { signedIn: true, libraryWriteFails: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await searchFor(page, "песня");
+    await rows(page).first().hover();
+    await rows(page).first().locator(".like").click();
+    await page.waitForSelector(".toast.error");
+    assert.match(await page.locator(".toast.error").innerText(), /Access denied/);
+    assert.equal(await rows(page).first().locator(".like").getAttribute("aria-pressed"), "false");
+  } finally { await app.close(); }
+});

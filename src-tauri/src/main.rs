@@ -95,6 +95,8 @@ fn main() {
             commands::set_volume,
             commands::set_visualizer,
             commands::lyrics,
+            commands::add_to_library,
+            commands::remove_from_library,
             commands::artwork_palette,
             commands::set_fullscreen,
             commands::set_shuffle,

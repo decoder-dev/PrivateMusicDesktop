@@ -5,6 +5,7 @@ import { api } from "./api.js";
 import { store, subscribe } from "./store.js";
 import { createVisualizer, MODES } from "./visualizer.js";
 import { createLyricsPanel } from "./lyrics-panel.js";
+import { isLiked, isBusy } from "./likes.js";
 
 const IDLE_MS = 3000;
 const PALETTES = new Map();
@@ -31,7 +32,7 @@ function toHex(color) {
  * The full-screen "now playing" view: the cover as a blurred backdrop, big
  * artwork, transport, and a live spectrum drawn from what is really playing.
  */
-export function createNowPlaying({ settings, onSettingsChange }) {
+export function createNowPlaying({ settings, onSettingsChange, onLike }) {
   const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
   let open = false;
   let dragging = false;
@@ -48,6 +49,20 @@ export function createNowPlaying({ settings, onSettingsChange }) {
   const title = h("div", { class: "np-title" });
   const artist = h("div", { class: "np-artist" });
   const upNext = h("div", { class: "np-next" });
+  const likeButton = h("button", { class: "np-btn np-like", type: "button", onclick: () => onLike?.(store.player.track) }, icon("heart", 22));
+  function renderLike() {
+    const track = store.player.track;
+    likeButton.hidden = !track;
+    if (!track) return;
+    const liked = isLiked(track);
+    const label = liked ? t("like.remove") : t("like.add");
+    likeButton.classList.toggle("on", liked);
+    likeButton.title = label;
+    likeButton.setAttribute("aria-label", label);
+    likeButton.setAttribute("aria-pressed", String(liked));
+    likeButton.disabled = isBusy(track);
+    likeButton.replaceChildren(icon(liked ? "heart-on" : "heart", 22));
+  }
 
   const closeButton = h("button", { class: "np-btn", type: "button", title: t("np.close"), "aria-label": t("np.close"), onclick: () => close() }, icon("chevron", 22));
   const modeButton = h("button", { class: "np-btn", type: "button", onclick: () => cycleMode() }, icon("visualizer", 20));
@@ -77,7 +92,7 @@ export function createNowPlaying({ settings, onSettingsChange }) {
     backdrop,
     canvas,
     h("div", { class: "np-top" }, closeButton, h("div", { class: "np-spacer" }), lyricsButton, modeButton, windowButton),
-    h("div", { class: "np-stage" }, coverBox, h("div", { class: "np-info" }, title, artist, upNext), lyrics.element),
+    h("div", { class: "np-stage" }, coverBox, h("div", { class: "np-info" }, title, h("div", { class: "np-artist-row" }, artist, likeButton), upNext), lyrics.element),
     h("div", { class: "np-bottom" },
       h("div", { class: "np-seek" }, elapsed, seek, total),
       h("div", { class: "np-controls" }, shuffleButton, previousButton, playButton, nextButton, repeatButton)));
@@ -272,6 +287,7 @@ export function createNowPlaying({ settings, onSettingsChange }) {
     lyrics.setVisible(lyricsOn);
     visualizer.start();
     render(store.player);
+    renderLike();
     renderQueue();
     syncEngine();
     wake();
@@ -289,7 +305,8 @@ export function createNowPlaying({ settings, onSettingsChange }) {
     if (windowFullscreen) toggleWindowFullscreen(false);
   }
 
-  subscribe("player", (player) => { if (open) render(player); });
+  subscribe("player", (player) => { if (open) { render(player); renderLike(); } });
+  subscribe("likes", () => { if (open) renderLike(); });
   subscribe("queue", () => { if (open) renderQueue(); });
 
   return {
