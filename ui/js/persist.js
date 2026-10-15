@@ -28,6 +28,7 @@ export function loadSettings() {
     volume,
     shuffle: saved.shuffle === true,
     repeat: ["off", "all", "one"].includes(saved.repeat) ? saved.repeat : "off",
+    visualizer: ["bars", "mirror", "wave", "radial", "off"].includes(saved.visualizer) ? saved.visualizer : null,
   };
 }
 

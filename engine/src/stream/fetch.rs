@@ -96,7 +96,7 @@ fn is_loopback(url: &Url) -> bool {
 /// Literal local addresses (loopback, private, link-local, unspecified) and
 /// `localhost`: a stream address handed over by the window must not be able to
 /// make the engine knock on the user's own machine or network.
-fn is_local_host(url: &Url) -> bool {
+pub(crate) fn is_local_host(url: &Url) -> bool {
     use std::net::{Ipv4Addr, Ipv6Addr};
     fn v4(a: Ipv4Addr) -> bool {
         a.is_loopback() || a.is_private() || a.is_link_local() || a.is_unspecified() || a.is_broadcast()

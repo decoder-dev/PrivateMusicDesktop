@@ -20,6 +20,7 @@ use crossbeam_channel::{bounded, unbounded, Receiver, SendTimeoutError, Sender, 
 
 use super::convert::Converter;
 use super::sink::Sink;
+use super::spectrum::{Analyzer, Tap, BANDS};
 use crate::stream::{spawn_fetch, Decoder, FetchConfig, SharedBuffer};
 use crate::Error;
 
@@ -33,6 +34,8 @@ pub enum PlayerEvent {
     /// The stream ran dry mid-track and playback waits for data.
     Buffering { track_id: String, on: bool },
     Position { track_id: String, seconds: f64, duration: f64 },
+    /// Levels (0…1) of what is playing right now; only while the visualizer is on.
+    Spectrum { bands: [f32; BANDS] },
     /// The track played to its end by itself.
     Ended { track_id: String },
     Stopped,
@@ -46,6 +49,8 @@ pub enum Command {
     Resume,
     Seek(f64),
     SetVolume(f32),
+    /// Turns the spectrum analysis (and its events) on or off.
+    SetVisualizer(bool),
     Stop,
     Shutdown,
 }
@@ -79,6 +84,7 @@ struct Session {
     failure: Option<Error>,
     started: bool,
     buffering: bool,
+    tap: Tap,
     _fetch: JoinHandle<()>,
     _decoder: JoinHandle<()>,
 }
@@ -121,6 +127,7 @@ impl Remote {
     pub fn resume(&self) { self.send(Command::Resume); }
     pub fn seek(&self, seconds: f64) { self.send(Command::Seek(seconds)); }
     pub fn set_volume(&self, volume: f32) { self.send(Command::SetVolume(volume)); }
+    pub fn set_visualizer(&self, on: bool) { self.send(Command::SetVisualizer(on)); }
     pub fn stop(&self) { self.send(Command::Stop); }
 }
 
@@ -155,6 +162,7 @@ impl PlayerHandle {
     pub fn resume(&self) { self.send(Command::Resume); }
     pub fn seek(&self, seconds: f64) { self.send(Command::Seek(seconds)); }
     pub fn set_volume(&self, volume: f32) { self.send(Command::SetVolume(volume)); }
+    pub fn set_visualizer(&self, on: bool) { self.send(Command::SetVisualizer(on)); }
     pub fn stop(&self) { self.send(Command::Stop); }
 }
 
@@ -168,6 +176,8 @@ impl Drop for PlayerHandle {
 }
 
 const POSITION_INTERVAL: Duration = Duration::from_millis(250);
+/// About 30 pictures a second for the visualizer.
+const SPECTRUM_INTERVAL: Duration = Duration::from_millis(33);
 /// Refill the sink when it holds less than this, up to `HIGH_WATER`. Filling
 /// in batches lets every thread sleep for a few hundred milliseconds at a
 /// time instead of waking dozens of times a second, which is what keeps a
@@ -186,11 +196,21 @@ where
     let mut paused = false;
     let mut volume = 1.0f32;
     let mut last_position = Instant::now();
+    let mut visualizer = false;
+    let mut analyzer: Option<Analyzer> = None;
+    let mut last_spectrum = Instant::now();
 
     loop {
         // Commands first, so Pause/Stop never wait behind audio work.
         let timeout = match (session.as_ref(), sink.as_ref()) {
-            (Some(active), Some(output)) if !paused => wake_after(active, output.as_ref(), last_position),
+            (Some(active), Some(output)) if !paused => {
+                let wake = wake_after(active, output.as_ref(), last_position);
+                if visualizer {
+                    wake.min(SPECTRUM_INTERVAL.saturating_sub(last_spectrum.elapsed()).max(Duration::from_millis(5)))
+                } else {
+                    wake
+                }
+            }
             (Some(_), _) => Duration::from_millis(250),
             _ => Duration::from_millis(500),
         };
@@ -206,6 +226,16 @@ where
                     volume = if v.is_finite() { v.clamp(0.0, 1.0) } else { 1.0 };
                     if let Some(sink) = sink.as_mut() {
                         sink.set_volume(volume);
+                    }
+                }
+                Command::SetVisualizer(on) => {
+                    visualizer = on;
+                    if let Some(s) = session.as_mut() {
+                        s.tap.enabled = on;
+                        s.tap.reset();
+                    }
+                    if !on {
+                        analyzer = None;
                     }
                 }
                 Command::Stop => {
@@ -239,6 +269,7 @@ where
                 Command::Seek(seconds) => {
                     if let (Some(s), Some(sink)) = (session.as_mut(), sink.as_mut()) {
                         seek(s, sink.as_mut(), seconds);
+                        s.tap.reset();
                         events(position_event(s, sink.as_ref()));
                         last_position = Instant::now();
                     }
@@ -264,7 +295,7 @@ where
                     sink.set_paused(false);
                     paused = false;
                     events(PlayerEvent::Loading { track_id: track_id.clone() });
-                    match start_session(track_id.clone(), &url, duration, start, fetch, sink.sample_rate(), sink.channels()) {
+                    match start_session(track_id.clone(), &url, duration, start, fetch, sink.sample_rate(), sink.channels(), visualizer) {
                         Ok(started) => session = Some(started),
                         Err(error) => events(PlayerEvent::Failed { track_id, error }),
                     }
@@ -283,6 +314,11 @@ where
 
         if !paused {
             pump(active, output.as_mut(), &events);
+            if visualizer && active.started && last_spectrum.elapsed() >= SPECTRUM_INTERVAL {
+                last_spectrum = Instant::now();
+                let analyzer = analyzer.get_or_insert_with(|| Analyzer::new(output.sample_rate()));
+                events(PlayerEvent::Spectrum { bands: analyzer.analyze(&active.tap, output.played_frames()) });
+            }
         }
         if let Some(error) = active.failure.take() {
             let id = active.track_id.clone();
@@ -347,6 +383,7 @@ fn pump(session: &mut Session, sink: &mut dyn Sink, events: &impl Fn(PlayerEvent
             }
             let end = (session.pending_offset + room).min(session.pending.len());
             let written = sink.write(&session.pending[session.pending_offset..end]);
+            session.tap.push(&session.pending[session.pending_offset..session.pending_offset + written], sink.channels());
             session.pending_offset += written;
             if !session.started && written > 0 {
                 session.started = true;
@@ -421,6 +458,7 @@ fn start_session(
     fetch: FetchConfig,
     out_rate: u32,
     out_channels: usize,
+    visualizer: bool,
 ) -> crate::Result<Session> {
     let buffer = SharedBuffer::new(fetch.max_stream_bytes);
     let fetch_thread = spawn_fetch(url.to_string(), fetch, buffer.clone());
@@ -452,6 +490,7 @@ fn start_session(
         failure: None,
         started: false,
         buffering: false,
+        tap: Tap::new(visualizer),
         _fetch: fetch_thread,
         _decoder: decoder_thread,
     })

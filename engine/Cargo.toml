@@ -17,9 +17,11 @@ symphonia = { version = "0.5", default-features = false, features = ["aac", "mp3
 cpal = "0.15"
 ringbuf = "0.4"
 rubato = "0.16"
+realfft = "3"
 rand = "0.8"
 log = "0.4"
 crossbeam-channel = "0.5"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }

@@ -98,6 +98,12 @@
       state.player.queue_len = state.queue.length; emitQueue(); emitState();
     },
     stop: () => { state.player.status = "idle"; emitState(); },
+    set_visualizer: ({ on }) => { state.visualizer = on; },
+    artwork_palette: ({ url }) => {
+      if (config.paletteFails) throw { kind: "format", message: "no palette" };
+      return url.includes("/6.") ? { primary: "#e02838", secondary: "#2838e0" } : { primary: "#28a050", secondary: "#a05028" };
+    },
+    set_fullscreen: ({ on }) => { state.fullscreen = on; },
   };
 
   window.__TAURI__ = {

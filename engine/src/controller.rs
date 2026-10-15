@@ -59,6 +59,8 @@ pub enum UiEvent {
     Error { kind: String, message: String },
     /// The VK token no longer works: show the sign-in screen.
     SessionExpired,
+    /// Visualizer levels (0…1), about 30 per second while it is on.
+    Spectrum { bands: Vec<f32> },
 }
 
 struct Inner {
@@ -230,6 +232,10 @@ impl Shared {
                     events.push(UiEvent::State(inner.state()));
                 }
             }),
+            PlayerEvent::Spectrum { bands } => {
+                let bands = bands.iter().map(|b| (b * 1000.0).round() / 1000.0).collect();
+                (self.emit)(UiEvent::Spectrum { bands });
+            }
             PlayerEvent::Loading { .. } => {}
             PlayerEvent::Playing { track_id } => self.with(|inner, events| {
                 if inner.queue.current().map(Track::id).as_deref() == Some(track_id.as_str()) {
@@ -428,6 +434,12 @@ impl Controller {
             events.push(UiEvent::State(inner.state()));
         });
         self.shared.remote().seek(seconds);
+    }
+
+    /// Starts or stops the spectrum events. Off by default: analysing audio
+    /// costs CPU that only the full-screen view needs.
+    pub fn set_visualizer(&self, on: bool) {
+        self.shared.remote().set_visualizer(on);
     }
 
     pub fn set_volume(&self, volume: f32) {

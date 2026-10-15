@@ -27,11 +27,11 @@ export function startServer() {
   return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve({ server, url: `http://127.0.0.1:${server.address().port}/` })));
 }
 
-export async function openApp({ config = {}, viewport = { width: 1120, height: 740 }, colorScheme = "light", language = "ru-RU" } = {}) {
+export async function openApp({ config = {}, viewport = { width: 1120, height: 740 }, colorScheme = "light", language = "ru-RU", reducedMotion = "no-preference" } = {}) {
   const { server, url } = await startServer();
   const executablePath = process.env.PM_CHROMIUM ?? "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
   const browser = await chromium.launch({ executablePath: fs.existsSync(executablePath) ? executablePath : undefined, args: ["--no-sandbox"] });
-  const context = await browser.newContext({ viewport, colorScheme, locale: language });
+  const context = await browser.newContext({ viewport, colorScheme, locale: language, reducedMotion });
   const page = await context.newPage();
   const problems = [];
   page.on("pageerror", (error) => problems.push(`pageerror: ${error.message}`));
