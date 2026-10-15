@@ -236,6 +236,27 @@ impl Core {
         self.api(|client, session| client.search(session, query, offset, count.clamp(1, 300)))
     }
 
+    /// The personal mix: two pages, so a session lasts a while.
+    pub fn mix(&self) -> Result<Vec<Track>> {
+        self.api(|client, session| {
+            let mut tracks = client.mix(session, 0, 50)?;
+            if let Ok(more) = client.mix(session, 50, 50) {
+                let known: std::collections::HashSet<String> = tracks.iter().map(Track::id).collect();
+                tracks.extend(more.into_iter().filter(|t| !known.contains(&t.id())));
+            }
+            Ok(tracks)
+        })
+    }
+
+    pub fn recommendations(&self) -> Result<Vec<Track>> {
+        self.api(|client, session| client.recommendations(session, None))
+    }
+
+    /// "More like this": VK's radio seeded with one track.
+    pub fn similar(&self, track: &Track) -> Result<Vec<Track>> {
+        self.api(|client, session| client.recommendations(session, Some(track)))
+    }
+
     pub fn add_to_library(&self, track: &Track) -> Result<Track> {
         self.api(|client, session| client.add_track(session, track))
     }

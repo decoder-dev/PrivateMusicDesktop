@@ -262,3 +262,21 @@ pub fn set_output_device(state: TauriState<'_, AppState>, name: Option<String>) 
     state.app.controller().reopen_output();
     Ok(())
 }
+
+#[tauri::command]
+pub async fn mix(state: TauriState<'_, AppState>) -> CommandResult<Vec<Track>> {
+    let app = state.app.clone();
+    blocking(move || app.mix()).await
+}
+
+#[tauri::command]
+pub async fn recommendations(state: TauriState<'_, AppState>) -> CommandResult<Vec<Track>> {
+    let app = state.app.clone();
+    blocking(move || app.recommendations()).await
+}
+
+#[tauri::command]
+pub async fn similar(state: TauriState<'_, AppState>, track: Track) -> CommandResult<Vec<Track>> {
+    let app = state.app.clone();
+    blocking(move || app.similar(&track)).await
+}

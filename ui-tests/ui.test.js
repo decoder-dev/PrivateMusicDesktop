@@ -723,3 +723,65 @@ test("settings: the saved output is used at the next start, and a desktop withou
     if (process.env.PM_SCREENSHOTS) await page.screenshot({ path: `${process.env.PM_SCREENSHOTS}/settings.png`, fullPage: true });
   } finally { await app.close(); }
 });
+
+// ------------------------------------------------------------------ for you
+
+test("for you: the mix and recommendations load on first look, play, and refresh", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    assert.equal(await page.evaluate(() => window.__mock.count("mix")), 0, "nothing is fetched before it is opened");
+    await page.click(".nav button[data-view=forYou]");
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .title")?.textContent === "Микс 1");
+    assert.match(await page.locator(".main > .view:not([hidden]) .meta").innerText(), /100/);
+    await page.click(".main > .view:not([hidden]) .tabs button[data-source=recs]");
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .title")?.textContent === "Рек 1");
+    await page.click(".main > .view:not([hidden]) .tabs button[data-source=mix]");
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .title")?.textContent === "Микс 1");
+    assert.equal(await page.evaluate(() => window.__mock.count("mix")), 1, "switching back uses what was loaded");
+    await page.click(".main > .view:not([hidden]) .view-header .btn.primary");
+    await page.waitForFunction(() => window.__mock.last("play_tracks")?.args.tracks.length === 100);
+    await page.click(".main > .view:not([hidden]) .view-header .set-inline .btn");
+    await page.waitForFunction(() => window.__mock.count("mix") === 2);
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("for you: a failure says so in the list", async () => {
+  const app = await openApp({ config: { signedIn: true, forYouFails: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await page.click(".nav button[data-view=forYou]");
+    await page.waitForSelector(".main > .view:not([hidden]) .status.error");
+    assert.match(await page.locator(".main > .view:not([hidden]) .status.error").innerText(), /Нет подключения/);
+  } finally { await app.close(); }
+});
+
+test("similar tracks: the row button plays the track followed by VK's radio from it", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await rows(page).nth(1).hover();
+    await rows(page).nth(1).locator("[data-action=radio]").click();
+    await page.waitForFunction(() => window.__mock.last("play_tracks")?.args.tracks.length === 21);
+    const call = await page.evaluate(() => window.__mock.last("play_tracks").args);
+    assert.equal(call.tracks[0].title, "Трек 2");
+    assert.equal(call.tracks[1].title, "Похожий 1");
+    assert.equal(call.index, 0);
+  } finally { await app.close(); }
+});
+
+test("similar tracks: when VK has none, nothing changes and the user is told", async () => {
+  const app = await openApp({ config: { signedIn: true, noSimilar: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await rows(page).first().hover();
+    await rows(page).first().locator("[data-action=radio]").click();
+    await page.waitForFunction(() => document.querySelector(".toast")?.textContent === "VK не нашёл похожих треков.");
+    assert.equal(await page.evaluate(() => window.__mock.count("play_tracks")), 0);
+  } finally { await app.close(); }
+});
