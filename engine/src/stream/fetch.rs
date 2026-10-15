@@ -38,12 +38,72 @@ pub struct FetchConfig {
     /// Tests serve from 127.0.0.1 over plain http. Never true in the app.
     pub allow_loopback_http: bool,
     pub max_stream_bytes: usize,
+    /// Where downloaded tracks live; `offline:<file>` addresses resolve here
+    /// and nowhere else.
+    pub offline_dir: Option<std::path::PathBuf>,
 }
 
 impl FetchConfig {
     pub fn new(user_agent: impl Into<String>) -> Self {
-        Self { user_agent: user_agent.into(), allow_loopback_http: false, max_stream_bytes: MAX_STREAM_BYTES }
+        Self { user_agent: user_agent.into(), allow_loopback_http: false, max_stream_bytes: MAX_STREAM_BYTES, offline_dir: None }
     }
+}
+
+/// The scheme of a downloaded track's address: `offline:<file name>`.
+pub const OFFLINE_SCHEME: &str = "offline:";
+
+/// A downloaded file's name: letters, digits, `_`, `-` and one extension.
+/// Nothing that could step outside the downloads folder.
+pub(crate) fn safe_offline_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 100
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+        && !name.starts_with('.')
+        && !name.contains("..")
+}
+
+pub(crate) fn kind_for_name(name: &str) -> Option<ElementaryKind> {
+    match name.rsplit_once('.')?.1 {
+        "aac" => Some(ElementaryKind::AdtsAac),
+        "mp3" => Some(ElementaryKind::Mp3),
+        _ => None,
+    }
+}
+
+/// Plays a downloaded file: same buffer, no network.
+fn run_offline(name: &str, config: &FetchConfig, buffer: &SharedBuffer) -> Result<()> {
+    let dir = config.offline_dir.as_ref().ok_or(Error::InvalidRequest)?;
+    if !safe_offline_name(name) {
+        return Err(Error::InvalidRequest);
+    }
+    let kind = kind_for_name(name).ok_or(Error::InvalidRequest)?;
+    let mut file = std::fs::File::open(dir.join(name)).map_err(|e| Error::Stream(format!("downloaded file: {e}")))?;
+    buffer.set_kind(kind);
+    let mut chunk = vec![0u8; 256 * 1024];
+    loop {
+        if buffer.is_cancelled() {
+            return Err(Error::Cancelled);
+        }
+        let n = std::io::Read::read(&mut file, &mut chunk).map_err(|e| Error::Stream(format!("downloaded file: {e}")))?;
+        if n == 0 {
+            return Ok(());
+        }
+        if !buffer.push(&chunk[..n]) {
+            return if buffer.is_cancelled() { Err(Error::Cancelled) } else { Err(buffer.failure().unwrap_or(Error::Cancelled)) };
+        }
+    }
+}
+
+/// Downloads a whole stream (HLS or progressive) and returns the audio, ready
+/// to be saved: decrypted and demuxed exactly as for playback.
+pub fn fetch_to_end(url: &str, config: &FetchConfig) -> Result<(ElementaryKind, Vec<u8>)> {
+    if url.starts_with(OFFLINE_SCHEME) {
+        return Err(Error::InvalidRequest); // already downloaded
+    }
+    let buffer = SharedBuffer::new(config.max_stream_bytes);
+    run(url, config, &buffer)?;
+    buffer.finish();
+    buffer.completed_bytes().ok_or_else(|| Error::Stream("the stream held no audio".into()))
 }
 
 /// Starts the download on its own thread. The buffer is finished, failed or
@@ -70,6 +130,9 @@ struct Fetcher<'a> {
 }
 
 fn run(url: &str, config: &FetchConfig, buffer: &SharedBuffer) -> Result<()> {
+    if let Some(name) = url.strip_prefix(OFFLINE_SCHEME) {
+        return run_offline(name, config, buffer);
+    }
     let start = parse_url(url, config)?;
     let allow_loopback = config.allow_loopback_http;
     let http = Client::builder()

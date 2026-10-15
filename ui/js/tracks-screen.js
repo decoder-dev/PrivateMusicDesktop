@@ -6,6 +6,7 @@ import { trackRow, ROW_HEIGHT } from "./track-row.js";
 import { store, subscribe } from "./store.js";
 import { trackKey } from "./api.js";
 import { isLiked, isBusy } from "./likes.js";
+import { isDownloaded, isDownloading } from "./downloads.js";
 
 /**
  * The common screen for every list of tracks: header, optional filter,
@@ -48,6 +49,8 @@ export function createTracksScreen({ title, filterable = false, playable = true,
         liked: isLiked(track),
         busy: isBusy(track),
         pinLiked: hooks.pinLiked ?? true,
+        downloaded: isDownloaded(track),
+        downloading: isDownloading(track),
       }),
     onRowEvent: (type, event, track, index) => {
       const button = event.target.closest?.("[data-action]");
@@ -93,6 +96,7 @@ export function createTracksScreen({ title, filterable = false, playable = true,
   });
 
   subscribe("likes", () => list.refresh());
+  subscribe("downloads", () => list.refresh());
 
   return {
     element,

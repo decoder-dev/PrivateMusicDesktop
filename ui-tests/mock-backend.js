@@ -98,6 +98,18 @@
       state.player.queue_len = state.queue.length; emitQueue(); emitState();
     },
     stop: () => { state.player.status = "idle"; emitState(); },
+    downloads: () => ({ tracks: state.downloads ?? [], bytes: (state.downloads ?? []).length * 4_200_000 }),
+    download: async ({ track }) => {
+      await delay(config.downloadDelay ?? 30);
+      if (config.downloadFails) throw { kind: "stream", message: "Stream error: 403" };
+      state.downloads = [{ ...track, stream_url: null }, ...(state.downloads ?? []).filter((t) => t.track_id !== track.track_id || t.owner_id !== track.owner_id)];
+      return track;
+    },
+    remove_download: ({ trackId }) => {
+      const before = (state.downloads ?? []).length;
+      state.downloads = (state.downloads ?? []).filter((t) => `${t.owner_id}_${t.track_id}` !== trackId);
+      return state.downloads.length !== before;
+    },
     mix: async () => {
       await delay(20);
       if (config.forYouFails) throw { kind: "offline", message: "No internet connection." };

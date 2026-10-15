@@ -92,7 +92,10 @@ fn main() {
                     }
                     let _ = emitter.emit("pm-event", &event);
                 },
-                AppOptions::default(),
+                AppOptions {
+                    offline_dir: handle.path().app_data_dir().ok().map(|dir| dir.join("downloads")),
+                    ..AppOptions::default()
+                },
             );
             let has_tray = Arc::new(AtomicBool::new(false));
             let close_to_tray = Arc::new(AtomicBool::new(true));
@@ -156,6 +159,9 @@ fn main() {
             commands::set_visualizer,
             commands::set_equalizer,
             commands::lyrics,
+            commands::downloads,
+            commands::download,
+            commands::remove_download,
             commands::mix,
             commands::recommendations,
             commands::similar,

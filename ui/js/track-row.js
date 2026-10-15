@@ -13,12 +13,17 @@ function cover(url) {
  * One track line. `extra` is an optional list of [iconName, action, label]
  * overriding the default hover actions.
  */
-export function trackRow(track, { selected = false, actions, liked = false, busy = false, pinLiked = true } = {}) {
+export function trackRow(track, { selected = false, actions, liked = false, busy = false, pinLiked = true, downloaded = false, downloading = false } = {}) {
   const likeLabel = liked ? t("like.remove") : t("like.add");
   const like = h("button", {
     class: `icon-btn like${liked ? " on" : ""}${liked && pinLiked ? " pinned" : ""}`, type: "button", "data-action": "like",
     title: likeLabel, "aria-label": likeLabel, "aria-pressed": String(liked), disabled: busy,
   }, icon(liked ? "heart-on" : "heart", 16));
+  const downloadLabel = downloading ? t("dl.working") : downloaded ? t("dl.remove") : t("dl.add");
+  const download = h("button", {
+    class: `icon-btn download${downloaded ? " on pinned" : ""}${downloading ? " busy pinned" : ""}`, type: "button",
+    "data-action": "download", title: downloadLabel, "aria-label": downloadLabel, "aria-pressed": String(downloaded), disabled: downloading,
+  }, icon(downloaded ? "downloaded" : "download", 16));
   const buttons = (actions ?? [
     ["play-next", "play-next", t("playNext")],
     ["queue-add", "play-last", t("playLast")],
@@ -31,5 +36,5 @@ export function trackRow(track, { selected = false, actions, liked = false, busy
       h("div", { class: "title", text: track.title }),
       h("div", { class: "artist", text: track.artist })),
     h("div", { class: "time", text: formatTime(track.duration) }),
-    h("div", { class: "actions" }, like, buttons));
+    h("div", { class: "actions" }, like, download, buttons));
 }

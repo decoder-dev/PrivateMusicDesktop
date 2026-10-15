@@ -18,6 +18,7 @@ use rand::SeedableRng;
 use serde::Serialize;
 
 use crate::audio::{PlayerEvent, PlayerHandle, Remote, Sink};
+use crate::offline::OfflineStore;
 use crate::queue::{Queue, Repeat};
 use crate::stream::FetchConfig;
 use crate::vk::{Session, Track, VkClient};
@@ -85,6 +86,7 @@ struct Shared {
     emit: Box<dyn Fn(UiEvent) + Send + Sync>,
     fetch_template: FetchConfig,
     refresher: OnceLock<Refresher>,
+    offline: OnceLock<Arc<OfflineStore>>,
 }
 
 /// Renews an expired session (see [`Controller::set_refresher`]).
@@ -142,6 +144,7 @@ impl Shared {
         if let Some(session) = &inner.session {
             config.user_agent = session.api_user_agent.clone();
         }
+        config.offline_dir = self.offline.get().map(|o| o.dir().to_path_buf());
         config
     }
 
@@ -158,6 +161,18 @@ impl Shared {
         inner.position = start;
         inner.duration = f64::from(track.duration);
         events.push(UiEvent::State(inner.state()));
+        // A downloaded copy plays from disk. If its file has gone, the player
+        // fails and the usual retry fetches the track from VK instead.
+        let downloaded = if inner.refreshed.contains(&track.id()) {
+            None
+        } else {
+            self.offline.get().and_then(|o| o.address(&track.id()))
+        };
+        if let Some(address) = downloaded {
+            let config = self.fetch_config(inner);
+            self.remote().play(&track.id(), &address, f64::from(track.duration), start, config);
+            return;
+        }
         match track.stream_url.clone() {
             Some(url) => {
                 let config = self.fetch_config(inner);
@@ -357,6 +372,7 @@ impl Controller {
             emit: Box::new(emit),
             fetch_template,
             refresher: OnceLock::new(),
+            offline: OnceLock::new(),
         });
         let callback_shared = shared.clone();
         let player = PlayerHandle::spawn(make_sink, move |event| callback_shared.on_player_event(event));
@@ -383,6 +399,17 @@ impl Controller {
     /// fresh stream address. Set once by the app.
     pub fn set_refresher(&self, refresher: Refresher) {
         let _ = self.shared.refresher.set(refresher);
+    }
+
+    /// Where downloaded tracks are played from. Set once by the app.
+    pub fn set_offline(&self, store: Arc<OfflineStore>) {
+        let _ = self.shared.offline.set(store);
+    }
+
+    /// The download settings playback uses (user agent, size cap).
+    pub fn fetch_config(&self) -> FetchConfig {
+        let inner = self.shared.lock();
+        self.shared.fetch_config(&inner)
     }
 
     pub fn session(&self) -> Option<Session> {

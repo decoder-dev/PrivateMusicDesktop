@@ -15,6 +15,8 @@ import { createQueueView } from "./views/queue.js";
 import { createLoginView } from "./views/login.js";
 import { createSettingsView } from "./views/settings.js";
 import { createForYouView } from "./views/for-you.js";
+import { createDownloadsView } from "./views/downloads.js";
+import { toggleDownload, refreshDownloads } from "./downloads.js";
 import { loadSettings, saveSettings, saveQueue, loadQueue, clearQueue } from "./persist.js";
 
 const root = document.getElementById("app");
@@ -47,6 +49,16 @@ export async function like(track) {
   }
 }
 
+async function download(track) {
+  try {
+    const result = await toggleDownload(track);
+    if (result === "added") toast(t("dl.done", { title: track.title }));
+    if (result === "removed") toast(t("dl.removed"));
+  } catch (error) {
+    toast(errorText(error), { error: true });
+  }
+}
+
 /** "More like this": the track, then VK's radio from it. */
 async function playSimilar(track) {
   toast(t("radio.loading"));
@@ -62,6 +74,7 @@ async function playSimilar(track) {
 async function onTrackAction(action, track) {
   if (action === "like") return like(track);
   if (action === "radio") return playSimilar(track);
+  if (action === "download") return download(track);
   try {
     if (action === "play-next") {
       await api.playNext(track);
@@ -98,6 +111,7 @@ function buildShellParts() {
   const views = {
     library: createLibraryView(ctx),
     forYou: createForYouView(ctx),
+    downloads: createDownloadsView(ctx),
     playlists: createPlaylistsView(ctx),
     search: createSearchView(ctx),
     queue: createQueueView(),
@@ -109,6 +123,7 @@ function buildShellParts() {
     ["playlists", "nav.playlists", "playlist"],
     ["search", "nav.search", "search"],
     ["queue", "nav.queue", "queue"],
+    ["downloads", "nav.downloads", "download"],
     ["settings", "nav.settings", "settings"],
   ];
 
@@ -171,6 +186,7 @@ async function showApp() {
   root.append(shell.element);
   shell.show("library");
   api.profile().then((profile) => shell?.setProfile(profile)).catch(() => {});
+  refreshDownloads();
   await applyStartupState();
 }
 

@@ -8,6 +8,8 @@ use serde::Serialize;
 use crate::audio::Sink;
 use crate::controller::{Controller, UiEvent};
 use crate::lyrics::{from_plain, LrcLib, Lyrics};
+use crate::offline::{OfflineStore, OfflineTrack};
+use crate::stream::fetch::fetch_to_end;
 use crate::store::SecretStore;
 use crate::stream::FetchConfig;
 use crate::vk::auth::{exchange_at, now_unix};
@@ -51,9 +53,12 @@ pub struct Core {
     generation: Mutex<u64>,
     token_url: String,
     lrclib: Option<LrcLib>,
+    offline: Option<Arc<OfflineStore>>,
 }
 
 pub struct AppOptions {
+    /// Where downloads are kept; `None` disables them.
+    pub offline_dir: Option<std::path::PathBuf>,
     pub lyrics_base: String,
     pub fetch: FetchConfig,
     pub token_url: String,
@@ -67,6 +72,7 @@ impl Default for AppOptions {
             token_url: TOKEN_URL.to_string(),
             volume: 1.0,
             lyrics_base: crate::lyrics::LRCLIB_BASE.to_string(),
+            offline_dir: None,
         }
     }
 }
@@ -102,7 +108,13 @@ impl App {
             generation: Mutex::new(0),
             token_url: options.token_url,
             lrclib: LrcLib::with_base(&options.lyrics_base).ok(),
+            offline: options.offline_dir.and_then(|dir| {
+                OfflineStore::open(dir).map_err(|e| log::warn!("downloads unavailable: {e}")).ok().map(Arc::new)
+            }),
         };
+        if let Some(store) = &app.offline {
+            app.controller.set_offline(store.clone());
+        }
         match app.store.load() {
             Ok(Some(session)) => app.controller.set_session(Some(session)),
             Ok(None) => {}
@@ -234,6 +246,36 @@ impl Core {
             return Ok(Page { items: Vec::new(), total: 0, next_offset: None });
         }
         self.api(|client, session| client.search(session, query, offset, count.clamp(1, 300)))
+    }
+
+    fn offline(&self) -> Result<&OfflineStore> {
+        self.offline.as_deref().ok_or_else(|| Error::Stream("downloads are not available".into()))
+    }
+
+    pub fn downloads(&self) -> Vec<OfflineTrack> {
+        self.offline.as_ref().map(|o| o.list()).unwrap_or_default()
+    }
+
+    pub fn downloads_size(&self) -> u64 {
+        self.offline.as_ref().map(|o| o.total_bytes()).unwrap_or(0)
+    }
+
+    /// Downloads a track for listening without a connection. A fresh stream
+    /// address is asked for first: the one the window holds may have expired.
+    pub fn download(&self, track: &Track) -> Result<OfflineTrack> {
+        let store = self.offline()?;
+        if let Some(existing) = store.list().into_iter().find(|e| e.track.id() == track.id()) {
+            return Ok(existing);
+        }
+        let fresh = self.api(|client, session| client.refreshed_track(session, track))?;
+        let url = fresh.stream_url.as_deref().ok_or_else(|| Error::Format("no stream address".into()))?;
+        let (kind, audio) = fetch_to_end(url, &self.controller.fetch_config())?;
+        // Keep the metadata the window showed (title, cover) over VK's echo.
+        store.save(&Track { stream_url: None, ..track.clone() }, kind, &audio)
+    }
+
+    pub fn remove_download(&self, track_id: &str) -> Result<bool> {
+        self.offline()?.remove(track_id)
     }
 
     /// The personal mix: two pages, so a session lasts a while.
