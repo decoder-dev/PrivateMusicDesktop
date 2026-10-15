@@ -21,6 +21,13 @@ function write(key, value) {
   }
 }
 
+function readEq(saved) {
+  const gains = Array.isArray(saved?.gains) && saved.gains.length === 10 && saved.gains.every(Number.isFinite)
+    ? saved.gains.map((g) => Math.min(12, Math.max(-12, g)))
+    : Array(10).fill(0);
+  return { on: saved?.on === true, gains, preset: typeof saved?.preset === "string" ? saved.preset : "flat" };
+}
+
 export function loadSettings() {
   const saved = read(SETTINGS) ?? {};
   const volume = Number.isFinite(saved.volume) ? Math.min(1, Math.max(0, saved.volume)) : 1;
@@ -30,6 +37,7 @@ export function loadSettings() {
     repeat: ["off", "all", "one"].includes(saved.repeat) ? saved.repeat : "off",
     lyrics: saved.lyrics !== false,
     closeToTray: saved.closeToTray !== false,
+    eq: readEq(saved.eq),
     outputDevice: typeof saved.outputDevice === "string" && saved.outputDevice ? saved.outputDevice : null,
     visualizer: ["bars", "mirror", "wave", "radial", "off"].includes(saved.visualizer) ? saved.visualizer : null,
   };

@@ -293,3 +293,24 @@ fn the_visualizer_is_silent_until_asked_and_then_follows_the_tone() {
     std::thread::sleep(Duration::from_millis(300));
     assert_eq!(spectra(&rig).len(), count, "events stop when the visualizer is turned off");
 }
+
+#[test]
+fn the_equalizer_shapes_what_reaches_the_device() {
+    if !require_ffmpeg() { return; }
+    let dir = tempfile::tempdir().unwrap();
+    hls(dir.path());
+    let server = Server::start(dir.path().to_path_buf());
+    let level = |gains: Option<[f32; 10]>| {
+        let rig = rig(48_000, 20.0);
+        rig.player.set_equalizer(gains);
+        rig.player.play("1_1", &format!("{}/index.m3u8", server.base), 12.0, 0.0, lab_config());
+        rig.wait("end", |e| e.iter().any(|x| matches!(x, PlayerEvent::Ended { .. })));
+        pcm_of(&rig, 48_000).rms()
+    };
+    let plain = level(None);
+    let cut = level(Some([-12.0; 10]));
+    let ratio_db = 20.0 * (cut / plain).log10();
+    assert!((-14.0..-8.0).contains(&ratio_db), "every band cut by 12 dB: {ratio_db:.1} dB");
+    let flat = level(Some([0.0; 10]));
+    assert!((flat / plain - 1.0).abs() < 0.01, "flat is untouched");
+}

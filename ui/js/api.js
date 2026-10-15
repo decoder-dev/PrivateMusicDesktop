@@ -35,6 +35,7 @@ export const api = {
   setOutputDevice: (name) => invoke("set_output_device", { name }),
   setCloseToTray: (on) => invoke("set_close_to_tray", { on }),
   appInfo: () => invoke("app_info"),
+  setEqualizer: (gains) => invoke("set_equalizer", { gains }),
   setVisualizer: (on) => invoke("set_visualizer", { on }),
   artworkPalette: (url) => invoke("artwork_palette", { url }),
   setFullscreen: (on) => invoke("set_fullscreen", { on }),

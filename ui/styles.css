@@ -300,3 +300,12 @@ select.field { padding: 7px 10px; }
 .tabs button { padding: 6px 12px; border-radius: 7px; color: var(--text-secondary); }
 .tabs button:hover { color: var(--text); }
 .tabs button[aria-selected="true"] { background: var(--bg); color: var(--text); font-weight: 600; }
+
+/* ---------- equaliser ---------- */
+.eq { display: flex; flex-direction: column; gap: 14px; }
+.eq-bands { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
+.eq-band { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.eq-slider { writing-mode: vertical-lr; direction: rtl; width: 22px !important; height: 130px; }
+.eq-value { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text); min-height: 15px; }
+.eq-label { font-size: 11px; color: var(--text-secondary); }
+.eq.off .eq-bands { opacity: 0.45; }

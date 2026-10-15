@@ -2,6 +2,7 @@
 //! to the sound card.
 
 pub mod convert;
+pub mod eq;
 pub mod player;
 pub mod sink;
 pub mod spectrum;

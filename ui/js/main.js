@@ -179,6 +179,7 @@ async function applyStartupState() {
   try {
     api.setCloseToTray(settings.closeToTray).catch(() => {});
     if (settings.outputDevice) await api.setOutputDevice(settings.outputDevice).catch(() => {});
+    if (settings.eq.on) api.setEqualizer(settings.eq.gains).catch(() => {});
     await api.setVolume(settings.volume);
     await api.setShuffle(settings.shuffle);
     await api.setRepeat(settings.repeat);

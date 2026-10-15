@@ -3,6 +3,7 @@ import { t, errorText } from "../i18n.js";
 import { api } from "../api.js";
 import { store, subscribe } from "../store.js";
 import { MODES } from "../visualizer.js";
+import { createEqualizerPanel } from "../equalizer.js";
 
 const IS_MAC = /Mac/i.test(navigator.platform || navigator.userAgent);
 const MOD = IS_MAC ? "⌘" : "Ctrl";
@@ -33,6 +34,8 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
   const lyricsBox = h("input", { type: "checkbox", id: "set-lyrics",
     onchange: () => onSettingsChange({ lyrics: lyricsBox.checked }) });
 
+  const equalizer = createEqualizerPanel({ settings, onSettingsChange });
+
   const accountName = h("div", { class: "set-account" });
   const persistNote = h("div", { class: "set-note warn", hidden: true, text: t("set.persist.off") });
   const version = h("div", { class: "set-note" });
@@ -48,6 +51,7 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
     h("div", { class: "set-body" },
       section(t("set.sound"),
         row(t("set.output"), h("div", { class: "set-inline" }, deviceSelect, refreshButton), t("set.output.note"))),
+      section(t("eq.title"), equalizer.element),
       section(t("set.window"),
         h("div", { class: "set-row" },
           h("label", { class: "set-check", for: "set-tray" }, trayBox, h("span", { text: t("set.tray") })),
