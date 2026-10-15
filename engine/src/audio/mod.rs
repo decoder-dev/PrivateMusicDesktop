@@ -5,5 +5,5 @@ pub mod convert;
 pub mod player;
 pub mod sink;
 
-pub use player::{Command, PlayerEvent, PlayerHandle};
+pub use player::{Command, PlayerEvent, PlayerHandle, Remote};
 pub use sink::{CpalSink, SimulatedSink, Sink};

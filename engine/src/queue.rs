@@ -192,6 +192,15 @@ impl Queue {
         was_current
     }
 
+    /// Swaps in a refreshed copy of a track (new stream URL) everywhere it
+    /// appears. Position and order are untouched.
+    pub fn replace_track(&mut self, fresh: &Track) {
+        let id = fresh.id();
+        for slot in self.tracks.iter_mut().filter(|t| t.id() == id) {
+            *slot = fresh.clone();
+        }
+    }
+
     pub fn clear(&mut self) {
         *self = Self { shuffle: self.shuffle, repeat: self.repeat, ..Self::default() };
     }
@@ -320,6 +329,19 @@ mod tests {
         assert!(q.remove(0));
         assert!(q.current().is_none());
         assert!(q.is_empty());
+    }
+
+    #[test]
+    fn replace_track_updates_every_copy_without_moving_anything() {
+        let (mut q, _) = queue(3);
+        q.play_last(track(2));
+        q.jump(1);
+        let mut fresh = track(2);
+        fresh.stream_url = Some("https://new.example/a".into());
+        q.replace_track(&fresh);
+        assert_eq!(q.current().unwrap().stream_url.as_deref(), Some("https://new.example/a"));
+        assert_eq!(q.tracks().iter().filter(|t| t.stream_url.is_some()).count(), 2);
+        assert_eq!(q.current_index(), Some(1));
     }
 
     #[test]

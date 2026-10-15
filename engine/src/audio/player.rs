@@ -73,6 +73,8 @@ struct Session {
     pending: Vec<f32>,
     pending_offset: usize,
     ended: bool,
+    /// Set when the stream died; reported once, then the session is dropped.
+    failure: Option<Error>,
     started: bool,
     buffering: bool,
     _fetch: JoinHandle<()>,
@@ -97,6 +99,29 @@ pub struct PlayerHandle {
     thread: Option<JoinHandle<()>>,
 }
 
+/// A cloneable way to talk to the player thread (from its own event callback,
+/// from worker threads). It does not own the thread.
+#[derive(Clone)]
+pub struct Remote {
+    commands: Sender<Command>,
+}
+
+impl Remote {
+    pub fn send(&self, command: Command) {
+        let _ = self.commands.send(command);
+    }
+
+    pub fn play(&self, track_id: &str, url: &str, duration: f64, start: f64, fetch: FetchConfig) {
+        self.send(Command::Play { track_id: track_id.to_string(), url: url.to_string(), duration, start, fetch });
+    }
+
+    pub fn pause(&self) { self.send(Command::Pause); }
+    pub fn resume(&self) { self.send(Command::Resume); }
+    pub fn seek(&self, seconds: f64) { self.send(Command::Seek(seconds)); }
+    pub fn set_volume(&self, volume: f32) { self.send(Command::SetVolume(volume)); }
+    pub fn stop(&self) { self.send(Command::Stop); }
+}
+
 impl PlayerHandle {
     /// `make_sink` runs on the audio thread, lazily at the first Play, so the
     /// app starts without a sound card and a stream never crosses threads.
@@ -110,6 +135,10 @@ impl PlayerHandle {
             .spawn(move || run(receiver, make_sink, events))
             .expect("spawn audio thread");
         Self { commands, thread: Some(thread) }
+    }
+
+    pub fn remote(&self) -> Remote {
+        Remote { commands: self.commands.clone() }
     }
 
     pub fn send(&self, command: Command) {
@@ -244,6 +273,13 @@ where
         if !paused {
             pump(active, output.as_mut(), &events);
         }
+        if let Some(error) = active.failure.take() {
+            let id = active.track_id.clone();
+            session = None;
+            output.flush();
+            events(PlayerEvent::Failed { track_id: id, error });
+            continue;
+        }
 
         if active.ended && !active.buffering && output.queued_frames() == 0 && active.pending_offset >= active.pending.len() {
             let id = active.track_id.clone();
@@ -309,9 +345,8 @@ fn pump(session: &mut Session, sink: &mut dyn Sink, events: &impl Fn(PlayerEvent
             }
             Ok(Chunk::End { generation }) if generation == session.generation => session.ended = true,
             Ok(Chunk::Failed { generation, error }) if generation == session.generation => {
-                session.ended = true;
+                session.failure = Some(error);
                 session.cancel();
-                events(PlayerEvent::Failed { track_id: session.track_id.clone(), error });
                 return;
             }
             Ok(_) => {} // stale chunk from before a seek
@@ -324,7 +359,12 @@ fn pump(session: &mut Session, sink: &mut dyn Sink, events: &impl Fn(PlayerEvent
                 return;
             }
             Err(mpsc::TryRecvError::Disconnected) => {
-                session.ended = true;
+                // The decoder thread is gone. After End that is normal; any
+                // other time it died, which must not look like a finished track.
+                if !session.ended {
+                    session.failure = Some(Error::Stream("the decoder stopped unexpectedly".into()));
+                    session.cancel();
+                }
                 return;
             }
         }
@@ -381,6 +421,7 @@ fn start_session(
         pending: Vec::new(),
         pending_offset: 0,
         ended: false,
+        failure: None,
         started: false,
         buffering: false,
         _fetch: fetch_thread,

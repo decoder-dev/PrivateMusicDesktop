@@ -6,6 +6,7 @@
 //! decoder, the queue and the player thread.
 
 pub mod audio;
+pub mod controller;
 pub mod error;
 pub mod queue;
 pub mod stream;
