@@ -108,7 +108,7 @@ jobs:
         shell: bash
         run: |
           binary=$(find target -path '*release/bundle/macos/*.app/Contents/MacOS/private-music-desktop' -print -quit)
-          [ -n "$binary" ] || binary=target/release/private-music-desktop
+          [ -n "$binary" ] || binary=target/${{ matrix.target }}/release/private-music-desktop
           scripts/smoke-login.sh "$binary"
 
       - name: Sign-in window loads (Windows)
