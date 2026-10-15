@@ -75,7 +75,8 @@
           "libasound2 | libasound2t64"
         ],
         "recommends": [
-          "gnome-keyring | kwalletmanager"
+          "gnome-keyring | kwalletmanager",
+          "libayatana-appindicator3-1"
         ]
       },
       "appimage": {
