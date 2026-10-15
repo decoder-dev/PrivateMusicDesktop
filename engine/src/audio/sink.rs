@@ -28,6 +28,11 @@ pub trait Sink {
     fn set_volume(&mut self, volume: f32);
     /// False after the device disappeared (unplugged headphones).
     fn is_healthy(&self) -> bool;
+    /// How much faster than real time the device consumes audio. Always 1
+    /// for a sound card; a simulated device in tests may run faster.
+    fn time_scale(&self) -> f64 {
+        1.0
+    }
 }
 
 /// A pretend sound card that consumes audio in real time (optionally faster),
@@ -113,6 +118,7 @@ impl Sink for SimulatedSink {
         self.volume.store(volume.to_bits(), Ordering::Relaxed);
     }
     fn is_healthy(&self) -> bool { true }
+    fn time_scale(&self) -> f64 { self.speed }
 }
 
 struct Shared {

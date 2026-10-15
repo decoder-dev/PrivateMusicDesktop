@@ -3203,6 +3203,7 @@ name = "pm_engine"
 version = "0.1.0"
 dependencies = [
  "cpal",
+ "crossbeam-channel",
  "keyring",
  "log",
  "pm_native",
