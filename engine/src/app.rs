@@ -7,6 +7,7 @@ use serde::Serialize;
 
 use crate::audio::Sink;
 use crate::controller::{Controller, UiEvent};
+use crate::lyrics::{from_plain, LrcLib, Lyrics};
 use crate::store::SecretStore;
 use crate::stream::FetchConfig;
 use crate::vk::auth::{exchange_at, now_unix};
@@ -33,9 +34,11 @@ pub struct App {
     /// re-issue the token.
     refresh_lock: Mutex<()>,
     token_url: String,
+    lrclib: Option<LrcLib>,
 }
 
 pub struct AppOptions {
+    pub lyrics_base: String,
     pub fetch: FetchConfig,
     pub token_url: String,
     pub volume: f32,
@@ -43,7 +46,12 @@ pub struct AppOptions {
 
 impl Default for AppOptions {
     fn default() -> Self {
-        Self { fetch: FetchConfig::new("PrivateMusicDesktop"), token_url: TOKEN_URL.to_string(), volume: 1.0 }
+        Self {
+            fetch: FetchConfig::new("PrivateMusicDesktop"),
+            token_url: TOKEN_URL.to_string(),
+            volume: 1.0,
+            lyrics_base: crate::lyrics::LRCLIB_BASE.to_string(),
+        }
     }
 }
 
@@ -76,6 +84,7 @@ impl App {
             persistent: Mutex::new(durable),
             refresh_lock: Mutex::new(()),
             token_url: options.token_url,
+            lrclib: LrcLib::with_base(&options.lyrics_base).ok(),
         };
         match app.store.load() {
             Ok(Some(session)) => app.controller.set_session(Some(session)),
@@ -184,6 +193,41 @@ impl App {
             return Ok(Page { items: Vec::new(), total: 0, next_offset: None });
         }
         self.api(|client, session| client.search(session, query, offset, count.clamp(1, 300)))
+    }
+
+    /// Lyrics for a track: timed from LRCLIB when its length agrees, else VK's
+    /// own text, else whatever plain text LRCLIB had. `Ok(None)`: none exists.
+    pub fn lyrics(&self, track: &Track) -> Result<Option<Lyrics>> {
+        let mut failure = None;
+        let lrc = match self.lrclib.as_ref().map(|l| l.lookup(track)) {
+            Some(Ok(found)) => found,
+            Some(Err(error)) => {
+                log::debug!("lrclib: {error}");
+                failure = Some(error);
+                None
+            }
+            None => None,
+        };
+        if lrc.as_ref().is_some_and(|l| !l.lines.is_empty()) {
+            return Ok(lrc);
+        }
+        if let Some(id) = track.lyrics_id {
+            match self.api(|client, session| client.lyrics_text(session, id)) {
+                Ok(Some(text)) => {
+                    if let Some(found) = from_plain("VK", &text) {
+                        return Ok(Some(found));
+                    }
+                }
+                Ok(None) => {}
+                Err(Error::Unauthorized) => return Err(Error::Unauthorized),
+                Err(error) => failure = failure.or(Some(error)),
+            }
+        }
+        match (lrc, failure) {
+            (Some(found), _) => Ok(Some(found)),
+            (None, Some(error)) => Err(error),
+            (None, None) => Ok(None),
+        }
     }
 
     pub fn playlists(&self, offset: u32, count: u32) -> Result<Page<Playlist>> {

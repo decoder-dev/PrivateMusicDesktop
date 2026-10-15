@@ -201,3 +201,9 @@ pub async fn artwork_palette(url: String) -> CommandResult<pm_engine::artwork::P
 pub fn set_fullscreen(window: tauri::WebviewWindow, on: bool) -> CommandResult<()> {
     window.set_fullscreen(on).map_err(|e| CommandError { kind: "window".into(), message: e.to_string() })
 }
+
+#[tauri::command]
+pub async fn lyrics(state: TauriState<'_, AppState>, track: Track) -> CommandResult<Option<pm_engine::lyrics::Lyrics>> {
+    let app = state.app.clone();
+    blocking(move || app.lyrics(&track)).await
+}

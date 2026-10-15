@@ -25,6 +25,7 @@ export const api = {
   playLast: (track) => invoke("play_last", { track }),
   removeFromQueue: (index) => invoke("remove_from_queue", { index }),
   stop: () => invoke("stop"),
+  lyrics: (track) => invoke("lyrics", { track }),
   setVisualizer: (on) => invoke("set_visualizer", { on }),
   artworkPalette: (url) => invoke("artwork_palette", { url }),
   setFullscreen: (on) => invoke("set_fullscreen", { on }),

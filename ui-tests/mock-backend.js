@@ -98,6 +98,15 @@
       state.player.queue_len = state.queue.length; emitQueue(); emitState();
     },
     stop: () => { state.player.status = "idle"; emitState(); },
+    lyrics: async ({ track }) => {
+      if (config.lyricsFail) throw { kind: "offline", message: "No internet connection." };
+      await delay(15);
+      const n = track.track_id;
+      if (n % 5 === 0) return null;
+      if (n % 2 === 0) return { source: "VK", text: "первая строка\nвторая <b>строка</b>", lines: [] };
+      const lines = Array.from({ length: 40 }, (_, i) => ({ time: 5 + i * 5, text: i === 3 ? "" : i === 0 ? config.hostileLyric ?? "Строка 0" : `Строка ${i}` }));
+      return { source: "LRCLIB", text: lines.map((l) => l.text).join("\n"), lines };
+    },
     set_visualizer: ({ on }) => { state.visualizer = on; },
     artwork_palette: ({ url }) => {
       if (config.paletteFails) throw { kind: "format", message: "no palette" };

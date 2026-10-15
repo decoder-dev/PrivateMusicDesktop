@@ -182,6 +182,12 @@ impl VkClient {
         Ok(tracks_page(&value, offset, Some(user)))
     }
 
+    /// VK's own plain text for a track's `lyrics_id`.
+    pub fn lyrics_text(&self, session: &Session, lyrics_id: i64) -> Result<Option<String>> {
+        let value = self.call(session, "audio.getLyrics", &[("lyrics_id", lyrics_id.to_string())])?;
+        Ok(value.get("text").and_then(Value::as_str).map(str::to_string))
+    }
+
     pub fn search(&self, session: &Session, query: &str, offset: u32, count: u32) -> Result<Page<Track>> {
         let user = session.user_id;
         let value = self.call(
