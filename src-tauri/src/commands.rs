@@ -239,3 +239,26 @@ pub fn app_info(handle: AppHandle, state: TauriState<'_, AppState>) -> AppInfo {
         has_tray: state.has_tray.load(std::sync::atomic::Ordering::Relaxed),
     }
 }
+
+/// Sound outputs, default first. Asking the audio system can take a moment.
+#[tauri::command]
+pub async fn output_devices() -> Vec<String> {
+    tauri::async_runtime::spawn_blocking(pm_engine::audio::output_devices).await.unwrap_or_default()
+}
+
+/// `None` follows the system default. Playback continues on the new output.
+#[tauri::command]
+pub fn set_output_device(state: TauriState<'_, AppState>, name: Option<String>) -> CommandResult<()> {
+    if name.as_ref().is_some_and(|n| n.is_empty() || n.len() > 512) {
+        return Err(Error::InvalidRequest.into());
+    }
+    {
+        let mut current = state.output_device.lock().unwrap_or_else(|p| p.into_inner());
+        if *current == name {
+            return Ok(());
+        }
+        *current = name;
+    }
+    state.app.controller().reopen_output();
+    Ok(())
+}

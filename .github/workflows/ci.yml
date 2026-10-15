@@ -96,13 +96,11 @@ jobs:
         if: runner.os == 'macOS'
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
-      - name: Tauri CLI
-        run: cargo install tauri-cli --version "^2" --locked
-
       - name: Build
         shell: bash
         working-directory: src-tauri
-        run: cargo tauri build --bundles ${{ matrix.bundles }} ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+        # The npm package ships a prebuilt CLI: no ten-minute `cargo install`.
+        run: npx --yes @tauri-apps/cli@2 build --bundles ${{ matrix.bundles }} ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:

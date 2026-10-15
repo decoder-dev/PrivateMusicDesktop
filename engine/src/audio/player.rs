@@ -51,6 +51,9 @@ pub enum Command {
     SetVolume(f32),
     /// Turns the spectrum analysis (and its events) on or off.
     SetVisualizer(bool),
+    /// Closes the sound card so the next Play opens it again (the user chose
+    /// another output). Whatever was playing stops.
+    ReopenSink,
     Stop,
     Shutdown,
 }
@@ -130,6 +133,7 @@ impl Remote {
     pub fn seek(&self, seconds: f64) { self.send(Command::Seek(seconds)); }
     pub fn set_volume(&self, volume: f32) { self.send(Command::SetVolume(volume)); }
     pub fn set_visualizer(&self, on: bool) { self.send(Command::SetVisualizer(on)); }
+    pub fn reopen_sink(&self) { self.send(Command::ReopenSink); }
     pub fn stop(&self) { self.send(Command::Stop); }
 }
 
@@ -165,6 +169,7 @@ impl PlayerHandle {
     pub fn seek(&self, seconds: f64) { self.send(Command::Seek(seconds)); }
     pub fn set_volume(&self, volume: f32) { self.send(Command::SetVolume(volume)); }
     pub fn set_visualizer(&self, on: bool) { self.send(Command::SetVisualizer(on)); }
+    pub fn reopen_sink(&self) { self.send(Command::ReopenSink); }
     pub fn stop(&self) { self.send(Command::Stop); }
 }
 
@@ -241,6 +246,12 @@ where
                     if !on {
                         analyzer = None;
                     }
+                }
+                Command::ReopenSink => {
+                    session = None;
+                    sink = None;
+                    paused = false;
+                    events(PlayerEvent::Stopped);
                 }
                 Command::Stop => {
                     session = None;

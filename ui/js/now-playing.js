@@ -321,6 +321,16 @@ export function createNowPlaying({ settings, onSettingsChange, onLike }) {
     close,
     toggle: () => (open ? close() : show()),
     isOpen: () => open,
+    /** The settings screen changed a default. */
+    applySettings(patch) {
+      if (patch.visualizer && MODES.includes(patch.visualizer) && patch.visualizer !== mode) {
+        mode = patch.visualizer;
+        visualizer.setMode(mode);
+        renderMode();
+        syncEngine();
+      }
+      if (typeof patch.lyrics === "boolean" && patch.lyrics !== lyricsOn) setLyrics(patch.lyrics);
+    },
     /** From the engine, ~30 times a second while open. */
     feed(bands) { if (open && mode !== "off" && Array.isArray(bands)) visualizer.feed(bands); },
   };

@@ -24,6 +24,8 @@ pub struct AppState {
     /// Only honoured when a tray icon exists to bring the window back.
     pub close_to_tray: Arc<AtomicBool>,
     pub has_tray: Arc<AtomicBool>,
+    /// The sound output the user picked; `None` follows the system default.
+    pub output_device: Arc<std::sync::Mutex<Option<String>>>,
 }
 
 /// Hosts the main window is allowed to show: the bundled UI only. A link or
@@ -67,9 +69,14 @@ fn main() {
             let last_tooltip = std::sync::Mutex::new(None::<String>);
             let media: Arc<std::sync::OnceLock<Option<media::Media>>> = Arc::new(std::sync::OnceLock::new());
             let media_for_events = media.clone();
+            let output_device: Arc<std::sync::Mutex<Option<String>>> = Arc::default();
+            let device_for_sink = output_device.clone();
             let app = App::new(
                 VkClient::new().expect("the built-in API address is valid"),
-                || CpalSink::open_default().map(|sink| Box::new(sink) as Box<dyn Sink>),
+                move || {
+                    let name = device_for_sink.lock().unwrap_or_else(|p| p.into_inner()).clone();
+                    CpalSink::open(name.as_deref()).map(|sink| Box::new(sink) as Box<dyn Sink>)
+                },
                 store,
                 move |event| {
                     if let Some(Some(media)) = media_for_events.get() {
@@ -94,6 +101,7 @@ fn main() {
                 login_running: Arc::new(AtomicBool::new(false)),
                 close_to_tray: close_to_tray.clone(),
                 has_tray: has_tray.clone(),
+                output_device,
             });
 
             WebviewWindowBuilder::new(&handle, "main", WebviewUrl::App("index.html".into()))
@@ -152,6 +160,8 @@ fn main() {
             commands::artwork_palette,
             commands::set_fullscreen,
             commands::set_close_to_tray,
+            commands::output_devices,
+            commands::set_output_device,
             commands::app_info,
             commands::set_shuffle,
             commands::set_repeat,

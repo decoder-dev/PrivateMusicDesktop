@@ -121,6 +121,10 @@
       const lines = Array.from({ length: 40 }, (_, i) => ({ time: 5 + i * 5, text: i === 3 ? "" : i === 0 ? config.hostileLyric ?? "Строка 0" : `Строка ${i}` }));
       return { source: "LRCLIB", text: lines.map((l) => l.text).join("\n"), lines };
     },
+    output_devices: async () => { await delay(5); return config.devices ?? ["Динамики", "Наушники"]; },
+    set_output_device: ({ name }) => { state.outputDevice = name; },
+    set_close_to_tray: ({ on }) => { state.closeToTray = on; },
+    app_info: () => ({ version: "0.1.0", has_tray: config.noTray ? false : true }),
     set_visualizer: ({ on }) => { state.visualizer = on; },
     artwork_palette: ({ url }) => {
       if (config.paletteFails) throw { kind: "format", message: "no palette" };
