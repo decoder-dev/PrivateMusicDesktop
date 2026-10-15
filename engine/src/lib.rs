@@ -9,6 +9,7 @@ pub mod app;
 pub mod audio;
 pub mod controller;
 pub mod error;
+pub mod media_sync;
 pub mod queue;
 pub mod store;
 pub mod stream;
