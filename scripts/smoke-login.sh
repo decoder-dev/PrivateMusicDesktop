@@ -11,9 +11,15 @@ case "$(uname -s)" in
   Linux) runner=(dbus-run-session -- xvfb-run -a) ;;
   *) runner=() ;;
 esac
+# macOS has no `timeout`, so a background watchdog stops a hung app.
 set +e
-timeout 150 "${runner[@]+"${runner[@]}"}" "$binary"
+"${runner[@]+"${runner[@]}"}" "$binary" &
+app=$!
+( sleep "${SMOKE_TIMEOUT:-150}"; echo "the app did not finish in time"; kill "$app" ) 2>/dev/null &
+watchdog=$!
+wait "$app"
 status=$?
+kill "$watchdog" 2>/dev/null
 set -e
 echo "app exited with $status"
 cat "$report" 2>/dev/null || echo "(no report)"
