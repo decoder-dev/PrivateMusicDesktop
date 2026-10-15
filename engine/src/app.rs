@@ -67,12 +67,13 @@ impl App {
             options.volume,
             options.fetch,
         );
+        let durable = store.is_durable();
         let app = Self {
             controller,
             store,
             emit,
             profile: Mutex::new(None),
-            persistent: Mutex::new(true),
+            persistent: Mutex::new(durable),
             refresh_lock: Mutex::new(()),
             token_url: options.token_url,
         };
@@ -97,12 +98,14 @@ impl App {
 
     /// Adopts a fresh session (just signed in, or just refreshed).
     pub fn sign_in(&self, session: Session) {
-        if let Err(error) = self.store.save(&session) {
-            log::warn!("could not save the session: {error}");
-            *Self::lock(&self.persistent) = false;
-        } else {
-            *Self::lock(&self.persistent) = true;
-        }
+        let saved = match self.store.save(&session) {
+            Ok(()) => self.store.is_durable(),
+            Err(error) => {
+                log::warn!("could not save the session: {error}");
+                false
+            }
+        };
+        *Self::lock(&self.persistent) = saved;
         *Self::lock(&self.profile) = None;
         self.controller.set_session(Some(session));
     }

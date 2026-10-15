@@ -231,7 +231,9 @@ impl Sink for CpalSink {
     }
     fn set_paused(&mut self, paused: bool) { self.shared.paused.store(paused, Ordering::Relaxed); }
     fn set_volume(&mut self, volume: f32) {
-        self.shared.volume_bits.store(volume.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
+        // `NaN.clamp(..)` is NaN, and a NaN gain turns every sample into noise.
+        let volume = if volume.is_finite() { volume.clamp(0.0, 1.0) } else { 1.0 };
+        self.shared.volume_bits.store(volume.to_bits(), Ordering::Relaxed);
     }
     fn is_healthy(&self) -> bool { !self.shared.broken.load(Ordering::Relaxed) }
 }
