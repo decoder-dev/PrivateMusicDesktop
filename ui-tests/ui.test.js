@@ -688,11 +688,11 @@ test("settings: output device, tray, full screen defaults, all applied and remem
     await page.waitForFunction(() => document.querySelectorAll(".settings select")[0]?.options.length === 3);
     assert.match(await page.locator(".settings").innerText(), /Версия 0\.1\.0/);
 
-    await page.selectOption(".settings select >> nth=0", "Наушники");
+    await page.selectOption(".settings select[aria-label=\"Устройство вывода\"]", "Наушники");
     await page.waitForFunction(() => window.__mock.state.outputDevice === "Наушники");
     await page.uncheck("#set-tray");
     await page.waitForFunction(() => window.__mock.state.closeToTray === false);
-    await page.selectOption(".settings select >> nth=1", "radial");
+    await page.selectOption(".settings select[aria-label=\"Визуализация\"]", "radial");
     await page.uncheck("#set-lyrics");
     const saved = JSON.parse(await page.evaluate(() => localStorage.getItem("pm.settings.v1")));
     assert.deepEqual([saved.outputDevice, saved.closeToTray, saved.visualizer, saved.lyrics], ["Наушники", false, "radial", false]);
@@ -783,5 +783,40 @@ test("similar tracks: when VK has none, nothing changes and the user is told", a
     await rows(page).first().locator("[data-action=radio]").click();
     await page.waitForFunction(() => document.querySelector(".toast")?.textContent === "VK не нашёл похожих треков.");
     assert.equal(await page.evaluate(() => window.__mock.count("play_tracks")), 0);
+  } finally { await app.close(); }
+});
+
+test("equaliser: presets and sliders reach the engine, off sends nothing, and it comes back on restart", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await page.click(".nav button[data-view=settings]");
+    await page.waitForSelector(".eq");
+    await page.selectOption(".eq select", "bass");
+    await page.waitForFunction(() => JSON.stringify(window.__mock.state.eq) === JSON.stringify([7, 6, 4, 2, 0, 0, 0, 0, 0, 0]));
+    assert.equal(await page.isChecked("#eq-on"), true, "picking a preset turns it on");
+
+    // Drag the 1 kHz slider up with the keyboard: a custom curve.
+    await page.focus(".eq-slider >> nth=5");
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("ArrowUp");
+    await page.waitForFunction(() => window.__mock.state.eq?.[5] === 2);
+    assert.equal(await page.locator(".eq select").inputValue(), "custom");
+    assert.equal(await page.evaluate(() => window.__mock.count("seek")), 0, "arrows on a slider never seek");
+
+    await page.uncheck("#eq-on");
+    await page.waitForFunction(() => window.__mock.state.eq === null);
+
+    await page.check("#eq-on");
+    await page.waitForFunction(() => window.__mock.state.eq?.[5] === 2);
+    await page.reload();
+    await waitForLibrary(page);
+    await page.waitForFunction(() => window.__mock.state.eq?.[0] === 7 && window.__mock.state.eq?.[5] === 2);
+    if (process.env.PM_SCREENSHOTS) {
+      await page.click(".nav button[data-view=settings]");
+      await page.locator(".eq").screenshot({ path: `${process.env.PM_SCREENSHOTS}/eq.png` });
+    }
+    assert.deepEqual(app.problems, []);
   } finally { await app.close(); }
 });

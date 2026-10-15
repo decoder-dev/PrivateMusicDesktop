@@ -20,6 +20,7 @@ use crossbeam_channel::{bounded, unbounded, Receiver, SendTimeoutError, Sender, 
 
 use super::convert::Converter;
 use super::sink::Sink;
+use super::eq::Equalizer;
 use super::spectrum::{Analyzer, Tap, BANDS};
 use crate::stream::{spawn_fetch, Decoder, FetchConfig, SharedBuffer};
 use crate::Error;
@@ -51,6 +52,8 @@ pub enum Command {
     SetVolume(f32),
     /// Turns the spectrum analysis (and its events) on or off.
     SetVisualizer(bool),
+    /// Equaliser gains in dB for `eq::BANDS`; `None` (or all zero) turns it off.
+    SetEqualizer(Option<[f32; 10]>),
     /// Closes the sound card so the next Play opens it again (the user chose
     /// another output). Whatever was playing stops.
     ReopenSink,
@@ -133,6 +136,7 @@ impl Remote {
     pub fn seek(&self, seconds: f64) { self.send(Command::Seek(seconds)); }
     pub fn set_volume(&self, volume: f32) { self.send(Command::SetVolume(volume)); }
     pub fn set_visualizer(&self, on: bool) { self.send(Command::SetVisualizer(on)); }
+    pub fn set_equalizer(&self, gains: Option<[f32; 10]>) { self.send(Command::SetEqualizer(gains)); }
     pub fn reopen_sink(&self) { self.send(Command::ReopenSink); }
     pub fn stop(&self) { self.send(Command::Stop); }
 }
@@ -169,6 +173,7 @@ impl PlayerHandle {
     pub fn seek(&self, seconds: f64) { self.send(Command::Seek(seconds)); }
     pub fn set_volume(&self, volume: f32) { self.send(Command::SetVolume(volume)); }
     pub fn set_visualizer(&self, on: bool) { self.send(Command::SetVisualizer(on)); }
+    pub fn set_equalizer(&self, gains: Option<[f32; 10]>) { self.send(Command::SetEqualizer(gains)); }
     pub fn reopen_sink(&self) { self.send(Command::ReopenSink); }
     pub fn stop(&self) { self.send(Command::Stop); }
 }
@@ -208,6 +213,9 @@ where
     let mut visualizer = false;
     let mut analyzer: Option<Analyzer> = None;
     let mut last_spectrum = Instant::now();
+    let mut eq_gains: Option<[f32; 10]> = None;
+    let mut eq: Option<Equalizer> = None;
+    let mut eq_for: Option<(u32, usize)> = None; // the device format the filters were made for
 
     loop {
         // Commands first, so Pause/Stop never wait behind audio work.
@@ -236,6 +244,10 @@ where
                     if let Some(sink) = sink.as_mut() {
                         sink.set_volume(volume);
                     }
+                }
+                Command::SetEqualizer(gains) => {
+                    eq_gains = gains;
+                    eq_for = None; // rebuild below
                 }
                 Command::SetVisualizer(on) => {
                     visualizer = on;
@@ -327,8 +339,13 @@ where
             continue;
         }
 
+        let format = (output.sample_rate(), output.channels());
+        if eq_for != Some(format) {
+            eq = eq_gains.as_ref().and_then(|g| Equalizer::new(g, format.0, format.1));
+            eq_for = Some(format);
+        }
         if !paused {
-            pump(active, output.as_mut(), &events);
+            pump(active, output.as_mut(), eq.as_mut(), &events);
             if visualizer && active.started && last_spectrum.elapsed() >= SPECTRUM_INTERVAL {
                 last_spectrum = Instant::now();
                 let analyzer = analyzer.get_or_insert_with(|| Analyzer::new(output.sample_rate()));
@@ -388,7 +405,7 @@ fn wake_after(session: &Session, sink: &dyn Sink, last_position: Instant) -> Dur
 }
 
 /// Moves chunks from the decoder thread into the sink.
-fn pump(session: &mut Session, sink: &mut dyn Sink, events: &impl Fn(PlayerEvent)) {
+fn pump(session: &mut Session, sink: &mut dyn Sink, mut eq: Option<&mut Equalizer>, events: &impl Fn(PlayerEvent)) {
     loop {
         // Finish what is left of the previous chunk first.
         if session.pending_offset < session.pending.len() {
@@ -422,6 +439,9 @@ fn pump(session: &mut Session, sink: &mut dyn Sink, events: &impl Fn(PlayerEvent
                 }
                 session.pending = samples;
                 session.pending_offset = 0;
+                if let Some(eq) = eq.as_deref_mut() {
+                    eq.process(&mut session.pending);
+                }
             }
             Ok(Chunk::End { generation }) if generation == session.generation => {
                 session.ended = true;

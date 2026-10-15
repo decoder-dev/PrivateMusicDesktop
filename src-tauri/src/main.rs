@@ -154,6 +154,7 @@ fn main() {
             commands::seek,
             commands::set_volume,
             commands::set_visualizer,
+            commands::set_equalizer,
             commands::lyrics,
             commands::mix,
             commands::recommendations,

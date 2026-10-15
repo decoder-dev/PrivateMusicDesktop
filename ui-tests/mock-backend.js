@@ -136,6 +136,7 @@
     set_output_device: ({ name }) => { state.outputDevice = name; },
     set_close_to_tray: ({ on }) => { state.closeToTray = on; },
     app_info: () => ({ version: "0.1.0", has_tray: config.noTray ? false : true }),
+    set_equalizer: ({ gains }) => { state.eq = gains; },
     set_visualizer: ({ on }) => { state.visualizer = on; },
     artwork_palette: ({ url }) => {
       if (config.paletteFails) throw { kind: "format", message: "no palette" };

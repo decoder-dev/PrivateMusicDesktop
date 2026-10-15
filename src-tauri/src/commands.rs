@@ -280,3 +280,9 @@ pub async fn similar(state: TauriState<'_, AppState>, track: Track) -> CommandRe
     let app = state.app.clone();
     blocking(move || app.similar(&track)).await
 }
+
+/// Equaliser gains in dB for the ten bands; `None` turns it off.
+#[tauri::command]
+pub fn set_equalizer(state: TauriState<'_, AppState>, gains: Option<[f32; 10]>) {
+    state.app.controller().set_equalizer(gains);
+}

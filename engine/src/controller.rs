@@ -483,6 +483,11 @@ impl Controller {
         });
     }
 
+    /// Equaliser gains in dB (see `audio::eq::BANDS`); `None` turns it off.
+    pub fn set_equalizer(&self, gains: Option<[f32; 10]>) {
+        self.shared.remote().set_equalizer(gains);
+    }
+
     /// Starts or stops the spectrum events. Off by default: analysing audio
     /// costs CPU that only the full-screen view needs.
     pub fn set_visualizer(&self, on: bool) {
