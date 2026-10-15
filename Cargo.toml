@@ -1,5 +1,8 @@
 [workspace]
 members = ["engine", "src-tauri"]
+# The vendored iOS crate is a dependency, not part of this workspace (it has its
+# own, with panic=abort): keep it out of `--workspace` runs such as clippy.
+exclude = ["native"]
 resolver = "2"
 
 [workspace.package]
