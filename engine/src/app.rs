@@ -195,6 +195,14 @@ impl App {
         self.api(|client, session| client.search(session, query, offset, count.clamp(1, 300)))
     }
 
+    pub fn add_to_library(&self, track: &Track) -> Result<Track> {
+        self.api(|client, session| client.add_track(session, track))
+    }
+
+    pub fn remove_from_library(&self, track: &Track) -> Result<()> {
+        self.api(|client, session| client.delete_track(session, track))
+    }
+
     /// Lyrics for a track: timed from LRCLIB when its length agrees, else VK's
     /// own text, else whatever plain text LRCLIB had. `Ok(None)`: none exists.
     pub fn lyrics(&self, track: &Track) -> Result<Option<Lyrics>> {

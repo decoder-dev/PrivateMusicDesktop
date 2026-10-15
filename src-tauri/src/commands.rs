@@ -207,3 +207,15 @@ pub async fn lyrics(state: TauriState<'_, AppState>, track: Track) -> CommandRes
     let app = state.app.clone();
     blocking(move || app.lyrics(&track)).await
 }
+
+#[tauri::command]
+pub async fn add_to_library(state: TauriState<'_, AppState>, track: Track) -> CommandResult<Track> {
+    let app = state.app.clone();
+    blocking(move || app.add_to_library(&track)).await
+}
+
+#[tauri::command]
+pub async fn remove_from_library(state: TauriState<'_, AppState>, track: Track) -> CommandResult<()> {
+    let app = state.app.clone();
+    blocking(move || app.remove_from_library(&track)).await
+}

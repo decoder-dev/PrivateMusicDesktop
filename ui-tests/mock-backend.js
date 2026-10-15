@@ -98,6 +98,20 @@
       state.player.queue_len = state.queue.length; emitQueue(); emitState();
     },
     stop: () => { state.player.status = "idle"; emitState(); },
+    add_to_library: async ({ track }) => {
+      await delay(10);
+      if (config.libraryWriteFails) throw { kind: "vk", message: "VK error 15: Access denied" };
+      const copy = { ...track, track_id: 900000 + track.track_id, owner_id: 7, access_key: null };
+      library.unshift(copy);
+      return copy;
+    },
+    remove_from_library: async ({ track }) => {
+      await delay(10);
+      if (config.libraryWriteFails) throw { kind: "vk", message: "VK error 15: Access denied" };
+      const index = library.findIndex((t) => t.owner_id === track.owner_id && t.track_id === track.track_id);
+      if (index < 0) throw { kind: "vk", message: "not in library" };
+      library.splice(index, 1);
+    },
     lyrics: async ({ track }) => {
       if (config.lyricsFail) throw { kind: "offline", message: "No internet connection." };
       await delay(15);

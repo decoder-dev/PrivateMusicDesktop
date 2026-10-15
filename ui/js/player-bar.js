@@ -3,9 +3,10 @@ import { icon } from "./icons.js";
 import { t } from "./i18n.js";
 import { api } from "./api.js";
 import { store, subscribe } from "./store.js";
+import { isLiked, isBusy } from "./likes.js";
 
 /** The bottom bar: what is playing, transport, position and volume. */
-export function createPlayerBar({ onSettingsChange, onExpand }) {
+export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
   let dragging = false;
   let lastVolume = 1;
 
@@ -50,10 +51,24 @@ export function createPlayerBar({ onSettingsChange, onExpand }) {
 
   const expandButton = h("button", { class: "icon-btn", type: "button", title: t("np.open"), "aria-label": t("np.open"),
     onclick: () => onExpand?.() }, icon("expand", 18));
+  const likeButton = h("button", { class: "icon-btn like", type: "button", hidden: true, onclick: () => onLike?.(store.player.track) }, icon("heart", 18));
+  function renderLike() {
+    const track = store.player.track;
+    likeButton.hidden = !track;
+    if (!track) return;
+    const liked = isLiked(track);
+    const label = liked ? t("like.remove") : t("like.add");
+    likeButton.classList.toggle("on", liked);
+    likeButton.title = label;
+    likeButton.setAttribute("aria-label", label);
+    likeButton.setAttribute("aria-pressed", String(liked));
+    likeButton.disabled = isBusy(track);
+    likeButton.replaceChildren(icon(liked ? "heart-on" : "heart", 18));
+  }
   const coverButton = h("button", { class: "cover-button", type: "button", title: t("np.open"), "aria-label": t("np.open"), onclick: () => onExpand?.() }, coverSlot);
 
   const element = h("div", { class: "player-inner" },
-    h("div", { class: "now" }, coverButton, h("div", { class: "titles" }, title, artist)),
+    h("div", { class: "now" }, coverButton, h("div", { class: "titles" }, title, artist), likeButton),
     h("div", { class: "transport" },
       h("div", { class: "controls" }, shuffleButton, previousButton, playButton, nextButton, repeatButton),
       h("div", { class: "seek" }, elapsed, seek, total),
@@ -103,7 +118,8 @@ export function createPlayerBar({ onSettingsChange, onExpand }) {
     previousButton.disabled = nextButton.disabled = playButton.disabled = !track && player.queue_len === 0;
   }
 
-  subscribe("player", render);
+  subscribe("player", (player) => { render(player); renderLike(); });
+  subscribe("likes", renderLike);
   render(store.player);
   return { element, toggleMute, volumeUp: () => setVolume(store.player.volume + 0.05), volumeDown: () => setVolume(store.player.volume - 0.05) };
 }

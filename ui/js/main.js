@@ -7,6 +7,7 @@ import { store, set, publish, subscribe } from "./store.js";
 import { toast } from "./toast.js";
 import { createPlayerBar } from "./player-bar.js";
 import { createNowPlaying } from "./now-playing.js";
+import { toggleLike } from "./likes.js";
 import { createLibraryView } from "./views/library.js";
 import { createPlaylistsView } from "./views/playlists.js";
 import { createSearchView } from "./views/search.js";
@@ -33,7 +34,19 @@ async function play(tracks, index, { shuffle = false } = {}) {
   }
 }
 
+/** Hearts everywhere end here. */
+export async function like(track) {
+  if (!track) return;
+  try {
+    const result = await toggleLike(track);
+    if (result) toast(t(result === "added" ? "like.added" : "like.removed"));
+  } catch (error) {
+    toast(errorText(error), { error: true });
+  }
+}
+
 async function onTrackAction(action, track) {
+  if (action === "like") return like(track);
   try {
     if (action === "play-next") {
       await api.playNext(track);
@@ -78,8 +91,8 @@ function buildShell() {
   const account = h("div", { class: "account" }, name,
     h("button", { class: "link", type: "button", onclick: signOut }, t("account.signOut")));
   const main = h("main", { class: "main" }, ...Object.values(views).map((v) => v.element));
-  nowPlaying = createNowPlaying({ settings, onSettingsChange: persistSettings });
-  const bar = createPlayerBar({ onSettingsChange: persistSettings, onExpand: () => nowPlaying.show() });
+  nowPlaying = createNowPlaying({ settings, onSettingsChange: persistSettings, onLike: like });
+  const bar = createPlayerBar({ onSettingsChange: persistSettings, onExpand: () => nowPlaying.show(), onLike: like });
 
   const element = h("div", { class: "shell" },
     h("aside", { class: "sidebar" }, h("div", { class: "brand", text: t("app.name") }), nav, h("div", { class: "spacer" }), account),
