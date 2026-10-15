@@ -1,7 +1,8 @@
 name: Release
 
-# Pushing a tag such as v0.2.0 builds the installers and attaches them to a
-# GitHub release (as a draft, so nothing goes out before it is looked at).
+# Builds the installers and publishes them as a GitHub release, either from a
+# pushed tag (v0.2.0) or by running the workflow by hand with the tag name:
+# then the tag is created on the commit the run is for.
 on:
   push:
     tags: ["v*"]
@@ -56,7 +57,7 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          ref: ${{ needs.version.outputs.tag }}
+          ref: ${{ github.sha }}
 
       - name: Linux system libraries
         if: runner.os == 'Linux'
@@ -86,7 +87,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: Draft release
+    name: Publish release
     needs: [version, build]
     runs-on: ubuntu-latest
     permissions:
@@ -125,6 +126,6 @@ jobs:
           TAG: ${{ needs.version.outputs.tag }}
           REPO: ${{ github.repository }}
         run: |
-          gh release create "$TAG" out/* --repo "$REPO" --draft --verify-tag \
+          gh release create "$TAG" out/* --repo "$REPO" --target "$GITHUB_SHA" --latest \
             --title "Private Music ${TAG#v}" \
             --notes "Unofficial VK Music player for Windows, macOS and Linux. Installers are not code-signed: use the install scripts in the README, or see the notes there for the first-run warning."
