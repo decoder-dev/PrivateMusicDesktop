@@ -50,6 +50,9 @@ pub fn secure_remote_url(raw: &str) -> Option<String> {
     url.host_str()?;
     match url.scheme() {
         "https" => {}
+        // Loopback is left alone so tests can serve from 127.0.0.1. It is
+        // never fetched unless the fetcher was explicitly put in test mode.
+        "http" if matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]")) => {}
         "http" => url.set_scheme("https").ok()?,
         _ => return None,
     }
@@ -76,6 +79,7 @@ mod tests {
     fn secure_remote_url_rules() {
         assert_eq!(secure_remote_url("//a.example/x").as_deref(), Some("https://a.example/x"));
         assert_eq!(secure_remote_url("http://a.example/x").as_deref(), Some("https://a.example/x"));
+        assert_eq!(secure_remote_url("http://127.0.0.1:8/x").as_deref(), Some("http://127.0.0.1:8/x"));
         assert_eq!(secure_remote_url("file:///etc/passwd"), None);
         assert_eq!(secure_remote_url("javascript:alert(1)"), None);
         assert_eq!(secure_remote_url("  "), None);

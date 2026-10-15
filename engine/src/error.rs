@@ -54,3 +54,21 @@ impl From<reqwest::Error> for Error {
         }
     }
 }
+
+impl Error {
+    /// Stable machine-readable category for the UI.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Error::Unauthorized => "unauthorized",
+            Error::Offline => "offline",
+            Error::Timeout => "timeout",
+            Error::Vk { .. } => "vk",
+            Error::Http(_) => "http",
+            Error::Format(_) => "format",
+            Error::Transport(_) => "network",
+            Error::Stream(_) => "stream",
+            Error::Cancelled => "cancelled",
+            Error::InvalidRequest => "invalid",
+        }
+    }
+}

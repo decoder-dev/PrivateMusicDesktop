@@ -207,6 +207,8 @@ fn a_dead_stream_fails_cleanly_and_the_player_stays_usable() {
     let rig = rig(44_100, 20.0);
     rig.player.play("9_9", &format!("{}/nothing.m3u8", server.base), 10.0, 0.0, lab_config());
     rig.wait("failure", |e| e.iter().any(|x| matches!(x, PlayerEvent::Failed { track_id, .. } if track_id == "9_9")));
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(!rig.has(|e| matches!(e, PlayerEvent::Ended { track_id } if track_id == "9_9")), "a failed track must not also end");
     rig.player.play("1_1", &format!("{}/index.m3u8", server.base), 12.0, 0.0, lab_config());
     rig.wait("recovery", |e| e.iter().any(|x| matches!(x, PlayerEvent::Ended { track_id } if track_id == "1_1")));
 }
