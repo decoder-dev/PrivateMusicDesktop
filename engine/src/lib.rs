@@ -12,6 +12,7 @@ pub mod controller;
 pub mod error;
 pub mod lyrics;
 pub mod media_sync;
+pub mod offline;
 pub mod queue;
 pub mod store;
 pub mod stream;

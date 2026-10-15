@@ -132,6 +132,15 @@ impl SharedBuffer {
         }
     }
 
+    /// Everything received, once the stream is complete (for saving a download).
+    pub fn completed_bytes(&self) -> Option<(ElementaryKind, Vec<u8>)> {
+        let state = self.lock();
+        match (state.complete, state.kind) {
+            (true, Some(kind)) => Some((kind, state.data.clone())),
+            _ => None,
+        }
+    }
+
     pub fn reader(&self) -> BufferReader {
         BufferReader { shared: self.clone(), position: 0 }
     }

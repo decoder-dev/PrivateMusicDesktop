@@ -286,3 +286,32 @@ pub async fn similar(state: TauriState<'_, AppState>, track: Track) -> CommandRe
 pub fn set_equalizer(state: TauriState<'_, AppState>, gains: Option<[f32; 10]>) {
     state.app.controller().set_equalizer(gains);
 }
+
+#[derive(Serialize)]
+pub struct Downloads {
+    tracks: Vec<Track>,
+    bytes: u64,
+}
+
+#[tauri::command]
+pub fn downloads(state: TauriState<'_, AppState>) -> Downloads {
+    Downloads {
+        tracks: state.app.downloads().into_iter().map(|d| d.track).collect(),
+        bytes: state.app.downloads_size(),
+    }
+}
+
+#[tauri::command]
+pub async fn download(state: TauriState<'_, AppState>, track: Track) -> CommandResult<Track> {
+    let app = state.app.clone();
+    blocking(move || app.download(&track).map(|d| d.track)).await
+}
+
+/// `track_id` is "owner_trackid", as the window knows it.
+#[tauri::command]
+pub fn remove_download(state: TauriState<'_, AppState>, track_id: String) -> CommandResult<bool> {
+    if track_id.len() > 64 || !track_id.chars().all(|c| c.is_ascii_digit() || c == '_' || c == '-') {
+        return Err(Error::InvalidRequest.into());
+    }
+    Ok(state.app.remove_download(&track_id)?)
+}

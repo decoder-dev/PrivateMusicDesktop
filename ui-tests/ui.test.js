@@ -820,3 +820,43 @@ test("equaliser: presets and sliders reach the engine, off sends nothing, and it
     assert.deepEqual(app.problems, []);
   } finally { await app.close(); }
 });
+
+// ---------------------------------------------------------------- downloads
+
+test("downloads: a row button saves the track, shows it everywhere, lists it with its size, and removes it", async () => {
+  const app = await openApp({ config: { signedIn: true, downloadDelay: 200 } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await rows(page).nth(1).hover();
+    const button = rows(page).nth(1).locator("[data-action=download]");
+    await button.click();
+    await page.waitForFunction(() => document.querySelectorAll(".main > .view:not([hidden]) .row")[1]?.querySelector(".download.busy"));
+    await page.waitForFunction(() => document.querySelectorAll(".main > .view:not([hidden]) .row")[1]?.querySelector(".download.on"));
+    assert.match(await page.locator(".toast").innerText(), /Скачано: Трек 2/);
+    assert.equal(await rows(page).nth(1).locator(".download").isVisible(), true, "a downloaded mark stays visible");
+
+    await page.click(".nav button[data-view=downloads]");
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .title")?.textContent === "Трек 2");
+    assert.match(await page.locator(".main > .view:not([hidden]) .meta").innerText(), /1 трек.*4 МБ на диске/);
+
+    await rows(page).first().hover();
+    await rows(page).first().locator("[data-action=download]").click();
+    await page.waitForSelector(".main > .view:not([hidden]) .empty-state:not([hidden])");
+    assert.match(await page.locator(".toast").innerText(), /Удалено с компьютера/);
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("downloads: a failed download says why and leaves the button ready", async () => {
+  const app = await openApp({ config: { signedIn: true, downloadFails: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await rows(page).first().hover();
+    await rows(page).first().locator("[data-action=download]").click();
+    await page.waitForSelector(".toast.error");
+    assert.equal(await rows(page).first().locator(".download").getAttribute("aria-pressed"), "false");
+    assert.equal(await rows(page).first().locator(".download").isDisabled(), false);
+  } finally { await app.close(); }
+});
