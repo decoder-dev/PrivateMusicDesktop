@@ -1,0 +1,18 @@
+[workspace]
+members = ["engine"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+strip = "symbols"
+
+# pm_native is built for iOS with panic=abort; the desktop app keeps unwinding
+# so a bad packet in one track cannot take the whole process down silently.
