@@ -313,3 +313,19 @@ fn shuffle_keeps_the_playing_track() {
     assert_eq!(state.track.unwrap().track_id, 4);
 }
 
+
+#[test]
+fn a_restored_queue_waits_and_then_starts_at_the_saved_position() {
+    if !require_ffmpeg() { return; }
+    let (_dir, media) = media_dir();
+    let vk = FakeVk::start(media.base.clone(), true);
+    let rig = rig(&vk.base, 1.0);
+    let url = format!("{}/index.m3u8", media.base);
+    rig.controller.load_queue((1..=3).map(|n| track(n, Some(url.clone()))).collect(), 1, 9.0);
+    let state = rig.controller.state();
+    assert_eq!(state.status, Status::Idle, "nothing plays by itself");
+    assert_eq!(state.track.unwrap().track_id, 2);
+    assert_eq!(state.position, 9.0);
+    rig.controller.toggle();
+    rig.wait("playing from the saved spot", |s| s.status == Status::Playing && s.position >= 9.0);
+}

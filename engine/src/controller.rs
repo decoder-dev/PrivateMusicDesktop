@@ -72,6 +72,8 @@ struct Inner {
     failures: u32,
     /// Tracks already retried with a fresh URL during this attempt.
     refreshed: HashSet<String>,
+    /// Where the next start of the current track begins (a restored session).
+    pending_start: f64,
 }
 
 struct Shared {
@@ -145,16 +147,20 @@ impl Shared {
             events.push(UiEvent::State(inner.state()));
             return;
         };
+        let start = std::mem::take(&mut inner.pending_start).clamp(0.0, f64::from(track.duration));
         inner.status = Status::Loading;
-        inner.position = 0.0;
+        inner.position = start;
         inner.duration = f64::from(track.duration);
         events.push(UiEvent::State(inner.state()));
         match track.stream_url.clone() {
             Some(url) => {
                 let config = self.fetch_config(inner);
-                self.remote().play(&track.id(), &url, f64::from(track.duration), 0.0, config);
+                self.remote().play(&track.id(), &url, f64::from(track.duration), start, config);
             }
-            None => self.refresh_then_play(inner, track),
+            None => {
+                inner.pending_start = start;
+                self.refresh_then_play(inner, track)
+            }
         }
     }
 
@@ -178,8 +184,9 @@ impl Shared {
                     }
                     inner.queue.replace_track(&fresh);
                     let config = shared.fetch_config(inner);
+                    let start = std::mem::take(&mut inner.pending_start);
                     if let Some(url) = &fresh.stream_url {
-                        shared.remote().play(&fresh.id(), url, f64::from(fresh.duration), 0.0, config);
+                        shared.remote().play(&fresh.id(), url, f64::from(fresh.duration), start, config);
                     }
                     events.push(UiEvent::State(inner.state()));
                 }),
@@ -257,6 +264,7 @@ impl Shared {
                 } else {
                     inner.status = Status::Idle;
                     inner.position = 0.0;
+                    inner.pending_start = 0.0;
                     events.push(UiEvent::State(inner.state()));
                 }
             }),
@@ -323,6 +331,7 @@ impl Controller {
                 rng: StdRng::from_entropy(),
                 failures: 0,
                 refreshed: HashSet::new(),
+                pending_start: 0.0,
             }),
             client,
             remote: OnceLock::new(),
@@ -366,6 +375,21 @@ impl Controller {
             inner.refreshed.clear();
             events.push(inner.queue_event());
             self.shared.start_current(inner, events);
+        });
+    }
+
+    /// Puts a queue in place without playing it (a restored session). The
+    /// next play starts at `position` seconds.
+    pub fn load_queue(&self, tracks: Vec<Track>, index: usize, position: f64) {
+        self.shared.with(|inner, events| {
+            let Inner { queue, rng, .. } = inner;
+            queue.replace(tracks, index, rng);
+            inner.status = Status::Idle;
+            inner.pending_start = if position.is_finite() { position.max(0.0) } else { 0.0 };
+            inner.position = inner.pending_start;
+            inner.duration = inner.queue.current().map(|t| f64::from(t.duration)).unwrap_or(0.0);
+            events.push(inner.queue_event());
+            events.push(UiEvent::State(inner.state()));
         });
     }
 

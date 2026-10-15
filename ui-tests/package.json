@@ -1,0 +1,7 @@
+{
+  "name": "private-music-ui-tests",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test --test-concurrency=1 ui.test.js" },
+  "devDependencies": { "playwright": "1.56.1" }
+}
