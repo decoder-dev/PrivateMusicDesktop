@@ -62,7 +62,9 @@ enum Chunk {
 }
 
 enum DecoderCommand {
-    Seek { generation: u64, seconds: f64 },
+    /// `near_end`: the target is within the last seconds of VK's length,
+    /// which is rounded up and can lie past the real end of the audio.
+    Seek { generation: u64, seconds: f64, near_end: bool },
 }
 
 /// Everything about the track being played.
@@ -176,6 +178,8 @@ impl Drop for PlayerHandle {
 }
 
 const POSITION_INTERVAL: Duration = Duration::from_millis(250);
+/// A seek this close to VK's (rounded) length may land past the real end.
+const NEAR_END_SECONDS: f64 = 2.0;
 /// About 30 pictures a second for the visualizer.
 const SPECTRUM_INTERVAL: Duration = Duration::from_millis(33);
 /// Refill the sink when it holds less than this, up to `HIGH_WATER`. Filling
@@ -408,7 +412,14 @@ fn pump(session: &mut Session, sink: &mut dyn Sink, events: &impl Fn(PlayerEvent
                 session.pending = samples;
                 session.pending_offset = 0;
             }
-            Ok(Chunk::End { generation }) if generation == session.generation => session.ended = true,
+            Ok(Chunk::End { generation }) if generation == session.generation => {
+                session.ended = true;
+                // Nothing more is coming, so this is no longer waiting for data.
+                if session.buffering {
+                    session.buffering = false;
+                    events(PlayerEvent::Buffering { track_id: session.track_id.clone(), on: false });
+                }
+            }
             Ok(Chunk::Failed { generation, error }) if generation == session.generation => {
                 session.failure = Some(error);
                 session.cancel();
@@ -445,7 +456,8 @@ fn seek(session: &mut Session, sink: &mut dyn Sink, seconds: f64) {
     session.ended = false;
     session.pending.clear();
     session.pending_offset = 0;
-    let _ = session.decoder_commands.send(DecoderCommand::Seek { generation: session.generation, seconds: target });
+    let near_end = session.duration > 0.0 && target >= session.duration - NEAR_END_SECONDS;
+    let _ = session.decoder_commands.send(DecoderCommand::Seek { generation: session.generation, seconds: target, near_end });
     sink.flush();
     session.base_seconds = target;
 }
@@ -548,24 +560,33 @@ fn decode_loop(
         }
         // The latest Seek wins; older ones are superseded.
         let mut seek = None;
-        while let Ok(DecoderCommand::Seek { generation: g, seconds }) = commands.try_recv() {
-            seek = Some((g, seconds));
+        while let Ok(DecoderCommand::Seek { generation: g, seconds, near_end }) = commands.try_recv() {
+            seek = Some((g, seconds, near_end));
         }
         // At the end of the stream there is nothing to decode: sleep until a
         // Seek arrives (or the session is dropped), without polling.
         if at_end && seek.is_none() {
             match commands.recv_timeout(Duration::from_millis(250)) {
-                Ok(DecoderCommand::Seek { generation: g, seconds }) => seek = Some((g, seconds)),
+                Ok(DecoderCommand::Seek { generation: g, seconds, near_end }) => seek = Some((g, seconds, near_end)),
                 Err(_) => continue,
             }
         }
-        if let Some((g, seconds)) = seek {
+        if let Some((g, seconds, near_end)) = seek {
             generation = g;
             at_end = false;
             converter.reset();
             if let Err(error) = decoder.seek(seconds) {
                 if error == Error::Cancelled {
                     return;
+                }
+                if near_end {
+                    // Past the real end of the audio: the track is over, which
+                    // is not a failure (a failure would restart it from 0:00).
+                    at_end = true;
+                    if !send_chunk(&sender, &stop, Chunk::End { generation }) {
+                        return;
+                    }
+                    continue;
                 }
                 send_chunk(&sender, &stop, Chunk::Failed { generation, error });
                 return;

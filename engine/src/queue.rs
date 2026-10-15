@@ -159,6 +159,16 @@ impl Queue {
         }
     }
 
+    /// True when the current track is the last one in play order.
+    pub fn at_last(&self) -> bool {
+        self.cursor.is_some_and(|c| c + 1 == self.order.len())
+    }
+
+    /// Makes the first track in play order current (repeat-all wrap).
+    pub fn rewind(&mut self) {
+        self.cursor = if self.order.is_empty() { None } else { Some(0) };
+    }
+
     /// Removes a track by `tracks()` index. Returns true when it was the
     /// current one (the caller must start the next track or stop).
     pub fn remove(&mut self, index: usize) -> bool {

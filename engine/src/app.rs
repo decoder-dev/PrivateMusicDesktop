@@ -24,7 +24,20 @@ pub struct SessionState {
     pub persistent: bool,
 }
 
+/// The app object the shell holds. It is cheap to share: everything lives in
+/// [`Core`], which the controller can also reach to renew an expired token.
 pub struct App {
+    core: Arc<Core>,
+}
+
+impl std::ops::Deref for App {
+    type Target = Core;
+    fn deref(&self) -> &Core {
+        &self.core
+    }
+}
+
+pub struct Core {
     controller: Controller,
     store: Box<dyn SecretStore>,
     emit: Arc<dyn Fn(UiEvent) + Send + Sync>,
@@ -33,6 +46,9 @@ pub struct App {
     /// One refresh at a time: two screens hitting 401 together must not both
     /// re-issue the token.
     refresh_lock: Mutex<()>,
+    /// Bumped by every sign-out, under this lock. A refresh that started
+    /// before a sign-out must not sign the user back in when it finishes.
+    generation: Mutex<u64>,
     token_url: String,
     lrclib: Option<LrcLib>,
 }
@@ -76,13 +92,14 @@ impl App {
             options.fetch,
         );
         let durable = store.is_durable();
-        let app = Self {
+        let app = Core {
             controller,
             store,
             emit,
             profile: Mutex::new(None),
             persistent: Mutex::new(durable),
             refresh_lock: Mutex::new(()),
+            generation: Mutex::new(0),
             token_url: options.token_url,
             lrclib: LrcLib::with_base(&options.lyrics_base).ok(),
         };
@@ -94,9 +111,16 @@ impl App {
                 *app.persistent.lock().unwrap_or_else(|p| p.into_inner()) = false;
             }
         }
-        app
+        let core = Arc::new(app);
+        let weak = Arc::downgrade(&core);
+        core.controller.set_refresher(Arc::new(move |stale: &Session| {
+            weak.upgrade().ok_or(Error::Unauthorized)?.refresh(stale)
+        }));
+        App { core }
     }
+}
 
+impl Core {
     pub fn controller(&self) -> &Controller {
         &self.controller
     }
@@ -107,6 +131,11 @@ impl App {
 
     /// Adopts a fresh session (just signed in, or just refreshed).
     pub fn sign_in(&self, session: Session) {
+        let _generation = Self::lock(&self.generation);
+        self.adopt(session);
+    }
+
+    fn adopt(&self, session: Session) {
         let saved = match self.store.save(&session) {
             Ok(()) => self.store.is_durable(),
             Err(error) => {
@@ -120,6 +149,8 @@ impl App {
     }
 
     pub fn sign_out(&self) {
+        let mut generation = Self::lock(&self.generation);
+        *generation += 1;
         if let Err(error) = self.store.clear() {
             log::warn!("could not clear the session: {error}");
         }
@@ -138,6 +169,7 @@ impl App {
     /// Re-issues the token from the stored web cookie.
     fn refresh(&self, stale: &Session) -> Result<Session> {
         let _one_at_a_time = Self::lock(&self.refresh_lock);
+        let started = *Self::lock(&self.generation);
         // Someone else may have refreshed while we waited for the lock.
         if let Some(current) = self.controller.session() {
             if current.access_token != stale.access_token {
@@ -146,10 +178,19 @@ impl App {
         }
         match exchange_at(&self.token_url, &stale.refresh_cookie, &stale.web_user_agent, now_unix()) {
             Ok(fresh) => {
-                self.sign_in(fresh.clone());
+                let generation = Self::lock(&self.generation);
+                if *generation != started || self.controller.session().is_none() {
+                    // Signed out while VK was answering: stay signed out.
+                    return Err(Error::Unauthorized);
+                }
+                self.adopt(fresh.clone());
+                drop(generation);
                 Ok(fresh)
             }
             Err(Error::Unauthorized) => {
+                if *Self::lock(&self.generation) != started {
+                    return Err(Error::Unauthorized);
+                }
                 self.sign_out();
                 (self.emit)(UiEvent::SessionExpired);
                 Err(Error::Unauthorized)
