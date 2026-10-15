@@ -2,7 +2,7 @@
 
 The desktop twin of the iOS app: an unofficial VK Music player for Windows,
 Linux and macOS. Rust engine + [Tauri](https://tauri.app) shell + a small flat
-web UI. It reuses the iOS app's `native/` crate (HLS parsing, AES-128, MPEG-TS
+web UI. It reuses the iOS app's `native/` crate (a copy of the one in decoder-dev/PrivateMusic2; keep them in sync) (HLS parsing, AES-128, MPEG-TS
 and CMAF demuxing, VK stream unmasking), so both clients play streams the same
 way.
 
@@ -23,7 +23,7 @@ Linux needs `libwebkit2gtk-4.1-dev libgtk-3-dev libasound2-dev libdbus-1-dev lib
 tests also need `ffmpeg` (they generate HLS fixtures).
 
 ```sh
-cd desktop
+
 cargo run -p private-music-desktop                    # debug app
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace                                # uses a simulated sound card

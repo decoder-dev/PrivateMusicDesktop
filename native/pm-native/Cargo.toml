@@ -1,0 +1,10 @@
+[package]
+name = "pm_native"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Native core of Private Music: DSP and media parsing behind a C ABI."
+
+[lib]
+name = "pm_native"
+crate-type = ["staticlib", "rlib"]
