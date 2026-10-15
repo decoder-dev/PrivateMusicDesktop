@@ -13,6 +13,7 @@ import { createPlaylistsView } from "./views/playlists.js";
 import { createSearchView } from "./views/search.js";
 import { createQueueView } from "./views/queue.js";
 import { createLoginView } from "./views/login.js";
+import { createSettingsView } from "./views/settings.js";
 import { loadSettings, saveSettings, saveQueue, loadQueue, clearQueue } from "./persist.js";
 
 const root = document.getElementById("app");
@@ -65,6 +66,12 @@ function persistSettings(patch) {
   saveSettings(settings);
 }
 
+/** From the settings screen: saved, and pushed to whatever shows them now. */
+function applySettings(patch) {
+  persistSettings(patch);
+  nowPlaying?.applySettings(patch);
+}
+
 // ------------------------------------------------------------------ shell
 
 function buildShell() {
@@ -79,12 +86,14 @@ function buildShellParts() {
     playlists: createPlaylistsView(ctx),
     search: createSearchView(ctx),
     queue: createQueueView(),
+    settings: createSettingsView({ settings, onSettingsChange: applySettings, onSignOut: signOut, toast }),
   };
   const items = [
     ["library", "nav.library", "note"],
     ["playlists", "nav.playlists", "playlist"],
     ["search", "nav.search", "search"],
     ["queue", "nav.queue", "queue"],
+    ["settings", "nav.settings", "settings"],
   ];
 
   const nav = h("nav", { class: "nav", "aria-label": t("app.name") },
@@ -117,7 +126,10 @@ function buildShellParts() {
 
   return {
     element, views, bar, show,
-    setProfile(profile) { name.textContent = profile ? `${profile.first_name} ${profile.last_name}`.trim() : ""; },
+    setProfile(profile) {
+      name.textContent = profile ? `${profile.first_name} ${profile.last_name}`.trim() : "";
+      views.settings.setProfile(profile);
+    },
   };
 }
 
@@ -149,6 +161,8 @@ async function showApp() {
 /** Pushes saved settings to the engine, and brings back the last queue. */
 async function applyStartupState() {
   try {
+    api.setCloseToTray(settings.closeToTray).catch(() => {});
+    if (settings.outputDevice) await api.setOutputDevice(settings.outputDevice).catch(() => {});
     await api.setVolume(settings.volume);
     await api.setShuffle(settings.shuffle);
     await api.setRepeat(settings.repeat);

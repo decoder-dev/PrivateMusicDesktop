@@ -7,4 +7,4 @@ pub mod sink;
 pub mod spectrum;
 
 pub use player::{Command, PlayerEvent, PlayerHandle, Remote};
-pub use sink::{CpalSink, SimulatedSink, Sink};
+pub use sink::{output_devices, CpalSink, SimulatedSink, Sink};

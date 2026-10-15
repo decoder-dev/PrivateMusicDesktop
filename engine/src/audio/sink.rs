@@ -139,11 +139,44 @@ pub struct CpalSink {
     capacity: usize,
 }
 
+/// Names of the sound outputs the system offers, default first.
+pub fn output_devices() -> Vec<String> {
+    use cpal::traits::HostTrait;
+    let host = cpal::default_host();
+    let default = host.default_output_device().and_then(|d| d.name().ok());
+    let mut names: Vec<String> = host
+        .output_devices()
+        .map(|devices| devices.filter_map(|d| d.name().ok()).collect())
+        .unwrap_or_default();
+    names.sort();
+    names.dedup();
+    if let Some(default) = default {
+        names.retain(|n| *n != default);
+        names.insert(0, default);
+    }
+    names
+}
+
 impl CpalSink {
     /// Opens the default output device.
     pub fn open_default() -> Result<Self> {
+        Self::open(None)
+    }
+
+    /// Opens the named output, or the default one when `name` is `None` or
+    /// that device is gone (unplugged headphones should not mean silence).
+    pub fn open(name: Option<&str>) -> Result<Self> {
         let host = cpal::default_host();
-        let device = host.default_output_device().ok_or_else(|| Error::Stream("no audio output device".into()))?;
+        let named = name.and_then(|wanted| {
+            host.output_devices().ok()?.find(|d| d.name().ok().as_deref() == Some(wanted))
+        });
+        if name.is_some() && named.is_none() {
+            log::warn!("audio output {name:?} is not available, using the default one");
+        }
+        let device = match named {
+            Some(device) => device,
+            None => host.default_output_device().ok_or_else(|| Error::Stream("no audio output device".into()))?,
+        };
         let config = device.default_output_config().map_err(|e| Error::Stream(format!("audio output: {e}")))?;
         let rate = config.sample_rate().0;
         let channels = config.channels() as usize;

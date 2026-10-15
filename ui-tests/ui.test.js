@@ -675,3 +675,51 @@ test("hearts wait until My music is known, so a click cannot add a duplicate", a
     await page.waitForFunction(() => !document.querySelector(".main > .view:not([hidden]) .row .like")?.disabled, null, { timeout: 15000 });
   } finally { await app.close(); }
 });
+
+// ---------------------------------------------------------------- settings
+
+test("settings: output device, tray, full screen defaults, all applied and remembered", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    assert.equal(await page.evaluate(() => window.__mock.state.closeToTray), true, "the saved choice is sent at start");
+    await page.click(".nav button[data-view=settings]");
+    await page.waitForFunction(() => document.querySelectorAll(".settings select")[0]?.options.length === 3);
+    assert.match(await page.locator(".settings").innerText(), /Версия 0\.1\.0/);
+
+    await page.selectOption(".settings select >> nth=0", "Наушники");
+    await page.waitForFunction(() => window.__mock.state.outputDevice === "Наушники");
+    await page.uncheck("#set-tray");
+    await page.waitForFunction(() => window.__mock.state.closeToTray === false);
+    await page.selectOption(".settings select >> nth=1", "radial");
+    await page.uncheck("#set-lyrics");
+    const saved = JSON.parse(await page.evaluate(() => localStorage.getItem("pm.settings.v1")));
+    assert.deepEqual([saved.outputDevice, saved.closeToTray, saved.visualizer, saved.lyrics], ["Наушники", false, "radial", false]);
+
+    // The full-screen view follows the new defaults.
+    await rows(page).first().dblclick().catch(() => {});
+    await page.click(".nav button[data-view=library]");
+    await rows(page).first().dblclick();
+    await page.keyboard.press("f");
+    await page.waitForSelector(".np:not([hidden])");
+    assert.equal(await page.locator(".np").getAttribute("data-mode"), "radial");
+    assert.equal(await page.locator(".np").getAttribute("data-lyrics"), "off");
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("settings: the saved output is used at the next start, and a desktop without a tray says so", async () => {
+  const app = await openApp({ config: { signedIn: true, noTray: true } });
+  try {
+    const { page } = app;
+    await page.evaluate(() => localStorage.setItem("pm.settings.v1", JSON.stringify({ outputDevice: "Наушники" })));
+    await page.reload();
+    await waitForLibrary(page);
+    await page.waitForFunction(() => window.__mock.state.outputDevice === "Наушники");
+    await page.click(".nav button[data-view=settings]");
+    await page.waitForFunction(() => document.querySelector("#set-tray")?.disabled === true);
+    assert.match(await page.locator(".settings").innerText(), /нет трея/);
+    if (process.env.PM_SCREENSHOTS) await page.screenshot({ path: `${process.env.PM_SCREENSHOTS}/settings.png`, fullPage: true });
+  } finally { await app.close(); }
+});

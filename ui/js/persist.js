@@ -29,6 +29,8 @@ export function loadSettings() {
     shuffle: saved.shuffle === true,
     repeat: ["off", "all", "one"].includes(saved.repeat) ? saved.repeat : "off",
     lyrics: saved.lyrics !== false,
+    closeToTray: saved.closeToTray !== false,
+    outputDevice: typeof saved.outputDevice === "string" && saved.outputDevice ? saved.outputDevice : null,
     visualizer: ["bars", "mirror", "wave", "radial", "off"].includes(saved.visualizer) ? saved.visualizer : null,
   };
 }

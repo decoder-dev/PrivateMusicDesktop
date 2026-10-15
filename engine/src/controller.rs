@@ -460,6 +460,29 @@ impl Controller {
         self.shared.remote().seek(seconds);
     }
 
+    /// Switches to another sound output (the shell's `make_sink` decides
+    /// which): the device is reopened and playback carries on where it was.
+    pub fn reopen_output(&self) {
+        self.shared.with(|inner, events| {
+            self.shared.remote().reopen_sink();
+            let had_track = inner.queue.current().is_some();
+            match inner.status {
+                Status::Playing | Status::Buffering | Status::Loading if had_track => {
+                    inner.pending_start = inner.position;
+                    self.shared.start_current(inner, events);
+                }
+                _ => {
+                    // Paused or idle: the next Play starts from here on the new output.
+                    if had_track {
+                        inner.pending_start = inner.position;
+                    }
+                    inner.status = Status::Idle;
+                    events.push(UiEvent::State(inner.state()));
+                }
+            }
+        });
+    }
+
     /// Starts or stops the spectrum events. Off by default: analysing audio
     /// costs CPU that only the full-screen view needs.
     pub fn set_visualizer(&self, on: bool) {
