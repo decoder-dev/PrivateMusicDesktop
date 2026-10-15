@@ -137,7 +137,8 @@ test("hover actions add to the queue, and the queue view shows and edits it", as
     await page.waitForFunction(() => window.__mock.state.queue.length > 0);
     const second = rows(page).nth(1);
     await second.hover();
-    await second.locator("[data-action=play-last]").click();
+    await second.locator("[data-action=menu]").click();
+    await page.click(".menu [data-action=play-last]");
     assert.equal((await page.evaluate(() => window.__mock.last("play_last"))).args.track.title, "Трек 2");
 
     await page.click(".nav button[data-view=queue]");
@@ -184,7 +185,7 @@ test("playlists open into their tracks and back", async () => {
     await waitForLibrary(page);
     await page.click(".nav button[data-view=playlists]");
     await page.waitForSelector(".card");
-    assert.equal(await page.locator(".card").count(), 2);
+    assert.equal(await page.locator(".card").count(), 3);
     await page.locator(".card").first().click();
     await page.waitForFunction(() => [...document.querySelectorAll(".row .title")].some((e) => e.textContent.startsWith("Дорога:")));
     assert.equal(await page.locator(".main > .view:not([hidden]) .row").count(), 3);
@@ -764,8 +765,8 @@ test("similar tracks: the row button plays the track followed by VK's radio from
   try {
     const { page } = app;
     await waitForLibrary(page);
-    await rows(page).nth(1).hover();
-    await rows(page).nth(1).locator("[data-action=radio]").click();
+    await rows(page).nth(1).click({ button: "right" });
+    await page.click(".menu [data-action=radio]");
     await page.waitForFunction(() => window.__mock.last("play_tracks")?.args.tracks.length === 21);
     const call = await page.evaluate(() => window.__mock.last("play_tracks").args);
     assert.equal(call.tracks[0].title, "Трек 2");
@@ -780,7 +781,8 @@ test("similar tracks: when VK has none, nothing changes and the user is told", a
     const { page } = app;
     await waitForLibrary(page);
     await rows(page).first().hover();
-    await rows(page).first().locator("[data-action=radio]").click();
+    await rows(page).first().locator("[data-action=menu]").click();
+    await page.click(".menu [data-action=radio]");
     await page.waitForFunction(() => document.querySelector(".toast")?.textContent === "VK не нашёл похожих треков.");
     assert.equal(await page.evaluate(() => window.__mock.count("play_tracks")), 0);
   } finally { await app.close(); }
@@ -858,5 +860,87 @@ test("downloads: a failed download says why and leaves the button ready", async 
     await page.waitForSelector(".toast.error");
     assert.equal(await rows(page).first().locator(".download").getAttribute("aria-pressed"), "false");
     assert.equal(await rows(page).first().locator(".download").isDisabled(), false);
+  } finally { await app.close(); }
+});
+
+// ---------------------------------------------------------------- playlists
+
+test("playlists: create one, add a track to it from the menu, rename it, remove the track, delete it", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    // Add to a new playlist straight from a library row.
+    await rows(page).nth(2).click({ button: "right" });
+    await page.click(".menu [data-action=add-to-playlist]");
+    await page.waitForSelector(".menu .menu-item[data-action=add-to]");
+    assert.deepEqual(await page.locator(".menu .menu-item[data-action=add-to] .menu-label").allInnerTexts(), ["Дорога", "Работа"], "only own playlists");
+    await page.click(".menu [data-action=new-playlist]");
+    await page.fill(".dialog input[name=title]", "  Ночь  ");
+    await page.fill(".dialog textarea[name=description]", "для поездок");
+    await page.click(".dialog .btn.primary");
+    await page.waitForFunction(() => window.__mock.state.lastAdded?.playlist === "Ночь");
+    assert.equal(await page.evaluate(() => window.__mock.state.lastAdded.track), "Трек 3");
+
+    await page.click(".nav button[data-view=playlists]");
+    await page.waitForFunction(() => document.querySelector(".grid .card .name")?.textContent === "Ночь");
+    assert.match(await page.locator(".grid .card").first().innerText(), /1 треков/);
+    await page.click(".grid .card >> nth=0");
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .view:not([hidden]) .row .title")?.textContent === "Трек 3");
+
+    await page.click(".pl-owner .btn >> nth=0");
+    await page.fill(".dialog input[name=title]", "Ночная дорога");
+    await page.click(".dialog .btn.primary");
+    await page.waitForFunction(() => [...document.querySelectorAll(".view-header h1")].some((e) => e.textContent === "Ночная дорога"));
+
+    const row = page.locator(".main > .view:not([hidden]) .view:not([hidden]) .row").first();
+    await row.click({ button: "right" });
+    await page.click(".menu [data-action=remove-from-playlist]");
+    await page.waitForSelector(".main > .view:not([hidden]) .view:not([hidden]) .empty-state:not([hidden])");
+
+    await page.click(".pl-owner .btn >> nth=1");
+    await page.click(".dialog .btn.danger");
+    await page.waitForFunction(() => ![...document.querySelectorAll(".grid .card .name")].some((e) => e.textContent.startsWith("Ночн")));
+    assert.match(await page.locator(".toast").innerText(), /удалён/);
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("playlists: someone else's playlist cannot be edited, and the menu closes with Escape", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await page.click(".nav button[data-view=playlists]");
+    await page.waitForSelector(".grid .card");
+    await page.locator(".grid .card", { hasText: "Чужой" }).click();
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .view:not([hidden]) .row"));
+    assert.equal(await page.locator(".pl-owner .btn >> nth=0").isVisible(), false);
+    const row = page.locator(".main > .view:not([hidden]) .view:not([hidden]) .row").first();
+    await row.click({ button: "right" });
+    assert.equal(await page.locator(".menu [data-action=remove-from-playlist]").count(), 0);
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => !document.querySelector(".menu"));
+    // Cancelling a new playlist creates nothing.
+    await page.click(".view-header .btn.primary >> nth=0").catch(() => {});
+  } finally { await app.close(); }
+});
+
+test("playlists: an empty name cannot be submitted, and cancel leaves things as they were", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await page.click(".nav button[data-view=playlists]");
+    await page.waitForSelector(".grid .card");
+    await page.click(".main > .view:not([hidden]) .view:not([hidden]) .view-header .btn.primary");
+    await page.waitForSelector(".dialog[open]");
+    assert.equal(await page.locator(".dialog .btn.primary").isDisabled(), true);
+    await page.fill(".dialog input[name=title]", "   ");
+    assert.equal(await page.locator(".dialog .btn.primary").isDisabled(), true);
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => !document.querySelector(".dialog"));
+    assert.equal(await page.evaluate(() => window.__mock.count("create_playlist")), 0);
   } finally { await app.close(); }
 });

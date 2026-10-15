@@ -6,6 +6,7 @@ import { listen } from "./bridge.js";
 import { store, set, publish, subscribe, withScope } from "./store.js";
 import { toast } from "./toast.js";
 import { createPlayerBar } from "./player-bar.js";
+import { setDefaultTrackMenu } from "./tracks-screen.js";
 import { createNowPlaying } from "./now-playing.js";
 import { toggleLike } from "./likes.js";
 import { createLibraryView } from "./views/library.js";
@@ -17,6 +18,9 @@ import { createSettingsView } from "./views/settings.js";
 import { createForYouView } from "./views/for-you.js";
 import { createDownloadsView } from "./views/downloads.js";
 import { toggleDownload, refreshDownloads } from "./downloads.js";
+import { openMenu } from "./menu.js";
+import { formDialog } from "./dialog.js";
+import { ensurePlaylists, ownPlaylists, addPlaylist, changeCount, forgetPlaylists } from "./my-playlists.js";
 import { loadSettings, saveSettings, saveQueue, loadQueue, clearQueue } from "./persist.js";
 
 const root = document.getElementById("app");
@@ -71,6 +75,63 @@ async function playSimilar(track) {
   }
 }
 
+/** Asks for a name and creates a playlist; resolves to it or null. */
+export async function newPlaylist() {
+  const values = await formDialog({
+    title: t("pl.new"),
+    confirm: t("pl.create"),
+    fields: [
+      { name: "title", label: t("pl.name"), required: true, max: 128 },
+      { name: "description", label: t("pl.description"), multiline: true, max: 2000 },
+    ],
+  });
+  if (!values) return null;
+  try {
+    const playlist = await api.createPlaylist(values.title, values.description);
+    addPlaylist(playlist);
+    toast(t("pl.created", { title: playlist.title }));
+    return playlist;
+  } catch (error) {
+    toast(errorText(error), { error: true });
+    return null;
+  }
+}
+
+async function addToPlaylist(playlist, track) {
+  try {
+    await api.addToPlaylist(playlist, track);
+    changeCount(playlist, 1);
+    toast(t("pl.added", { title: playlist.title }));
+  } catch (error) {
+    toast(errorText(error), { error: true });
+  }
+}
+
+/** The ⋯ / right-click menu of a track. `extra` adds screen-specific items. */
+async function openTrackMenu(track, at, extra = []) {
+  let playlists = [];
+  try {
+    playlists = (await ensurePlaylists(), ownPlaylists());
+  } catch {
+    // Without the list the menu still offers a new playlist.
+  }
+  const targets = [
+    ...playlists.map((playlist) => ({ label: playlist.title, action: "add-to", run: () => addToPlaylist(playlist, track) })),
+    ...(playlists.length ? ["-"] : []),
+    { label: t("menu.newPlaylist"), action: "new-playlist", icon: "plus", run: async () => { const p = await newPlaylist(); if (p) addToPlaylist(p, track); } },
+  ];
+  openMenu(at, [
+    { label: t("playNext"), action: "play-next", icon: "play-next", run: () => onTrackAction("play-next", track) },
+    { label: t("playLast"), action: "play-last", icon: "queue-add", run: () => onTrackAction("play-last", track) },
+    { label: t("radio"), action: "radio", icon: "radio", run: () => playSimilar(track) },
+    "-",
+    { label: t("menu.addTo"), action: "add-to-playlist", icon: "playlist", items: targets },
+    ...(extra.length ? ["-", ...extra] : []),
+  ], { label: track.title });
+}
+
+setDefaultTrackMenu((track, at) => openTrackMenu(track, at));
+
 async function onTrackAction(action, track) {
   if (action === "like") return like(track);
   if (action === "radio") return playSimilar(track);
@@ -107,7 +168,7 @@ function buildShell() {
 }
 
 function buildShellParts() {
-  const ctx = { play, onTrackAction, toast };
+  const ctx = { play, onTrackAction, toast, openTrackMenu, newPlaylist };
   const views = {
     library: createLibraryView(ctx),
     forYou: createForYouView(ctx),
@@ -185,7 +246,11 @@ async function showApp() {
   shell = buildShell();
   root.append(shell.element);
   shell.show("library");
-  api.profile().then((profile) => shell?.setProfile(profile)).catch(() => {});
+  api.profile().then((profile) => {
+    store.session = { ...store.session, profile };
+    publish("session");
+    shell?.setProfile(profile);
+  }).catch(() => {});
   refreshDownloads();
   await applyStartupState();
 }
@@ -213,6 +278,7 @@ async function applyStartupState() {
 function signedOut() {
   for (const view of Object.values(shell?.views ?? {})) view.reset?.();
   clearQueue();
+  forgetPlaylists();
   set("queue", { tracks: [], current: null });
   showLogin();
 }

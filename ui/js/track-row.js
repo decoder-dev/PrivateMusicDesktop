@@ -24,11 +24,7 @@ export function trackRow(track, { selected = false, actions, liked = false, busy
     class: `icon-btn download${downloaded ? " on pinned" : ""}${downloading ? " busy pinned" : ""}`, type: "button",
     "data-action": "download", title: downloadLabel, "aria-label": downloadLabel, "aria-pressed": String(downloaded), disabled: downloading,
   }, icon(downloaded ? "downloaded" : "download", 16));
-  const buttons = (actions ?? [
-    ["play-next", "play-next", t("playNext")],
-    ["queue-add", "play-last", t("playLast")],
-    ["radio", "radio", t("radio")],
-  ]).map(([name, action, label]) =>
+  const buttons = [...(actions ?? []), ["more", "menu", t("menu.more")]].map(([name, action, label]) =>
     h("button", { class: "icon-btn", type: "button", "data-action": action, title: label, "aria-label": label }, icon(name, 16)));
   return h("div", { class: "row", role: "option", "aria-selected": selected ? "true" : "false", tabindex: "0" },
     cover(track.artwork_url),

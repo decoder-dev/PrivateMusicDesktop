@@ -315,3 +315,38 @@ pub fn remove_download(state: TauriState<'_, AppState>, track_id: String) -> Com
     }
     Ok(state.app.remove_download(&track_id)?)
 }
+
+#[tauri::command]
+pub async fn create_playlist(state: TauriState<'_, AppState>, title: String, description: String) -> CommandResult<Playlist> {
+    let app = state.app.clone();
+    blocking(move || app.create_playlist(&title, &description)).await
+}
+
+#[tauri::command]
+pub async fn edit_playlist(
+    state: TauriState<'_, AppState>,
+    playlist: Playlist,
+    title: String,
+    description: String,
+) -> CommandResult<Playlist> {
+    let app = state.app.clone();
+    blocking(move || app.edit_playlist(&playlist, &title, &description)).await
+}
+
+#[tauri::command]
+pub async fn delete_playlist(state: TauriState<'_, AppState>, playlist: Playlist) -> CommandResult<()> {
+    let app = state.app.clone();
+    blocking(move || app.delete_playlist(&playlist)).await
+}
+
+#[tauri::command]
+pub async fn add_to_playlist(state: TauriState<'_, AppState>, playlist: Playlist, track: Track) -> CommandResult<()> {
+    let app = state.app.clone();
+    blocking(move || app.add_to_playlist(&playlist, &track)).await
+}
+
+#[tauri::command]
+pub async fn remove_from_playlist(state: TauriState<'_, AppState>, playlist: Playlist, track: Track) -> CommandResult<()> {
+    let app = state.app.clone();
+    blocking(move || app.remove_from_playlist(&playlist, &track)).await
+}
