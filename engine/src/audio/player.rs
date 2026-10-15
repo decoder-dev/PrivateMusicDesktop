@@ -295,7 +295,7 @@ where
                     sink.set_paused(false);
                     paused = false;
                     events(PlayerEvent::Loading { track_id: track_id.clone() });
-                    match start_session(track_id.clone(), &url, duration, start, fetch, sink.sample_rate(), sink.channels(), visualizer) {
+                    match start_session(track_id.clone(), &url, duration, start, fetch, (sink.sample_rate(), sink.channels()), visualizer) {
                         Ok(started) => session = Some(started),
                         Err(error) => events(PlayerEvent::Failed { track_id, error }),
                     }
@@ -456,8 +456,7 @@ fn start_session(
     duration: f64,
     start: f64,
     fetch: FetchConfig,
-    out_rate: u32,
-    out_channels: usize,
+    (out_rate, out_channels): (u32, usize),
     visualizer: bool,
 ) -> crate::Result<Session> {
     let buffer = SharedBuffer::new(fetch.max_stream_bytes);
