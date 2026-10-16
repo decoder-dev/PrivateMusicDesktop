@@ -167,7 +167,10 @@ fn poll(
         if handle.get_webview_window("login").is_none() || !running.load(Ordering::SeqCst) {
             return None;
         }
-        if SMOKE_REPORT.get().is_some() && SMOKE_PAGE_LOADED.load(Ordering::SeqCst) {
+        if SMOKE_REPORT.get().is_some() {
+            // CI only probes the browser, never VK's token endpoint, including
+            // while the initial page is still loading.
+            if !SMOKE_PAGE_LOADED.load(Ordering::SeqCst) { continue; }
             let verified = smoke_cookie_store(window);
             if let Some(report) = SMOKE_REPORT.get() {
                 let _ = std::fs::write(report, if verified {
