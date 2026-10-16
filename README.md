@@ -25,7 +25,16 @@ way. `native/` is a copy of the one in decoder-dev/PrivateMusic2: keep them in s
   failing that, rebuild the album from public search results).
 - For you: VK's personal mix, recommendations and catalogue mixes; "similar tracks" on any row
   plays VK's radio seeded with that track; the personal mix can be tuned by
-  mood, activity or genre.
+  mood, activity or genre. A "New releases" shelf shows VK's fresh albums as
+  cards that open the album page.
+- Endless radio: a queue started from the personal mix, a catalogue mix or
+  "similar tracks" keeps filling from the same source while it plays. When six
+  tracks or fewer are left, the next page is fetched (the next stream window,
+  or recommendations seeded with a track the radio queued), tracks already
+  queued or played are skipped, and at most 80 are kept ahead of the current
+  one. A source that fails or has nothing new is given up on after three
+  attempts in a row, and the queue then simply ends. The Queue view says when it
+  is a mix. Playing anything else turns the radio off.
 - Search remembers recent queries, which can be reused, removed or cleared.
 - Downloads: any track can be saved to the app's folder and then plays with no
   internet (the file is the decrypted audio, not VK's encrypted stream).
