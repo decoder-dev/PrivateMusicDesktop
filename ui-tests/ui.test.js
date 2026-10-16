@@ -659,6 +659,7 @@ test("hero headers: artist, album and playlist show a cover, a kicker and their 
     await openArtistFromRow(page, 4);
     assert.equal(await page.locator(".artist-view .kicker").innerText(), "Исполнитель");
     await page.waitForSelector(".artist-view .page-art img");
+    await page.waitForFunction(() => document.querySelector(".artist-view .page-art .art-box")?.getBoundingClientRect().width === 88);
     const photo = await page.locator(".artist-view .page-art .art-box").evaluate((el) => [getComputedStyle(el).borderTopLeftRadius, el.getBoundingClientRect().width]);
     assert.equal(photo[1], 88);
     assert.equal(photo[0], "50%", "the artist photo is a circle");
@@ -668,7 +669,7 @@ test("hero headers: artist, album and playlist show a cover, a kicker and their 
     await page.locator(".artist-view .artist-albums .card").first().click();
     await page.waitForSelector(".album-view:not([hidden])");
     assert.equal(await page.locator(".album-view .kicker").innerText(), "Альбом");
-    assert.equal(await page.locator(".album-view .page-art .art-box").evaluate((el) => el.getBoundingClientRect().width), 136);
+    await page.waitForFunction(() => document.querySelector(".album-view .page-art .art-box")?.getBoundingClientRect().width === 136);
     await page.click(".nav button[data-view=playlists]");
     await page.locator(".grid .card", { hasText: "Дорога" }).click();
     await page.waitForFunction(() => document.querySelectorAll(".main > .view:not([hidden]) .view:not([hidden]) .row").length === 3);
