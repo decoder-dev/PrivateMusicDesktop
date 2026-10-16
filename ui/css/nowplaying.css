@@ -51,7 +51,7 @@
 .np-top { display: flex; align-items: center; gap: 8px; padding: 14px max(var(--gutter), 20px); min-height: 72px; }
 .np-kicker { flex: 1 1 auto; min-width: 0; text-align: center; display: flex; flex-direction: column; gap: 1px; }
 .np-kicker .k1 { font: 700 11px/14px var(--font); letter-spacing: 0.06px; text-transform: none; }
-.np-kicker .k2 { font: 500 11px/14px var(--font); letter-spacing: 0.06px; color: var(--np-fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.np-kicker .k2 { display: none; font: 500 11px/14px var(--font); letter-spacing: 0.06px; color: var(--np-fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .np-btn {
   position: relative; width: 44px; height: 44px; border-radius: 50%; flex: none; display: inline-flex; align-items: center; justify-content: center;
   color: color-mix(in srgb, var(--np-fg) 86%, transparent);
@@ -80,7 +80,7 @@
 .np-info { min-width: 0; max-width: 520px; display: flex; flex-direction: column; gap: 8px; }
 .np-title { font: 700 clamp(26px, 3.4vw, 40px)/1.1 var(--font); letter-spacing: -0.4px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .np-artist-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.np-artist { font: 500 clamp(16px, 1.7vw, 20px)/1.25 var(--font); color: var(--np-fg-2); min-width: 0; overflow-wrap: anywhere; }
+.np-artist { font: 500 clamp(16px, 1.7vw, 20px)/1.25 var(--font); color: var(--np-fg-2); min-width: 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .np-artist.link-text { white-space: normal; text-align: inherit; }
 .np-artist.link-text:not(:disabled):hover { color: var(--np-fg); }
 .np-like { width: 40px; height: 40px; flex: none; }
@@ -183,6 +183,8 @@
   .np-artist-row { justify-content: center; }
   .np-side, .ly, .np-queue { width: 100%; border-radius: 22px; flex: 1 1 0; height: auto; }
   .np[data-side="lyrics"] .np-main, .np[data-side="queue"] .np-main { display: none; }
+  /* With the cover gone, the title and artist move into the header. */
+  .np[data-side="lyrics"] .np-kicker .k2, .np[data-side="queue"] .np-kicker .k2 { display: block; }
   .ly-line { text-align: center; transform-origin: center; }
   .ly-message { align-items: center; text-align: center; }
 }

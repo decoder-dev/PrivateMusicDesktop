@@ -288,10 +288,12 @@ function buildShellParts() {
     views[id].show?.();
   }
 
+  /** From the sidebar: the screen starts over at its first page, like tapping a tab again. */
   function show(id) {
     stack = [];
     current = { id, payload: null };
     display(id);
+    views[id].root?.();
   }
 
   function navigate(id, payload) {

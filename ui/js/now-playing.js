@@ -253,7 +253,9 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     if (url) {
       const image = h("img", { src: url, alt: "", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" });
       image.addEventListener("error", () => image.replaceWith(h("div", { class: "np-placeholder" }, icon("note", 96))));
-      coverBox.replaceChildren(image);
+      // The old cover stays until the new one has decoded.
+      const swap = () => { if (token === paletteToken) coverBox.replaceChildren(image); };
+      if (coverBox.firstChild) image.decode().catch(() => {}).finally(swap); else swap();
     } else {
       coverBox.replaceChildren(h("div", { class: "np-placeholder" }, icon("note", 96)));
     }
@@ -277,7 +279,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     title.textContent = track ? track.title : t("nothing");
     artist.textContent = track ? track.artist : "";
     artist.disabled = !hasArtist(track);
-    kickerAlbum.textContent = track?.album_title ?? "";
+    kickerAlbum.textContent = track ? `${track.artist} — ${track.title}` : "";
     updateCover(track);
     if (lyricsOn) {
       lyrics.setTrack(track);

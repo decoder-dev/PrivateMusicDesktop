@@ -34,6 +34,7 @@
 .nav button .glyph { display: inline-flex; flex: none; color: var(--text-2); transition: color var(--t-hover) var(--ease-std); }
 .nav button:hover { background: var(--hover); color: var(--text); }
 .nav button:active { opacity: 0.85; transition-duration: var(--t-press); }
+.nav button:focus-visible { outline-offset: -2px; }
 .nav button[aria-current="page"] { background: var(--accent-fill); color: var(--accent); font-weight: 600; }
 .nav button[aria-current="page"] .glyph { color: var(--accent); }
 .nav button .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
