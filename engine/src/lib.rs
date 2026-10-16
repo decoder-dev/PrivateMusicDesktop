@@ -13,6 +13,7 @@ pub mod error;
 pub mod history;
 pub mod lyrics;
 pub mod media_sync;
+pub mod net;
 pub mod offline;
 pub mod queue;
 pub mod radio;

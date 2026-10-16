@@ -6,12 +6,13 @@
 //! the recording's length agrees: an edit or a live take shares the words but
 //! not the timeline.
 
+use std::sync::Arc;
 use std::time::Duration;
 
-use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+use crate::net::{self, Pool};
 use crate::vk::Track;
 use crate::{Error, Result};
 
@@ -195,7 +196,7 @@ pub fn from_plain(source: &str, text: &str) -> Option<Lyrics> {
 }
 
 pub struct LrcLib {
-    http: Client,
+    http: Arc<Pool>,
     base: Url,
 }
 
@@ -203,7 +204,7 @@ pub struct LrcLib {
 /// title and lead artist match the requested track; URLs are restricted to
 /// `genius.com` and redirects are disabled.
 pub struct GeniusLyrics {
-    http: Client,
+    http: Arc<Pool>,
     base: Url,
 }
 
@@ -219,12 +220,16 @@ impl GeniusLyrics {
         if base.scheme() != "https" && !(loopback && base.scheme() == "http") {
             return Err(Error::InvalidRequest);
         }
-        let http = Client::builder()
-            .connect_timeout(Duration::from_secs(6))
-            .timeout(Duration::from_secs(12))
-            .redirect(reqwest::redirect::Policy::none())
-            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128 Safari/537.36")
-            .build()?;
+        let http = net::shared_pool(|| {
+            reqwest::blocking::Client::builder()
+                .connect_timeout(Duration::from_secs(6))
+                .timeout(Duration::from_secs(12))
+                .pool_idle_timeout(Duration::from_secs(20))
+                .redirect(reqwest::redirect::Policy::none())
+                .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128 Safari/537.36")
+                .build()
+                .map_err(Error::from)
+        })?;
         Ok(Self { http, base })
     }
 
@@ -248,26 +253,46 @@ impl GeniusLyrics {
     }
 
     fn get_json(&self, url: Url) -> Result<serde_json::Value> {
-        let response = self.http.get(url).header("Accept", "application/json").header("Referer", "https://genius.com/").send()?;
-        if !response.status().is_success() { return Err(Error::Http(response.status().as_u16())); }
-        let body = read_capped(response, GENIUS_BODY_LIMIT)?;
+        let body = soft_get(&self.http, "genius", |client| {
+            let response = client.get(url.clone()).header("Accept", "application/json").header("Referer", "https://genius.com/").send()?;
+            if !response.status().is_success() { return Err(Error::Http(response.status().as_u16())); }
+            read_capped(response, GENIUS_BODY_LIMIT)
+        })?;
         serde_json::from_slice(&body).map_err(|_| Error::Format("Genius search response".into()))
     }
 
     fn get_text(&self, url: &str) -> Result<String> {
         let parsed = Url::parse(url).map_err(|_| Error::InvalidRequest)?;
         if !genius_url(url) { return Err(Error::InvalidRequest); }
-        let response = self.http.get(parsed).header("Accept", "text/html").header("Referer", "https://genius.com/").send()?;
-        if !response.status().is_success() { return Err(Error::Http(response.status().as_u16())); }
-        String::from_utf8(read_capped(response, GENIUS_BODY_LIMIT)?)
-            .map_err(|_| Error::Format("Genius page encoding".into()))
+        let body = soft_get(&self.http, "genius", |client| {
+            let response = client.get(parsed.clone()).header("Accept", "text/html").header("Referer", "https://genius.com/").send()?;
+            if !response.status().is_success() { return Err(Error::Http(response.status().as_u16())); }
+            read_capped(response, GENIUS_BODY_LIMIT)
+        })?;
+        String::from_utf8(body).map_err(|_| Error::Format("Genius page encoding".into()))
+    }
+}
+
+/// One GET against an optional source (lyrics, covers): if the connection is
+/// bad, the pool is rebuilt and the request made once more after a short
+/// pause. A source that is still down after that is simply skipped by the
+/// caller; nothing here is ever worth more than two quick tries.
+fn soft_get<T>(pool: &Pool, source: &str, attempt: impl Fn(&reqwest::blocking::Client) -> Result<T>) -> Result<T> {
+    match attempt(&pool.get()) {
+        Err(error) if net::is_connectivity(&error) => {
+            log::info!("{source}: {} → new connections, trying once more", error.kind());
+            net::drop_connections();
+            std::thread::sleep(Duration::from_millis(300));
+            attempt(&pool.get())
+        }
+        other => other,
     }
 }
 
 fn read_capped(response: reqwest::blocking::Response, limit: u64) -> Result<Vec<u8>> {
     let mut body = Vec::new();
     std::io::Read::read_to_end(&mut std::io::Read::take(response, limit + 1), &mut body)
-        .map_err(|error| Error::Transport(error.to_string()))?;
+        .map_err(|error| net::read_error(&error))?;
     if body.len() as u64 > limit { return Err(Error::Format("Genius response is too large".into())); }
     Ok(body)
 }
@@ -413,28 +438,36 @@ impl LrcLib {
         if base.scheme() != "https" && !(loopback && base.scheme() == "http") {
             return Err(Error::InvalidRequest);
         }
-        let http = Client::builder()
-            .connect_timeout(Duration::from_secs(6))
-            .timeout(Duration::from_secs(10))
-            // A fixed host: nothing it says may send us elsewhere.
-            .redirect(reqwest::redirect::Policy::none())
-            .user_agent("PrivateMusicDesktop (https://github.com/decoder-dev/PrivateMusicDesktop)")
-            .build()?;
+        let http = net::shared_pool(|| {
+            reqwest::blocking::Client::builder()
+                .connect_timeout(Duration::from_secs(6))
+                .timeout(Duration::from_secs(10))
+                .pool_idle_timeout(Duration::from_secs(20))
+                // A fixed host: nothing it says may send us elsewhere.
+                .redirect(reqwest::redirect::Policy::none())
+                .user_agent("PrivateMusicDesktop (https://github.com/decoder-dev/PrivateMusicDesktop)")
+                .build()
+                .map_err(Error::from)
+        })?;
         Ok(Self { http, base })
     }
 
     fn fetch(&self, path: &str, query: &[(&str, String)]) -> Result<Option<Vec<Candidate>>> {
         let mut url = self.base.join(path).map_err(|_| Error::InvalidRequest)?;
         url.query_pairs_mut().extend_pairs(query.iter().map(|(k, v)| (*k, v.as_str())));
-        let response = self.http.get(url).header("Accept", "application/json").send()?;
-        match response.status().as_u16() {
-            404 => return Ok(None),
-            200..=299 => {}
-            other => return Err(Error::Http(other)),
-        }
-        let mut body = Vec::new();
-        std::io::Read::read_to_end(&mut std::io::Read::take(response, MAX_BODY + 1), &mut body)
-            .map_err(|e| Error::Transport(e.to_string()))?;
+        let body = soft_get(&self.http, "lrclib", |client| {
+            let response = client.get(url.clone()).header("Accept", "application/json").send()?;
+            match response.status().as_u16() {
+                404 => return Ok(None),
+                200..=299 => {}
+                other => return Err(Error::Http(other)),
+            }
+            let mut body = Vec::new();
+            std::io::Read::read_to_end(&mut std::io::Read::take(response, MAX_BODY + 1), &mut body)
+                .map_err(|e| net::read_error(&e))?;
+            Ok(Some(body))
+        })?;
+        let Some(body) = body else { return Ok(None) };
         if body.len() as u64 > MAX_BODY {
             return Err(Error::Format("lyrics response is too large".into()));
         }

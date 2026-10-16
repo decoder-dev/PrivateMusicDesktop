@@ -46,7 +46,7 @@ pub fn palette_from_url(raw: &str) -> Result<Palette> {
         return Err(Error::Http(response.status().as_u16()));
     }
     let mut bytes = Vec::new();
-    response.take(MAX_BYTES + 1).read_to_end(&mut bytes).map_err(|e| Error::Transport(e.to_string()))?;
+    response.take(MAX_BYTES + 1).read_to_end(&mut bytes).map_err(|e| crate::net::read_error(&e))?;
     if bytes.len() as u64 > MAX_BYTES {
         return Err(Error::Format("cover is too large".into()));
     }

@@ -5,6 +5,7 @@ import { h } from "./dom.js";
 import { icon, illustration } from "./icons.js";
 import { t } from "./i18n.js";
 import { coverPalette } from "./palette.js";
+import { decorateStatus } from "./network.js";
 
 /**
  * Artwork. The placeholder (accent gradient and a glyph) sits behind the image,
@@ -95,6 +96,8 @@ export function paintStatus(element, text, { error = false, kind = "rows", extra
   element.removeAttribute("aria-busy");
   element.className = `status${error ? " error" : ""}${extra ? ` ${extra}` : ""}`;
   fillPanel(element, text, error ? "error" : art);
+  // A failed connection gets the VPN hint and a retry (see network.js).
+  if (error) decorateStatus(element, text);
 }
 
 /** Sets a panel's text, with the small illustration above it when the panel is a real one (not an inline line). */
