@@ -1,0 +1,39 @@
+name: Upgrade check
+
+# Installs a published release, then another installer over it, and checks that
+# the sign-in and the app data survive. Run it by hand on any two releases.
+on:
+  workflow_dispatch:
+    inputs:
+      old:
+        description: Release tag installed first
+        required: true
+        default: v0.2.3
+      new:
+        description: Release tag installed over it
+        required: true
+        default: v0.2.3
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Download both installers
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download '${{ inputs.old }}' --repo '${{ github.repository }}' --pattern '*-setup.exe' --dir "$env:RUNNER_TEMP\old"
+          gh release download '${{ inputs.new }}' --repo '${{ github.repository }}' --pattern '*-setup.exe' --dir "$env:RUNNER_TEMP\new"
+
+      - name: Install, then install over it
+        shell: pwsh
+        run: |
+          $old = (Get-ChildItem "$env:RUNNER_TEMP\old\*-setup.exe").FullName
+          $new = (Get-ChildItem "$env:RUNNER_TEMP\new\*-setup.exe").FullName
+          scripts\upgrade-check.ps1 -Old $old -New $new
