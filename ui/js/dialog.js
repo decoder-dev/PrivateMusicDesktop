@@ -1,5 +1,25 @@
 import { h } from "./dom.js";
 import { t } from "./i18n.js";
+import { afterAnimation } from "./motion.js";
+
+/** Opens the dialog modally and returns `close(value)`, which fades it out first. */
+function present(dialog, resolve) {
+  let done = false;
+  document.body.classList.add("overlay-open");
+  document.body.append(dialog);
+  dialog.showModal();
+  return function close(value) {
+    if (done) return;
+    done = true;
+    dialog.classList.add("closing");
+    afterAnimation(dialog, () => {
+      dialog.close();
+      dialog.remove();
+      if (!document.querySelector("dialog.dialog")) document.body.classList.remove("overlay-open");
+      resolve(value);
+    }, 300);
+  };
+}
 
 /** A modal form. Resolves to the field values, or null when cancelled. */
 export function formDialog({ title, fields, confirm }) {
@@ -17,7 +37,7 @@ export function formDialog({ title, fields, confirm }) {
       h("div", { class: "dialog-actions" },
         h("button", { class: "btn", type: "button", onclick: () => finish(null), text: t("pl.cancel") }),
         submit));
-    const dialog = h("dialog", { class: "dialog" }, form);
+    const dialog = h("dialog", { class: "dialog", "aria-label": title }, form);
 
     function valid() {
       return inputs.every(({ field, input }) => !field.required || input.value.trim());
@@ -26,19 +46,13 @@ export function formDialog({ title, fields, confirm }) {
     inputs.forEach(({ input }) => input.addEventListener("input", refresh));
     refresh();
 
-    function finish(value) {
-      dialog.close();
-      dialog.remove();
-      resolve(value);
-    }
+    const finish = present(dialog, resolve);
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       if (!valid()) return;
       finish(Object.fromEntries(inputs.map(({ field, input }) => [field.name, input.value.trim()])));
     });
     dialog.addEventListener("cancel", (event) => { event.preventDefault(); finish(null); });
-    document.body.append(dialog);
-    dialog.showModal();
     inputs[0]?.input.focus();
   });
 }
@@ -46,19 +60,13 @@ export function formDialog({ title, fields, confirm }) {
 /** Yes/no. Resolves to true when confirmed. */
 export function confirmDialog({ text, confirm, danger = false }) {
   return new Promise((resolve) => {
-    const dialog = h("dialog", { class: "dialog" },
+    const dialog = h("dialog", { class: "dialog", "aria-label": text },
       h("p", { class: "dialog-text", text }),
       h("div", { class: "dialog-actions" },
         h("button", { class: "btn", type: "button", onclick: () => finish(false), text: t("pl.cancel") }),
         h("button", { class: `btn ${danger ? "danger" : "primary"}`, type: "button", onclick: () => finish(true), text: confirm })));
-    function finish(value) {
-      dialog.close();
-      dialog.remove();
-      resolve(value);
-    }
+    const finish = present(dialog, resolve);
     dialog.addEventListener("cancel", (event) => { event.preventDefault(); finish(false); });
-    document.body.append(dialog);
-    dialog.showModal();
     dialog.querySelector(".btn:not(.primary):not(.danger)")?.focus();
   });
 }
