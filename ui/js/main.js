@@ -29,6 +29,12 @@ import { loadSettings, saveSettings, saveQueue, loadQueue, clearQueue } from "./
 
 const root = document.getElementById("app");
 const settings = loadSettings();
+function applyAppearance() {
+  if (settings.theme === "system") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = settings.theme;
+  document.documentElement.dataset.accent = settings.accent;
+}
+applyAppearance();
 let shell = null;
 let nowPlaying = null;
 let login = null;
@@ -170,6 +176,7 @@ function persistSettings(patch) {
 /** From the settings screen: saved, and pushed to whatever shows them now. */
 function applySettings(patch) {
   persistSettings(patch);
+  if ("theme" in patch || "accent" in patch) applyAppearance();
   nowPlaying?.applySettings(patch);
 }
 

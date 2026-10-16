@@ -18,25 +18,27 @@ way. `native/` is a copy of the one in decoder-dev/PrivateMusic2: keep them in s
   or the full-screen view.
 - Artist and album pages: click an artist in any row, the player bar or the
   full-screen view (or use *Go to artist* / *Go to album* in a track's menu) to
-  see their popular tracks and albums; an album page plays the release and
+  see their popular tracks and albums, with more loaded as you scroll; an album page plays the release and
   saves it to your albums. Search has Artists and Albums tabs, and followed
   albums are listed under Playlists. Community albums whose access key VK
   withholds are resolved the way the iOS app does it (search for the key, and
   failing that, rebuild the album from public search results).
-- For you: VK's personal mix and recommendations; "similar tracks" on any row
-  plays VK's radio seeded with that track.
+- For you: VK's personal mix, recommendations and catalogue mixes; "similar tracks" on any row
+  plays VK's radio seeded with that track; the personal mix can be tuned by
+  mood, activity or genre.
+- Search remembers recent queries, which can be reused, removed or cleared.
 - Downloads: any track can be saved to the app's folder and then plays with no
   internet (the file is the decrypted audio, not VK's encrypted stream).
 - A ten-band equaliser with presets.
 - Full-screen "now playing": blurred cover backdrop in the cover's colours, a
   live spectrum of what is actually playing (bars, mirror, wave, radial), and
-  synced lyrics (LRCLIB, else VK's text) that follow the song; click a line to
-  jump there.
+  synced lyrics (LRCLIB, VK text, then Genius fallback) that follow the song; click a line to
+  jump there, pause auto-scroll or return to the current line.
 - OS integration: media keys and Now Playing (MPRIS / SMTC / MediaRemote), a
   tray icon with controls, keep-running-in-the-tray on close, one instance only,
   window size and position remembered.
 - Settings: sound output device (switches without losing the place), equaliser,
-  tray, full-screen defaults, keyboard shortcuts.
+  tray, full-screen defaults, theme, accent colour and keyboard shortcuts.
 
 ## Install
 
@@ -121,7 +123,4 @@ Optional tests: `live_vk` (real VK endpoints, needs network) and `cpal_smoke`
 - CI checks page loading and private cookie access on Windows, macOS and Linux.
   Signing in to a real account and OS media controls still need manual verification.
 - CMAF streams with encryption are untested against real VK data.
-- Mood/genre mixes from VK's catalogue (the iOS app has them) are not there yet.
-- An artist page shows the first 50 popular tracks and 30 albums; it does not
-  page further the way the iOS one does on scroll.
 - `install.ps1` has not been run on a real Windows machine yet.

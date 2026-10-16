@@ -165,6 +165,7 @@
       if (config.forYouFails) throw { kind: "offline", message: "No internet connection." };
       return Array.from({ length: 100 }, (_, i) => makeTrack(7000 + i, { title: `Микс ${i + 1}` }));
     },
+    catalog_mixes: async () => [],
     recommendations: async () => { await delay(20); return Array.from({ length: 30 }, (_, i) => makeTrack(8000 + i, { title: `Рек ${i + 1}` })); },
     similar: async ({ track }) => {
       await delay(10);

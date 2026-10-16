@@ -20,10 +20,28 @@ export function createLyricsPanel() {
   let lines = []; // [{ time, node }]
   let active = -1;
   let handScrollUntil = 0;
+  let autoFollow = readAutoFollow();
 
   const body = h("div", { class: "ly-body" });
   const source = h("div", { class: "ly-source" });
-  const element = h("section", { class: "ly", "aria-label": t("ly.label"), hidden: true }, body, source);
+  const currentButton = h("button", { class: "ly-control", type: "button", text: t("ly.current"), hidden: true, onclick: () => snap(lastPosition) });
+  const followButton = h("button", { class: "ly-control", type: "button", onclick: () => setAutoFollow(!autoFollow) });
+  const controls = h("div", { class: "ly-controls" }, source, currentButton, followButton);
+  const element = h("section", { class: "ly", "aria-label": t("ly.label"), hidden: true }, body, controls);
+  let lastPosition = 0;
+
+  function renderControls() {
+    followButton.textContent = autoFollow ? t("ly.followOn") : t("ly.followOff");
+    followButton.setAttribute("aria-pressed", String(autoFollow));
+    currentButton.hidden = autoFollow || lines.length === 0;
+  }
+
+  function setAutoFollow(on) {
+    autoFollow = on;
+    try { localStorage.setItem("lyrics.autoFollow", String(on)); } catch { /* storage can be disabled */ }
+    renderControls();
+    if (on) snap(lastPosition);
+  }
 
   const markHandScroll = () => { handScrollUntil = Date.now() + HAND_SCROLL_MS; };
   body.addEventListener("wheel", markHandScroll, { passive: true });
@@ -36,6 +54,7 @@ export function createLyricsPanel() {
     source.textContent = "";
     body.replaceChildren(h("div", { class: "ly-message" }, text,
       retry ? h("button", { class: "np-chip", type: "button", onclick: retry, text: t("ly.retry") }) : null));
+    renderControls();
   }
 
   function show(lyrics) {
@@ -57,6 +76,7 @@ export function createLyricsPanel() {
       body.replaceChildren(h("div", { class: "ly-text", text: lyrics.text }));
       body.scrollTop = 0;
     }
+    renderControls();
   }
 
   async function load(track) {
@@ -93,6 +113,7 @@ export function createLyricsPanel() {
   }
 
   function follow(position, { force = false } = {}) {
+    lastPosition = position;
     if (!lines.length) return;
     const index = indexAt(position);
     if (index === active && !force) return;
@@ -101,9 +122,14 @@ export function createLyricsPanel() {
     if (index < 0) return;
     const node = lines[index].node;
     node.classList.add("active");
-    if (Date.now() < handScrollUntil && !force) return;
+    if ((!autoFollow || Date.now() < handScrollUntil) && !force) return;
     const top = node.offsetTop - body.clientHeight / 2 + node.offsetHeight / 2;
     body.scrollTo({ top, behavior: reduceMotion || force ? "auto" : "smooth" });
+  }
+
+  function snap(position) {
+    handScrollUntil = 0;
+    follow(position, { force: true });
   }
 
   return {
@@ -118,7 +144,12 @@ export function createLyricsPanel() {
     setVisible(on) { element.hidden = !on; },
     update(position) { follow(position); },
     /** After a seek or when the panel appears: jump without gliding. */
-    snap(position) { follow(position, { force: true }); },
+    snap,
     forget() { current = null; token += 1; },
   };
+}
+
+function readAutoFollow() {
+  try { return localStorage.getItem("lyrics.autoFollow") !== "false"; }
+  catch { return true; }
 }

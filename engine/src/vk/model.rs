@@ -168,6 +168,18 @@ pub struct Profile {
     pub photo_url: Option<String>,
 }
 
+/// A VK catalogue stream mix, including optional tuning already attached to
+/// a mood or activity tile.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct MusicMix {
+    pub id: String,
+    pub title: String,
+    pub subtitle: String,
+    pub artwork_url: Option<String>,
+    pub section_title: Option<String>,
+    pub options: Option<String>,
+}
+
 impl Profile {
     pub fn display_name(&self) -> String {
         format!("{} {}", self.first_name, self.last_name).trim().to_string()
