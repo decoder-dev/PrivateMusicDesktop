@@ -236,6 +236,8 @@ mod tests {
             lyrics_id: None,
             is_hq: false,
             track_code: None,
+            artists: Vec::new(),
+            album: None,
         }
     }
 

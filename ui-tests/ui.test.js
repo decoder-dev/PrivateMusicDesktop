@@ -967,3 +967,229 @@ test("playlists: an empty name cannot be submitted, and cancel leaves things as 
     assert.equal(await page.evaluate(() => window.__mock.count("create_playlist")), 0);
   } finally { await app.close(); }
 });
+
+// ------------------------------------------------------ artists and albums
+
+const visibleView = ".main > .view:not([hidden])";
+
+async function openArtistFromRow(page, index = 0) {
+  await waitForLibrary(page);
+  await rows(page).nth(index).locator(".artist").click();
+  await page.waitForSelector(".artist-view:not([hidden])");
+}
+
+test("artist page: opens from a track row's artist, plays its tracks with the visible list as the queue", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await openArtistFromRow(page, 0);
+    assert.equal(await page.locator(".artist-view h1").innerText(), "Исполнитель 1");
+    assert.equal((await page.evaluate(() => window.__mock.last("artist_tracks"))).args.artistId, "art1");
+    await page.waitForFunction(() => document.querySelectorAll(".artist-view .row").length > 5);
+    // The catalogue's photo and the albums grid arrive with the albums.
+    await page.waitForSelector(".artist-view .page-art img");
+    await page.waitForFunction(() => document.querySelectorAll(".artist-view .artist-albums .card").length === 4);
+    assert.equal(await page.locator(".nav button[aria-current=page]").getAttribute("data-view"), "library", "the sidebar keeps the screen it came from");
+
+    await page.locator(".artist-view .row").nth(2).dblclick();
+    const call = await page.evaluate(() => window.__mock.last("play_tracks"));
+    assert.equal(call.args.index, 2);
+    assert.equal(call.args.tracks.length, 30);
+    assert.ok(call.args.tracks.every((t) => t.title.startsWith("Хит")));
+    await page.waitForFunction(() => document.querySelector(".player .title")?.textContent === "Хит 3");
+
+    await page.click(".artist-view button[aria-label=Назад]");
+    await page.waitForSelector(".artist-view", { state: "hidden" });
+    assert.equal(await page.locator(`${visibleView} h1`).first().innerText(), "Моя музыка");
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("artist page: an artist known only by name is looked up, and an unknown one falls back to search", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    // Track 13 links no artist: "Исполнитель 0" is not known to the mock.
+    await page.fill(`${visibleView} input[type=search]`, "Трек 13");
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .title")?.textContent === "Трек 13");
+    await rows(page).first().locator(".artist").click();
+    await page.waitForSelector(".artist-view .page-note:not([hidden])");
+    assert.equal((await page.evaluate(() => window.__mock.last("find_artist"))).args.name, "Исполнитель 0");
+    await page.waitForFunction(() => window.__mock.count("search_albums") === 1 && window.__mock.count("search") === 1);
+    assert.equal(await page.evaluate(() => window.__mock.count("artist_tracks")), 0);
+  } finally { await app.close(); }
+});
+
+test("album page: opens from the artist's albums, plays, follows and unfollows; the Albums shelf follows", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await openArtistFromRow(page, 4); // Исполнитель 5
+    await page.waitForSelector(".artist-view .artist-albums .card");
+    await page.locator(".artist-view .artist-albums .card").first().click();
+    await page.waitForSelector(".album-view:not([hidden])");
+    await page.waitForFunction(() => document.querySelectorAll(".album-view .row").length === 12);
+    assert.equal(await page.locator(".album-view h1").innerText(), "Альбом 1");
+    assert.match(await page.locator(".album-view .page-note").innerText(), /2011 · 12 треков/);
+    assert.equal(await page.locator(".album-view .page-artists").innerText(), "Исполнитель 5");
+    const asked = await page.evaluate(() => window.__mock.last("album_tracks"));
+    assert.deepEqual([asked.args.album.album_id, asked.args.album.owner_id, asked.args.album.access_key], [1, -2000, "k"]);
+
+    await page.locator(".album-view .row").first().dblclick();
+    const call = await page.evaluate(() => window.__mock.last("play_tracks"));
+    assert.equal(call.args.tracks.length, 12);
+
+    const follow = page.locator(".album-view .follow");
+    assert.equal(await follow.innerText(), "Сохранить альбом");
+    await follow.click();
+    await page.waitForFunction(() => document.querySelector(".album-view .follow").getAttribute("aria-pressed") === "true");
+    assert.equal((await page.evaluate(() => window.__mock.last("follow_album"))).args.follow, true);
+    assert.equal(await follow.innerText(), "Убрать из альбомов");
+    assert.match(await page.locator(".toast").innerText(), /сохранён/);
+
+    await page.click(".nav button[data-view=playlists]");
+    await page.waitForFunction(() => [...document.querySelectorAll(".followed-albums .card .name")].map((e) => e.textContent).join() === "Альбом 1");
+    await page.locator(".followed-albums .card").first().click();
+    await page.waitForSelector(".album-view:not([hidden])");
+    await page.waitForFunction(() => document.querySelector(".album-view .follow").getAttribute("aria-pressed") === "true");
+    await page.click(".album-view .follow");
+    await page.waitForFunction(() => document.querySelector(".album-view .follow").getAttribute("aria-pressed") === "false");
+    assert.equal((await page.evaluate(() => window.__mock.last("follow_album"))).args.follow, false);
+    await page.click(".album-view button[aria-label=Назад]");
+    await page.waitForFunction(() => document.querySelectorAll(".followed-albums .card").length === 0);
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("album page: a refused follow leaves the button as it was; an album VK will not open says so", async () => {
+  const app = await openApp({ config: { signedIn: true, followFails: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await rows(page).nth(1).click({ button: "right" }); // track 2 names its album
+    await page.click(".menu [data-action=go-album]");
+    await page.waitForSelector(".album-view:not([hidden])");
+    await page.waitForFunction(() => document.querySelectorAll(".album-view .row").length === 12);
+    // The engine found the key the track did not carry.
+    assert.equal((await page.evaluate(() => window.__mock.last("album_tracks"))).args.album.access_key, null);
+    await page.click(".album-view .follow");
+    await page.waitForSelector(".toast.error");
+    assert.equal(await page.locator(".album-view .follow").getAttribute("aria-pressed"), "false");
+    assert.equal(await page.locator(".album-view .follow").isDisabled(), false);
+  } finally { await app.close(); }
+  const denied = await openApp({ config: { signedIn: true, albumDenied: true } });
+  try {
+    const { page } = denied;
+    await waitForLibrary(page);
+    await rows(page).nth(1).click({ button: "right" });
+    await page.click(".menu [data-action=go-album]");
+    await page.waitForSelector(".album-view .status.error");
+    assert.match(await page.locator(".album-view .status.error").innerText(), /Не удалось загрузить треки этого альбома/);
+  } finally { await denied.close(); }
+});
+
+test("track menu: go to artist and album only when the track has them; several artists get a sub-menu", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await rows(page).first().click({ button: "right" }); // track 1: an artist, no album
+    assert.equal(await page.locator(".menu [data-action=go-artist]").count(), 1);
+    assert.equal(await page.locator(".menu [data-action=go-album]").count(), 0);
+    await page.keyboard.press("Escape");
+    await rows(page).nth(3).click({ button: "right" }); // track 4: two artists and an album
+    await page.click(".menu [data-action=go-artist]");
+    assert.deepEqual(await page.locator(".menu [data-action=go-artist-item] .menu-label").allInnerTexts(), ["Исполнитель 4", "Гость"]);
+    await page.click(".menu [data-action=go-artist-item] >> nth=1");
+    await page.waitForFunction(() => document.querySelector(".artist-view:not([hidden]) h1")?.textContent === "Гость");
+    assert.equal((await page.evaluate(() => window.__mock.last("artist_tracks"))).args.artistId, "art99");
+  } finally { await app.close(); }
+});
+
+test("back navigation: playlist → artist → album → back → back returns to the open playlist", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await page.click(".nav button[data-view=playlists]");
+    await page.locator(".grid .card", { hasText: "Дорога" }).click();
+    await page.waitForFunction(() => [...document.querySelectorAll(".row .title")].some((e) => e.textContent.startsWith("Дорога:")));
+    const playlistRow = page.locator(`${visibleView} .view:not([hidden]) .row`).first();
+    await playlistRow.click({ button: "right" });
+    await page.click(".menu [data-action=go-artist]");
+    await page.waitForSelector(".artist-view .artist-albums .card");
+    assert.equal(await page.locator(".nav button[aria-current=page]").getAttribute("data-view"), "playlists");
+    await page.locator(".artist-view .artist-albums .card").nth(1).click();
+    await page.waitForFunction(() => document.querySelector(".album-view:not([hidden]) h1")?.textContent === "Альбом 2");
+
+    await page.click(".album-view button[aria-label=Назад]");
+    await page.waitForSelector(".artist-view:not([hidden])");
+    assert.equal(await page.locator(".artist-view h1").innerText(), "Исполнитель 1");
+    assert.equal(await page.evaluate(() => window.__mock.count("artist_tracks")), 1, "the artist page comes back as it was");
+    await page.click(".artist-view button[aria-label=Назад]");
+    await page.waitForSelector(".artist-view", { state: "hidden" });
+    await page.waitForFunction(() => [...document.querySelectorAll(".main > .view:not([hidden]) .view:not([hidden]) .row .title")].some((e) => e.textContent.startsWith("Дорога:")));
+    assert.equal(await page.evaluate(() => window.__mock.count("playlist_tracks")), 1, "the playlist was not reloaded");
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("search: Artists and Albums tabs search VK, open their pages, and keep the tab on the way back", async () => {
+  const hostile = `<img src=x onerror="window.__pwned=1">`;
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await page.click(".nav button[data-view=search]");
+    const input = page.locator(`${visibleView} input[type=search]`);
+    await input.fill(hostile);
+    await page.waitForFunction(() => document.querySelectorAll(".main > .view:not([hidden]) .row").length > 0);
+    assert.equal(await page.evaluate(() => window.__mock.count("search_artists")), 0, "other tabs load when shown");
+
+    await page.click(`${visibleView} [role=tab][data-tab=artists]`);
+    await page.waitForFunction(() => document.querySelectorAll(".main > .view:not([hidden]) .artist-card").length === 2);
+    assert.equal((await page.evaluate(() => window.__mock.last("search_artists"))).args.query, hostile);
+    assert.equal(await page.locator(`${visibleView} .artist-card .name`).first().innerText(), `${hostile} артист`);
+    assert.equal(await page.locator(`${visibleView} .tab-pane:not([hidden]) .row`).count(), 0, "the track list is hidden");
+    await page.locator(`${visibleView} .artist-card`).nth(1).click();
+    await page.waitForFunction(() => document.querySelector(".artist-view:not([hidden]) h1")?.textContent === "Исполнитель 2");
+    assert.equal(await page.locator(".nav button[aria-current=page]").getAttribute("data-view"), "search");
+    await page.click(".artist-view button[aria-label=Назад]");
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) [role=tab][aria-selected=true]")?.dataset.tab === "artists");
+
+    await page.click(`${visibleView} [role=tab][data-tab=albums]`);
+    await page.waitForFunction(() => document.querySelectorAll(".main > .view:not([hidden]) .album-card").length === 5);
+    await page.locator(`${visibleView} .album-card`).first().click();
+    await page.waitForSelector(".album-view:not([hidden])");
+    assert.equal(await page.locator(".album-view h1").innerText(), `${hostile} альбом 1`);
+
+    await page.click(".album-view button[aria-label=Назад]");
+    await input.fill("empty");
+    await page.waitForSelector(`${visibleView} .empty-state:not([hidden])`);
+    assert.match(await page.locator(`${visibleView} .tab-pane:not([hidden]) .empty-state`).innerText(), /Альбомы не найдены/);
+    assert.equal(await page.evaluate(() => window.__pwned), undefined);
+    assert.equal(await page.locator("img[src=x]").count(), 0);
+  } finally { await app.close(); }
+});
+
+test("artist page: opens from the player bar and from the full-screen view", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await rows(page).nth(5).dblclick();
+    await page.waitForFunction(() => document.querySelector(".player .title")?.textContent === "Трек 6");
+    await page.click(".player .artist");
+    await page.waitForFunction(() => document.querySelector(".artist-view:not([hidden]) h1")?.textContent === "Исполнитель 6");
+    await page.click(".artist-view button[aria-label=Назад]");
+    await page.waitForSelector(".artist-view", { state: "hidden" });
+
+    await page.click(".player .volume .icon-btn:last-child");
+    await page.waitForSelector(".np:not([hidden])");
+    await page.click(".np-artist");
+    await page.waitForSelector(".np", { state: "hidden" });
+    await page.waitForSelector(".artist-view:not([hidden])");
+    assert.equal(await page.evaluate(() => window.__mock.state.visualizer), false, "closing the view stops the analysis");
+  } finally { await app.close(); }
+});

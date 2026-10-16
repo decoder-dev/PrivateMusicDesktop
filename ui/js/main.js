@@ -17,6 +17,10 @@ import { createLoginView } from "./views/login.js";
 import { createSettingsView } from "./views/settings.js";
 import { createForYouView } from "./views/for-you.js";
 import { createDownloadsView } from "./views/downloads.js";
+import { createArtistView } from "./views/artist.js";
+import { createAlbumView } from "./views/album.js";
+import { setRouter, hasArtist, hasAlbum, linkedArtists, openArtist, openArtistOf, openAlbumOf } from "./navigation.js";
+import { forgetAlbums } from "./my-albums.js";
 import { toggleDownload, refreshDownloads } from "./downloads.js";
 import { openMenu } from "./menu.js";
 import { formDialog } from "./dialog.js";
@@ -120,10 +124,19 @@ async function openTrackMenu(track, at, extra = []) {
     ...(playlists.length ? ["-"] : []),
     { label: t("menu.newPlaylist"), action: "new-playlist", icon: "plus", run: async () => { const p = await newPlaylist(); if (p) addToPlaylist(p, track); } },
   ];
+  // Several linked artists get a sub-menu; one, or just a name, a plain item.
+  const artists = linkedArtists(track);
+  const goTo = [
+    artists.length > 1
+      ? { label: t("menu.goArtist"), action: "go-artist", icon: "artist", items: artists.map((artist) => ({ label: artist.name, action: "go-artist-item", run: () => openArtist(artist) })) }
+      : hasArtist(track) ? { label: t("menu.goArtist"), action: "go-artist", icon: "artist", run: () => openArtistOf(track) } : null,
+    hasAlbum(track) ? { label: t("menu.goAlbum"), action: "go-album", icon: "album", run: () => openAlbumOf(track) } : null,
+  ].filter(Boolean);
   openMenu(at, [
     { label: t("playNext"), action: "play-next", icon: "play-next", run: () => onTrackAction("play-next", track) },
     { label: t("playLast"), action: "play-last", icon: "queue-add", run: () => onTrackAction("play-last", track) },
     { label: t("radio"), action: "radio", icon: "radio", run: () => playSimilar(track) },
+    ...(goTo.length ? ["-", ...goTo] : []),
     "-",
     { label: t("menu.addTo"), action: "add-to-playlist", icon: "playlist", items: targets },
     ...(extra.length ? ["-", ...extra] : []),
@@ -168,7 +181,12 @@ function buildShell() {
 }
 
 function buildShellParts() {
-  const ctx = { play, onTrackAction, toast, openTrackMenu, newPlaylist };
+  // Artist and album pages stack on top of whatever was on screen: Back
+  // returns there, with that screen as it was (a playlist stays open, a
+  // search keeps its results). The sidebar starts over from a clean stack.
+  let stack = [];
+  let current = { id: "library", payload: null };
+  const ctx = { play, onTrackAction, toast, openTrackMenu, newPlaylist, back };
   const views = {
     library: createLibraryView(ctx),
     forYou: createForYouView(ctx),
@@ -177,6 +195,8 @@ function buildShellParts() {
     search: createSearchView(ctx),
     queue: createQueueView(),
     settings: createSettingsView({ settings, onSettingsChange: applySettings, onSignOut: signOut, toast }),
+    artist: createArtistView(ctx),
+    album: createAlbumView(ctx),
   };
   const items = [
     ["library", "nav.library", "note"],
@@ -206,15 +226,40 @@ function buildShellParts() {
     h("footer", { class: "player" }, bar.element),
     nowPlaying.element);
 
-  function show(id) {
+  function display(id) {
     set("view", id);
     for (const [key, view] of Object.entries(views)) view.element.hidden = key !== id;
+    // A page opened from a screen keeps that screen's place in the sidebar.
+    const section = stack[0]?.id ?? id;
     for (const button of nav.querySelectorAll("button")) {
-      if (button.dataset.view === id) button.setAttribute("aria-current", "page");
+      if (button.dataset.view === section) button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
     }
     views[id].show?.();
   }
+
+  function show(id) {
+    stack = [];
+    current = { id, payload: null };
+    display(id);
+  }
+
+  function navigate(id, payload) {
+    nowPlaying?.close();
+    stack.push(current);
+    current = { id, payload };
+    display(id);
+    views[id].open(payload);
+  }
+
+  function back() {
+    const previous = stack.pop() ?? { id: "library", payload: null };
+    current = previous;
+    display(previous.id);
+    if (previous.payload) views[previous.id].open(previous.payload);
+  }
+
+  setRouter({ openArtist: (artist) => navigate("artist", artist), openAlbum: (album) => navigate("album", album) });
 
   return {
     element, views, bar, show,
@@ -279,6 +324,7 @@ function signedOut() {
   for (const view of Object.values(shell?.views ?? {})) view.reset?.();
   clearQueue();
   forgetPlaylists();
+  forgetAlbums();
   set("queue", { tracks: [], current: null });
   showLogin();
 }

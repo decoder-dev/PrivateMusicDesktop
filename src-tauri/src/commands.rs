@@ -3,7 +3,7 @@
 use pm_engine::app::SessionState;
 use pm_engine::controller::State;
 use pm_engine::queue::Repeat;
-use pm_engine::vk::{Page, Playlist, Profile, Track};
+use pm_engine::vk::{Album, AlbumTracks, Artist, ArtistAlbums, Page, Playlist, Profile, Track};
 use pm_engine::Error;
 use serde::Serialize;
 use tauri::{AppHandle, State as TauriState};
@@ -351,4 +351,65 @@ pub async fn add_to_playlist(state: TauriState<'_, AppState>, playlist: Playlist
 pub async fn remove_from_playlist(state: TauriState<'_, AppState>, playlist: Playlist, track: Track) -> CommandResult<()> {
     let app = state.app.clone();
     blocking(move || app.remove_from_playlist(&playlist, &track)).await
+}
+
+// Artist and album pages. Ids, offsets and the album locator are checked by
+// the engine before anything reaches VK.
+
+#[tauri::command]
+pub async fn search_artists(state: TauriState<'_, AppState>, query: String, offset: u32, count: u32) -> CommandResult<Vec<Artist>> {
+    let app = state.app.clone();
+    blocking(move || app.search_artists(&query, offset, count)).await
+}
+
+#[tauri::command]
+pub async fn find_artist(state: TauriState<'_, AppState>, name: String) -> CommandResult<Option<Artist>> {
+    let app = state.app.clone();
+    blocking(move || app.find_artist(&name)).await
+}
+
+#[tauri::command]
+pub async fn artist_tracks(
+    state: TauriState<'_, AppState>,
+    artist_id: String,
+    offset: u32,
+    count: u32,
+) -> CommandResult<Page<Track>> {
+    let app = state.app.clone();
+    blocking(move || app.artist_tracks(&artist_id, offset, count)).await
+}
+
+#[tauri::command]
+pub async fn artist_albums(
+    state: TauriState<'_, AppState>,
+    artist_id: String,
+    offset: u32,
+    count: u32,
+) -> CommandResult<ArtistAlbums> {
+    let app = state.app.clone();
+    blocking(move || app.artist_albums(&artist_id, offset, count)).await
+}
+
+#[tauri::command]
+pub async fn search_albums(state: TauriState<'_, AppState>, query: String, offset: u32, count: u32) -> CommandResult<Page<Album>> {
+    let app = state.app.clone();
+    blocking(move || app.search_albums(&query, offset, count)).await
+}
+
+#[tauri::command]
+pub async fn followed_albums(state: TauriState<'_, AppState>, offset: u32, count: u32) -> CommandResult<Page<Album>> {
+    let app = state.app.clone();
+    blocking(move || app.followed_albums(offset, count)).await
+}
+
+#[tauri::command]
+pub async fn album_tracks(state: TauriState<'_, AppState>, album: Album, offset: u32, count: u32) -> CommandResult<AlbumTracks> {
+    let app = state.app.clone();
+    blocking(move || app.album_tracks(&album, offset, count)).await
+}
+
+#[tauri::command]
+pub async fn follow_album(state: TauriState<'_, AppState>, album: Album, follow: bool) -> CommandResult<()> {
+    let app = state.app.clone();
+    blocking(move || app.follow_album(&album, follow)).await
 }

@@ -16,6 +16,13 @@ way. `native/` is a copy of the one in decoder-dev/PrivateMusic2: keep them in s
   position survive a restart.
 - Hearts: add any track to My music or take it out, from lists, the player bar
   or the full-screen view.
+- Artist and album pages: click an artist in any row, the player bar or the
+  full-screen view (or use *Go to artist* / *Go to album* in a track's menu) to
+  see their popular tracks and albums; an album page plays the release and
+  saves it to your albums. Search has Artists and Albums tabs, and followed
+  albums are listed under Playlists. Community albums whose access key VK
+  withholds are resolved the way the iOS app does it (search for the key, and
+  failing that, rebuild the album from public search results).
 - For you: VK's personal mix and recommendations; "similar tracks" on any row
   plays VK's radio seeded with that track.
 - Downloads: any track can be saved to the app's folder and then plays with no
@@ -104,6 +111,7 @@ Optional tests: `live_vk` (real VK endpoints, needs network) and `cpal_smoke`
 - **CSP** is strict (`default-src 'self'`, no inline script, no `eval`);
   capabilities grant the main window only the app's own commands.
 - **IPC** arguments are validated in the engine (numbers finite and in range,
+  artist ids and album locators/keys plain tokens before they are sent to VK,
   stream URLs https-only and never loopback, private or link-local addresses (also across redirects); no redirects on VK API calls, where a
   token is attached).
 - Logs never contain tokens or cookies.
@@ -114,4 +122,6 @@ Optional tests: `live_vk` (real VK endpoints, needs network) and `cpal_smoke`
   Signing in to a real account and OS media controls still need manual verification.
 - CMAF streams with encryption are untested against real VK data.
 - Mood/genre mixes from VK's catalogue (the iOS app has them) are not there yet.
+- An artist page shows the first 50 popular tracks and 30 albums; it does not
+  page further the way the iOS one does on scroll.
 - `install.ps1` has not been run on a real Windows machine yet.

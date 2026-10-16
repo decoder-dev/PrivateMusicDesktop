@@ -13,10 +13,53 @@ use crate::stream::fetch::fetch_to_end;
 use crate::store::SecretStore;
 use crate::stream::FetchConfig;
 use crate::vk::auth::{exchange_at, now_unix};
-use crate::vk::{Page, Playlist, Profile, Session, Track, VkClient};
+use crate::vk::{model, Album, AlbumTracks, Artist, ArtistAlbums, Page, Playlist, Profile, Session, Track, VkClient};
 use crate::{Error, Result};
 
 const TOKEN_URL: &str = "https://login.vk.ru/?act=web_token";
+
+/// Furthest offset the window may ask for in an artist or album list; VK's
+/// own lists end long before.
+const MAX_OFFSET: u32 = 100_000;
+
+/// Upper bound for a search query from the window.
+const MAX_QUERY: usize = 500;
+
+fn checked_offset(offset: u32) -> Result<u32> {
+    (offset <= MAX_OFFSET).then_some(offset).ok_or(Error::InvalidRequest)
+}
+
+fn checked_artist_id(id: &str) -> Result<&str> {
+    let id = id.trim();
+    model::valid_artist_id(id).then_some(id).ok_or(Error::InvalidRequest)
+}
+
+fn checked_query(query: &str) -> Result<Option<&str>> {
+    if query.len() > MAX_QUERY {
+        return Err(Error::InvalidRequest);
+    }
+    let query = query.trim();
+    Ok((!query.is_empty()).then_some(query))
+}
+
+/// An album handed over by the window: a real locator, and an access key or
+/// follow hash that is a plain token, since both are sent back to VK.
+fn checked_album(album: &Album) -> Result<()> {
+    let token = |value: &Option<String>| {
+        value.as_deref().is_none_or(|v| v.len() <= 256 && v.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'))
+    };
+    let artists_ok = album.artists.len() <= 50 && album.artists.iter().all(|a| a.name.len() <= 1024);
+    if album.album_id <= 0
+        || album.owner_id == 0
+        || album.title.len() > 1024
+        || !token(&album.access_key)
+        || !token(&album.follow_hash)
+        || !artists_ok
+    {
+        return Err(Error::InvalidRequest);
+    }
+    Ok(())
+}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SessionState {
@@ -368,5 +411,53 @@ impl Core {
 
     pub fn playlist_tracks(&self, playlist: &Playlist, offset: u32, count: u32) -> Result<Page<Track>> {
         self.api(|client, session| client.playlist_tracks(session, playlist, offset, count.clamp(1, 300)))
+    }
+
+    pub fn search_artists(&self, query: &str, offset: u32, count: u32) -> Result<Vec<Artist>> {
+        let offset = checked_offset(offset)?;
+        let Some(query) = checked_query(query)? else { return Ok(Vec::new()) };
+        self.api(|client, session| client.search_artists(session, query, offset, count.clamp(1, 100)))
+    }
+
+    /// The artist meant by a name, for tracks that do not link one.
+    pub fn find_artist(&self, name: &str) -> Result<Option<Artist>> {
+        let Some(name) = checked_query(name)? else { return Ok(None) };
+        self.api(|client, session| client.find_artist(session, name))
+    }
+
+    pub fn artist_tracks(&self, artist_id: &str, offset: u32, count: u32) -> Result<Page<Track>> {
+        let artist_id = checked_artist_id(artist_id)?;
+        let offset = checked_offset(offset)?;
+        self.api(|client, session| client.artist_tracks(session, artist_id, offset, count.clamp(1, 100)))
+    }
+
+    pub fn artist_albums(&self, artist_id: &str, offset: u32, count: u32) -> Result<ArtistAlbums> {
+        let artist_id = checked_artist_id(artist_id)?;
+        let offset = checked_offset(offset)?;
+        self.api(|client, session| client.artist_albums(session, artist_id, offset, count.clamp(1, 100)))
+    }
+
+    pub fn search_albums(&self, query: &str, offset: u32, count: u32) -> Result<Page<Album>> {
+        let offset = checked_offset(offset)?;
+        let Some(query) = checked_query(query)? else {
+            return Ok(Page { items: Vec::new(), total: 0, next_offset: None });
+        };
+        self.api(|client, session| client.search_albums(session, query, offset, count.clamp(1, 100)))
+    }
+
+    pub fn followed_albums(&self, offset: u32, count: u32) -> Result<Page<Album>> {
+        let offset = checked_offset(offset)?;
+        self.api(|client, session| client.followed_albums(session, offset, count.clamp(1, 100)))
+    }
+
+    pub fn album_tracks(&self, album: &Album, offset: u32, count: u32) -> Result<AlbumTracks> {
+        checked_album(album)?;
+        let offset = checked_offset(offset)?;
+        self.api(|client, session| client.album_tracks(session, album, offset, count.clamp(1, 100)))
+    }
+
+    pub fn follow_album(&self, album: &Album, follow: bool) -> Result<()> {
+        checked_album(album)?;
+        self.api(|client, session| client.follow_album(session, album, follow))
     }
 }

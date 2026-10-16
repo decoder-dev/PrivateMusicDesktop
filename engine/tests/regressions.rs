@@ -25,6 +25,7 @@ fn track(n: i64, url: Option<String>) -> Track {
     Track {
         track_id: n, owner_id: 7, title: format!("T{n}"), artist: "A".into(), album_title: None, duration: 12,
         stream_url: url, artwork_url: None, access_key: None, lyrics_id: None, is_hq: false, track_code: None,
+        artists: Vec::new(), album: None,
     }
 }
 

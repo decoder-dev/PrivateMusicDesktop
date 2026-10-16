@@ -3,5 +3,5 @@ pub mod client;
 pub mod model;
 
 pub use auth::{exchange_web_session, API_USER_AGENT};
-pub use client::{Session, VkClient};
-pub use model::{Page, Playlist, Profile, Track};
+pub use client::{AlbumTracks, ArtistAlbums, Session, VkClient};
+pub use model::{Album, AlbumRef, Artist, ArtistRef, Page, Playlist, Profile, Track};

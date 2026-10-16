@@ -7,6 +7,7 @@ import { store, subscribe } from "./store.js";
 import { trackKey } from "./api.js";
 import { isLiked, isBusy } from "./likes.js";
 import { isDownloaded, isDownloading } from "./downloads.js";
+import { openArtistOf } from "./navigation.js";
 
 /**
  * The common screen for every list of tracks: header, optional filter,
@@ -17,17 +18,19 @@ import { isDownloaded, isDownloading } from "./downloads.js";
  *   onAction(action, track, index)      hover buttons
  *   rowActions                           [[icon, action, label], …] or undefined for the default pair
  *   isSelected(track, index)             default: the playing track
+ *
+ * `heading` is the title's tag: "h2" when the list is a part of a page.
  */
 // The track menu every list uses unless a screen brings its own (set by main).
 let defaultMenu = null;
 export function setDefaultTrackMenu(fn) { defaultMenu = fn; }
 
-export function createTracksScreen({ title, filterable = false, playable = true, hooks }) {
+export function createTracksScreen({ title, filterable = false, playable = true, heading: level = "h1", hooks }) {
   let all = [];
   let visible = [];
   let query = "";
 
-  const heading = h("h1", { text: title });
+  const heading = h(level, { text: title });
   const meta = h("span", { class: "meta" });
   const filter = filterable
     ? h("input", {
@@ -65,6 +68,9 @@ export function createTracksScreen({ title, filterable = false, playable = true,
         event.stopPropagation();
         const box = button.getBoundingClientRect();
         (hooks.onMenu ?? defaultMenu)?.(track, { x: box.right - 4, y: box.bottom + 2 }, index);
+      } else if (type === "click" && button?.dataset.action === "artist") {
+        event.stopPropagation();
+        openArtistOf(track);
       } else if (type === "click" && button) {
         event.stopPropagation();
         hooks.onAction?.(button.dataset.action, track, index);

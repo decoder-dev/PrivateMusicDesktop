@@ -7,6 +7,9 @@ import { subscribe } from "../store.js";
 import { formDialog, confirmDialog } from "../dialog.js";
 import { loadAllPages } from "../api.js";
 import { allPlaylists, ensurePlaylists, isOwn, replacePlaylist, dropPlaylist, changeCount, same, forgetPlaylists } from "../my-playlists.js";
+import { ensureAlbums, followedAlbums } from "../my-albums.js";
+import { albumCard } from "../album-card.js";
+import { openAlbum } from "../navigation.js";
 
 function card(playlist, open) {
   const art = playlist.artwork_url
@@ -29,7 +32,12 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
   const grid = h("div", { class: "grid" });
   const header = h("header", { class: "view-header" }, h("h1", { text: t("playlists.title") }),
     h("button", { class: "btn primary", type: "button", onclick: () => newPlaylist(), text: t("pl.new") }));
-  const listScreen = h("section", { class: "view" }, header, status, grid);
+  // Followed releases, below the playlists.
+  const albumsStatus = h("div", { class: "status", role: "status", hidden: true });
+  const albumsGrid = h("div", { class: "grid followed-albums" });
+  const shelves = h("div", { class: "page-scroll" }, grid,
+    h("h2", { class: "shelf-title", text: t("albums.title") }), albumsStatus, albumsGrid);
+  const listScreen = h("section", { class: "view" }, header, status, shelves);
 
   const editButton = h("button", { class: "btn", type: "button", onclick: () => edit(), text: t("pl.edit") });
   const deleteButton = h("button", { class: "btn danger-text", type: "button", onclick: () => remove(), text: t("pl.delete") });
@@ -73,6 +81,34 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
     }
   });
   subscribe("session", renderOwner);
+
+  let albumsLoaded = false;
+  function renderAlbums() {
+    if (!albumsLoaded) return;
+    const list = followedAlbums();
+    albumsGrid.replaceChildren(...list.map((album) => albumCard(album, openAlbum)));
+    albumsStatus.hidden = list.length > 0;
+    albumsStatus.className = "status";
+    albumsStatus.textContent = list.length ? "" : t("albums.empty");
+  }
+  subscribe("albums", renderAlbums);
+
+  async function loadAlbums() {
+    const mine = generation;
+    albumsStatus.hidden = false;
+    albumsStatus.className = "status";
+    albumsStatus.textContent = t("loading");
+    try {
+      await ensureAlbums();
+      if (mine !== generation) return;
+      albumsLoaded = true;
+      renderAlbums();
+    } catch (error) {
+      if (mine !== generation) return;
+      albumsStatus.className = "status error";
+      albumsStatus.textContent = errorText(error);
+    }
+  }
 
   function showList() {
     detailGeneration++;
@@ -177,10 +213,13 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
     element,
     show() {
       if (!loaded) load();
+      if (!albumsLoaded) loadAlbums();
     },
     reset() {
       generation++;
       loaded = false;
+      albumsLoaded = false;
+      albumsGrid.replaceChildren();
       forgetPlaylists();
       grid.replaceChildren();
       showList();

@@ -6,6 +6,7 @@ import { store, subscribe, own } from "./store.js";
 import { createVisualizer, MODES } from "./visualizer.js";
 import { createLyricsPanel } from "./lyrics-panel.js";
 import { isLiked, isBusy } from "./likes.js";
+import { hasArtist, openArtistOf } from "./navigation.js";
 
 const IDLE_MS = 3000;
 const PALETTES = new Map();
@@ -47,7 +48,8 @@ export function createNowPlaying({ settings, onSettingsChange, onLike }) {
   const canvas = h("canvas", { class: "np-canvas", "aria-hidden": "true" });
   const coverBox = h("div", { class: "np-cover" });
   const title = h("div", { class: "np-title" });
-  const artist = h("div", { class: "np-artist" });
+  const artist = h("button", { class: "np-artist link-text", type: "button", title: t("artist.open"), disabled: true,
+    onclick: () => { const track = store.player.track; close(); openArtistOf(track); } });
   const upNext = h("div", { class: "np-next" });
   const likeButton = h("button", { class: "np-btn np-like", type: "button", onclick: () => onLike?.(store.player.track) }, icon("heart", 22));
   function renderLike() {
@@ -182,6 +184,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike }) {
     const track = player.track;
     title.textContent = track ? track.title : t("nothing");
     artist.textContent = track ? track.artist : "";
+    artist.disabled = !hasArtist(track);
     updateCover(track);
     if (lyricsOn) {
       lyrics.setTrack(track);

@@ -85,7 +85,7 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 .row .cover.empty { display: flex; align-items: center; justify-content: center; color: var(--text-secondary); font-size: 16px; }
 .row .titles { min-width: 0; }
 .row .title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.row .artist { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .artist { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 16px; }
 .row[aria-selected="true"] .artist { color: inherit; opacity: 0.8; }
 .row .time { color: var(--text-secondary); text-align: right; font-variant-numeric: tabular-nums; }
 .row .actions { display: flex; gap: 2px; justify-content: flex-end; visibility: hidden; }
@@ -336,3 +336,32 @@ select.field { padding: 7px 10px; }
 .btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
 .btn.danger-text { color: var(--danger); }
 .view-header > .btn.primary:last-child { margin-left: auto; }
+
+/* ---------- artist and album pages ---------- */
+/* Only the text is the link, so a double click elsewhere on a row still plays. */
+.link-text { display: block; width: fit-content; max-width: 100%; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-text:not(:disabled):hover { text-decoration: underline; color: var(--text); }
+.link-text:disabled { cursor: default; }
+.np-artist.link-text { white-space: normal; text-align: inherit; }
+.np-artist.link-text:not(:disabled):hover { color: #fff; }
+.page-head { flex-wrap: nowrap; }
+.page-art { flex: none; width: 96px; height: 96px; border-radius: 8px; background: var(--surface); overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); }
+.page-art.round { border-radius: 50%; }
+.page-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.page-info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.page-artists { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.page-artists .link-text { display: inline; max-width: none; }
+.page-note { color: var(--text-secondary); font-size: 13px; }
+.page-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+.page-scroll > .view { flex: none; }
+.page-scroll .list { flex: none; }
+.page-scroll .grid { flex: none; overflow: visible; }
+.shelf-title { font-size: 17px; margin: 12px 24px 4px; }
+.view-header h2 { font-size: 17px; margin: 0; flex: 1 1 auto; min-width: 0; }
+.artist-card .art { border-radius: 50%; }
+.tab-bar { padding: 0 24px 8px; }
+.empty-state.error { color: var(--danger); }
+.tab-pane { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+@media (max-width: 900px) {
+  .page-art { width: 64px; height: 64px; }
+}
