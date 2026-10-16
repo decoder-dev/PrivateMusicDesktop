@@ -886,6 +886,32 @@ async function playAndOpen(app, { index = 0 } = {}) {
   await page.waitForSelector(".np:not([hidden])");
 }
 
+test("buffering: the loading ring is centred inside the play button, in the bar and in full screen", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await playAndOpen(app, { index: 2 });
+    await page.evaluate(() => { window.__mock.state.player.status = "buffering"; window.__mock.emitState(); });
+    const offsets = (button) => page.evaluate((selector) => {
+      const b = document.querySelector(selector).getBoundingClientRect();
+      const r = document.querySelector(`${selector} .spinner`).getBoundingClientRect();
+      const ring = document.querySelector(`${selector} .spinner`), host = document.querySelector(selector);
+      // Sizes without the rotation, which widens the bounding box of a turning square.
+      return { dx: Math.abs(r.x + r.width / 2 - (b.x + b.width / 2)), dy: Math.abs(r.y + r.height / 2 - (b.y + b.height / 2)), inside: ring.offsetWidth <= host.offsetWidth && ring.offsetHeight <= host.offsetHeight };
+    }, button);
+    for (const button of [".np .np-play", ".player .play"]) {
+      await page.waitForSelector(`${button} .spinner`, { state: "attached" });
+      const { dx, dy, inside } = await offsets(button);
+      assert.ok(dx < 1 && dy < 1 && inside, `${button}: ring off centre by ${dx}, ${dy} (inside: ${inside})`);
+    }
+    // Repeat-one keeps its small "1" in the corner of the repeat button only.
+    await page.evaluate(() => { window.__mock.state.player.repeat = "one"; window.__mock.emitState(); });
+    await page.waitForSelector(".player .controls .badge");
+    assert.equal(await page.locator(".player .controls .badge").count(), 1);
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
 test("full screen: opens from the player bar, asks the engine for the spectrum only while open", async () => {
   const app = await motionApp({ config: { signedIn: true } });
   try {

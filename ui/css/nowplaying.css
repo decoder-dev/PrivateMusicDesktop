@@ -158,6 +158,10 @@
   display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 6px 24px rgb(0 0 0 / 0.2);
   transition: opacity var(--t-release) var(--ease-std), transform var(--t-release) var(--ease-std);
 }
+.np-play { position: relative; }
+.np-play .spin-over { position: absolute; inset: 0; display: grid; place-items: center; }
+.np-play .spin-over .spinner { width: 46px; height: 46px; border-width: 3px; }
+.np-play.is-buffering svg { opacity: 0.3; }
 .np-play:not(:disabled):hover { opacity: 0.92; }
 .np-play:not(:disabled):active { opacity: 0.78; transition-duration: var(--t-press); }
 .np-play:disabled { opacity: 0.5; }
