@@ -9,21 +9,24 @@ export function closeMenu() {
 
 /**
  * A small pop-up menu at a point. items: { label, action, icon?, items? (a
- * sub-menu), disabled? } or "-" for a separator. Arrow keys, Enter and
- * Escape work; a click outside closes it.
+ * sub-menu), disabled?, destructive? } or "-" for a separator. Arrow keys,
+ * Enter and Escape work; a click outside closes it. A sub-menu opens beside its
+ * parent, on the left when the right side is full, and never covers it.
  */
 export function openMenu({ x, y }, items, { label } = {}) {
   closeMenu();
   const stack = [];
+  document.body.classList.add("overlay-open");
 
-  function build(list, at) {
+  function build(list, at, { parent = null } = {}) {
     const buttons = [];
-    const element = h("div", { class: "menu", role: "menu", "aria-label": label ?? "" },
+    const element = h("div", { class: `menu glass strong${parent ? " sub" : ""}`, role: "menu", "aria-label": label ?? "" },
       list.map((item) => {
         if (item === "-") return h("div", { class: "menu-sep", role: "separator" });
         const button = h("button", {
           type: "button", role: "menuitem", class: "menu-item", disabled: item.disabled,
           "data-action": item.action ?? null, "aria-haspopup": item.items ? "menu" : null,
+          "data-destructive": item.destructive ? "" : null,
           onclick: (event) => {
             event.stopPropagation();
             if (item.items) return openSub(item, button);
@@ -33,17 +36,23 @@ export function openMenu({ x, y }, items, { label } = {}) {
         },
         item.icon ? icon(item.icon, 16) : h("span", { class: "menu-gap" }),
         h("span", { class: "menu-label", text: item.label }),
-        item.items ? icon("chevronRight", 14) : null);
+        item.items ? h("span", { class: "chev" }, icon("chevronRight", 12)) : null);
         buttons.push(button);
         return button;
       }));
     document.body.append(element);
-    // Keep the menu on screen.
+    // Keep the menu on screen; a sub-menu flips to the parent's left side.
     const box = element.getBoundingClientRect();
-    const left = Math.max(8, Math.min(at.x, window.innerWidth - box.width - 8));
-    const top = Math.max(8, Math.min(at.y, window.innerHeight - box.height - 8));
+    const margin = 8;
+    let left = at.x;
+    if (parent && left + box.width > window.innerWidth - margin) left = parent.left - box.width - 2;
+    left = Math.max(margin, Math.min(left, window.innerWidth - box.width - margin));
+    const top = Math.max(margin, Math.min(at.y, window.innerHeight - box.height - margin));
     element.style.left = `${left}px`;
     element.style.top = `${top}px`;
+    // The pop-up grows from the point it was opened at.
+    element.style.setProperty("--ox", `${Math.max(0, Math.min(box.width, at.x - left))}px`);
+    element.style.setProperty("--oy", `${Math.max(0, Math.min(box.height, at.y - top))}px`);
     const level = { element, buttons };
     stack.push(level);
     buttons.find((b) => !b.disabled)?.focus({ preventScroll: true });
@@ -52,12 +61,14 @@ export function openMenu({ x, y }, items, { label } = {}) {
 
   function openSub(item, button) {
     while (stack.length > 1 && stack[stack.length - 1].element !== button.closest(".menu")) stack.pop().element.remove();
+    const parentBox = button.closest(".menu").getBoundingClientRect();
     const box = button.getBoundingClientRect();
-    build(item.items, { x: box.right + 2, y: box.top - 4 });
+    build(item.items, { x: parentBox.right + 2, y: box.top - 6 }, { parent: parentBox });
   }
 
   function close() {
     for (const level of stack.splice(0)) level.element.remove();
+    document.body.classList.remove("overlay-open");
     document.removeEventListener("pointerdown", onOutside, true);
     document.removeEventListener("keydown", onKey, true);
     window.removeEventListener("blur", close);
@@ -77,8 +88,10 @@ export function openMenu({ x, y }, items, { label } = {}) {
     if (event.key === "Escape" || (event.key === "ArrowLeft" && stack.length > 1)) {
       event.preventDefault();
       event.stopPropagation();
-      if (stack.length > 1) stack.pop().element.remove();
-      else close();
+      if (stack.length > 1) {
+        stack.pop().element.remove();
+        stack[stack.length - 1].buttons.find((b) => b.getAttribute("aria-haspopup"))?.focus();
+      } else close();
     } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       event.stopPropagation();

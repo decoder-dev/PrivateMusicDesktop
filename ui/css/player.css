@@ -1,0 +1,64 @@
+/* The player bar: a floating glass card inside the main column. */
+
+.player {
+  position: absolute; z-index: 5; left: var(--bar-gap); right: var(--bar-gap); bottom: var(--bar-gap);
+  height: var(--bar-h); border-radius: var(--r-compact); box-shadow: var(--sh-bar); overflow: hidden;
+  /* A tint from the cover over the glass; none until the palette arrives. */
+  background-color: color-mix(in srgb, var(--tint, transparent) var(--tint-amt), var(--glass));
+  transition: background-color 400ms var(--ease-std);
+}
+.player.no-tint { --tint-amt: 0%; }
+
+.player-inner {
+  height: 100%; display: grid; grid-template-columns: minmax(180px, 1fr) minmax(300px, 2fr) minmax(140px, 1fr); align-items: center; gap: 16px; padding: 8px 16px;
+  transition: opacity var(--t-pop) var(--ease-std);
+}
+.player.is-empty .player-inner { opacity: 0.6; }
+.now { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.cover-button { flex: none; display: block; border-radius: 11px; }
+.cover-button .art-box { --art-size: 48px; box-shadow: var(--sh-art-mini), inset 0 0 0 var(--hair) var(--line-placeholder); }
+.cover-button:active { opacity: 0.88; }
+.now .titles { min-width: 0; flex: 0 1 auto; display: flex; flex-direction: column; gap: 1px; }
+.now .title { font: 600 15px/20px var(--font); letter-spacing: -0.2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.now .artist { font: 400 13px/18px var(--font); letter-spacing: -0.08px; color: var(--text-2); }
+.now .like { flex: none; }
+
+.transport { display: flex; flex-direction: column; gap: 2px; align-items: stretch; min-width: 0; }
+.controls { display: flex; justify-content: center; align-items: center; gap: 4px; }
+.controls .icon-btn { width: 36px; height: 36px; }
+.controls .icon-btn:not(:disabled):active { opacity: 0.78; }
+.controls .play { width: 40px; height: 40px; background: var(--accent); color: var(--on-accent); }
+.controls .play:not(:disabled):hover { background: color-mix(in srgb, var(--accent) 90%, var(--text)); color: var(--on-accent); }
+.controls .play:not(:disabled):active { background: var(--accent); }
+.controls .on { color: var(--accent); }
+.controls .icon-btn.on::after { content: ""; position: absolute; bottom: 3px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: currentColor; }
+.controls .icon-btn span { position: absolute; right: 5px; top: 5px; font: 700 9px/1 var(--font); }
+.play .spin-over { position: absolute; inset: 0; display: grid; place-items: center; }
+.play .spin-over .spinner { width: 30px; height: 30px; border-width: 2px; }
+.play.is-buffering svg { opacity: 0.3; }
+.seek { display: grid; grid-template-columns: 40px minmax(0, 1fr) 44px; align-items: center; gap: 8px; color: var(--text-2); font: 500 11px/16px var(--font); letter-spacing: 0.06px; font-variant-numeric: tabular-nums; }
+.seek span:first-child { text-align: right; }
+.seek span:last-child { text-align: left; }
+.buffering { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+.volume { display: flex; align-items: center; justify-content: flex-end; gap: 4px; min-width: 0; }
+.volume input { width: 96px; flex: 0 1 96px; }
+.volume .icon-btn:last-child { margin-left: 4px; }
+
+@media (max-width: 900px) {
+  .player-inner { grid-template-columns: minmax(120px, 1fr) minmax(280px, 2fr) auto; }
+  .volume input { display: none; }
+}
+@media (max-width: 640px) {
+  .player-inner { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "now controls" "seek seek"; row-gap: 0; column-gap: 8px; padding: 6px 12px; align-content: center; }
+  .transport { display: contents; }
+  .now { grid-area: now; }
+  .controls { grid-area: controls; gap: 0; }
+  .controls .icon-btn { width: 34px; height: 34px; }
+  .controls .play { width: 38px; height: 38px; }
+  .controls .icon-btn:first-child { display: none; }
+  .seek { grid-area: seek; grid-template-columns: 34px minmax(0, 1fr) 38px; gap: 6px; }
+  .volume { display: none; }
+  .cover-button .art-box { --art-size: 40px; }
+}
+.cover-slot { display: block; line-height: 0; }

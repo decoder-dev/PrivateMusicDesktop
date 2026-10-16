@@ -1,0 +1,63 @@
+/* Menus, dialogs, toasts and the undo banner. */
+
+@keyframes pop-in { from { opacity: 0; transform: scale(0.96); } }
+@keyframes pop-in-sub { from { opacity: 0; transform: scale(0.97); } }
+
+.menu {
+  position: fixed; z-index: 80; min-width: 220px; max-width: 320px; max-height: 70vh; overflow-y: auto; padding: 6px;
+  border-radius: var(--r-control); box-shadow: var(--sh-float);
+  transform-origin: var(--ox, 0) var(--oy, 0); animation: pop-in var(--t-pop) var(--ease-out) backwards;
+}
+.menu.sub { animation: pop-in-sub 120ms var(--ease-out) backwards; }
+.menu-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 32px; padding: 0 10px; border-radius: 8px; text-align: left;
+  font-size: 14px; line-height: 19px; font-weight: 500; color: var(--text); letter-spacing: -0.15px;
+  transition: background-color var(--t-hover) var(--ease-std), opacity var(--t-release) var(--ease-std);
+}
+.menu-item:hover, .menu-item:focus-visible { background: var(--hover); outline: none; }
+.menu-item:focus-visible { background: var(--pressed); }
+.menu-item:active { opacity: 0.85; transition-duration: var(--t-press); }
+.menu-item:disabled { color: var(--text-3); background: none; }
+.menu-item[data-destructive] { color: var(--danger); }
+.menu-item svg { flex: none; color: var(--text-2); }
+.menu-item .chev { margin-left: auto; color: var(--text-3); }
+.menu-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-gap { width: 16px; flex: none; }
+.menu-sep { height: var(--hair); margin: 4px 6px; background: var(--line); }
+
+/* While a menu or dialog is open the chrome below it goes flat: one blur layer at a time. */
+body.overlay-open .player { -webkit-backdrop-filter: none; backdrop-filter: none; }
+
+.dialog {
+  border: var(--hair) solid var(--line-card); border-radius: var(--r-card); padding: 24px; width: min(440px, calc(100vw - 32px));
+  background: var(--surface); color: var(--text); box-shadow: var(--sh-float);
+  animation: dialog-in var(--t-dialog) var(--ease-ios) backwards;
+}
+.dialog.closing { animation: dialog-out var(--t-pop) var(--ease-std) forwards; }
+.dialog::backdrop { background: var(--scrim); animation: fade-in var(--t-dialog) var(--ease-std) backwards; }
+.dialog.closing::backdrop { animation: fade-out var(--t-pop) var(--ease-std) forwards; }
+@keyframes dialog-in { from { opacity: 0; transform: translateY(10px) scale(0.98); } }
+@keyframes dialog-out { to { opacity: 0; transform: scale(0.98); } }
+@keyframes fade-out { to { opacity: 0; } }
+.dialog h2 { font: 600 20px/25px var(--font); letter-spacing: -0.3px; margin: 0 0 16px; }
+.dialog-form { display: flex; flex-direction: column; gap: 12px; }
+.dialog-field { display: flex; flex-direction: column; gap: 6px; color: var(--text-2); font-size: 13px; line-height: 18px; }
+.dialog-field .field { font-size: 14px; }
+.dialog-text { font-size: 15px; line-height: 21px; margin: 0 0 20px; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+
+/* Toasts: a glass capsule above the player bar. */
+.toast {
+  position: fixed; z-index: 90; left: 50%; bottom: calc(var(--bar-h) + var(--bar-gap) + 16px); transform: translateX(-50%);
+  max-width: min(560px, 90vw); padding: 10px 20px; border-radius: var(--r-pill); box-shadow: var(--sh-rest);
+  font-size: 14px; line-height: 19px; font-weight: 600; letter-spacing: -0.15px; text-align: center;
+  display: inline-flex; align-items: center; gap: 8px; animation: toast-in var(--t-toast) var(--ease-ios) backwards;
+}
+.toast.error svg { color: var(--danger); flex: none; }
+.toast.closing { animation: toast-out var(--t-pop) var(--ease-std) forwards; }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 12px); } }
+@keyframes toast-out { to { opacity: 0; transform: translate(-50%, 8px); } }
+.toast.undo { border-radius: var(--r-compact); padding: 0 8px 0 16px; min-height: 44px; text-align: left; gap: 12px; font-weight: 500; }
+.toast .toast-action { min-height: 44px; padding: 0 12px; color: var(--accent); font-weight: 600; border-radius: 12px; }
+.toast .toast-action:hover { background: var(--hover); }
+@media (max-width: 640px) { .toast { bottom: calc(var(--bar-h) + var(--bar-gap) + 12px); } }
