@@ -68,6 +68,7 @@ fn similar_tracks_are_seeded_and_never_repeat_the_seed() {
     let seed = Track {
         track_id: 9, owner_id: -5, title: "T9".into(), artist: "A9".into(), album_title: None, duration: 200,
         stream_url: None, artwork_url: None, access_key: None, lyrics_id: None, is_hq: false, track_code: None,
+        artists: Vec::new(), album: None,
     };
     let similar = app.similar(&seed).unwrap();
     assert_eq!(similar.iter().map(|t| t.track_id).collect::<Vec<_>>(), vec![4]);

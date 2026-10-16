@@ -140,7 +140,7 @@ mod tests {
         Track {
             track_id: id, owner_id: owner, title: format!("T{id}"), artist: "A".into(), album_title: None, duration: 10,
             stream_url: Some("https://cdn.example/x.m3u8".into()), artwork_url: None, access_key: Some("k".into()),
-            lyrics_id: None, is_hq: false, track_code: None,
+            lyrics_id: None, is_hq: false, track_code: None, artists: Vec::new(), album: None,
         }
     }
 

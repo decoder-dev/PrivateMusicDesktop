@@ -276,6 +276,7 @@ mod tests {
         Track {
             track_id: 1, owner_id: 1, title: title.into(), artist: artist.into(), album_title: None, duration,
             stream_url: None, artwork_url: None, access_key: None, lyrics_id: None, is_hq: false, track_code: None,
+            artists: Vec::new(), album: None,
         }
     }
 

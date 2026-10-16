@@ -47,6 +47,14 @@ export const api = {
   setVisualizer: (on) => invoke("set_visualizer", { on }),
   artworkPalette: (url) => invoke("artwork_palette", { url }),
   setFullscreen: (on) => invoke("set_fullscreen", { on }),
+  searchArtists: (query, offset, count) => invoke("search_artists", { query, offset, count }),
+  findArtist: (name) => invoke("find_artist", { name }),
+  artistTracks: (artistId, offset, count) => invoke("artist_tracks", { artistId, offset, count }),
+  artistAlbums: (artistId, offset, count) => invoke("artist_albums", { artistId, offset, count }),
+  searchAlbums: (query, offset, count) => invoke("search_albums", { query, offset, count }),
+  followedAlbums: (offset, count) => invoke("followed_albums", { offset, count }),
+  albumTracks: (album, offset, count) => invoke("album_tracks", { album, offset, count }),
+  followAlbum: (album, follow) => invoke("follow_album", { album, follow }),
 };
 
 export const trackKey = (track) => `${track.owner_id}_${track.track_id}`;

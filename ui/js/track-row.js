@@ -1,6 +1,7 @@
 import { h, formatTime } from "./dom.js";
 import { icon } from "./icons.js";
 import { t } from "./i18n.js";
+import { hasArtist } from "./navigation.js";
 
 export const ROW_HEIGHT = 56;
 
@@ -30,7 +31,9 @@ export function trackRow(track, { selected = false, actions, liked = false, busy
     cover(track.artwork_url),
     h("div", { class: "titles" },
       h("div", { class: "title", text: track.title }),
-      h("div", { class: "artist", text: track.artist })),
+      hasArtist(track)
+        ? h("button", { class: "artist link-text", type: "button", "data-action": "artist", tabindex: "-1", title: t("artist.open"), text: track.artist })
+        : h("div", { class: "artist", text: track.artist })),
     h("div", { class: "time", text: formatTime(track.duration) }),
     h("div", { class: "actions" }, like, download, buttons));
 }

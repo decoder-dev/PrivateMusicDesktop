@@ -26,6 +26,8 @@ fn track(n: i64, url: Option<String>) -> Track {
         lyrics_id: None,
         is_hq: false,
         track_code: None,
+        artists: Vec::new(),
+        album: None,
     }
 }
 

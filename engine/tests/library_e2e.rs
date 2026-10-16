@@ -29,7 +29,7 @@ fn foreign() -> Track {
     Track {
         track_id: 456, owner_id: -100, title: "T".into(), artist: "A".into(), album_title: None, duration: 180,
         stream_url: Some("https://cdn.example/x.m3u8".into()), artwork_url: None, access_key: Some("key".into()),
-        lyrics_id: Some(3), is_hq: false, track_code: None,
+        lyrics_id: Some(3), is_hq: false, track_code: None, artists: Vec::new(), album: None,
     }
 }
 

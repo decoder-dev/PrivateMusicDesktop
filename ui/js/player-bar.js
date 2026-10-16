@@ -4,6 +4,7 @@ import { t } from "./i18n.js";
 import { api } from "./api.js";
 import { store, subscribe } from "./store.js";
 import { isLiked, isBusy } from "./likes.js";
+import { hasArtist, openArtistOf } from "./navigation.js";
 
 /** The bottom bar: what is playing, transport, position and volume. */
 export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
@@ -12,7 +13,9 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
 
   const coverSlot = h("div", { class: "cover-slot" }, h("div", { class: "cover empty" }, icon("note", 22)));
   const title = h("div", { class: "title", text: t("nothing") });
-  const artist = h("div", { class: "artist" });
+  // The artist opens its page, when the track names one.
+  const artist = h("button", { class: "artist link-text", type: "button", title: t("artist.open"), disabled: true,
+    onclick: () => openArtistOf(store.player.track) });
 
   const shuffleButton = h("button", { class: "icon-btn", type: "button", title: t("shuffle.toggle"), "aria-label": t("shuffle.toggle"), "aria-pressed": "false",
     onclick: () => { api.setShuffle(!store.player.shuffle); } }, icon("shuffle", 18));
@@ -81,6 +84,7 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
     const track = player.track;
     title.textContent = track ? track.title : t("nothing");
     artist.textContent = track ? track.artist : "";
+    artist.disabled = !hasArtist(track);
     const url = track?.artwork_url ?? null;
     if (url !== coverUrl) {
       coverUrl = url;

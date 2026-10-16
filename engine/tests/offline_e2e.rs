@@ -31,7 +31,7 @@ fn track() -> Track {
     Track {
         track_id: 1, owner_id: -3, title: "Saved".into(), artist: "A".into(), album_title: None, duration: 12,
         stream_url: None, artwork_url: Some("https://cdn.example/c.jpg".into()), access_key: None, lyrics_id: None,
-        is_hq: false, track_code: None,
+        is_hq: false, track_code: None, artists: Vec::new(), album: None,
     }
 }
 

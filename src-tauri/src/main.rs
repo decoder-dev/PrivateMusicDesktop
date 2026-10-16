@@ -231,6 +231,14 @@ fn main() {
             commands::play_last,
             commands::remove_from_queue,
             commands::stop,
+            commands::search_artists,
+            commands::find_artist,
+            commands::artist_tracks,
+            commands::artist_albums,
+            commands::search_albums,
+            commands::followed_albums,
+            commands::album_tracks,
+            commands::follow_album,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build the application")

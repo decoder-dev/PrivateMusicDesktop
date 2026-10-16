@@ -7,14 +7,31 @@
   const delay = (ms) => new Promise((r) => setTimeout(r, ms));
   const config = window.__mockConfig || {};
 
+  // Artists are linked by id, except every 13th track (named only, found by
+  // name); every 10th+4 has a guest too. Even tracks name their album.
+  const artistsOf = (n) => {
+    if (n % 13 === 0) return [];
+    const main = { id: `art${n % 13}`, name: `Исполнитель ${n % 13}` };
+    return n % 10 === 4 ? [main, { id: "art99", name: "Гость" }] : [main];
+  };
   const makeTrack = (n, extra = {}) => ({
     track_id: n, owner_id: 7,
     title: n % 97 === 0 ? `Ёлка ${n}` : `Трек ${n}`,
     artist: `Исполнитель ${n % 13}`,
-    album_title: null, duration: 120 + (n % 200), stream_url: null,
+    album_title: n % 2 === 0 ? `Альбом ${n % 5 + 1}` : null, duration: 120 + (n % 200), stream_url: null,
     artwork_url: n % 3 === 0 ? null : `https://cdn.example/${n}.jpg`,
-    access_key: null, lyrics_id: null, is_hq: false, track_code: null, ...extra,
+    access_key: null, lyrics_id: null, is_hq: false, track_code: null,
+    artists: artistsOf(n),
+    album: n % 2 === 0 ? { album_id: n % 5 + 1, owner_id: -2000, access_key: null, title: `Альбом ${n % 5 + 1}` } : null,
+    ...extra,
   });
+  const artistName = (id) => (id === "art99" ? "Гость" : `Исполнитель ${String(id).replace("art", "")}`);
+  const makeAlbum = (n, extra = {}) => ({
+    album_id: n, owner_id: -2000, title: `Альбом ${n}`, description: null, count: 12,
+    artwork_url: n % 2 ? `https://cdn.example/al${n}.jpg` : null, access_key: n % 2 ? "k" : null,
+    artists: [{ id: "art5", name: "Исполнитель 5" }], year: 2010 + n, is_followed: false, follow_hash: null, ...extra,
+  });
+  const sameAlbum = (a, b) => a.owner_id === b.owner_id && a.album_id === b.album_id;
 
   const total = config.libraryTotal ?? 1234;
   const library = Array.from({ length: total }, (_, i) => makeTrack(i + 1));
@@ -30,6 +47,7 @@
     session: { signed_in: !!config.signedIn, profile: null, persistent: config.persistent !== false },
     player: { status: "idle", track: null, position: 0, duration: 0, volume: 1, shuffle: false, repeat: "off", queue_index: null, queue_len: 0 },
     queue: [],
+    followedAlbums: [],
   };
 
   const emit = (event, payload) => (handlers.get(event) ?? []).forEach((fn) => fn({ payload }));
@@ -187,6 +205,51 @@
       return url.includes("/6.") ? { primary: "#e02838", secondary: "#2838e0" } : { primary: "#28a050", secondary: "#a05028" };
     },
     set_fullscreen: ({ on }) => { state.fullscreen = on; },
+    search_artists: async ({ query }) => {
+      await delay(10);
+      if (query === "empty") return [];
+      return [
+        { id: "art1", name: `${query} артист`, photo_url: "https://cdn.example/artist.jpg" },
+        { id: "art2", name: "Исполнитель 2", photo_url: null },
+      ];
+    },
+    find_artist: async ({ name }) => {
+      await delay(5);
+      const match = /^Исполнитель (\d+)$/.exec(name);
+      return match && match[1] !== "0" ? { id: `art${match[1]}`, name, photo_url: null } : null;
+    },
+    artist_tracks: async ({ artistId, offset, count }) => {
+      await delay(10);
+      if (config.artistFails) throw { kind: "offline", message: "No internet connection." };
+      const name = artistName(artistId);
+      return page(Array.from({ length: 30 }, (_, i) => makeTrack(10000 + i, { title: `Хит ${i + 1}`, artist: name, artists: [{ id: artistId, name }] })), offset, count);
+    },
+    artist_albums: async ({ artistId, offset, count }) => {
+      await delay(10);
+      const name = artistName(artistId);
+      const albums = Array.from({ length: 4 }, (_, i) => makeAlbum(i + 1, { artists: [{ id: artistId, name }] }));
+      return { artist: { id: artistId, name, photo_url: "https://cdn.example/artist.jpg" }, albums: page(albums, offset, count) };
+    },
+    search_albums: async ({ query, offset, count }) => {
+      await delay(10);
+      return page(query === "empty" ? [] : Array.from({ length: 5 }, (_, i) => makeAlbum(20 + i, { title: `${query} альбом ${i + 1}` })), offset, count);
+    },
+    followed_albums: async ({ offset, count }) => page(state.followedAlbums, offset, count),
+    album_tracks: async ({ album, offset, count }) => {
+      await delay(10);
+      if (config.albumDenied) throw { kind: "vk", message: "VK error 15: Could not load this album's tracks." };
+      // Like the engine: a missing key is found, and VK describes the album.
+      const described = { ...album, access_key: album.access_key ?? "resolved", count: 12, year: album.year ?? 2020,
+        is_followed: state.followedAlbums.some((a) => sameAlbum(a, album)) };
+      const tracks = Array.from({ length: 12 }, (_, i) => makeTrack(20000 + album.album_id * 100 + i, { title: `${album.title}: песня ${i + 1}` }));
+      return { album: described, tracks: page(tracks, offset, count) };
+    },
+    follow_album: async ({ album, follow }) => {
+      await delay(10);
+      if (config.followFails) throw { kind: "vk", message: "VK error 15: Access denied" };
+      state.followedAlbums = state.followedAlbums.filter((a) => !sameAlbum(a, album));
+      if (follow) state.followedAlbums.unshift({ ...album, is_followed: true });
+    },
   };
 
   window.__TAURI__ = {

@@ -14,6 +14,7 @@ fn track(lyrics_id: Option<i64>) -> Track {
     Track {
         track_id: 5, owner_id: 7, title: "Дорога".into(), artist: "Группа".into(), album_title: None, duration: 200,
         stream_url: None, artwork_url: None, access_key: None, lyrics_id, is_hq: false, track_code: None,
+        artists: Vec::new(), album: None,
     }
 }
 

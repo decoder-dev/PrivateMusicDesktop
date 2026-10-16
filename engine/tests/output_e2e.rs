@@ -44,7 +44,7 @@ fn switching_output_reopens_the_device_and_keeps_the_place() {
     let track = Track {
         track_id: 1, owner_id: 7, title: "T".into(), artist: "A".into(), album_title: None, duration: 12,
         stream_url: Some(format!("{}/index.m3u8", media.base)), artwork_url: None, access_key: None,
-        lyrics_id: None, is_hq: false, track_code: None,
+        lyrics_id: None, is_hq: false, track_code: None, artists: Vec::new(), album: None,
     };
     controller.play_tracks(vec![track], 0);
     wait_for("playing", || controller.state().status == Status::Playing);

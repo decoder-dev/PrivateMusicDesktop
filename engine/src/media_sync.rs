@@ -144,7 +144,7 @@ mod tests {
         Track {
             track_id: n, owner_id: 1, title: format!("T{n}"), artist: "A".into(), album_title: Some("Al".into()),
             duration: 200, stream_url: None, artwork_url: Some("https://c.example/x.jpg".into()),
-            access_key: None, lyrics_id: None, is_hq: false, track_code: None,
+            access_key: None, lyrics_id: None, is_hq: false, track_code: None, artists: Vec::new(), album: None,
         }
     }
 

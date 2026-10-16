@@ -5,7 +5,7 @@ use reqwest::header::{ACCEPT, CONTENT_TYPE, RETRY_AFTER, USER_AGENT};
 use serde_json::Value;
 use url::Url;
 
-use super::model::{self, Page, Playlist, Profile, Track};
+use super::model::{self, Album, Artist, Page, Playlist, Profile, Track};
 use crate::{Error, Result};
 
 pub const DEFAULT_BASE_URL: &str = "https://api.vk.ru";
@@ -291,7 +291,15 @@ impl VkClient {
             &[("owner_id", user.to_string()), ("count", count.to_string()), ("offset", offset.to_string())],
         )?;
         let (entries, raw_count) = collect_entries(&value);
-        let items: Vec<Playlist> = entries.iter().filter_map(model::parse_playlist).collect();
+        // Followed releases come back in the same list; they belong on the
+        // Albums shelf (`followed_albums`), and only the ones VK typed as a
+        // release beyond doubt are left out here.
+        let items: Vec<Playlist> = entries
+            .iter()
+            .filter_map(library_entry)
+            .filter(|entry| !looks_like_followed_album(entry))
+            .filter_map(model::parse_playlist)
+            .collect();
         let total = value.get("count").and_then(model::int).unwrap_or(0).max(0) as u32;
         let total = total.max(offset + raw_count);
         Ok(Page { items, total, next_offset: model::next_offset(offset, raw_count, total) })
@@ -408,6 +416,351 @@ impl VkClient {
         Ok(tracks_page(&value, offset, session.user_id))
     }
 
+    /// Artists matching a query (`audio.searchArtists`). The answer is
+    /// `{count, items}` but has also come back nested, so every artist-shaped
+    /// object is collected wherever it sits.
+    pub fn search_artists(&self, session: &Session, query: &str, offset: u32, count: u32) -> Result<Vec<Artist>> {
+        let value = self.call(
+            session,
+            "audio.searchArtists",
+            &[("q", query.to_string()), ("count", count.to_string()), ("offset", offset.to_string())],
+        )?;
+        let mut found = Vec::new();
+        collect_artists(&value, &mut found);
+        Ok(dedupe_by(found, |a| a.id.clone()))
+    }
+
+    /// The artist VK's search ranks as the one meant by `name`, if any.
+    pub fn find_artist(&self, session: &Session, name: &str) -> Result<Option<Artist>> {
+        let candidates = self.search_artists(session, name, 0, 8)?;
+        Ok(best_artist_match(candidates, name))
+    }
+
+    /// An artist's tracks: `audio.getAudiosByArtist`, and VK's catalogue
+    /// artist page when that is refused or empty.
+    pub fn artist_tracks(&self, session: &Session, artist_id: &str, offset: u32, count: u32) -> Result<Page<Track>> {
+        let user = session.user_id;
+        match self.call(
+            session,
+            "audio.getAudiosByArtist",
+            &[("artist_id", artist_id.to_string()), ("count", count.to_string()), ("offset", offset.to_string())],
+        ) {
+            Ok(value) => {
+                let page = tracks_page(&value, offset, user);
+                if !page.items.is_empty() {
+                    return Ok(page);
+                }
+            }
+            Err(error) if is_fatal(&error) => return Err(error),
+            Err(error) => log::debug!("audio.getAudiosByArtist: {}, trying the catalogue", error.kind()),
+        }
+        let value = self.artist_catalog(session, artist_id)?;
+        let mut tracks = Vec::new();
+        collect_tracks(&value, user, &mut tracks);
+        Ok(slice_page(dedupe(tracks), offset, count))
+    }
+
+    fn artist_catalog(&self, session: &Session, artist_id: &str) -> Result<Value> {
+        self.call(
+            session,
+            "catalog.getAudioArtist",
+            &[("artist_id", artist_id.to_string()), ("need_blocks", "1".into())],
+        )
+    }
+
+    /// An artist's releases. `audio.getAlbumsByArtist` is the list; the
+    /// catalogue artist page fills in what its entries lack (keys, covers)
+    /// and replaces the list when every entry is a bare stub. The catalogue
+    /// also names the artist with a photo, which the list never does.
+    pub fn artist_albums(&self, session: &Session, artist_id: &str, offset: u32, count: u32) -> Result<ArtistAlbums> {
+        let mut list: Vec<Album> = Vec::new();
+        let mut list_total: Option<u32> = None;
+        match self.call(
+            session,
+            "audio.getAlbumsByArtist",
+            &[("artist_id", artist_id.to_string()), ("count", count.to_string()), ("offset", offset.to_string())],
+        ) {
+            Ok(value) => {
+                list = collect_entries(&value).0.iter().filter_map(model::parse_album).collect();
+                list_total = value.get("count").and_then(model::int).map(|n| n.max(0) as u32);
+            }
+            Err(error) if is_fatal(&error) => return Err(error),
+            Err(error) => log::debug!("audio.getAlbumsByArtist: {}, trying the catalogue", error.kind()),
+        }
+        let (catalog, artist) = match self.artist_catalog(session, artist_id) {
+            Ok(value) => {
+                let mut albums = Vec::new();
+                collect_albums(&value, &mut albums);
+                (dedupe_by(albums, Album::id), catalog_artist(&value, artist_id))
+            }
+            Err(error) if is_fatal(&error) => return Err(error),
+            Err(_) => (Vec::new(), None),
+        };
+        Ok(ArtistAlbums { artist, albums: artist_album_page(list, list_total, catalog, offset, count) })
+    }
+
+    pub fn search_albums(&self, session: &Session, query: &str, offset: u32, count: u32) -> Result<Page<Album>> {
+        let value = self.call(
+            session,
+            "audio.searchAlbums",
+            &[("q", query.to_string()), ("count", count.to_string()), ("offset", offset.to_string())],
+        )?;
+        let (entries, raw_count) = collect_entries(&value);
+        let items: Vec<Album> = entries.iter().filter_map(model::parse_album).collect();
+        let total = value.get("count").and_then(model::int).map(|n| n.max(0) as u32).unwrap_or(offset + raw_count);
+        Ok(Page { items, total, next_offset: model::next_offset(offset, raw_count, total) })
+    }
+
+    /// The releases the user follows: `audio.getPlaylists` with
+    /// `filters=albums`. `filters` is a union of categories, not a chain of
+    /// qualifiers (`followed,albums` would add every playlist saved from
+    /// someone else), so it names only `albums`; anything VK still marks as
+    /// person-made is left out.
+    pub fn followed_albums(&self, session: &Session, offset: u32, count: u32) -> Result<Page<Album>> {
+        let mut params = vec![("count", count.to_string()), ("offset", offset.to_string()), ("filters", "albums".to_string())];
+        if let Ok(user) = self.user_id(session) {
+            params.push(("owner_id", user.to_string()));
+        }
+        let value = self.call(session, "audio.getPlaylists", &params)?;
+        let (entries, raw_count) = collect_entries(&value);
+        let items: Vec<Album> = entries
+            .iter()
+            .filter_map(library_entry)
+            .filter(|entry| !has_playlist_marker(entry))
+            .filter_map(model::parse_album)
+            .collect();
+        let total = value.get("count").and_then(model::int).map(|n| n.max(0) as u32).unwrap_or(offset + raw_count);
+        let total = total.max(offset + raw_count);
+        // A full page always continues: VK's `count` for this list does not
+        // always describe the same set as `items`.
+        let next_offset = match raw_count {
+            0 => None,
+            n if n >= count => Some(offset + n),
+            n => model::next_offset(offset, n, total),
+        };
+        Ok(Page { items, total, next_offset })
+    }
+
+    /// `album` with a usable `access_key` when it is a community release
+    /// that needs one. Unchanged when it already has one or a person owns it.
+    pub fn resolved_album(&self, session: &Session, album: &Album) -> Result<Album> {
+        if !album.needs_access_key() {
+            return Ok(album.clone());
+        }
+        Ok(self.resolve_album_access_key(session, album, false)?.unwrap_or_else(|| album.clone()))
+    }
+
+    /// One page of an album's tracks, and the album as VK described it.
+    ///
+    /// `execute.getPlaylist`, then `audio.get` for sessions that reject the
+    /// former. When access is denied the key is looked up again through
+    /// search; when the playlist methods still refuse (or answer empty), the
+    /// album is put together from public `audio.search` hits that belong to
+    /// it.
+    pub fn album_tracks(&self, session: &Session, album: &Album, offset: u32, count: u32) -> Result<AlbumTracks> {
+        let effective = self.resolved_album(session, album)?;
+        let mut last_error = None;
+        match self.fetch_album_tracks(session, &effective, offset, count) {
+            Ok(found) if !found.tracks.items.is_empty() => return Ok(found),
+            Ok(_) => {}
+            Err(error) if is_fatal(&error) => return Err(error),
+            Err(error) => {
+                if is_access_denied(&error) {
+                    let recovered = self.resolve_album_access_key(session, album, true).ok().flatten();
+                    if let Some(recovered) = recovered.filter(|r| r.usable_access_key() != effective.usable_access_key()) {
+                        if let Ok(found) = self.fetch_album_tracks(session, &recovered, offset, count) {
+                            if !found.tracks.items.is_empty() {
+                                return Ok(found);
+                            }
+                        }
+                    }
+                }
+                last_error = Some(error);
+            }
+        }
+        match self.album_tracks_via_search(session, album, offset, count) {
+            Ok(tracks) if !tracks.items.is_empty() => return Ok(AlbumTracks { album: effective, tracks }),
+            Err(error) if is_fatal(&error) => return Err(error),
+            _ => {}
+        }
+        Err(match last_error {
+            Some(error) if is_access_denied(&error) => {
+                let code = match error {
+                    Error::Vk { code, .. } if code > 0 => code,
+                    _ => 15,
+                };
+                Error::Vk { code, message: ALBUM_DENIED.into() }
+            }
+            Some(error) => error,
+            None => Error::Format("album: no tracks".into()),
+        })
+    }
+
+    fn fetch_album_tracks(&self, session: &Session, album: &Album, offset: u32, count: u32) -> Result<AlbumTracks> {
+        let user = session.user_id;
+        let mut params = vec![
+            ("owner_id", album.owner_id.to_string()),
+            ("id", album.album_id.to_string()),
+            ("audio_offset", offset.to_string()),
+            ("audio_count", count.to_string()),
+            ("need_playlist", "1".to_string()),
+            ("need_owner", "0".to_string()),
+        ];
+        if let Some(key) = album.usable_access_key() {
+            params.push(("access_key", key.to_string()));
+        }
+        match self.call(session, "execute.getPlaylist", &params) {
+            Ok(value) => {
+                // VK describes the playlist next to its audios; what it says
+                // (cover, year, follow state, size) beats what the window had.
+                let described = value
+                    .get("playlist")
+                    .and_then(model::parse_album)
+                    .filter(|p| p.id() == album.id())
+                    .map(|p| album.merging_access_metadata(&Album { access_key: None, ..p }))
+                    .unwrap_or_else(|| album.clone());
+                let audios = match value.get("audios") {
+                    Some(Value::Array(list)) => Some(list.clone()),
+                    Some(Value::Null) => Some(Vec::new()),
+                    _ => None,
+                };
+                let mut tracks = Vec::new();
+                match &audios {
+                    Some(list) => list.iter().for_each(|v| collect_tracks(v, user, &mut tracks)),
+                    None => collect_tracks(&value, user, &mut tracks),
+                }
+                let tracks = dedupe(tracks);
+                if !tracks.is_empty() {
+                    let raw = audios.as_ref().map(Vec::len).unwrap_or(tracks.len()) as u32;
+                    let consumed = offset + raw;
+                    let known_more = described.count > consumed;
+                    let unknown_more = described.count == 0 && raw >= count;
+                    let total = if described.count > 0 { described.count } else { offset + tracks.len() as u32 };
+                    let next_offset = (known_more || unknown_more).then_some(consumed);
+                    return Ok(AlbumTracks { album: described, tracks: Page { items: tracks, total, next_offset } });
+                }
+            }
+            Err(error) if is_fatal(&error) || is_access_denied(&error) => return Err(error),
+            // Older sessions can reject execute.getPlaylist; the plain album
+            // query below still works for them.
+            Err(error) => log::debug!("execute.getPlaylist: {}, trying audio.get", error.kind()),
+        }
+        let mut params = vec![
+            ("owner_id", album.owner_id.to_string()),
+            ("album_id", album.album_id.to_string()),
+            ("count", count.to_string()),
+            ("offset", offset.to_string()),
+        ];
+        if let Some(key) = album.usable_access_key() {
+            params.push(("access_key", key.to_string()));
+        }
+        let value = self.call(session, "audio.get", &params)?;
+        Ok(AlbumTracks { album: album.clone(), tracks: tracks_page(&value, offset, user) })
+    }
+
+    /// Finds an `access_key` for `album`: `audio.getPlaylistById` when a key
+    /// or a person owner makes that possible, else the best match among
+    /// `audio.searchAlbums` results for its title and artist.
+    fn resolve_album_access_key(&self, session: &Session, album: &Album, force_search: bool) -> Result<Option<Album>> {
+        if !force_search && album.usable_access_key().is_some() {
+            return Ok(Some(album.clone()));
+        }
+        if album.usable_access_key().is_some() || album.owner_id > 0 {
+            if let Ok(detailed) = self.playlist_by_id(session, album) {
+                return Ok(Some(album.merging_access_metadata(&detailed)));
+            }
+        }
+        let mut candidates: Vec<Album> = Vec::new();
+        for query in album_search_queries(album) {
+            let page = self.search_albums(session, &query, 0, 30)?;
+            for item in page.items {
+                if !candidates.iter().any(|c| c.id() == item.id()) {
+                    candidates.push(item);
+                }
+            }
+        }
+        Ok(preferred_album_match(&candidates, album).map(|found| album.merging_access_metadata(found)))
+    }
+
+    fn playlist_by_id(&self, session: &Session, album: &Album) -> Result<Album> {
+        let mut params = vec![("owner_id", album.owner_id.to_string()), ("playlist_id", album.album_id.to_string())];
+        if let Some(key) = album.usable_access_key() {
+            params.push(("access_key", key.to_string()));
+        }
+        let value = self.call(session, "audio.getPlaylistById", &params)?;
+        model::parse_album(&value).ok_or_else(|| Error::Format("audio.getPlaylistById".into()))
+    }
+
+    /// When the playlist methods deny access, a usable track list is
+    /// rebuilt from public `audio.search` results that belong to the album.
+    fn album_tracks_via_search(&self, session: &Session, album: &Album, offset: u32, count: u32) -> Result<Page<Track>> {
+        let mut collected: Vec<Track> = Vec::new();
+        let append = |collected: &mut Vec<Track>, tracks: Vec<Track>, soft_artist_match: bool| {
+            for track in tracks {
+                let matches = track_belongs(&track, album) || (soft_artist_match && artist_matches(&track, album));
+                if matches && !collected.iter().any(|t| t.id() == track.id()) {
+                    collected.push(track);
+                }
+            }
+        };
+        let wanted = (count + offset).max(40) as usize;
+        for query in album_search_queries(album) {
+            let page = self.search(session, &query, 0, 100)?;
+            // Search often leaves `album_title` out; for a query that already
+            // names the album, the artist matching is enough.
+            let names_title = model::is_usable_title(&album.title) && fold(&query).contains(&fold(&album.title));
+            append(&mut collected, page.items, names_title);
+            if collected.len() >= wanted {
+                break;
+            }
+        }
+        // A key that search turned up may open the playlist after all.
+        if collected.len() < 8 && album.usable_access_key().is_some() {
+            if let Ok(found) = self.fetch_album_tracks(session, album, 0, (count + offset).max(100)) {
+                append(&mut collected, found.tracks.items, false);
+            }
+        }
+        // The artist's own tracks are a second public source when title
+        // search is thin.
+        if collected.len() < 8 {
+            if let Some(name) = album.artist_names().next() {
+                let artist = self.search_artists(session, name, 0, 5).ok().and_then(|list| list.into_iter().next());
+                if let Some(page) = artist.and_then(|a| self.artist_tracks(session, &a.id, 0, 100).ok()) {
+                    append(&mut collected, page.items, false);
+                }
+            }
+        }
+        // Last resort: artist-matched hits for the title alone, and failing
+        // even that, the top hits, so a known title does not open empty.
+        if collected.is_empty() && model::is_usable_title(&album.title) {
+            let page = self.search(session, &album.title, 0, 100)?;
+            append(&mut collected, page.items.clone(), true);
+            if collected.is_empty() {
+                collected = dedupe(page.items).into_iter().take(count as usize).collect();
+            }
+        }
+        if collected.is_empty() {
+            return Err(Error::Format("album: nothing found".into()));
+        }
+        Ok(slice_page(collected, offset, count))
+    }
+
+    /// Saves a release to the user's albums, or takes it out. VK has no
+    /// `audio.unfollowPlaylist`: removing a followed album is the same
+    /// `audio.deletePlaylist` call as deleting one's own playlist.
+    pub fn follow_album(&self, session: &Session, album: &Album, follow: bool) -> Result<()> {
+        let mut params = vec![("owner_id", album.owner_id.to_string()), ("playlist_id", album.album_id.to_string())];
+        if let Some(hash) = album.follow_hash.as_deref().filter(|h| !h.is_empty()) {
+            params.push(("hash", hash.to_string()));
+        }
+        if let Some(key) = album.usable_access_key() {
+            params.push(("access_key", key.to_string()));
+        }
+        let method = if follow { "audio.followPlaylist" } else { "audio.deletePlaylist" };
+        self.call_once(session, method, &params)?;
+        Ok(())
+    }
+
     /// Fresh stream URL for one track (`audio.getById`). Done right before
     /// play when the URL we hold may have expired.
     pub fn refreshed_track(&self, session: &Session, track: &Track) -> Result<Track> {
@@ -423,6 +776,279 @@ impl VkClient {
         }
         Ok(fresh)
     }
+}
+
+/// An artist's releases and, when the catalogue named them, the artist.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct ArtistAlbums {
+    pub artist: Option<Artist>,
+    pub albums: Page<Album>,
+}
+
+/// A page of an album's tracks and the album as VK described it (with the
+/// key that opened it).
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct AlbumTracks {
+    pub album: Album,
+    pub tracks: Page<Track>,
+}
+
+/// What the album screen shows instead of VK's own refusal text.
+const ALBUM_DENIED: &str = "Could not load this album's tracks. Try again or find it in search.";
+
+/// Failures no fallback can help with: a dead session or no network.
+fn is_fatal(error: &Error) -> bool {
+    matches!(error, Error::Unauthorized | Error::Offline | Error::Timeout | Error::Transport(_) | Error::Cancelled)
+}
+
+/// VK refusing audio of someone else's playlist.
+fn is_access_denied(error: &Error) -> bool {
+    let Error::Vk { code, message } = error else { return false };
+    if matches!(code, 15 | 201 | 203 | 204) {
+        return true;
+    }
+    let lower = message.to_lowercase();
+    ["access denied", "access to users audio", "permission to perform this action"].iter().any(|m| lower.contains(m))
+}
+
+fn slice_page<T>(all: Vec<T>, offset: u32, count: u32) -> Page<T> {
+    let total = all.len() as u32;
+    let items: Vec<T> = all.into_iter().skip(offset as usize).take(count as usize).collect();
+    let consumed = offset + items.len() as u32;
+    Page { items, total, next_offset: (consumed < total).then_some(consumed) }
+}
+
+fn dedupe_by<T, K: Eq + std::hash::Hash>(items: Vec<T>, key: impl Fn(&T) -> K) -> Vec<T> {
+    let mut seen = std::collections::HashSet::new();
+    items.into_iter().filter(|item| seen.insert(key(item))).collect()
+}
+
+/// Lower case, trimmed, ё as е: for comparing names VK spells loosely.
+fn fold(text: &str) -> String {
+    text.trim().to_lowercase().replace('ё', "е")
+}
+
+fn names_match(a: &str, b: &str) -> bool {
+    a == b || a.contains(b) || b.contains(a)
+}
+
+/// Artist from search to use for a name: an exact match, else one of a
+/// collaboration's parts, else a close prefix (at least three letters and
+/// most of the name).
+fn best_artist_match(candidates: Vec<Artist>, name: &str) -> Option<Artist> {
+    let target = fold(name);
+    let score = |candidate: &str| -> u32 {
+        let value = fold(candidate);
+        if target.is_empty() || value.is_empty() {
+            return 0;
+        }
+        if value == target {
+            return 100;
+        }
+        if collaboration_parts(&value).contains(&target) {
+            return 80;
+        }
+        if value.starts_with(&target) || target.starts_with(&value) {
+            let (a, b) = (value.chars().count(), target.chars().count());
+            let (shorter, longer) = (a.min(b), a.max(b));
+            if shorter >= 3 && shorter as f64 / longer as f64 >= 0.72 {
+                return 55;
+            }
+        }
+        0
+    };
+    let mut best: Option<(u32, Artist)> = None;
+    for candidate in candidates {
+        let s = score(&candidate.name);
+        if s > 0 && best.as_ref().is_none_or(|(b, _)| s > *b) {
+            best = Some((s, candidate));
+        }
+    }
+    best.map(|(_, artist)| artist)
+}
+
+fn collaboration_parts(value: &str) -> Vec<String> {
+    let mut parts = vec![value.to_string()];
+    for separator in [",", ";", " feat. ", " feat ", " featuring ", " ft. ", " ft "] {
+        parts = parts.iter().flat_map(|p| p.split(separator).map(str::to_string).collect::<Vec<_>>()).collect();
+    }
+    parts.iter().map(|p| fold(p)).filter(|p| !p.is_empty()).collect()
+}
+
+/// The page of releases an artist screen shows. The list from
+/// `audio.getAlbumsByArtist` has the offset applied already, so it is only
+/// enriched from the catalogue, never extended or sliced again. When the
+/// list is empty, or holds only stubs with neither a cover nor a size, the
+/// catalogue replaces it.
+fn artist_album_page(list: Vec<Album>, list_total: Option<u32>, catalog: Vec<Album>, offset: u32, count: u32) -> Page<Album> {
+    let incomplete = |a: &Album| a.count == 0 && a.artwork_url.is_none();
+    let prefer_catalog = !catalog.is_empty() && list.iter().all(incomplete);
+    if !list.is_empty() && !prefer_catalog {
+        let received = list.len() as u32;
+        let items: Vec<Album> = list
+            .into_iter()
+            .map(|album| match catalog.iter().find(|c| c.id() == album.id()) {
+                Some(found) => album.merging_access_metadata(found),
+                None => album,
+            })
+            .collect();
+        let total = list_total.unwrap_or(offset + received + u32::from(received >= count));
+        return Page { items, total, next_offset: model::next_offset(offset, received, total) };
+    }
+    slice_page(catalog, offset, count)
+}
+
+/// Release-shaped objects anywhere in a catalogue response. Audio rows also
+/// carry an id, owner, title and `main_artists`, so a `duration` rules an
+/// object out.
+fn collect_albums(value: &Value, out: &mut Vec<Album>) {
+    match value {
+        Value::Array(list) => list.iter().for_each(|v| collect_albums(v, out)),
+        Value::Object(object) => {
+            let release = ["owner_id", "id", "title"].iter().all(|k| object.contains_key(*k))
+                && !object.contains_key("duration")
+                && (object.contains_key("main_artists") || object.contains_key("year"));
+            if release {
+                if let Some(album) = model::parse_album(value) {
+                    out.push(album);
+                    return;
+                }
+            }
+            object.values().for_each(|v| collect_albums(v, out));
+        }
+        _ => {}
+    }
+}
+
+fn collect_artists(value: &Value, out: &mut Vec<Artist>) {
+    match value {
+        Value::Array(list) => list.iter().for_each(|v| collect_artists(v, out)),
+        Value::Object(object) => {
+            if let Some(artist) = model::parse_artist(value) {
+                out.push(artist);
+            }
+            object.values().for_each(|v| collect_artists(v, out));
+        }
+        _ => {}
+    }
+}
+
+/// The artist a catalogue artist page is about: its `artists` block, the
+/// requested id first.
+fn catalog_artist(value: &Value, artist_id: &str) -> Option<Artist> {
+    let mut found = Vec::new();
+    collect_artists(value.get("artists").unwrap_or(&Value::Null), &mut found);
+    let index = found.iter().position(|a| a.id == artist_id)?;
+    Some(found.swap_remove(index))
+}
+
+/// The playlist object a list entry is, or wraps (`playlist`, `album`,
+/// `audio_playlist`). Objects with a `duration` are audio rows.
+fn library_entry(value: &Value) -> Option<&Value> {
+    let is_entry = |v: &Value| v.get("id").is_some() && v.get("owner_id").is_some() && v.get("duration").is_none();
+    for key in ["playlist", "album", "audio_playlist"] {
+        if let Some(nested) = value.get(key).filter(|v| v.is_object() && is_entry(v)) {
+            return Some(nested);
+        }
+    }
+    is_entry(value).then_some(value)
+}
+
+/// Marks only a person-made list carries: an `original` (saved from
+/// someone else) or an `album_type` of `playlist` / `collection`.
+fn has_playlist_marker(entry: &Value) -> bool {
+    if entry.get("original").is_some_and(Value::is_object) {
+        return true;
+    }
+    let kind = entry.get("album_type").and_then(Value::as_str).unwrap_or("").to_lowercase();
+    matches!(kind.as_str(), "playlist" | "collection")
+}
+
+/// A followed release in the plain `audio.getPlaylists` list, beyond doubt:
+/// VK typed it as a release, named its artists, and dated it (or flagged it
+/// `type: 1`), with no playlist marker. VK stamps release-like metadata on
+/// ordinary playlists too, so anything less stays a playlist: an extra card
+/// is a blemish, a playlist that vanishes is a bug.
+fn looks_like_followed_album(entry: &&Value) -> bool {
+    let kind = entry.get("album_type").and_then(Value::as_str).unwrap_or("").to_lowercase();
+    let release = matches!(kind.as_str(), "album" | "single" | "ep" | "compilation" | "main_only");
+    let has_artists = entry.get("main_artists").and_then(Value::as_array).is_some_and(|a| !a.is_empty());
+    if has_playlist_marker(entry) || !release || !has_artists {
+        return false;
+    }
+    let dated = entry.get("year").and_then(model::int).is_some() || entry.get("original_year").and_then(model::int).is_some();
+    let typed = entry.get("type").and_then(model::int) == Some(1);
+    1 + u32::from(dated) + u32::from(typed) >= 2
+}
+
+/// Searches that may find an album: "title artist", "artist title", the
+/// title, the artist.
+fn album_search_queries(album: &Album) -> Vec<String> {
+    let title = album.title.trim();
+    let artist = album.artist_names().next().map(str::trim).unwrap_or("");
+    let mut queries = Vec::new();
+    if model::is_usable_title(title) && !artist.is_empty() {
+        queries.push(format!("{title} {artist}"));
+        queries.push(format!("{artist} {title}"));
+    }
+    if model::is_usable_title(title) {
+        queries.push(title.to_string());
+    }
+    if !artist.is_empty() {
+        queries.push(artist.to_string());
+    }
+    dedupe_by(queries, |q| q.to_lowercase())
+}
+
+/// The search result that is `album`: the same id (with a key if one has
+/// it), else the same title by one of its artists, else the same title,
+/// keyed results first.
+fn preferred_album_match<'a>(candidates: &'a [Album], album: &Album) -> Option<&'a Album> {
+    let keyed = |a: &&Album| a.usable_access_key().is_some();
+    let same: Vec<&Album> = candidates.iter().filter(|c| c.id() == album.id()).collect();
+    if let Some(found) = same.iter().copied().find(keyed).or(same.first().copied()) {
+        return Some(found);
+    }
+    let title = fold(&album.title);
+    if title.is_empty() {
+        return candidates.iter().find(keyed);
+    }
+    let hints: Vec<String> = album.artist_names().map(fold).filter(|h| !h.is_empty()).collect();
+    let titled: Vec<&Album> = candidates.iter().filter(|c| names_match(&fold(&c.title), &title)).collect();
+    if !hints.is_empty() {
+        let by_artist: Vec<&Album> = titled
+            .iter()
+            .copied()
+            .filter(|c| c.artist_names().any(|name| hints.iter().any(|h| names_match(&fold(name), h))))
+            .collect();
+        if let Some(found) = by_artist.iter().copied().find(keyed).or(by_artist.first().copied()) {
+            return Some(found);
+        }
+    }
+    titled.iter().copied().find(keyed).or(titled.first().copied()).or_else(|| candidates.iter().find(keyed))
+}
+
+/// A search hit is on `album` when VK says so, or when its album title
+/// matches and so does the artist (or the album names none).
+fn track_belongs(track: &Track, album: &Album) -> bool {
+    if track.album.as_ref().is_some_and(|r| r.album_id == album.album_id && r.owner_id == album.owner_id) {
+        return true;
+    }
+    let title = fold(&album.title);
+    let track_album = fold(track.album_title.as_deref().unwrap_or(""));
+    if title.is_empty() || track_album.is_empty() || !names_match(&track_album, &title) {
+        return false;
+    }
+    artist_matches(track, album) || album.artists.is_empty()
+}
+
+fn artist_matches(track: &Track, album: &Album) -> bool {
+    let hints: Vec<String> = album.artist_names().map(fold).filter(|h| !h.is_empty()).collect();
+    if hints.is_empty() {
+        return true;
+    }
+    let artist = fold(&track.artist);
+    hints.iter().any(|h| artist.contains(h.as_str()) || h.contains(artist.as_str()))
 }
 
 fn sleep(seconds: f64) {
@@ -473,6 +1099,7 @@ fn collect_entries(value: &Value) -> (Vec<Value>, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn hostile_retry_after_values_never_escape_the_bounds() {
@@ -503,6 +1130,65 @@ mod tests {
         for bad in ["", "../x", "audio.get/../../y", "https://evil.example/", "a b", "audio.get?x=1"] {
             assert!(c.url(bad).is_err(), "{bad}");
         }
+    }
+
+    fn album(json: serde_json::Value) -> Album {
+        model::parse_album(&json).unwrap()
+    }
+
+    #[test]
+    fn artist_names_match_exactly_by_collaboration_or_by_a_close_prefix() {
+        let artist = |id: &str, name: &str| Artist { id: id.into(), name: name.into(), photo_url: None };
+        let pick = |list: Vec<Artist>, name: &str| best_artist_match(list, name).map(|a| a.id);
+        assert_eq!(pick(vec![artist("1", "Noize MC feat. Монеточка"), artist("2", "Монеточка")], "монеточка"), Some("2".into()));
+        assert_eq!(pick(vec![artist("1", "Noize MC feat. Монеточка")], "Монеточка"), Some("1".into()));
+        assert_eq!(pick(vec![artist("1", "Земфира Рамазанова")], "Земфира"), None, "too short a share of the name");
+        assert_eq!(pick(vec![artist("1", "Кино!")], "Кино"), Some("1".into()));
+        assert_eq!(pick(vec![artist("1", "Другой")], "Кино"), None);
+    }
+
+    #[test]
+    fn album_search_queries_and_the_preferred_match() {
+        let wanted = album(json!({"id": 1, "owner_id": -2, "title": "Раскраски", "main_artists": [{"name": "Монеточка"}]}));
+        assert_eq!(album_search_queries(&wanted), ["Раскраски Монеточка", "Монеточка Раскраски", "Раскраски", "Монеточка"]);
+        let untitled = album(json!({"id": 1, "owner_id": -2, "title": "unnamed"}));
+        assert!(album_search_queries(&untitled).is_empty());
+
+        let candidates = vec![
+            album(json!({"id": 5, "owner_id": -9, "title": "Раскраски", "main_artists": [{"name": "Кто-то"}], "access_key": "x"})),
+            album(json!({"id": 6, "owner_id": -9, "title": "Раскраски (Deluxe)", "main_artists": [{"name": "Монеточка"}]})),
+            album(json!({"id": 7, "owner_id": -9, "title": "Раскраски", "main_artists": [{"name": "Монеточка"}], "access_key": "y"})),
+        ];
+        assert_eq!(preferred_album_match(&candidates, &wanted).unwrap().album_id, 7, "title, artist and a key");
+        let same = album(json!({"id": 1, "owner_id": -2, "title": "Другое", "access_key": "z"}));
+        assert_eq!(preferred_album_match(&[candidates[0].clone(), same], &wanted).unwrap().album_id, 1, "the same id wins");
+        assert!(preferred_album_match(&[], &wanted).is_none());
+    }
+
+    #[test]
+    fn search_hits_belong_to_an_album_by_locator_or_by_title_and_artist() {
+        let wanted = album(json!({"id": 1, "owner_id": -2, "title": "Раскраски", "main_artists": [{"name": "Монеточка"}]}));
+        let track = |extra: serde_json::Value| {
+            let mut v = json!({"id": 3, "owner_id": 4, "artist": "Монеточка", "title": "t"});
+            v.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            model::parse_track(&v, None).unwrap()
+        };
+        assert!(track_belongs(&track(json!({"album": {"id": 1, "owner_id": -2}})), &wanted));
+        assert!(track_belongs(&track(json!({"album_title": "раскраски для взрослых"})), &wanted));
+        assert!(!track_belongs(&track(json!({"album_title": "Другой"})), &wanted));
+        assert!(!track_belongs(&track(json!({"album_title": "Раскраски", "artist": "Кто-то"})), &wanted));
+        assert!(!track_belongs(&track(json!({})), &wanted), "no album title, no locator");
+        assert!(artist_matches(&track(json!({"artist": "Монеточка, Noize MC"})), &wanted));
+    }
+
+    #[test]
+    fn denied_and_fatal_errors_are_told_apart() {
+        for code in [15, 201, 203, 204] {
+            assert!(is_access_denied(&Error::Vk { code, message: String::new() }));
+        }
+        assert!(is_access_denied(&Error::Vk { code: 7, message: "Permission to perform this action is denied".into() }));
+        assert!(!is_access_denied(&Error::Vk { code: 3, message: "Unknown method passed".into() }));
+        assert!(is_fatal(&Error::Offline) && is_fatal(&Error::Unauthorized) && !is_fatal(&Error::Http(500)));
     }
 
     #[test]

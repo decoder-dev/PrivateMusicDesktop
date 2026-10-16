@@ -36,6 +36,8 @@ const ICONS = {
   chevron: { d: ["M6 9l6 6 6-6"] },
   visualizer: { d: ["M5 20V12", "M9 20V6", "M13 20V10", "M17 20V4", "M21 20V14"] },
   back: { d: ["M15 5l-7 7 7 7"] },
+  artist: { d: ["M12 12a4 4 0 100-8 4 4 0 000 8z", "M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"] },
+  album: { d: ["M12 21a9 9 0 100-18 9 9 0 000 18z", "M12 14.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z"] },
 };
 
 export function icon(name, size = 18) {
