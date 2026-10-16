@@ -20,6 +20,7 @@ const KEYRING_SERVICE: &str = "com.dec.privatemusic2.desktop";
 pub struct AppState {
     pub app: Arc<App>,
     pub login_running: Arc<AtomicBool>,
+    pub login_check: Arc<AtomicBool>,
     /// Closing the window hides it (music keeps playing) instead of quitting.
     /// Only honoured when a tray icon exists to bring the window back.
     pub close_to_tray: Arc<AtomicBool>,
@@ -143,6 +144,7 @@ fn main() {
             tauri_app.manage(AppState {
                 app: Arc::new(app),
                 login_running: Arc::new(AtomicBool::new(false)),
+                login_check: Arc::new(AtomicBool::new(false)),
                 close_to_tray: close_to_tray.clone(),
                 has_tray: has_tray.clone(),
                 output_device,

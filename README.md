@@ -10,6 +10,8 @@ way. `native/` is a copy of the one in decoder-dev/PrivateMusic2: keep them in s
 
 - VK sign-in in an isolated window; the token lives in the OS keyring and is
   renewed from the session cookie when it expires.
+  If the VK page is signed in but the player is still waiting, use **I'm signed
+  in — check again** in the player to request completion without losing the web session.
 - My music, playlists, search, a queue with shuffle and repeat; the queue and
   position survive a restart.
 - Hearts: add any track to My music or take it out, from lists, the player bar
@@ -108,8 +110,8 @@ Optional tests: `live_vk` (real VK endpoints, needs network) and `cpal_smoke`
 
 ## Known limits
 
-- Windows and macOS are compiled in CI but not hand-tested yet (WebView2 cookie
-  access for sign-in, SMTC window handle, MediaRemote).
+- CI checks page loading and private cookie access on Windows, macOS and Linux.
+  Signing in to a real account and OS media controls still need manual verification.
 - CMAF streams with encryption are untested against real VK data.
 - Mood/genre mixes from VK's catalogue (the iOS app has them) are not there yet.
 - `install.ps1` has not been run on a real Windows machine yet.

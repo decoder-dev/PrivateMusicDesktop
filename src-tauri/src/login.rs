@@ -57,12 +57,14 @@ fn is_allowed_navigation(url: &Url) -> bool {
     }
 }
 
-/// `name=value; …` for the cookies, or `None` while no session cookie exists.
-fn session_header(cookies: &[(String, String)]) -> Option<String> {
+/// Automatic checks wait for a known session cookie; manual completion lets
+/// VK validate any nonempty cookie set, as the iOS client's finish button does.
+fn session_header(cookies: &[(String, String)], manual: bool) -> Option<String> {
     let signed_in = cookies
         .iter()
         .any(|(name, value)| SESSION_COOKIES.contains(&name.to_ascii_lowercase().as_str()) && !value.is_empty());
-    signed_in.then(|| cookies.iter().map(|(n, v)| format!("{n}={v}")).collect::<Vec<_>>().join("; "))
+    (signed_in || (manual && !cookies.is_empty()))
+        .then(|| cookies.iter().map(|(n, v)| format!("{n}={v}")).collect::<Vec<_>>().join("; "))
 }
 
 /// Read the whole private cookie store: looking up just vk.ru/ drops
@@ -83,6 +85,9 @@ fn token_cookies(cookies: &[tauri::webview::Cookie<'_>]) -> Vec<(String, String)
 
 pub fn start(handle: &AppHandle, state: &AppState) -> Result<(), String> {
     if let Some(existing) = handle.get_webview_window("login") {
+        // Explicit completion also works if VK changes its session-cookie names.
+        // Only VK's token endpoint decides whether these cookies authenticate.
+        state.login_check.store(true, Ordering::SeqCst);
         let _ = existing.unminimize();
         let _ = existing.show();
         let _ = existing.set_focus();
@@ -92,6 +97,8 @@ pub fn start(handle: &AppHandle, state: &AppState) -> Result<(), String> {
         return Ok(());
     }
     let running = state.login_running.clone();
+    let check = state.login_check.clone();
+    check.store(false, Ordering::SeqCst);
     let url: Url = LOGIN_URL.parse().map_err(|_| "bad login address".to_string())?;
     let window = WebviewWindowBuilder::new(handle, "login", WebviewUrl::External(url))
         .title("VK")
@@ -126,7 +133,7 @@ pub fn start(handle: &AppHandle, state: &AppState) -> Result<(), String> {
     let handle = handle.clone();
     let app = state.app.clone();
     std::thread::spawn(move || {
-        let outcome = poll(&handle, &window, &running);
+        let outcome = poll(&handle, &window, &running, &check);
         match outcome {
             Some(Ok(session)) => {
                 app.sign_in(session);
@@ -151,6 +158,7 @@ fn poll(
     handle: &AppHandle,
     window: &tauri::WebviewWindow,
     running: &Arc<AtomicBool>,
+    check: &Arc<AtomicBool>,
 ) -> Option<Result<pm_engine::vk::Session, Error>> {
     let mut failures = 0;
     let mut last_header = None;
@@ -179,7 +187,11 @@ fn poll(
             }
         };
         let pairs = token_cookies(&cookies);
-        let Some(header) = session_header(&pairs) else { continue };
+        let manual = check.swap(false, Ordering::SeqCst);
+        let Some(header) = session_header(&pairs, manual) else {
+            if manual { let _ = handle.emit("pm-login", "pending:unauthorized"); }
+            continue;
+        };
         if last_header.as_ref() != Some(&header) {
             failures = 0;
             last_header = Some(header.clone());
@@ -198,7 +210,7 @@ fn poll(
             // captcha step): keep waiting.
             Err(Error::Unauthorized) => {
                 failures += 1;
-                if failures == 3 {
+                if failures == 3 || manual {
                     log::warn!("sign-in window: VK has not confirmed the web session");
                     let _ = handle.emit("pm-login", "pending:unauthorized");
                 }
@@ -275,9 +287,11 @@ mod tests {
     #[test]
     fn a_session_cookie_is_required() {
         let anonymous = vec![("remixlang".to_string(), "0".to_string()), ("remixsid".to_string(), String::new())];
-        assert_eq!(session_header(&anonymous), None);
+        assert_eq!(session_header(&anonymous, false), None);
+        assert!(session_header(&anonymous, true).is_some(), "manual completion lets VK validate an unrecognized session");
+        assert_eq!(session_header(&[], true), None);
         let signed_in = vec![("remixlang".to_string(), "0".to_string()), ("remixsid".to_string(), "abc".to_string())];
-        assert_eq!(session_header(&signed_in).as_deref(), Some("remixlang=0; remixsid=abc"));
+        assert_eq!(session_header(&signed_in, false).as_deref(), Some("remixlang=0; remixsid=abc"));
     }
 
     #[test]
@@ -291,7 +305,7 @@ mod tests {
             cookie("other", "private", ".vk.com"),
             cookie("foreign", "private", "vk.ru.evil.example"),
         ];
-        let header = session_header(&token_cookies(&cookies)).unwrap();
+        let header = session_header(&token_cookies(&cookies), false).unwrap();
         assert!(header.contains("remixsid=root"));
         assert!(header.contains("web_token=host-only"));
         assert!(!header.contains("private"));
@@ -300,6 +314,6 @@ mod tests {
             cookie("remixsid", "login", "login.vk.ru"),
             Cookie::build(("wrong_path", "private")).domain("vk.ru").path("/login").build(),
         ];
-        assert_eq!(session_header(&token_cookies(&scoped)).as_deref(), Some("remixsid=login"));
+        assert_eq!(session_header(&token_cookies(&scoped), false).as_deref(), Some("remixsid=login"));
     }
 }
