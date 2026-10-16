@@ -2041,7 +2041,8 @@ test("friends: a network failure is shown as such, and a long list loads complet
     await waitForLibrary(page);
     await openSection(page, "friends");
     await shown(page, ".status.error").first().waitFor();
-    assert.equal(await shown(page, ".status.error").first().innerText(), "Нет подключения к интернету.");
+    // The message comes first; a connection failure also carries the VPN hint (network.js).
+    assert.ok((await shown(page, ".status.error").first().innerText()).startsWith("Нет подключения к интернету."));
   } finally { await app.close(); }
   const long = await openApp({ config: { signedIn: true, friendsTotal: 450 } });
   try {

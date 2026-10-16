@@ -1,11 +1,12 @@
+use std::sync::Arc;
 use std::time::Duration;
 
-use reqwest::blocking::Client;
 use reqwest::header::{ACCEPT, CONTENT_TYPE, RETRY_AFTER, USER_AGENT};
 use serde_json::Value;
 use url::Url;
 
 use super::model::{self, Album, Artist, MusicMix, Page, Playlist, Profile, Track};
+use crate::net::{self, Pool};
 use crate::{Error, Result};
 
 pub const DEFAULT_BASE_URL: &str = "https://api.vk.ru";
@@ -37,7 +38,9 @@ impl std::fmt::Debug for Session {
 
 #[derive(Clone)]
 pub struct VkClient {
-    http: Client,
+    /// Rebuilt (all pooled connections dropped) after a transport error or a
+    /// network change; clones share it.
+    http: Arc<Pool>,
     base: Url,
     version: String,
 }
@@ -66,14 +69,26 @@ impl VkClient {
         if base.scheme() != "https" && !(loopback && base.scheme() == "http") {
             return Err(Error::InvalidRequest);
         }
-        let http = Client::builder()
-            .timeout(Duration::from_secs(30))
-            .connect_timeout(Duration::from_secs(15))
-            // The token travels in the body: a 307/308 would replay it at
-            // whatever host the response names.
-            .redirect(reqwest::redirect::Policy::none())
-            .build()?;
+        let http = net::shared_pool(|| {
+            reqwest::blocking::Client::builder()
+                .timeout(Duration::from_secs(30))
+                .connect_timeout(Duration::from_secs(15))
+                // A connection idle for long is the one a VPN switch killed:
+                // do not trust it, and let the OS notice dead peers.
+                .pool_idle_timeout(Duration::from_secs(20))
+                .tcp_keepalive(Duration::from_secs(30))
+                // The token travels in the body: a 307/308 would replay it at
+                // whatever host the response names.
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .map_err(Error::from)
+        })?;
         Ok(Self { http, base, version: API_VERSION.to_string() })
+    }
+
+    /// Forgets every pooled connection: the next call dials again.
+    pub fn reset_connections(&self) {
+        net::drop_connections();
     }
 
     fn url(&self, method: &str) -> Result<Url> {
@@ -95,6 +110,30 @@ impl VkClient {
         self.call_with(session, method, params, 1)
     }
 
+    /// A read that may be tried `attempts` times in all (the caller does its
+    /// own waiting between rounds, as the stream recovery does).
+    pub fn call_limited(&self, session: &Session, method: &str, params: &[(&str, String)], attempts: u32) -> Result<Value> {
+        self.call_with(session, method, params, attempts.max(1))
+    }
+
+    /// After a transport failure the pooled connections are suspect (a VPN
+    /// switch leaves dead sockets behind): drop them so the next request
+    /// dials again. Returns true when the caller should retry now, after the
+    /// back-off has been slept.
+    fn transport_failed(&self, method: &str, error: &Error, attempt: u32, attempts: u32) -> bool {
+        if !net::is_connectivity(error) {
+            return false;
+        }
+        self.reset_connections();
+        if attempt >= attempts {
+            log::warn!("{method}: {} (attempt {attempt}/{attempts}), giving up", error.kind());
+            return false;
+        }
+        log::info!("{method}: {} → new connections (attempt {}/{attempts})", error.kind(), attempt + 1);
+        sleep(retry_delay(attempt - 1, None, net::jitter_unit() * 0.3 + 0.85));
+        true
+    }
+
     fn call_with(&self, session: &Session, method: &str, params: &[(&str, String)], attempts: u32) -> Result<Value> {
         let url = self.url(method)?;
         let mut form: Vec<(&str, String)> = vec![
@@ -109,20 +148,20 @@ impl VkClient {
         loop {
             attempt += 1;
             let last = attempt >= attempts;
-            let response = self
+            let sent = self
                 .http
+                .get()
                 .post(url.clone())
                 .header(CONTENT_TYPE, "application/x-www-form-urlencoded; charset=utf-8")
                 .header(ACCEPT, "application/json")
                 .header(USER_AGENT, session.api_user_agent.as_str())
                 .form(&form)
                 .send();
-            let response = match response {
+            let response = match sent {
                 Ok(r) => r,
                 Err(err) => {
                     let mapped = Error::from(err);
-                    if !last && matches!(mapped, Error::Timeout | Error::Offline | Error::Transport(_)) {
-                        sleep(retry_delay(attempt - 1, None, 1.0));
+                    if self.transport_failed(method, &mapped, attempt, attempts) {
                         continue;
                     }
                     return Err(mapped);
@@ -134,11 +173,22 @@ impl VkClient {
                 .get(RETRY_AFTER)
                 .and_then(|v| v.to_str().ok())
                 .map(str::to_string);
-            let body = response.text().map_err(Error::from)?;
+            let body = match response.text() {
+                Ok(body) => body,
+                Err(err) => {
+                    // The connection died while the answer was coming.
+                    let mapped = Error::from(err);
+                    if self.transport_failed(method, &mapped, attempt, attempts) {
+                        continue;
+                    }
+                    return Err(mapped);
+                }
+            };
             log::debug!("POST {method} status={status} bytes={}", body.len());
 
             if matches!(status, 408 | 429 | 500 | 502 | 503 | 504) && !last {
-                sleep(retry_delay(attempt - 1, retry_after.as_deref(), 1.0));
+                log::info!("{method}: HTTP {status}, retrying (attempt {}/{attempts})", attempt + 1);
+                sleep(retry_delay(attempt - 1, retry_after.as_deref(), net::jitter_unit() * 0.3 + 0.85));
                 continue;
             }
             let parsed: Option<Value> = serde_json::from_str(&body).ok();
@@ -152,8 +202,10 @@ impl VkClient {
             }
             if let Some(error) = vk_error {
                 let code = vk_code.unwrap_or(0);
-                if matches!(code, 6 | 10) && !last {
-                    sleep(retry_delay(attempt - 1, None, 1.0));
+                // 6: too many requests per second, 9: flood control, 10: internal.
+                if matches!(code, 6 | 9 | 10) && !last {
+                    log::info!("{method}: VK error {code}, retrying (attempt {}/{attempts})", attempt + 1);
+                    sleep(retry_delay(attempt - 1, None, net::jitter_unit() * 0.3 + 0.85));
                     continue;
                 }
                 let message = error.get("error_msg").and_then(Value::as_str).unwrap_or("").to_string();
@@ -941,7 +993,19 @@ impl VkClient {
     /// Fresh stream URL for one track (`audio.getById`). Done right before
     /// play when the URL we hold may have expired.
     pub fn refreshed_track(&self, session: &Session, track: &Track) -> Result<Track> {
-        let value = self.call(session, "audio.getById", &[("audios", track.audio_id_with_key())])?;
+        self.refreshed_track_with(session, track, 3)
+    }
+
+    /// Like [`refreshed_track`](Self::refreshed_track) with a single request:
+    /// the stream recovery loop spaces its own attempts, and retrying here as
+    /// well would multiply one outage into many requests (the iOS app does
+    /// the same for its `playbackRecovery` policy).
+    pub fn refreshed_track_once(&self, session: &Session, track: &Track) -> Result<Track> {
+        self.refreshed_track_with(session, track, 1)
+    }
+
+    fn refreshed_track_with(&self, session: &Session, track: &Track, attempts: u32) -> Result<Track> {
+        let value = self.call_limited(session, "audio.getById", &[("audios", track.audio_id_with_key())], attempts)?;
         let user = self.user_id(session).ok();
         let fresh = value
             .as_array()

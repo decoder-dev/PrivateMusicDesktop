@@ -25,6 +25,22 @@ use crate::AppState;
 pub static SMOKE_REPORT: OnceLock<PathBuf> = OnceLock::new();
 static SMOKE_PAGE_LOADED: AtomicBool = AtomicBool::new(false);
 
+// Did VK's own page arrive? A blocked or unreachable VK (a VPN that is on, or
+// should be off) leaves the window blank or on the browser's error page, and
+// the web view reports no failure of its own.
+static PAGE_LOADED: AtomicBool = AtomicBool::new(false);
+static PAGE_ERROR: AtomicBool = AtomicBool::new(false);
+/// The window was reported as not loading; the next "sign in" press reloads it.
+static LOAD_FAILED: AtomicBool = AtomicBool::new(false);
+/// Tells the watcher that the page was asked for again: its clock restarts.
+static LOAD_RESTARTED: AtomicBool = AtomicBool::new(false);
+
+/// How long VK's login page may take before the window is called stuck.
+const LOAD_TIMEOUT: Duration = Duration::from_secs(25);
+/// A blank page can be the web view's own first one: only a non-VK page that
+/// is still what we see after this long is taken for an error page.
+const ERROR_PAGE_GRACE: Duration = Duration::from_secs(4);
+
 const LOGIN_URL: &str = "https://vk.ru/login";
 const POLL: Duration = Duration::from_millis(1500);
 const SESSION_COOKIES: [&str; 3] = ["remixsid", "remixsid6", "remixnsid"];
@@ -57,6 +73,32 @@ fn is_allowed_navigation(url: &Url) -> bool {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum LoadVerdict {
+    Waiting,
+    Failed,
+}
+
+/// The login page counts as not loading when VK's page has not finished after
+/// [`LOAD_TIMEOUT`], or a page other than VK's finished (the browser's own
+/// error page, which this window refuses to navigate to anyway).
+fn load_verdict(elapsed: Duration, loaded: bool, error_page: bool) -> LoadVerdict {
+    if loaded {
+        LoadVerdict::Waiting
+    } else if (error_page && elapsed >= ERROR_PAGE_GRACE) || elapsed >= LOAD_TIMEOUT {
+        LoadVerdict::Failed
+    } else {
+        LoadVerdict::Waiting
+    }
+}
+
+fn reset_load_state() {
+    PAGE_LOADED.store(false, Ordering::SeqCst);
+    PAGE_ERROR.store(false, Ordering::SeqCst);
+    LOAD_FAILED.store(false, Ordering::SeqCst);
+    LOAD_RESTARTED.store(true, Ordering::SeqCst);
+}
+
 /// Automatic checks wait for a known session cookie; manual completion lets
 /// VK validate any nonempty cookie set, as the iOS client's finish button does.
 fn session_header(cookies: &[(String, String)], manual: bool) -> Option<String> {
@@ -85,6 +127,15 @@ fn token_cookies(cookies: &[tauri::webview::Cookie<'_>]) -> Vec<(String, String)
 
 pub fn start(handle: &AppHandle, state: &AppState) -> Result<(), String> {
     if let Some(existing) = handle.get_webview_window("login") {
+        if LOAD_FAILED.load(Ordering::SeqCst) {
+            // The page never arrived: "Retry" loads it again, in the same
+            // window and with the same restrictions.
+            log::info!("sign-in window: reloading the login page");
+            reset_load_state();
+            if let Ok(url) = LOGIN_URL.parse::<Url>() {
+                let _ = existing.navigate(url);
+            }
+        }
         // Explicit completion also works if VK changes its session-cookie names.
         // Only VK's token endpoint decides whether these cookies authenticate.
         state.login_check.store(true, Ordering::SeqCst);
@@ -99,6 +150,7 @@ pub fn start(handle: &AppHandle, state: &AppState) -> Result<(), String> {
     let running = state.login_running.clone();
     let check = state.login_check.clone();
     check.store(false, Ordering::SeqCst);
+    reset_load_state();
     let url: Url = LOGIN_URL.parse().map_err(|_| "bad login address".to_string())?;
     let window = WebviewWindowBuilder::new(handle, "login", WebviewUrl::External(url))
         .title("VK")
@@ -113,12 +165,23 @@ pub fn start(handle: &AppHandle, state: &AppState) -> Result<(), String> {
             }
             allowed
         })
-        .on_page_load(|_window, payload| {
+        .on_page_load(|webview, payload| {
             if payload.event() != PageLoadEvent::Finished {
                 return;
             }
             let host = payload.url().host_str().unwrap_or("").to_string();
             log::info!("sign-in window: page loaded on {host}");
+            if payload.url().scheme() == "https" && is_vk_host(&host) {
+                PAGE_LOADED.store(true, Ordering::SeqCst);
+                PAGE_ERROR.store(false, Ordering::SeqCst);
+                if LOAD_FAILED.swap(false, Ordering::SeqCst) {
+                    // It got through after all (the VPN was switched meanwhile).
+                    let _ = webview.app_handle().emit("pm-login", "loadok");
+                }
+            } else if !PAGE_LOADED.load(Ordering::SeqCst) {
+                // Not VK's page: the engine's error page, or a blank one.
+                PAGE_ERROR.store(true, Ordering::SeqCst);
+            }
             if SMOKE_REPORT.get().is_some() && is_vk_host(&host) {
                 // The worker must also prove that private cookies are readable.
                 SMOKE_PAGE_LOADED.store(true, Ordering::SeqCst);
@@ -162,10 +225,28 @@ fn poll(
 ) -> Option<Result<pm_engine::vk::Session, Error>> {
     let mut failures = 0;
     let mut last_header = None;
+    let mut load_started = std::time::Instant::now();
     loop {
         std::thread::sleep(POLL);
         if handle.get_webview_window("login").is_none() || !running.load(Ordering::SeqCst) {
             return None;
+        }
+        if LOAD_RESTARTED.swap(false, Ordering::SeqCst) {
+            load_started = std::time::Instant::now();
+        }
+        if !LOAD_FAILED.load(Ordering::SeqCst)
+            && SMOKE_REPORT.get().is_none()
+            && load_verdict(
+                load_started.elapsed(),
+                PAGE_LOADED.load(Ordering::SeqCst),
+                PAGE_ERROR.load(Ordering::SeqCst),
+            ) == LoadVerdict::Failed
+        {
+            // Tell the window: it shows the VPN hint and a Retry button, and
+            // this window stays open for the retry.
+            log::warn!("sign-in window: the VK login page did not load");
+            LOAD_FAILED.store(true, Ordering::SeqCst);
+            let _ = handle.emit("pm-login", "loadfailed");
         }
         if SMOKE_REPORT.get().is_some() {
             // CI only probes the browser, never VK's token endpoint, including
@@ -288,6 +369,18 @@ mod tests {
         ] {
             assert!(!is_allowed_navigation(&bad.parse().unwrap()), "{bad}");
         }
+    }
+
+    #[test]
+    fn a_login_page_that_does_not_arrive_is_reported() {
+        let secs = Duration::from_secs;
+        assert_eq!(load_verdict(secs(3), false, false), LoadVerdict::Waiting);
+        assert_eq!(load_verdict(secs(24), false, false), LoadVerdict::Waiting);
+        assert_eq!(load_verdict(secs(25), false, false), LoadVerdict::Failed);
+        assert_eq!(load_verdict(secs(2), false, true), LoadVerdict::Waiting, "the web view's first blank page is not an error");
+        assert_eq!(load_verdict(secs(5), false, true), LoadVerdict::Failed, "an error page is not waited out");
+        assert_eq!(load_verdict(secs(600), true, false), LoadVerdict::Waiting, "a loaded page is never a failure");
+        assert_eq!(load_verdict(secs(600), true, true), LoadVerdict::Waiting);
     }
 
     #[test]

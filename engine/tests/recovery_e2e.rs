@@ -1,0 +1,472 @@
+//! Playback that heals itself when the network or the stream URLs change under
+//! it (a VPN switched on or off): expired URLs, dropped connections, bounded
+//! retries, the pause-with-retry state, downloads that never notice.
+
+mod common;
+
+use std::collections::HashSet;
+use std::io::{Read, Write};
+use std::net::TcpListener;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
+
+use common::*;
+use pm_engine::audio::{SimulatedSink, Sink};
+use pm_engine::controller::{Controller, RecoveryPhase, RecoveryPolicy, State, Status, UiEvent};
+use pm_engine::net::NetState;
+use pm_engine::offline::OfflineStore;
+use pm_engine::stream::fetch::fetch_to_end;
+use pm_engine::vk::{Session, Track, VkClient};
+
+fn track(n: i64, url: Option<String>) -> Track {
+    Track {
+        track_id: n,
+        owner_id: 7,
+        title: format!("Track {n}"),
+        artist: "Artist".into(),
+        album_title: None,
+        duration: 12,
+        stream_url: url,
+        artwork_url: None,
+        access_key: None,
+        lyrics_id: None,
+        is_hq: false,
+        track_code: None,
+        artists: Vec::new(),
+        album: None,
+    }
+}
+
+fn session() -> Session {
+    Session {
+        access_token: "0123456789abcdef0123456789".into(),
+        user_id: Some(7),
+        expires_at: None,
+        api_user_agent: "test-agent".into(),
+        refresh_cookie: String::new(),
+        web_user_agent: "web".into(),
+    }
+}
+
+/// A media server with an `old/` and a `new/` face onto the same HLS files.
+/// `old/` stops serving segments after `old_segments` of them (the signed
+/// URL expired mid-track) and can drop a connection in the middle of a segment.
+struct Media {
+    base: String,
+    old_segments: Arc<AtomicUsize>,
+    requests: Arc<Mutex<Vec<String>>>,
+    stop: Arc<AtomicBool>,
+    handle: Option<JoinHandle<()>>,
+}
+
+impl Media {
+    fn start(root: PathBuf, old_limit: usize) -> Self {
+        let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let port = server.server_addr().to_ip().unwrap().port();
+        let old_segments = Arc::new(AtomicUsize::new(0));
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let stop = Arc::new(AtomicBool::new(false));
+        let (served, log, flag) = (old_segments.clone(), requests.clone(), stop.clone());
+        let handle = std::thread::spawn(move || {
+            while !flag.load(Ordering::Relaxed) {
+                let Ok(Some(request)) = server.recv_timeout(Duration::from_millis(30)) else { continue };
+                let path = request.url().split('?').next().unwrap_or("").trim_start_matches('/').to_string();
+                log.lock().unwrap().push(path.clone());
+                let (face, file) = path.split_once('/').unwrap_or(("", ""));
+                let target = root.join(file);
+                if file.contains("..") || !target.is_file() || !matches!(face, "old" | "new") {
+                    let _ = request.respond(tiny_http::Response::empty(404));
+                    continue;
+                }
+                let segment = file.ends_with(".ts");
+                if face == "old" && segment && served.fetch_add(1, Ordering::SeqCst) >= old_limit {
+                    let _ = request.respond(tiny_http::Response::empty(403));
+                    continue;
+                }
+                let data = std::fs::read(&target).unwrap();
+                let _ = request.respond(tiny_http::Response::from_data(data));
+            }
+        });
+        Self { base: format!("http://127.0.0.1:{port}"), old_segments, requests, stop, handle: Some(handle) }
+    }
+
+    fn url(&self, face: &str) -> String {
+        format!("{}/{face}/index.m3u8", self.base)
+    }
+
+    fn count(&self, needle: &str) -> usize {
+        self.requests.lock().unwrap().iter().filter(|p| p.contains(needle)).count()
+    }
+}
+
+impl Drop for Media {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+/// Plain sockets, so a connection can really be cut: promises a whole file,
+/// sends half of the files named in `cut` (once each) and hangs up.
+struct CutMedia {
+    base: String,
+    requests: Arc<Mutex<Vec<String>>>,
+    stop: Arc<AtomicBool>,
+}
+
+impl CutMedia {
+    fn start(root: PathBuf, cut: &[&str]) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let base = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
+        let requests: Arc<Mutex<Vec<String>>> = Arc::default();
+        let cut: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(cut.iter().map(|c| c.to_string()).collect()));
+        let stop = Arc::new(AtomicBool::new(false));
+        let (log, flag) = (requests.clone(), stop.clone());
+        std::thread::spawn(move || {
+            while !flag.load(Ordering::Relaxed) {
+                let Ok((mut stream, _)) = listener.accept() else {
+                    std::thread::sleep(Duration::from_millis(5));
+                    continue;
+                };
+                let (root, log, cut) = (root.clone(), log.clone(), cut.clone());
+                std::thread::spawn(move || {
+                    let _ = stream.set_nonblocking(false);
+                    let mut head = Vec::new();
+                    let mut byte = [0u8; 1];
+                    while !head.ends_with(b"\r\n\r\n") {
+                        if stream.read(&mut byte).unwrap_or(0) == 0 {
+                            return;
+                        }
+                        head.push(byte[0]);
+                    }
+                    let head = String::from_utf8_lossy(&head).to_string();
+                    let path = head.split_whitespace().nth(1).unwrap_or("/").trim_start_matches('/').to_string();
+                    log.lock().unwrap().push(path.clone());
+                    let file = path.split_once('/').map(|(_, f)| f).unwrap_or("");
+                    let Ok(data) = std::fs::read(root.join(file)) else {
+                        let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                        return;
+                    };
+                    let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", data.len());
+                    if cut.lock().unwrap().remove(file) {
+                        let _ = stream.write_all(&data[..data.len() / 2]);
+                        let _ = stream.flush();
+                        let _ = stream.shutdown(std::net::Shutdown::Both);
+                    } else {
+                        let _ = stream.write_all(&data);
+                    }
+                });
+            }
+        });
+        Self { base, requests, stop }
+    }
+
+    fn url(&self) -> String {
+        format!("{}/old/index.m3u8", self.base)
+    }
+
+    fn count(&self, needle: &str) -> usize {
+        self.requests.lock().unwrap().iter().filter(|p| p.contains(needle)).count()
+    }
+}
+
+impl Drop for CutMedia {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+    }
+}
+
+fn hls_dir() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    run_ffmpeg(
+        dir.path(),
+        &tone_args(&["-c:a", "aac", "-b:a", "96k", "-f", "hls", "-hls_time", "2", "-hls_list_size", "0", "index.m3u8"]),
+    );
+    dir
+}
+
+/// A fake `api.vk.ru` whose `audio.getById` answers with the `new/` face of
+/// `stream_base`, or with a 503, depending on `healthy`.
+fn fake_vk(stream_url: String, healthy: Arc<AtomicBool>) -> FakeApi {
+    FakeApi::start(move |_, body, _| {
+        if !healthy.load(Ordering::SeqCst) {
+            return (503, "{}".into());
+        }
+        let audios = body.split('&').find_map(|p| p.strip_prefix("audios=")).unwrap_or("").replace("%5F", "_");
+        let mut parts = audios.split('_');
+        let (owner, id) = (parts.next().unwrap_or("7").to_string(), parts.next().unwrap_or("1").to_string());
+        (
+            200,
+            format!(r#"{{"response":[{{"id":{id},"owner_id":{owner},"artist":"Artist","title":"Fresh","duration":12,"url":"{stream_url}"}}]}}"#),
+        )
+    })
+}
+
+/// A loopback address nothing listens on: connections are refused at once.
+fn dead_url() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    format!("http://127.0.0.1:{port}/index.m3u8")
+}
+
+struct Rig {
+    controller: Controller,
+    events: Arc<Mutex<Vec<UiEvent>>>,
+    states: Arc<Mutex<Vec<State>>>,
+}
+
+fn rig(vk_base: &str, speed: f64) -> Rig {
+    let states = Arc::new(Mutex::new(Vec::new()));
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let (s, e) = (states.clone(), events.clone());
+    let mut slot = Some(SimulatedSink::new(44_100, 2, speed));
+    let controller = Controller::with_fetch(
+        VkClient::with_base(vk_base).unwrap(),
+        move || Ok(Box::new(slot.take().unwrap_or_else(|| SimulatedSink::new(44_100, 2, 20.0))) as Box<dyn Sink>),
+        move |event| {
+            if let UiEvent::State(state) = &event {
+                s.lock().unwrap().push(state.clone());
+            }
+            e.lock().unwrap().push(event);
+        },
+        1.0,
+        lab_config(),
+    );
+    // Waits shrink fiftyfold; the shape of the schedule stays.
+    controller.set_recovery_policy(RecoveryPolicy { time_scale: 0.02, ..RecoveryPolicy::default() });
+    controller.set_session(Some(session()));
+    Rig { controller, events, states }
+}
+
+impl Rig {
+    fn wait_state(&self, what: &str, f: impl Fn(&State) -> bool) {
+        wait_for(what, || f(&self.controller.state()));
+    }
+
+    fn recoveries(&self, wanted: RecoveryPhase) -> Vec<(u32, u32)> {
+        self.events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|e| match e {
+                UiEvent::Recovery { phase, attempt, max, .. } if *phase == wanted => Some((*attempt, *max)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn errors(&self) -> Vec<String> {
+        self.events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|e| match e {
+                UiEvent::Error { kind, .. } => Some(kind.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+}
+
+fn wait_for(what: &str, f: impl Fn() -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(25);
+    while !f() {
+        assert!(Instant::now() < deadline, "timed out waiting for {what}");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+#[test]
+fn a_url_that_expires_mid_track_is_replaced_and_playback_continues_from_the_position() {
+    if !require_ffmpeg() { return; }
+    let dir = hls_dir();
+    // Two of six segments (4 s) come through, then the signed URL "expires".
+    let media = Media::start(dir.path().to_path_buf(), 2);
+    let healthy = Arc::new(AtomicBool::new(true));
+    let vk = fake_vk(media.url("new"), healthy);
+    let rig = rig(&vk.base, 8.0);
+    rig.controller.play_tracks(vec![track(1, Some(media.url("old"))), track(2, Some(media.url("new")))], 0);
+
+    wait_for("the recovery to be reported", || !rig.recoveries(RecoveryPhase::Recovered).is_empty());
+    // Track 1 ends and track 2 plays through: the queue was never lost.
+    rig.wait_state("the end of the queue", |s| s.status == Status::Idle && s.track.as_ref().map(|t| t.track_id) == Some(2));
+
+    assert_eq!(rig.recoveries(RecoveryPhase::Retrying), vec![(1, 3)], "one attempt, from a content failure");
+    assert_eq!(vk.call_count("/method/audio.getById"), 1, "exactly one fresh URL asked for");
+    assert!(rig.errors().is_empty(), "healing is silent: {:?}", rig.errors());
+    // Playback went on from where it broke, not from the beginning.
+    let states = rig.states.lock().unwrap().clone();
+    let broke_at = states.iter().filter(|s| s.track.as_ref().map(|t| t.track_id) == Some(1)).map(|s| s.position).fold(0.0, f64::max);
+    assert!(broke_at >= 3.0, "the stream broke around 4 s, saw {broke_at}");
+    let queue_len = states.last().map(|s| s.queue_len);
+    assert_eq!(queue_len, Some(2));
+    assert!(media.count("new/index") >= 1 && media.old_segments.load(Ordering::SeqCst) >= 3);
+}
+
+#[test]
+fn the_position_survives_the_recovery() {
+    if !require_ffmpeg() { return; }
+    let dir = hls_dir();
+    let media = Media::start(dir.path().to_path_buf(), 3);
+    let vk = fake_vk(media.url("new"), Arc::new(AtomicBool::new(true)));
+    let rig = rig(&vk.base, 6.0);
+    rig.controller.play_tracks(vec![track(1, Some(media.url("old")))], 0);
+    wait_for("the retry", || !rig.recoveries(RecoveryPhase::Retrying).is_empty());
+    // The first Playing state after the retry starts near the break (6 s of
+    // the 12 s were buffered), never at 0:00.
+    let retry_at = rig.states.lock().unwrap().len();
+    wait_for("playing again", || rig.states.lock().unwrap().iter().skip(retry_at).any(|s| s.status == Status::Playing));
+    let resumed = rig.states.lock().unwrap().iter().skip(retry_at).find(|s| s.status == Status::Playing).map(|s| s.position).unwrap();
+    assert!(resumed >= 4.0, "resumed at {resumed} s");
+    rig.wait_state("the end", |s| s.status == Status::Idle && s.position == 0.0);
+}
+
+#[test]
+fn a_connection_dropped_in_the_middle_of_a_segment_is_fetched_again() {
+    if !require_ffmpeg() { return; }
+    let dir = hls_dir();
+    let media = CutMedia::start(dir.path().to_path_buf(), &["index3.ts"]);
+    let pcm = decode_all(&media.url()).expect("the stream recovers by itself");
+    assert!((pcm.seconds() - 12.0).abs() < 0.5, "the whole track arrived: {} s", pcm.seconds());
+    assert!(media.count("index3.ts") >= 2, "the broken segment was asked for again");
+    assert!((pcm.frequency(7.0, 11.0) - 880.0).abs() < 15.0, "and the audio after it is intact");
+}
+
+#[test]
+fn a_dead_url_is_not_retried_by_the_fetcher_itself() {
+    if !require_ffmpeg() { return; }
+    let dir = hls_dir();
+    let media = Media::start(dir.path().to_path_buf(), 0);
+    // 403 on every segment: one request each for the first segment, no hammering.
+    let error = decode_all(&media.url("old")).err().expect("fails");
+    assert_eq!(error, pm_engine::Error::Http(403));
+    assert_eq!(media.count("index0.ts"), 1);
+}
+
+#[test]
+fn repeated_connection_failures_are_bounded_then_playback_pauses_and_offers_a_retry() {
+    if !require_ffmpeg() { return; }
+    let dir = hls_dir();
+    let media = Media::start(dir.path().to_path_buf(), usize::MAX);
+    let healthy = Arc::new(AtomicBool::new(false));
+    let vk = fake_vk(media.url("new"), healthy.clone());
+    let rig = rig(&vk.base, 20.0);
+    rig.controller.play_tracks(vec![track(1, Some(dead_url())), track(2, Some(media.url("new")))], 0);
+
+    wait_for("the pause", || !rig.recoveries(RecoveryPhase::Failed).is_empty());
+    rig.wait_state("idle", |s| s.status == Status::Idle);
+    let state = rig.controller.state();
+    assert_eq!(state.track.as_ref().map(|t| t.track_id), Some(1), "a connection problem never skips tracks");
+    assert_eq!(state.queue_len, 2);
+    assert_eq!(rig.errors(), vec!["http".to_string()], "one clear error, not one per attempt");
+    let attempts: Vec<u32> = rig.recoveries(RecoveryPhase::Retrying).iter().map(|(a, _)| *a).collect();
+    assert_eq!(attempts, vec![1, 2, 3, 4, 5, 6], "six attempts, then it stops");
+    assert_eq!(vk.call_count("/method/audio.getById"), 6, "one request per attempt, none extra");
+
+    // It stays stopped: no spinning in the background.
+    std::thread::sleep(Duration::from_millis(400));
+    assert_eq!(vk.call_count("/method/audio.getById"), 6);
+    assert_eq!(rig.recoveries(RecoveryPhase::Retrying).len(), 6);
+    assert_eq!(rig.controller.state().status, Status::Idle);
+
+    // The user fixes the VPN and presses Retry: a fresh URL, same track.
+    healthy.store(true, Ordering::SeqCst);
+    rig.controller.retry();
+    wait_for("track 1 to play again", || rig.states.lock().unwrap().iter().any(|s| s.status == Status::Playing));
+    rig.wait_state("the queue to finish", |s| s.status == Status::Idle && s.track.as_ref().map(|t| t.track_id) == Some(2));
+    assert_eq!(vk.call_count("/method/audio.getById"), 8, "one for each track, after the retry");
+}
+
+#[test]
+fn playback_that_gave_up_resumes_by_itself_when_the_network_settles() {
+    if !require_ffmpeg() { return; }
+    let dir = hls_dir();
+    let media = Media::start(dir.path().to_path_buf(), usize::MAX);
+    let healthy = Arc::new(AtomicBool::new(false));
+    let vk = fake_vk(media.url("new"), healthy.clone());
+    let rig = rig(&vk.base, 20.0);
+    rig.controller.play_tracks(vec![track(1, Some(dead_url()))], 0);
+    wait_for("the pause", || !rig.recoveries(RecoveryPhase::Failed).is_empty());
+
+    // The network comes back: "changed", then "ok" once it holds still.
+    healthy.store(true, Ordering::SeqCst);
+    rig.controller.on_network(NetState::Changed);
+    rig.controller.on_network(NetState::Ok);
+    wait_for("playing again without any button", || rig.states.lock().unwrap().iter().any(|s| s.status == Status::Playing));
+    rig.wait_state("the end", |s| s.status == Status::Idle && s.position == 0.0);
+    assert!(!rig.recoveries(RecoveryPhase::Recovered).is_empty());
+}
+
+#[test]
+fn a_network_change_makes_cached_urls_stale_and_the_next_track_asks_for_a_fresh_one() {
+    if !require_ffmpeg() { return; }
+    let dir = hls_dir();
+    let media = Media::start(dir.path().to_path_buf(), usize::MAX);
+    let vk = fake_vk(media.url("new"), Arc::new(AtomicBool::new(true)));
+    let rig = rig(&vk.base, 20.0);
+    rig.controller.play_tracks(vec![track(1, Some(media.url("old")))], 0);
+    rig.wait_state("a normal play", |s| s.status == Status::Idle && s.position == 0.0 && s.track.is_some());
+    assert_eq!(vk.call_count("/method/audio.getById"), 0, "before any change the held URL is used as is");
+
+    rig.controller.on_network(NetState::Changed);
+    rig.controller.play_tracks(vec![track(2, Some(media.url("old")))], 0);
+    wait_for("the fresh URL", || vk.call_count("/method/audio.getById") == 1);
+    rig.wait_state("the end", |s| s.status == Status::Idle && s.position == 0.0 && s.track.as_ref().map(|t| t.title.clone()) == Some("Fresh".into()));
+    assert_eq!(media.count("old/index.m3u8"), 1, "the stale URL was not used again");
+}
+
+#[test]
+fn downloaded_tracks_never_notice_the_network() {
+    if !require_ffmpeg() { return; }
+    let dir = hls_dir();
+    let media = Media::start(dir.path().to_path_buf(), usize::MAX);
+    let healthy = Arc::new(AtomicBool::new(false));
+    let vk = fake_vk(media.url("new"), healthy);
+    let rig = rig(&vk.base, 4.0);
+    let downloads = tempfile::tempdir().unwrap();
+    let store = Arc::new(OfflineStore::open(downloads.path()).unwrap());
+    let (kind, audio) = fetch_to_end(&media.url("new"), &lab_config()).unwrap();
+    let saved = track(1, None);
+    store.save(&saved, kind, &audio).unwrap();
+    rig.controller.set_offline(store);
+    drop(media); // nothing to reach, and VK answers 503 anyway
+
+    rig.controller.play_tracks(vec![track(1, Some("https://cdn.example/stale.m3u8".into()))], 0);
+    rig.wait_state("playing from disk", |s| s.status == Status::Playing);
+    // A VPN is switched on and off while it plays.
+    rig.controller.on_network(NetState::Changed);
+    rig.controller.on_network(NetState::Unreachable);
+    rig.controller.on_network(NetState::Changed);
+    rig.controller.on_network(NetState::Ok);
+    rig.wait_state("the end", |s| s.status == Status::Idle && s.position == 0.0);
+
+    assert_eq!(vk.call_count("/method/"), 0, "VK was never asked");
+    assert!(rig.recoveries(RecoveryPhase::Retrying).is_empty());
+    assert!(rig.errors().is_empty());
+}
+
+#[test]
+fn a_dead_track_is_still_skipped_once_its_fresh_urls_fail_too() {
+    if !require_ffmpeg() { return; }
+    let dir = hls_dir();
+    // Fresh URLs are as dead as the old one (403 on every segment).
+    let media = Media::start(dir.path().to_path_buf(), 0);
+    let vk = fake_vk(media.url("old"), Arc::new(AtomicBool::new(true)));
+    let rig = rig(&vk.base, 20.0);
+    rig.controller.play_tracks((1..=6).map(|n| track(n, Some(media.url("old")))).collect(), 0);
+    wait_for("giving up on the queue", || {
+        let s = rig.controller.state();
+        s.status == Status::Idle && !rig.errors().is_empty()
+    });
+    std::thread::sleep(Duration::from_millis(300));
+    let at = rig.controller.state().track.unwrap().track_id;
+    assert!(at <= 3, "bounded skipping, stopped at track {at}");
+    assert!(rig.recoveries(RecoveryPhase::Retrying).len() <= 3 * 3, "at most three fresh URLs per track");
+}

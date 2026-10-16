@@ -228,6 +228,26 @@ pub fn set_close_to_tray(state: TauriState<'_, AppState>, on: bool) {
     state.close_to_tray.store(on, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// The window gained or lost the user's attention: the engine watches the
+/// network (cheaply) only while it has it or while audio plays.
+#[tauri::command]
+pub fn network_focus(state: TauriState<'_, AppState>, focused: bool) {
+    state.app.set_window_focused(focused);
+}
+
+/// "Retry" after a connection failure: drop pooled connections and look at
+/// the network now. The window then repeats the failed load itself.
+#[tauri::command]
+pub fn network_check(state: TauriState<'_, AppState>) {
+    state.app.check_network();
+}
+
+/// "Retry" for playback that stopped on a connection problem.
+#[tauri::command]
+pub fn retry_playback(state: TauriState<'_, AppState>) {
+    state.app.retry_playback();
+}
+
 #[derive(Serialize)]
 pub struct AppInfo {
     version: String,

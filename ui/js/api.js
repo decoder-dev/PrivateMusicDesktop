@@ -70,6 +70,12 @@ export const api = {
   listeningStats: (scope, choice = null) => invoke("listening_stats", { scope, choice }),
   resetListeningStats: () => invoke("reset_listening_stats"),
   setUtcOffset: (minutes) => invoke("set_utc_offset", { minutes }),
+  /** Tells the engine whether the window has the user's attention (it watches the network only then or while playing). */
+  networkFocus: (focused) => invoke("network_focus", { focused }),
+  /** "Retry" after a connection failure: the engine drops pooled connections and looks at the network. */
+  networkCheck: () => invoke("network_check"),
+  /** "Retry" for playback that stopped on a connection problem. */
+  retryPlayback: () => invoke("retry_playback"),
 };
 
 export const trackKey = (track) => `${track.owner_id}_${track.track_id}`;

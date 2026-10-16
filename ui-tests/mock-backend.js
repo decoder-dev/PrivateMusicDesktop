@@ -270,6 +270,9 @@
     output_devices: async () => { await delay(5); return config.devices ?? ["Динамики", "Наушники"]; },
     set_output_device: ({ name }) => { state.outputDevice = name; },
     set_close_to_tray: ({ on }) => { state.closeToTray = on; },
+    network_focus: ({ focused }) => { state.focused = focused; },
+    network_check: () => {},
+    retry_playback: () => {},
     app_info: () => ({ version: "0.1.0", has_tray: config.noTray ? false : true }),
     set_equalizer: ({ gains }) => { state.eq = gains; },
     set_visualizer: ({ on }) => { state.visualizer = on; },
@@ -358,7 +361,7 @@
       invoke: async (command, args) => {
         calls.push({ command, args });
         if (!(command in commands)) throw { kind: "invalid", message: `unknown command ${command}` };
-        if (config.failing && config.failing.includes(command)) throw { kind: "offline", message: "No internet connection." };
+        if (config.failing && config.failing.includes(command)) throw { kind: config.failKind ?? "offline", message: "No internet connection." };
         return commands[command](args ?? {});
       },
     },
