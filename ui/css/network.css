@@ -1,0 +1,33 @@
+/* Connection trouble: the VPN hint card, the status chip, the dialog. */
+.net-hint {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left;
+  width: 100%; max-width: 360px; margin-top: 4px; padding: 14px 16px;
+  border: var(--hair) solid var(--line-card); border-radius: var(--r-compact);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+.net-hint p { margin: 0; }
+.net-hint-title { display: flex; align-items: center; gap: 8px; font-size: 14px; line-height: 19px; font-weight: 600; color: var(--text); }
+.net-hint-title svg { color: var(--danger); flex: none; }
+.net-hint-text { font-size: 13px; line-height: 18px; color: var(--text-2); }
+.net-hint-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 6px; }
+.net-how { min-height: 36px; padding: 0 4px; color: var(--accent); font-size: 13px; font-weight: 600; border-radius: 10px; }
+.net-how:hover { background: var(--hover); }
+/* A panel with its own Retry button keeps that one: not two buttons for the same thing. */
+.net-hint:has(~ .retry) .net-retry { display: none; }
+.status.inline .net-how { flex: none; }
+
+.net-float {
+  position: fixed; z-index: 85; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--bar-h) + var(--bar-gap) + 16px + 52px);
+  display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: min(420px, 92vw); pointer-events: none;
+}
+.net-float > * { pointer-events: auto; }
+.net-chip { padding: 8px 16px; border-radius: var(--r-pill); box-shadow: var(--sh-rest); font-size: 13px; line-height: 18px; font-weight: 600; color: var(--text-2); }
+.net-banner { border-radius: var(--r-compact); box-shadow: var(--sh-rest); }
+.net-banner .net-hint { border: 0; background: transparent; }
+
+.net-dialog { max-width: 480px; }
+.net-platforms { margin: 0 0 12px; padding-left: 18px; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 8px; }
+.net-note { color: var(--text-2); font-size: 13px; line-height: 18px; margin-bottom: 8px; }
+
+.login .net-hint { margin: 16px auto 0; }

@@ -4,6 +4,7 @@
 import { h } from "./dom.js";
 import { icon } from "./icons.js";
 import { t } from "./i18n.js";
+import { decorateStatus } from "./network.js";
 
 /**
  * Artwork. The placeholder (accent gradient and a glyph) sits behind the image,
@@ -94,6 +95,8 @@ export function paintStatus(element, text, { error = false, kind = "rows", extra
   element.removeAttribute("aria-busy");
   element.className = `status${error ? " error" : ""}${extra ? ` ${extra}` : ""}`;
   element.textContent = text;
+  // A failed connection gets the VPN hint and a retry (see network.js).
+  if (error) decorateStatus(element, text);
 }
 
 /**

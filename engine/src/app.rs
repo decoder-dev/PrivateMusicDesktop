@@ -7,9 +7,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::audio::Sink;
-use crate::controller::{Controller, UiEvent};
+use crate::controller::{Controller, Status, UiEvent};
 use crate::history::{History, HistoryEntry, StatsView};
 use crate::lyrics::{from_plain, GeniusLyrics, LrcLib, Lyrics};
+use crate::net::{self, AddressSource, MonitorConfig, NetState, NetworkMonitor, SystemAddresses};
 use crate::offline::{OfflineStore, OfflineTrack};
 use crate::radio::{self, RadioFetch, RadioKind, RadioRequest};
 use crate::stream::fetch::fetch_to_end;
@@ -86,6 +87,23 @@ fn checked_album(album: &Album) -> Result<()> {
     Ok(())
 }
 
+/// Tells the network monitor whether audio is on its way.
+type ActivityHook = Arc<dyn Fn(bool) + Send + Sync>;
+
+/// VK errors that mean "this token is not good here (any more)": 5 arrives as
+/// [`Error::Unauthorized`]; 17 is "validation required" and 28 "application
+/// authorization failed", both seen when a token meets a new IP address.
+fn needs_new_session(error: &Error) -> bool {
+    matches!(error, Error::Unauthorized | Error::Vk { code: 17 | 28, .. })
+}
+
+fn describe_vk(error: &Error) -> String {
+    match error {
+        Error::Vk { code, .. } => format!("error {code}"),
+        other => other.kind().to_string(),
+    }
+}
+
 /// Where an endless queue refills from, as the window names it.
 #[derive(Debug, Clone, Deserialize)]
 #[allow(clippy::large_enum_variant)] // handed over once per radio
@@ -137,6 +155,8 @@ pub struct Core {
     genius: Option<GeniusLyrics>,
     offline: Option<Arc<OfflineStore>>,
     history: Arc<History>,
+    /// Watches the route to the internet; `None` when turned off.
+    network: Option<NetworkMonitor>,
 }
 
 pub struct AppOptions {
@@ -151,6 +171,12 @@ pub struct AppOptions {
     pub fetch: FetchConfig,
     pub token_url: String,
     pub volume: f32,
+    /// Notice network changes (a VPN switched on or off) and heal playback.
+    /// Tests that must not depend on the machine's network turn it off.
+    pub watch_network: bool,
+    /// Where the monitor reads the local addresses; `None` asks the OS.
+    pub address_source: Option<Arc<dyn AddressSource>>,
+    pub network_config: MonitorConfig,
 }
 
 impl Default for AppOptions {
@@ -159,6 +185,9 @@ impl Default for AppOptions {
             fetch: FetchConfig::new("PrivateMusicDesktop"),
             token_url: TOKEN_URL.to_string(),
             volume: 1.0,
+            watch_network: true,
+            address_source: None,
+            network_config: MonitorConfig::default(),
             lyrics_base: crate::lyrics::LRCLIB_BASE.to_string(),
             genius_base: crate::lyrics::GENIUS_BASE.to_string(),
             offline_dir: None,
@@ -180,10 +209,20 @@ impl App {
     {
         let emit: Arc<dyn Fn(UiEvent) + Send + Sync> = Arc::new(emit);
         let controller_emit = emit.clone();
+        // The monitor only needs to look while audio is on its way.
+        let activity: Arc<std::sync::OnceLock<ActivityHook>> = Arc::default();
+        let activity_for_events = activity.clone();
         let controller = Controller::with_fetch(
             client,
             make_sink,
-            move |event| controller_emit(event),
+            move |event| {
+                if let UiEvent::State(state) = &event {
+                    if let Some(set_playing) = activity_for_events.get() {
+                        set_playing(matches!(state.status, Status::Playing | Status::Buffering | Status::Loading));
+                    }
+                }
+                controller_emit(event)
+            },
             options.volume,
             options.fetch,
         );
@@ -203,6 +242,7 @@ impl App {
                 OfflineStore::open(dir).map_err(|e| log::warn!("downloads unavailable: {e}")).ok().map(Arc::new)
             }),
             history: History::open(options.history_dir),
+            network: None,
         };
         app.controller.set_history(app.history.clone());
         if let Some(store) = &app.offline {
@@ -219,6 +259,27 @@ impl App {
             Err(error) => {
                 log::warn!("secret store unavailable: {error}");
                 *app.persistent.lock().unwrap_or_else(|p| p.into_inner()) = false;
+            }
+        }
+        let mut app = app;
+        if options.watch_network {
+            let source = options.address_source.unwrap_or_else(|| Arc::new(SystemAddresses));
+            let (to_ui, to_controller) = (app.emit.clone(), app.controller.network_listener());
+            app.network = Some(NetworkMonitor::spawn(source, options.network_config, move |state| {
+                match state {
+                    NetState::Changed => {
+                        log::info!("network changed: dropping connections");
+                        net::drop_connections();
+                    }
+                    NetState::Unreachable => log::warn!("network unreachable: no route to the internet"),
+                    NetState::Ok => log::info!("network settled"),
+                }
+                to_controller(state);
+                to_ui(UiEvent::Network { state });
+            }));
+            if let Some(monitor) = &app.network {
+                let handle = monitor.handle();
+                let _ = activity.set(Arc::new(move |playing| handle.set_playing(playing)));
             }
         }
         let core = Arc::new(app);
@@ -373,12 +434,44 @@ impl Core {
             session = self.refresh(&session).unwrap_or(session);
         }
         match call(self.controller.client(), &session) {
-            Err(Error::Unauthorized) => {
-                let fresh = self.refresh(&session)?;
+            // A session VK stopped accepting, which is also how a changed IP
+            // shows (the token was minted on the other network): renew it from
+            // the cookie once and ask again once. Never a loop.
+            Err(error) if needs_new_session(&error) => {
+                log::info!("VK refused the session ({}), renewing it once", describe_vk(&error));
+                let fresh = match self.refresh(&session) {
+                    Ok(fresh) => fresh,
+                    // The renewal's own failure explains a refused sign-in;
+                    // for other errors the original answer is the useful one.
+                    Err(renewal) if error == Error::Unauthorized => return Err(renewal),
+                    Err(_) => return Err(error),
+                };
                 call(self.controller.client(), &fresh)
             }
             other => other,
         }
+    }
+
+    /// Tells the engine whether the window has the user's attention; the
+    /// network is only watched while it does or while audio plays.
+    pub fn set_window_focused(&self, focused: bool) {
+        if let Some(network) = &self.network {
+            network.set_focused(focused);
+        }
+    }
+
+    /// The user pressed "Retry" after a network failure: forget every pooled
+    /// connection and look at the network now.
+    pub fn check_network(&self) {
+        net::drop_connections();
+        if let Some(network) = &self.network {
+            network.check_now();
+        }
+    }
+
+    /// "Retry" for playback that stopped on a connection problem.
+    pub fn retry_playback(&self) {
+        self.controller.retry();
     }
 
     pub fn profile(&self) -> Result<Profile> {
