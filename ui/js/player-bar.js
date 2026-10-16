@@ -5,7 +5,7 @@ import { api } from "./api.js";
 import { store, subscribe } from "./store.js";
 import { isLiked, isBusy } from "./likes.js";
 import { hasArtist, openArtistOf } from "./navigation.js";
-import { artBox, bindRange, syncRange } from "./ui-parts.js";
+import { artBox, bindRange, syncRange, swapArt } from "./ui-parts.js";
 import { coverPalette } from "./palette.js";
 
 /** The bottom bar: what is playing, transport, position and volume. */
@@ -110,7 +110,7 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
     const url = track?.artwork_url ?? null;
     if (url !== coverUrl) {
       coverUrl = url;
-      coverSlot.replaceChildren(artBox(url, { size: 22 }));
+      swapArt(coverSlot, url, { size: 22 }, () => coverUrl === url);
       applyTint(url);
     }
     element.classList.toggle("is-empty", !track);

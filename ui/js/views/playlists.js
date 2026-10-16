@@ -228,6 +228,8 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
       if (!loaded) load();
       if (!albumsLoaded) loadAlbums();
     },
+    /** A sidebar click while a playlist is open goes back to the list. */
+    root() { if (current) showList(); },
     reset() {
       generation++;
       loaded = false;

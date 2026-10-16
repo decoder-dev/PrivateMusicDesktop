@@ -234,6 +234,8 @@ export function createFriendsView({ play, onTrackAction, toast }) {
     show() {
       if (!loaded) load();
     },
+    /** A sidebar click while a friend is open goes back to the friends. */
+    root() { if (friend) showList(); },
     reset() {
       generation++;
       loaded = false;

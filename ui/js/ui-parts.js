@@ -10,14 +10,26 @@ import { t } from "./i18n.js";
  * so a missing, slow or broken cover never leaves an empty square. No fade: the
  * lists that use it recreate their rows while scrolling.
  */
-export function artBox(url, { glyph = "note", size = 18, className = "" } = {}) {
+export function artBox(url, { glyph = "note", size = 18, className = "", eager = false } = {}) {
   const box = h("span", { class: `art-box${className ? ` ${className}` : ""}` }, h("span", { class: "art-ph" }, icon(glyph, size)));
   if (url) {
-    const image = h("img", { src: url, alt: "", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" });
+    const image = h("img", { src: url, alt: "", loading: eager ? "eager" : "lazy", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" });
     image.addEventListener("error", () => image.remove());
     box.append(image);
   }
   return box;
+}
+
+/**
+ * Puts a new cover in `slot` only once it has decoded, so the old cover stays
+ * until then (no flash of the placeholder between tracks). `current` tells
+ * whether the request is still the latest.
+ */
+export function swapArt(slot, url, options, current) {
+  const next = artBox(url, { ...options, eager: true });
+  const image = next.querySelector("img");
+  if (!image) { slot.replaceChildren(next); return; }
+  image.decode().catch(() => {}).finally(() => { if (current()) slot.replaceChildren(next); });
 }
 
 /** A search field with a leading glyph and a clear button. Returns { element, input }. */
