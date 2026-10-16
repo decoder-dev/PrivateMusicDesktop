@@ -28,7 +28,7 @@ test("pending sign-in can be brought back, reports verification and recovers aft
   try {
     const { page } = app;
     await page.click(".login .btn");
-    await page.getByRole("button", { name: "Вернуться к окну VK" }).click();
+    await page.getByRole("button", { name: "Я уже вошёл — проверить" }).click();
     assert.equal(await page.evaluate(() => window.__mock.count("login_start")), 2);
     await page.evaluate(() => window.__mock.emit("pm-login", "pending:unauthorized"));
     await page.waitForFunction(() => document.querySelector(".login .message").textContent.includes("VK пока не подтвердил"));
