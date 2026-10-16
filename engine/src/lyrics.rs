@@ -16,6 +16,7 @@ use crate::vk::Track;
 use crate::{Error, Result};
 
 pub const LRCLIB_BASE: &str = "https://lrclib.net/";
+pub const GENIUS_BASE: &str = "https://genius.com/";
 /// How far the recording's length may differ from the lyrics' timeline.
 const SYNC_TOLERANCE_SECONDS: f64 = 3.0;
 const MAX_BODY: u64 = 2 * 1024 * 1024;
@@ -203,27 +204,38 @@ pub struct LrcLib {
 /// `genius.com` and redirects are disabled.
 pub struct GeniusLyrics {
     http: Client,
+    base: Url,
 }
 
 impl GeniusLyrics {
     pub fn new() -> Result<Self> {
+        Self::with_base(GENIUS_BASE)
+    }
+
+    /// https only; plain http for a loopback host so tests can use a local server.
+    pub fn with_base(base: &str) -> Result<Self> {
+        let base = Url::parse(base).map_err(|_| Error::InvalidRequest)?;
+        let loopback = matches!(base.host_str(), Some("127.0.0.1" | "localhost"));
+        if base.scheme() != "https" && !(loopback && base.scheme() == "http") {
+            return Err(Error::InvalidRequest);
+        }
         let http = Client::builder()
             .connect_timeout(Duration::from_secs(6))
             .timeout(Duration::from_secs(12))
             .redirect(reqwest::redirect::Policy::none())
             .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128 Safari/537.36")
             .build()?;
-        Ok(Self { http })
+        Ok(Self { http, base })
     }
 
     pub fn lookup(&self, track: &Track) -> Result<Option<Lyrics>> {
-        let query = format!("{} {}", track.artist, track.title);
-        let mut search = Url::parse("https://genius.com/api/search/song").map_err(|_| Error::InvalidRequest)?;
+        let query = format!("{} {}", track.artist, display_title(&track.title));
+        let mut search = self.base.join("api/search/song").map_err(|_| Error::InvalidRequest)?;
         search.query_pairs_mut().append_pair("per_page", "8").append_pair("q", &query);
         let value = self.get_json(search)?;
         let candidates = genius_hits(&value);
         let candidate = candidates.into_iter().find(|(title, artist, url)| {
-            same_song(&track.title, title) && same_artist(&track.artist, artist) && genius_url(url)
+            same_song(&display_title(&track.title), title) && same_artist(&track.artist, artist) && genius_url(url)
         });
         let Some((_, _, url)) = candidate else { return Ok(None) };
         let page = self.get_text(&url)?;
@@ -432,31 +444,156 @@ impl LrcLib {
         serde_json::from_slice::<Candidate>(&body).map(|c| Some(vec![c])).map_err(|_| Error::Format("lyrics response".into()))
     }
 
-    /// `Ok(None)` when LRCLIB has nothing that fits this track.
+    /// `Ok(None)` when LRCLIB has nothing that fits this track. A 404 or an
+    /// empty list is "nothing"; any other failure is an error only when no
+    /// query found text. A query that fails with an HTTP status does not stop
+    /// the next one; a transport failure (offline, timeout) concerns the host
+    /// and ends the lookup at once.
     pub fn lookup(&self, track: &Track) -> Result<Option<Lyrics>> {
         if track.title.trim().is_empty() {
             return Ok(None);
         }
-        // Exact lookup by artist, title and length first: it finds the right recording.
-        if track.duration > 0 {
-            let mut query = vec![
-                ("track_name", track.title.clone()),
-                ("artist_name", track.artist.clone()),
-                ("duration", track.duration.to_string()),
-            ];
-            if let Some(album) = track.album_title.as_deref().filter(|a| !a.is_empty()) {
-                query.push(("album_name", album.to_string()));
-            }
-            if let Some(found) = self.fetch("api/get", &query)? {
-                if let Some(lyrics) = best(track, found) {
+        let mut fallback: Option<Lyrics> = None;
+        let mut failure: Option<Error> = None;
+        for (path, query) in lookup_queries(track) {
+            match self.fetch(path, &query) {
+                Ok(None) => {}
+                Ok(Some(found)) => {
+                    let Some(lyrics) = best(track, found) else { continue };
+                    // Timed lyrics end the search; a plain result is kept in
+                    // case no query finds better.
                     if !lyrics.lines.is_empty() {
                         return Ok(Some(lyrics));
                     }
+                    fallback = fallback.or(Some(lyrics));
+                }
+                Err(error @ (Error::Offline | Error::Timeout | Error::Transport(_))) => {
+                    return match fallback {
+                        Some(found) => Ok(Some(found)),
+                        None => Err(error),
+                    };
+                }
+                Err(error) => {
+                    log::debug!("{}", describe("lrclib", &error));
+                    failure = failure.or(Some(error));
                 }
             }
         }
-        let query = [("track_name", track.title.clone()), ("artist_name", track.artist.clone())];
-        Ok(self.fetch("api/search", &query)?.and_then(|found| best(track, found)))
+        match (fallback, failure) {
+            (Some(found), _) => Ok(Some(found)),
+            (None, Some(error)) => Err(error),
+            (None, None) => Ok(None),
+        }
+    }
+}
+
+type Query = (&'static str, Vec<(&'static str, String)>);
+
+/// What to ask LRCLIB, in order: the exact record (artist, title, length),
+/// then searches by the title as given, and by the title cleaned of
+/// "(speed up)", "[Live]", "feat. X" and the like, with and without the lead
+/// artist. Candidates are matched locally, so a loose query cannot return a
+/// different song.
+fn lookup_queries(track: &Track) -> Vec<Query> {
+    let mut queries: Vec<Query> = Vec::new();
+    if track.duration > 0 {
+        let mut query = vec![
+            ("track_name", track.title.clone()),
+            ("artist_name", track.artist.clone()),
+            ("duration", track.duration.to_string()),
+        ];
+        if let Some(album) = track.album_title.as_deref().filter(|a| !a.is_empty()) {
+            query.push(("album_name", album.to_string()));
+        }
+        queries.push(("api/get", query));
+    }
+    let clean = display_title(&track.title);
+    let title = if clean.is_empty() { track.title.trim().to_string() } else { clean };
+    let searches = [
+        vec![("track_name", track.title.clone()), ("artist_name", track.artist.clone())],
+        vec![("track_name", title.clone()), ("artist_name", lead_artist(&track.artist))],
+        vec![("track_name", title)],
+    ];
+    for search in searches {
+        if !queries.iter().any(|(path, q)| *path == "api/search" && *q == search) {
+            queries.push(("api/search", search));
+        }
+    }
+    queries
+}
+
+fn find_chars(haystack: &[char], marker: &str) -> Option<usize> {
+    let marker: Vec<char> = marker.chars().collect();
+    haystack.windows(marker.len()).position(|w| w == marker.as_slice())
+}
+
+fn lower_chars(text: &str) -> Vec<char> {
+    // One char per char, so positions in the result are positions in `text`.
+    text.chars().map(|c| c.to_lowercase().next().unwrap_or(c)).collect()
+}
+
+const SUFFIX_MARKERS: [&str; 15] = [
+    "remaster", "remix", "live", "version", "edit", "mix", "speed", "sped", "slowed", "nightcore", "acoustic",
+    "instrumental", "radio", "ремикс", "версия",
+];
+
+/// The title as people say it: without "(…)"/"[…]" parts, a "- Remastered"
+/// style tail or a "feat." tail. Case and letters are kept.
+fn display_title(text: &str) -> String {
+    let mut plain = String::new();
+    let mut depth = 0u32;
+    for ch in text.chars() {
+        match ch {
+            '(' | '[' => depth += 1,
+            ')' | ']' => depth = depth.saturating_sub(1),
+            _ if depth > 0 => {}
+            c => plain.push(c),
+        }
+    }
+    let lowered = lower_chars(&plain);
+    let chars: Vec<char> = plain.chars().collect();
+    let mut cut = chars.len();
+    for marker in [" feat.", " feat ", " ft. ", " ft ", " featuring ", " при уч."] {
+        if let Some(i) = find_chars(&lowered, marker) {
+            cut = cut.min(i);
+        }
+    }
+    for marker in [" - ", " – ", " — "] {
+        if let Some(i) = find_chars(&lowered, marker) {
+            let tail: String = lowered[i..].iter().collect();
+            if SUFFIX_MARKERS.iter().any(|m| tail.contains(m)) {
+                cut = cut.min(i);
+            }
+        }
+    }
+    chars[..cut].iter().collect::<String>().split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// First of several credited artists: "A, B feat. C" is "A".
+fn lead_artist(text: &str) -> String {
+    let lowered = lower_chars(text);
+    let chars: Vec<char> = text.chars().collect();
+    let mut cut = chars.iter().position(|c| matches!(c, ',' | ';' | '/' | '&' | '+')).unwrap_or(chars.len());
+    for marker in [" feat.", " feat ", " ft. ", " ft ", " featuring ", " при уч.", " x ", " и ", " and ", " vs. ", " vs ", " with "] {
+        if let Some(i) = find_chars(&lowered, marker) {
+            cut = cut.min(i);
+        }
+    }
+    let lead = chars[..cut].iter().collect::<String>().trim().to_string();
+    if lead.is_empty() { text.trim().to_string() } else { lead }
+}
+
+/// Short, secret-free description of a failure for the log: the source and
+/// the kind or status, never a URL.
+pub fn describe(source: &str, error: &Error) -> String {
+    match error {
+        Error::Timeout => format!("{source}: timeout"),
+        Error::Offline => format!("{source}: no connection"),
+        Error::Http(status) => format!("{source}: HTTP {status}"),
+        Error::Vk { code, .. } => format!("{source}: error code {code}"),
+        Error::Transport(what) => format!("{source}: network error ({what})"),
+        Error::Format(what) => format!("{source}: unexpected response ({what})"),
+        other => format!("{source}: {}", other.kind()),
     }
 }
 
@@ -539,6 +676,33 @@ mod tests {
         let near = candidate("A", "B", 199.0, Some("near"), None);
         assert_eq!(best(&t, vec![instrumental, far, near]).unwrap().text, "near");
         assert!(best(&t, vec![]).is_none());
+    }
+
+    #[test]
+    fn titles_and_artists_are_cleaned_for_the_search() {
+        assert_eq!(display_title("Дорога в ад (speed up)"), "Дорога в ад");
+        assert_eq!(display_title("Song [Live] (feat. X)"), "Song");
+        assert_eq!(display_title("Song - Remastered 2011"), "Song");
+        assert_eq!(display_title("Song feat. Y"), "Song");
+        assert_eq!(display_title("Ночь - это день"), "Ночь - это день");
+        assert_eq!(display_title("Mr. Brightside"), "Mr. Brightside");
+        assert_eq!(lead_artist("Скриптонит, Niman"), "Скриптонит");
+        assert_eq!(lead_artist("A feat. B"), "A");
+        assert_eq!(lead_artist("Чучело"), "Чучело");
+        let t = track("Чучело", "Дорога в ад (speed up)", 150);
+        let queries = lookup_queries(&t);
+        assert_eq!(queries[0].0, "api/get");
+        assert!(queries.iter().any(|(p, q)| *p == "api/search" && q.len() == 1 && q[0].1 == "Дорога в ад"));
+        // No duplicate queries for a plain title.
+        let plain = lookup_queries(&track("A", "B", 0));
+        assert_eq!(plain.len(), 2, "{plain:?}");
+    }
+
+    #[test]
+    fn failures_are_described_without_urls() {
+        assert_eq!(describe("lrclib", &Error::Timeout), "lrclib: timeout");
+        assert_eq!(describe("lrclib", &Error::Http(503)), "lrclib: HTTP 503");
+        assert_eq!(describe("vk lyrics", &Error::Vk { code: 15, message: "x".into() }), "vk lyrics: error code 15");
     }
 
     #[test]

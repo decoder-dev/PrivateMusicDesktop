@@ -252,7 +252,8 @@
       library.splice(index, 1);
     },
     lyrics: async ({ track }) => {
-      if (config.lyricsFail) throw { kind: "offline", message: "No internet connection." };
+      if (config.lyricsFail === "http") throw { kind: "http", message: "HTTP status 503." };
+      if (config.lyricsFail) throw { kind: config.lyricsFail === "timeout" ? "timeout" : "offline", message: "No internet connection." };
       await delay(15);
       const n = track.track_id;
       if (n % 5 === 0) return null;
