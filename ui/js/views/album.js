@@ -1,7 +1,7 @@
 import { api } from "../api.js";
 import { createTracksScreen } from "../tracks-screen.js";
 import { errorText, t, tn } from "../i18n.js";
-import { artBox, backButton, pageHero, headerOnScroll } from "../ui-parts.js";
+import { artBox, backButton, pageHero, headerOnScroll, setAmbience } from "../ui-parts.js";
 import { h } from "../dom.js";
 import { icon } from "../icons.js";
 import { subscribe } from "../store.js";
@@ -42,7 +42,7 @@ export function createAlbumView({ play, onTrackAction, toast, back }) {
     title: t("album.tracks"),
     heading: "h2",
     playable: false,
-    hooks: { emptyText: t("album.empty"), onPlay: play, onAction: onTrackAction },
+    hooks: { emptyText: t("album.empty"), art: "album", onPlay: play, onAction: onTrackAction },
   });
   const element = h("section", { class: "view album-view" }, head, tracks.element);
   headerOnScroll(head, tracks.list.element);
@@ -54,11 +54,13 @@ export function createAlbumView({ play, onTrackAction, toast, back }) {
     followButton.setAttribute("aria-pressed", String(on));
     followButton.classList.toggle("on", on);
     followButton.disabled = busy;
+    followButton.setAttribute("aria-busy", String(busy));
   }
 
   function render() {
     title.textContent = album.title;
     cover.replaceChildren(artBox(album.artwork_url, { glyph: "album", size: 40 }));
+    setAmbience(head, album.artwork_url);
     artists.replaceChildren(...album.artists.flatMap((artist, i) => [
       i ? ", " : null,
       h("button", { class: "link-text", type: "button", title: t("artist.open"), onclick: () => openArtist(artist), text: artist.name }),

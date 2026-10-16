@@ -5,7 +5,7 @@ import { errorText, t } from "../i18n.js";
 import { h } from "../dom.js";
 import { icon } from "../icons.js";
 import { albumCard } from "../album-card.js";
-import { artBox, paintStatus, backButton, pageHero, headerOnScroll } from "../ui-parts.js";
+import { artBox, paintStatus, backButton, pageHero, headerOnScroll, setAmbience } from "../ui-parts.js";
 import { openAlbum } from "../navigation.js";
 
 const TRACKS = 50;
@@ -47,7 +47,7 @@ export function createArtistView({ play, onTrackAction, toast, back }) {
     title: t("artist.popular"),
     heading: "h2",
     playable: false,
-    hooks: { emptyText: t("artist.noTracks"), onPlay: play, onAction: onTrackAction },
+    hooks: { emptyText: t("artist.noTracks"), art: "artist", onPlay: play, onAction: onTrackAction },
   });
   tracks.element.classList.add("artist-tracks");
 
@@ -76,6 +76,7 @@ export function createArtistView({ play, onTrackAction, toast, back }) {
   function renderHeader(artist) {
     name.textContent = artist.name;
     photo.replaceChildren(artBox(artist.photo_url, { glyph: "artist", size: 36, className: "round" }));
+    setAmbience(head, artist.photo_url);
   }
 
   function setAlbumsStatus(text, { error = false } = {}) {

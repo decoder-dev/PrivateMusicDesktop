@@ -12,3 +12,17 @@
   background: color-mix(in srgb, var(--warning) 12%, transparent); border: var(--hair) solid color-mix(in srgb, var(--warning) 28%, transparent);
 }
 .login .note svg { flex: none; color: var(--warning); margin-top: 1px; }
+
+/* A composed hero: the app tile in front of two tilted tiles (artist and album), on a soft wash of the accent. */
+.login::after { content: ""; position: absolute; inset: auto 0 0 0; height: 45%; pointer-events: none; background: radial-gradient(60% 100% at 50% 100%, color-mix(in srgb, var(--accent) 16%, transparent), transparent); }
+.login .box { z-index: 1; gap: 12px; }
+.login-art { position: relative; width: 224px; height: 112px; margin-bottom: 14px; }
+.login-art .tile {
+  position: absolute; top: 18px; width: 72px; height: 72px; border-radius: 22px; display: grid; place-items: center; color: #fff;
+  box-shadow: var(--sh-rest), inset 0 1px 0 rgb(255 255 255 / 0.25); animation: rise 520ms var(--ease-ios) backwards;
+}
+.login-art .tile.a { left: 0; transform: rotate(-12deg); background: linear-gradient(145deg, #bd4f69, #8a2f5a); animation-delay: 120ms; }
+.login-art .tile.b { right: 0; transform: rotate(11deg); background: linear-gradient(145deg, #23806f, #1b5f78); animation-delay: 200ms; }
+.login-art .app-icon { position: absolute; left: 50%; top: 4px; width: 88px; height: 88px; margin: 0 0 0 -44px; border-radius: 26px; box-shadow: var(--sh-float), 0 10px 30px -6px color-mix(in srgb, var(--accent) 45%, transparent), inset 0 1px 0 rgb(255 255 255 / 0.3); }
+.login h1 { font-size: 32px; line-height: 38px; letter-spacing: -0.6px; text-wrap: balance; }
+@media (max-height: 560px) { .login-art { transform: scale(0.8); margin-bottom: 0; } }
