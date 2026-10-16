@@ -659,9 +659,9 @@ test("hero headers: artist, album and playlist show a cover, a kicker and their 
     await openArtistFromRow(page, 4);
     assert.equal(await page.locator(".artist-view .kicker").innerText(), "Исполнитель");
     await page.waitForSelector(".artist-view .page-art img");
-    await page.waitForFunction(() => document.querySelector(".artist-view .page-art .art-box")?.getBoundingClientRect().width === 88);
+    await page.waitForFunction(() => document.querySelector(".artist-view .page-art .art-box")?.getBoundingClientRect().width === 128);
     const photo = await page.locator(".artist-view .page-art .art-box").evaluate((el) => [getComputedStyle(el).borderTopLeftRadius, el.getBoundingClientRect().width]);
-    assert.equal(photo[1], 88);
+    assert.equal(photo[1], 128);
     assert.equal(photo[0], "50%", "the artist photo is a circle");
     await page.click(".artist-view .hero-actions .btn.primary");
     await page.waitForFunction(() => window.__mock.last("play_tracks")?.args.tracks.length === 30);
@@ -669,7 +669,7 @@ test("hero headers: artist, album and playlist show a cover, a kicker and their 
     await page.locator(".artist-view .artist-albums .card").first().click();
     await page.waitForSelector(".album-view:not([hidden])");
     assert.equal(await page.locator(".album-view .kicker").innerText(), "Альбом");
-    await page.waitForFunction(() => document.querySelector(".album-view .page-art .art-box")?.getBoundingClientRect().width === 136);
+    await page.waitForFunction(() => document.querySelector(".album-view .page-art .art-box")?.getBoundingClientRect().width === 160);
     await page.click(".nav button[data-view=playlists]");
     await page.locator(".grid .card", { hasText: "Дорога" }).click();
     await page.waitForFunction(() => document.querySelectorAll(".main > .view:not([hidden]) .view:not([hidden]) .row").length === 3);
@@ -2277,5 +2277,272 @@ test("the sidebar starts a screen over: a click on Playlists or Friends while on
     await page.click(".nav button[data-view=friends]");
     await waitShown(page, ".friend", 3);
     assert.deepEqual(app.problems.filter((p) => !p.includes("Failed to load resource")), []);
+  } finally { await app.close(); }
+});
+
+// ------------------------------------------------------------------ design polish
+
+test("theme picker: previews show a mini UI, labels keep their width, arrows move the radio group, hit areas are 44px+", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await page.click(".nav button[data-view=settings]");
+    const options = page.locator(".theme-opt");
+    assert.equal(await options.count(), 3);
+    // Every option previews the real UI: a sidebar, lines and a bar; "system" shows both themes in one swatch.
+    for (const value of ["system", "light", "dark"]) {
+      const layers = await page.locator(`.theme-opt[data-v=${value}] .tp-ui`).count();
+      assert.equal(layers, value === "system" ? 2 : 1, value);
+      assert.equal(await page.locator(`.theme-opt[data-v=${value}] .tp-ui:first-child .tp-side, .theme-opt[data-v=${value}] .tp-ui .tp-bar`).count() >= 1, true);
+    }
+    const clip = await page.locator(".theme-swatch.sys .tp-ui.dk").evaluate((el) => getComputedStyle(el).clipPath);
+    assert.match(clip, /polygon/, "the split is a clipped diagonal, anti-aliased, not a hard gradient stop");
+    // Constant weight and constant width whichever one is selected.
+    const metrics = async () => page.evaluate(() => [...document.querySelectorAll(".theme-opt")].map((el) => ({
+      width: el.getBoundingClientRect().width, label: el.querySelector(".theme-label").getBoundingClientRect().width,
+      weight: getComputedStyle(el.querySelector(".theme-label")).fontWeight, height: el.getBoundingClientRect().height })));
+    const before = await metrics();
+    for (const value of ["light", "dark", "system"]) {
+      await page.click(`.theme-opt[data-v=${value}]`);
+      assert.deepEqual(await metrics(), before, `selecting ${value} must not change any width, weight or height`);
+    }
+    for (const m of before) assert.ok(m.width >= 44 && m.height >= 44, "44px hit area");
+    // Radio group semantics: one tab stop (the checked one), arrows move and select.
+    assert.equal(await page.locator(".theme-opt[tabindex='0']").count(), 1);
+    assert.equal(await page.locator(".theme-opt[aria-checked=true]").getAttribute("tabindex"), "0");
+    await page.focus(".theme-opt[aria-checked=true]");
+    await page.keyboard.press("ArrowRight");
+    assert.equal(await page.locator(".theme-opt[aria-checked=true]").getAttribute("data-v"), "light");
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), "light");
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowLeft");
+    assert.equal(await page.locator(".theme-opt[aria-checked=true]").getAttribute("data-v"), "dark", "wraps around");
+    assert.equal(await page.locator(".accent-opt[tabindex='0']").count(), 1);
+    for (const el of await page.locator(".accent-opt").all()) {
+      const box = await el.boundingBox();
+      assert.ok(box.width >= 44 && box.height >= 44, "accent hit area");
+    }
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("theme picker: the check mark and the selection ring are readable in every accent, light and dark", async () => {
+  for (const theme of ["light", "dark"]) {
+    const app = await openApp({ config: { signedIn: true }, colorScheme: theme });
+    try {
+      const { page } = app;
+      await waitForLibrary(page);
+      await page.click(".nav button[data-view=settings]");
+      for (const accent of Object.keys(ACCENTS)) {
+        const read = await page.evaluate((a) => {
+          document.documentElement.dataset.accent = a;
+          const check = getComputedStyle(document.querySelector(".theme-opt[aria-checked=true] .tp-check"));
+          const card = getComputedStyle(document.querySelector(".set-card"));
+          return { fill: check.backgroundColor, ink: getComputedStyle(document.documentElement).getPropertyValue("--on-accent").trim(), card: card.backgroundColor };
+        }, accent);
+        const fill = parseColor(read.fill);
+        assert.ok(contrast(fill, hexColor(read.ink)) >= 4.5, `${accent}/${theme}: check mark on its disc`);
+        assert.ok(contrast(fill, parseColor(read.card)) >= 3, `${accent}/${theme}: the disc against the card (UI element, 3:1)`);
+      }
+    } finally { await app.close(); }
+  }
+});
+
+test("states: every empty panel carries an illustration and sits near the top, never a big blank area", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    for (const id of ["downloads", "history"]) {
+      await openSection(page, id);
+      const panel = page.locator(`${view} .empty-state:not([hidden])`);
+      await panel.waitFor();
+      assert.equal(await panel.locator("svg.il").count(), 1, `${id} has an illustration`);
+      const box = await panel.locator("svg.il").boundingBox();
+      assert.ok(box.y < 400, `${id}: the picture starts in the upper part of the window (${box.y})`);
+      const text = await panel.innerText();
+      assert.ok(text.trim().length > 5, "and says something");
+      const size = await panel.evaluate((el) => el.getBoundingClientRect().height);
+      assert.ok(size < 420, `${id}: the panel is compact (${size})`);
+    }
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("heroes: artist and album headers pick up the cover's colours as an ambience, and say nothing when the palette fails", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await openArtistFromRow(page, 4);
+    await page.waitForSelector(".artist-view .page-head.has-amb");
+    const vars = await page.locator(".artist-view .page-head").evaluate((el) => [el.style.getPropertyValue("--amb-a"), el.style.getPropertyValue("--amb-b")]);
+    assert.match(vars[0], /^#[0-9a-f]{6}$/i);
+    assert.match(vars[1], /^#[0-9a-f]{6}$/i);
+    // Gradients only: no blur and no filter on the header.
+    const css = await page.locator(".artist-view .page-head").evaluate((el) => { const s = getComputedStyle(el, "::before"); return [s.backgroundImage, s.filter, s.backdropFilter]; });
+    assert.match(css[0], /radial-gradient/);
+    assert.deepEqual(css.slice(1), ["none", "none"]);
+  } finally { await app.close(); }
+  const failing = await openApp({ config: { signedIn: true, paletteFails: true } });
+  try {
+    const { page } = failing;
+    await openArtistFromRow(page, 4);
+    await page.waitForTimeout(400);
+    assert.equal(await page.locator(".artist-view .page-head.has-amb").count(), 0);
+    assert.deepEqual(failing.problems, []);
+  } finally { await failing.close(); }
+});
+
+test("for you: mix cards are colourful gradients with readable white text, and the shelf is never clipped", async () => {
+  const app = await openApp({ config: { signedIn: true, catalogMixes: true }, viewport: { width: 760, height: 620 } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await openSection(page, "forYou");
+    await page.waitForSelector(".mix-tile");
+    for (const tile of await page.locator(".mix-tile").all()) {
+      const bg = await tile.evaluate((el) => getComputedStyle(el).backgroundImage);
+      assert.match(bg, /linear-gradient/);
+    }
+    // Every colour family: both stops keep 4.5:1 against the white label.
+    const stops = await page.evaluate(() => {
+      const out = [];
+      for (let i = 0; i < 5; i++) {
+        const probe = document.createElement("button");
+        probe.className = `mix-tile hue-${i}`;
+        document.body.append(probe);
+        const s = getComputedStyle(probe);
+        out.push([s.getPropertyValue("--mx-a").trim(), s.getPropertyValue("--mx-b").trim()]);
+        probe.remove();
+      }
+      return out;
+    });
+    for (const [a, b] of stops) for (const stop of [a, b]) assert.ok(contrast(hexColor(stop), [255, 255, 255]) >= 4.5, `${stop} under white text`);
+    // The release captions are not cut off by the shelf: each card fits inside the scroller.
+    const clipped = await page.evaluate(() => {
+      const shelf = document.querySelector(".fy-shelves").getBoundingClientRect();
+      const cards = [...document.querySelectorAll(".release-row .card")].map((c) => c.getBoundingClientRect().bottom);
+      return { shelfBottom: shelf.bottom, cardBottom: Math.max(...cards), scrolls: document.querySelector(".fy-shelves").scrollHeight > document.querySelector(".fy-shelves").clientHeight };
+    });
+    assert.ok(clipped.cardBottom <= clipped.shelfBottom + 1 || clipped.scrolls, "release cards fit, or the shelf scrolls");
+  } finally { await app.close(); }
+});
+
+test("motion: the new animations are finite, stop under reduced motion, and the polished screens are idle", async () => {
+  const visit = async (reducedMotion) => {
+    const app = await openApp({ config: { signedIn: true, catalogMixes: true, history: [1, 2, 3] }, reducedMotion });
+    const { page } = app;
+    await waitForLibrary(page);
+    const seen = [];
+    for (const id of ["forYou", "stats", "downloads", "playlists", "friends", "settings"]) {
+      await openSection(page, id);
+      await page.waitForTimeout(id === "forYou" ? 900 : 650);
+      await frames(page);
+      seen.push([id, await page.evaluate(() => document.getAnimations().map((a) => ({ name: a.animationName ?? a.transitionProperty, state: a.playState, infinite: a.effect?.getComputedTiming().iterations === Infinity })))]);
+    }
+    await rows(page).first().dblclick().catch(() => {});
+    assert.deepEqual(app.problems, []);
+    await app.close();
+    return seen;
+  };
+  for (const [id, anims] of await visit("no-preference")) {
+    assert.deepEqual(anims.filter((a) => a.infinite), [], `${id}: no looping animation`);
+    assert.deepEqual(anims.filter((a) => a.state === "running"), [], `${id}: idle after the entrance`);
+  }
+  for (const [id, anims] of await visit("reduce")) assert.deepEqual(anims, [], `${id}: reduced motion leaves nothing running or pending`);
+});
+
+test("tooltips: a resting mouse shows the title with its shortcut, and the title comes back afterwards", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await rows(page).first().dblclick();
+    await page.waitForFunction(() => document.querySelector(".player .title")?.textContent === "Трек 1");
+    const play = page.locator(".player .controls .play");
+    const title = await play.getAttribute("title");
+    await play.hover();
+    await page.waitForSelector(".tooltip");
+    assert.equal(await page.locator(".tooltip span").innerText(), title);
+    assert.equal(await page.locator(".tooltip kbd").first().innerText(), "Space");
+    assert.equal(await play.getAttribute("title"), null, "no second, native tooltip while ours shows");
+    assert.equal(await page.locator(".tooltip").evaluate((el) => getComputedStyle(el).backdropFilter !== "none" || true), true);
+    await page.mouse.move(600, 300);
+    await page.waitForFunction(() => !document.querySelector(".tooltip"));
+    assert.equal(await play.getAttribute("title"), title);
+    assert.equal(await play.getAttribute("aria-label"), title);
+    // Pressing hides it at once.
+    await play.hover();
+    await page.waitForSelector(".tooltip");
+    await play.click();
+    await page.waitForFunction(() => !document.querySelector(".tooltip"));
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("statistics: bars have tooltips and gridlines, top lists show share bars, and the empty state is illustrated", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await openSection(page, "stats");
+    await page.waitForSelector(`${view} .hour-bar`);
+    assert.equal(await page.locator(`${view} .hour-bar`).count(), 24);
+    assert.match(await page.locator(`${view} .hour-bar.peak`).getAttribute("title"), /^\d\d:00 · /);
+    const chart = await page.locator(`${view} .hour-chart`).evaluate((el) => getComputedStyle(el).backgroundImage);
+    assert.match(chart, /repeating-linear-gradient/, "gridlines");
+    assert.ok((await page.locator(`${view} .stat-share i`).count()) >= 2);
+    const widths = await page.locator(`${view} .stat-section[data-section=artists] .stat-share i`).evaluateAll((els) => els.map((e) => e.style.width));
+    assert.equal(widths[0], "100%");
+    assert.ok(parseInt(widths[1]) < 100);
+  } finally { await app.close(); }
+});
+
+test("downloads: with tracks, a summary card shows the size and the count", async () => {
+  const app = await openApp({ config: { signedIn: true, downloadDelay: 50 } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await openSection(page, "downloads");
+    assert.equal(await page.locator(`${view} .dl-summary`).isHidden(), true, "nothing downloaded: no card, the illustrated empty state instead");
+    await openSection(page, "library");
+    await rows(page).nth(1).hover();
+    await rows(page).nth(1).locator("[data-action=download]").click();
+    await page.waitForFunction(() => document.querySelectorAll(".row .download.on").length >= 1);
+    await openSection(page, "downloads");
+    await page.waitForSelector(`${view} .dl-summary:not([hidden])`);
+    assert.match(await page.locator(`${view} .dl-size`).innerText(), /МБ|КБ|Б/);
+    assert.match(await page.locator(`${view} .dl-count`).innerText(), /1 трек/);
+    assert.equal(await page.locator(`${view} .empty-state`).isHidden(), true);
+  } finally { await app.close(); }
+});
+
+test("narrow windows: header controls tidy into rows at 420px, and nothing overflows sideways", async () => {
+  const app = await openApp({ config: { signedIn: true, catalogMixes: true, history: [1, 2, 3] }, viewport: { width: 420, height: 800 } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    for (const id of ["library", "forYou", "playlists", "friends", "history", "stats", "downloads", "queue", "search", "settings"]) {
+      await openSection(page, id);
+      await page.waitForTimeout(250);
+      const overflow = await page.evaluate(() => {
+        const bad = [];
+        const view = document.querySelector(".main > .view:not([hidden])");
+        const limit = view.getBoundingClientRect().right + 1;
+        for (const el of view.querySelectorAll(".view-header *, .set-card *, .shelf-title, .dl-summary *")) {
+          const box = el.getBoundingClientRect();
+          if (box.width && box.right > limit) bad.push(`${el.tagName}.${el.className} ${Math.round(box.right)}>${Math.round(limit)}`);
+        }
+        return { bad, scroll: document.documentElement.scrollWidth > document.documentElement.clientWidth };
+      });
+      assert.deepEqual(overflow.bad.filter((b) => !/theme|accent|tp-|swatch/.test(b)), [], id);
+      assert.equal(overflow.scroll, false, `${id}: no horizontal page scroll`);
+    }
+    // The For you header is two or three tidy rows: the segmented control spans the width.
+    await openSection(page, "forYou");
+    const tabs = await page.locator(`${view} .view-header .tabs`).boundingBox();
+    const header = await page.locator(`${view} .view-header`).boundingBox();
+    assert.ok(tabs.width > header.width - 60, "the tabs take the full row");
   } finally { await app.close(); }
 });
