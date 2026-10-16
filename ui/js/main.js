@@ -5,6 +5,7 @@ import { api } from "./api.js";
 import { listen } from "./bridge.js";
 import { store, set, publish, subscribe, withScope } from "./store.js";
 import { toast } from "./toast.js";
+import { installTooltips } from "./tooltip.js";
 import { createPlayerBar } from "./player-bar.js";
 import { setDefaultTrackMenu } from "./tracks-screen.js";
 import { createNowPlaying } from "./now-playing.js";
@@ -529,5 +530,6 @@ async function start() {
   }
 }
 
+installTooltips();
 start();
 window.addEventListener("beforeunload", () => unlisten.forEach((fn) => fn()));

@@ -9,7 +9,7 @@ export function createQueueView() {
     title: t("queue.title"),
     playable: false,
     hooks: {
-      emptyText: t("queue.empty"),
+      emptyText: t("queue.empty"), art: "queue",
       pinLiked: false, // hearts show on hover; a column of marks on every row says nothing
       rowActions: [["close", "remove", t("remove")]],
       isSelected: (_track, index) => index === store.queue.current,

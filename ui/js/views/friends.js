@@ -44,7 +44,7 @@ export function createFriendsView({ play, onTrackAction, toast }) {
     h("header", { class: "view-header" }, h("div", { class: "vh-text" }, h("h1", { text: t("friends.title") }))), status, list);
 
   function setStatus(text, { error = false } = {}) {
-    paintStatus(status, text, { error });
+    paintStatus(status, text, { error, art: "friends" });
     listScreen.classList.toggle("state-on", !!text);
   }
 
@@ -94,7 +94,7 @@ export function createFriendsView({ play, onTrackAction, toast }) {
     title: t("friends.tracks"),
     heading: "h2",
     filterable: true,
-    hooks: { emptyText: t("friends.noTracks"), onPlay: play, onAction: onTrackAction },
+    hooks: { emptyText: t("friends.noTracks"), art: "music", onPlay: play, onAction: onTrackAction },
   });
   const playlistStatus = h("div", { class: "status", role: "status", hidden: true });
   const playlistGrid = h("div", { class: "grid friend-playlists" });

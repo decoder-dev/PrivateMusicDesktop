@@ -21,7 +21,7 @@ export function createHistoryView({ play, onTrackAction, toast, openTrackMenu })
     title: t("history.title"),
     filterable: true,
     hooks: {
-      emptyText: t("history.empty"),
+      emptyText: t("history.empty"), art: "history",
       onPlay: play,
       onAction: onTrackAction,
       headerExtra: clearButton,

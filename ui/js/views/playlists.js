@@ -65,7 +65,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
     const list = allPlaylists();
     grid.replaceChildren(...list.map((p) => playlistCard(p, open)));
     if (loaded) {
-      paintStatus(status, list.length ? "" : t("playlists.empty"));
+      paintStatus(status, list.length ? "" : t("playlists.empty"), { art: "playlist" });
     }
   }
 

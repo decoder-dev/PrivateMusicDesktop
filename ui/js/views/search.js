@@ -3,7 +3,7 @@ import { createTracksScreen } from "../tracks-screen.js";
 import { errorText, t } from "../i18n.js";
 import { h } from "../dom.js";
 import { icon } from "../icons.js";
-import { searchField, paintStatus, watchSegmented } from "../ui-parts.js";
+import { searchField, paintStatus, fillPanel, watchSegmented } from "../ui-parts.js";
 import { albumCard, artistCard } from "../album-card.js";
 import { openAlbum, openArtist } from "../navigation.js";
 
@@ -44,7 +44,7 @@ export function createSearchView({ play, onTrackAction, toast }) {
 
   const screen = createTracksScreen({
     title: t("search.title"),
-    hooks: { emptyText: t("search.empty"), onPlay: play, onAction: onTrackAction },
+    hooks: { emptyText: t("search.empty"), art: "search", onPlay: play, onAction: onTrackAction },
   });
   // The search box lives in the header, next to the title.
   const header = screen.element.querySelector(".view-header");
@@ -132,9 +132,9 @@ export function createSearchView({ play, onTrackAction, toast }) {
     const { status } = shelfParts[id];
     if (text === t("loading")) return paintStatus(status, text, { kind: "cards" });
     status.removeAttribute("aria-busy");
-    status.textContent = text ?? "";
-    status.hidden = !text;
     status.className = `empty-state${error ? " error" : ""}`;
+    fillPanel(status, text ?? "", error ? "error" : id === "artists" ? "artist" : "album");
+    status.hidden = !text;
   }
 
   function renderShelf(id, items) {
