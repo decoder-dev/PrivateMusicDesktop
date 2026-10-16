@@ -125,6 +125,18 @@ jobs:
           if (Test-Path $log) { Write-Host "--- $log"; Get-Content $log }
           if (-not ((Test-Path $report) -and (Select-String -Path $report -Pattern '^loaded ' -Quiet))) { exit 1 }
 
+      # An update installs over the old version and must keep the sign-in and data.
+      - name: Installing over the last release keeps the sign-in (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --repo '${{ github.repository }}' --pattern '*-setup.exe' --dir "$env:RUNNER_TEMP\previous"
+          $old = (Get-ChildItem "$env:RUNNER_TEMP\previous\*-setup.exe" | Select-Object -First 1).FullName
+          $new = (Get-ChildItem 'target\release\bundle\nsis\*-setup.exe' | Select-Object -First 1).FullName
+          scripts\upgrade-check.ps1 -Old $old -New $new
+
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: private-music-desktop-${{ matrix.name }}
