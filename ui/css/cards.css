@@ -93,6 +93,9 @@
   display: flex; gap: 12px; overflow-x: auto; padding: 2px var(--gutter) 8px; scroll-snap-type: x proximity; scroll-padding-inline: var(--gutter); scrollbar-width: thin;
 }
 .mix-grid > *, .release-row > * { scroll-snap-align: start; }
+/* A shelf that failed is one line with a way to try again, not a panel. */
+.mix-catalog > .status.inline { flex-wrap: wrap; align-items: baseline; padding-top: 8px; }
+.retry-link { color: var(--accent); text-decoration: underline; }
 .release-row .card { flex: none; width: 136px; padding: 0; }
 .mix-tile {
   flex: none; display: flex; align-items: center; gap: 12px; min-width: 200px; max-width: 280px; height: 72px; padding: 0 14px 0 12px;
