@@ -1,6 +1,6 @@
 import { h, clear, fold } from "./dom.js";
 import { icon } from "./icons.js";
-import { t } from "./i18n.js";
+import { t, tn } from "./i18n.js";
 import { createVirtualList } from "./virtual-list.js";
 import { trackRow, ROW_HEIGHT } from "./track-row.js";
 import { store, subscribe } from "./store.js";
@@ -8,6 +8,7 @@ import { trackKey } from "./api.js";
 import { isLiked, isBusy } from "./likes.js";
 import { isDownloaded, isDownloading } from "./downloads.js";
 import { openArtistOf } from "./navigation.js";
+import { artBox, paintStatus, pageHero, searchField, headerOnScroll } from "./ui-parts.js";
 
 /**
  * The common screen for every list of tracks: header, optional filter,
@@ -18,40 +19,47 @@ import { openArtistOf } from "./navigation.js";
  *   onAction(action, track, index)      hover buttons
  *   rowActions                           [[icon, action, label], …] or undefined for the default pair
  *   isSelected(track, index)             default: the playing track
+ *   onRetry()                            a "try again" button under an error
+ *   back, headerExtra                    elements for the header
  *
  * `heading` is the title's tag: "h2" when the list is a part of a page.
+ * `hero` (with `kicker`) turns the header into a hero card with cover art.
+ * `playable: false` leaves the Play and Shuffle buttons out.
  */
 // The track menu every list uses unless a screen brings its own (set by main).
 let defaultMenu = null;
 export function setDefaultTrackMenu(fn) { defaultMenu = fn; }
 
-export function createTracksScreen({ title, filterable = false, playable = true, heading: level = "h1", hooks }) {
+export function createTracksScreen({ title, filterable = false, playable = true, heading: level = "h1", hero = false, kicker = "", hooks }) {
   let all = [];
   let visible = [];
   let query = "";
 
   const heading = h(level, { text: title });
   const meta = h("span", { class: "meta" });
-  const filter = filterable
-    ? h("input", {
-        class: "field", type: "search", placeholder: t("library.filterShort"), "aria-label": t("library.filter"),
+  const filterPart = filterable
+    ? searchField({
+        placeholder: t("library.filterShort"), label: t("library.filter"),
         oninput: (event) => { query = fold(event.target.value.trim()); applyFilter(); },
       })
     : null;
   const playButton = playable
-    ? h("button", { class: "btn primary", type: "button", onclick: () => visible.length && hooks.onPlay(visible, 0, { shuffle: false }) }, t("play"))
+    ? h("button", { class: "btn primary", type: "button", hidden: true, onclick: () => visible.length && hooks.onPlay(visible, 0, { shuffle: false }) }, icon("play", 14), t("play"))
     : null;
   const shuffleButton = playable
-    ? h("button", { class: "btn", type: "button", onclick: () => visible.length && hooks.onPlay(visible, Math.floor(Math.random() * visible.length), { shuffle: true }) }, t("shuffle"))
+    ? h("button", { class: "icon-btn circle-btn", type: "button", hidden: true, title: t("shuffle"), "aria-label": t("shuffle"),
+        onclick: () => visible.length && hooks.onPlay(visible, Math.floor(Math.random() * visible.length), { shuffle: true }) }, icon("shuffle", 16))
     : null;
   const status = h("div", { class: "status", role: "status", hidden: true });
   const empty = h("div", { class: "empty-state", hidden: true });
+  const retry = hooks.onRetry ? h("button", { class: "btn retry", type: "button", onclick: () => hooks.onRetry(), text: t("fy.retryTune") }) : null;
 
   const list = createVirtualList({
     rowHeight: ROW_HEIGHT,
     renderRow: (track, index) =>
       trackRow(track, {
-        selected: hooks.isSelected ? hooks.isSelected(track, index) : store.player.track && trackKey(store.player.track) === trackKey(track),
+        selected: hooks.isSelected ? hooks.isSelected(track, index) : !!store.player.track && trackKey(store.player.track) === trackKey(track),
+        paused: store.player.status !== "playing" && store.player.status !== "buffering" && store.player.status !== "loading",
         actions: hooks.rowActions,
         liked: isLiked(track),
         busy: isBusy(track),
@@ -82,9 +90,20 @@ export function createTracksScreen({ title, filterable = false, playable = true,
     },
   });
 
-  const element = h("section", { class: "view" },
-    h("header", { class: "view-header" }, hooks.back ?? null, heading, hooks.headerExtra ?? null, meta, filter, playButton, shuffleButton),
-    status, empty, list.element);
+  const heroArt = hero ? h("span", { class: "hero-art page-art" }, artBox(null, { glyph: "playlist", size: 40 })) : null;
+  const note = hero ? h("div", { class: "page-note", hidden: true }) : null;
+  const header = hero
+    ? pageHero({
+        back: hooks.back, art: heroArt,
+        body: [h("div", { class: "kicker", text: kicker }), heading, meta, note],
+        actions: [playButton, shuffleButton, hooks.headerExtra].filter(Boolean),
+      })
+    : h("header", { class: "view-header" }, hooks.back ?? null,
+        h("div", { class: "vh-text" }, heading, meta), hooks.headerExtra ?? null, filterPart?.element ?? null,
+        playable ? h("div", { class: "vh-actions" }, playButton, shuffleButton) : null);
+  headerOnScroll(header, list.element);
+
+  const element = h("section", { class: "view" }, header, status, empty, list.element);
 
   function applyFilter() {
     visible = query
@@ -95,17 +114,25 @@ export function createTracksScreen({ title, filterable = false, playable = true,
     renderEmpty();
   }
 
+  /** Panels replace the (empty) list; the list is shown again once there is something to list. */
+  function renderState() {
+    const panel = (!status.hidden && !status.classList.contains("progress")) || !empty.hidden;
+    list.element.parentElement?.classList.toggle("state-on", panel);
+  }
+
   function renderEmpty() {
     const show = visible.length === 0 && !status.textContent;
     empty.hidden = !show;
     if (show) empty.textContent = all.length === 0 ? (hooks.emptyText ?? "") : t("library.noMatches");
-    for (const button of [playButton, shuffleButton]) if (button) button.disabled = visible.length === 0;
+    // No dead buttons: with nothing to play they are not shown at all.
+    for (const button of [playButton, shuffleButton]) if (button) button.hidden = visible.length === 0;
+    renderState();
   }
 
-  // Keep the "playing" highlight current without rebuilding anything else.
+  // Keep the "playing" highlight and the pause glyph current without rebuilding anything else.
   let lastKey = null;
   subscribe("player", (player) => {
-    const key = player.track ? trackKey(player.track) : null;
+    const key = `${player.track ? trackKey(player.track) : ""}|${player.status === "paused"}`;
     if (key !== lastKey) {
       lastKey = key;
       list.refresh();
@@ -118,31 +145,32 @@ export function createTracksScreen({ title, filterable = false, playable = true,
   return {
     element,
     list,
+    header,
     setTitle(text) { heading.textContent = text; },
+    setKicker(text) { const node = header.querySelector(".kicker"); if (node) node.textContent = text; },
+    setCover(url) { heroArt?.replaceChildren(artBox(url, { glyph: "playlist", size: 40 })); },
+    setNote(text) { if (note) { note.textContent = text ?? ""; note.hidden = !text; } },
     setTracks(tracks) {
       all = tracks;
       applyFilter();
-      meta.textContent = tracks.length ? t("library.count", { n: tracks.length }) : "";
+      meta.textContent = tracks.length ? tn("library.count", tracks.length) : "";
     },
     /** Shows progressive loading without throwing the list away. */
     setProgress(tracks, total) {
       all = tracks;
       visible = query ? all.filter((tr) => fold(tr.title).includes(query) || fold(tr.artist).includes(query)) : all;
       list.setItems(visible);
-      status.hidden = false;
-      status.className = "status";
-      status.textContent = t("library.loaded", { n: tracks.length, total });
+      paintStatus(status, t("library.loaded", { n: tracks.length, total }), { extra: "progress" });
       renderEmpty();
     },
     setStatus(text, { error = false } = {}) {
-      status.textContent = text ?? "";
-      status.hidden = !text;
-      status.className = `status${error ? " error" : ""}`;
+      paintStatus(status, text, { error });
+      // A failed load can be tried again; the button lives inside the panel.
+      if (error && text && retry) status.append(retry);
       renderEmpty();
     },
     clearStatus() {
-      status.textContent = "";
-      status.hidden = true;
+      paintStatus(status, "");
       renderEmpty();
     },
     get visible() { return visible; },

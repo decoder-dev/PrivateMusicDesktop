@@ -1,0 +1,14 @@
+/* Sign-in. */
+.login { position: relative; height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px; overflow: auto; }
+.login::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 55%; pointer-events: none; background: linear-gradient(180deg, color-mix(in srgb, var(--role-station) 20%, transparent), transparent); }
+.login .box { position: relative; width: 100%; max-width: 360px; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; animation: view-in var(--t-page) var(--ease-out) backwards; }
+.login .app-icon { width: 64px; height: 64px; border-radius: 16px; display: grid; place-items: center; color: var(--on-accent); background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 100%, #fff 18%), var(--accent)); box-shadow: var(--sh-rest); margin-bottom: 6px; }
+.login h1 { font: 700 28px/34px var(--font); letter-spacing: -0.4px; }
+.login p { color: var(--text-2); font-size: 15px; line-height: 21px; max-width: 320px; }
+.login .btn.primary { width: 100%; min-height: 54px; border-radius: var(--r-pill); font-size: 17px; margin-top: 8px; }
+.login .message { min-height: 21px; font-size: 14px; }
+.login .note {
+  display: flex; gap: 10px; text-align: left; padding: 12px 16px; border-radius: var(--r-compact); font-size: 13px; line-height: 18px; color: var(--text-2);
+  background: color-mix(in srgb, var(--warning) 12%, transparent); border: var(--hair) solid color-mix(in srgb, var(--warning) 28%, transparent);
+}
+.login .note svg { flex: none; color: var(--warning); margin-top: 1px; }

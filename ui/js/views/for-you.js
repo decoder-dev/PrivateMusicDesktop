@@ -2,8 +2,10 @@ import { h } from "../dom.js";
 import { api } from "../api.js";
 import { createTracksScreen } from "../tracks-screen.js";
 import { albumCard } from "../album-card.js";
+import { icon } from "../icons.js";
 import { openAlbum } from "../navigation.js";
 import { errorText, t } from "../i18n.js";
+import { artBox, paintStatus, watchSegmented } from "../ui-parts.js";
 
 const SOURCES = {
   mix: { label: "fy.mix", load: () => api.mix() },
@@ -28,8 +30,9 @@ export function createForYouView({ play, onTrackAction, toast }) {
   const tabs = h("div", { class: "tabs", role: "tablist" },
     Object.entries(SOURCES).map(([id, source]) =>
       h("button", { type: "button", role: "tab", "data-source": id, onclick: () => select(id), text: t(source.label) })));
-  const refresh = h("button", { class: "btn", type: "button", onclick: () => load(current, { force: true }), text: t("fy.refresh") });
-  const tuningContent = h("div", { class: "mix-tuning-content" });
+  watchSegmented(tabs);
+  const refresh = h("button", { class: "btn", type: "button", onclick: () => load(current, { force: true }) }, icon("refresh", 14), t("fy.refresh"));
+  const tuningContent = h("div", { class: "mix-tuning-content glass strong" });
   const tuning = h("details", { class: "mix-tuning", ontoggle: (event) => {
     if (event.target.open) loadTuning();
   } }, h("summary", { text: t("fy.tune") }), tuningContent);
@@ -54,7 +57,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
   screen.element.insertBefore(h("div", { class: "fy-shelves" }, catalogShelf, releasesShelf), screen.list.element);
 
   function renderTabs() {
-    for (const button of tabs.children) button.setAttribute("aria-selected", String(button.dataset.source === current));
+    for (const button of tabs.querySelectorAll("button")) button.setAttribute("aria-selected", String(button.dataset.source === current));
     tuning.hidden = current !== "mix";
     catalogShelf.hidden = current !== "mix";
   }
@@ -96,12 +99,12 @@ export function createForYouView({ play, onTrackAction, toast }) {
 
   async function loadTuning() {
     if (categories) return;
-    tuningContent.replaceChildren(h("div", { class: "status", text: t("loading") }));
+    tuningContent.replaceChildren(h("div", { class: "status inline", text: t("loading") }));
     try {
       const settings = await api.mixSettings();
       categories = findCategories(settings);
       if (!categories.length) {
-        tuningContent.replaceChildren(h("div", { class: "status", text: t("fy.noTuning") }));
+        tuningContent.replaceChildren(h("div", { class: "status inline", text: t("fy.noTuning") }));
         return;
       }
       for (const category of categories) {
@@ -143,7 +146,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
       tuningContent.append(actions);
     } catch (error) {
       categories = null;
-      tuningContent.replaceChildren(h("div", { class: "status error", text: errorText(error) }),
+      tuningContent.replaceChildren(h("div", { class: "status inline error", text: errorText(error) }),
         h("button", { class: "btn", type: "button", text: t("fy.retryTune"), onclick: loadTuning }));
     }
   }
@@ -151,40 +154,33 @@ export function createForYouView({ play, onTrackAction, toast }) {
   async function loadCatalog(force = false) {
     if (catalogLoaded && !force) return;
     const mine = ++catalogGeneration;
-    catalogStatus.className = "status";
-    catalogStatus.hidden = false;
-    catalogStatus.textContent = t("loading");
+    paintStatus(catalogStatus, t("loading"), { kind: "tiles", extra: "compact" });
     catalogGrid.replaceChildren();
     try {
       const mixes = await api.catalogMixes();
       if (mine !== catalogGeneration) return;
       const visible = mixes.filter((mix) => mix.id !== "common");
       catalogGrid.replaceChildren(...visible.map((mix) => {
-        const artwork = mix.artwork_url
-          ? h("img", { src: mix.artwork_url, alt: "", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer" })
-          : h("span", { class: "mix-placeholder", text: "♪" });
         const button = h("button", { class: "mix-tile", type: "button", onclick: () => playCatalogMix(mix, button) },
-          artwork, h("span", { class: "mix-tile-title", text: mix.title }),
-          mix.section_title ? h("span", { class: "mix-tile-section", text: mix.section_title }) : null);
+          artBox(mix.artwork_url),
+          h("span", { class: "mix-text" },
+            mix.section_title ? h("span", { class: "mix-tile-section", text: mix.section_title }) : null,
+            h("span", { class: "mix-tile-title", text: mix.title })));
         return button;
       }));
       catalogLoaded = true;
-      catalogStatus.textContent = visible.length ? "" : t("fy.noCatalog");
-      catalogStatus.hidden = !!visible.length;
+      paintStatus(catalogStatus, visible.length ? "" : t("fy.noCatalog"), { extra: "compact" });
     } catch (error) {
       if (mine !== catalogGeneration) return;
-      catalogStatus.className = "status error";
-      catalogStatus.replaceChildren(document.createTextNode(errorText(error)), h("span", { text: " " }),
-        h("button", { class: "btn", type: "button", text: t("fy.refresh"), onclick: () => loadCatalog(true) }));
+      paintStatus(catalogStatus, errorText(error), { error: true, extra: "compact" });
+      catalogStatus.append(h("button", { class: "btn", type: "button", text: t("fy.refresh"), onclick: () => loadCatalog(true) }));
     }
   }
 
   async function loadReleases(force = false) {
     if (releasesLoaded && !force) return;
     const mine = ++releasesGeneration;
-    releasesStatus.className = "status";
-    releasesStatus.hidden = false;
-    releasesStatus.textContent = t("loading");
+    paintStatus(releasesStatus, t("loading"), { kind: "cards", extra: "compact" });
     releasesRow.replaceChildren();
     try {
       const albums = await api.newReleases();
@@ -193,29 +189,24 @@ export function createForYouView({ play, onTrackAction, toast }) {
       releasesRow.replaceChildren(...albums.map((album) =>
         albumCard(album.title?.trim() ? album : { ...album, title: t("album.untitled") }, () => openAlbum(album))));
       releasesLoaded = true;
-      releasesStatus.textContent = albums.length ? "" : t("fy.noReleases");
-      releasesStatus.hidden = !!albums.length;
+      paintStatus(releasesStatus, albums.length ? "" : t("fy.noReleases"), { extra: "compact" });
     } catch (error) {
       if (mine !== releasesGeneration) return;
-      releasesStatus.className = "status error";
-      releasesStatus.replaceChildren(document.createTextNode(errorText(error)), h("span", { text: " " }),
-        h("button", { class: "btn", type: "button", text: t("fy.refresh"), onclick: () => loadReleases(true) }));
+      paintStatus(releasesStatus, errorText(error), { error: true, extra: "compact" });
+      releasesStatus.append(h("button", { class: "btn", type: "button", text: t("fy.refresh"), onclick: () => loadReleases(true) }));
     }
   }
 
   async function playCatalogMix(mix, button) {
     button.disabled = true;
-    catalogStatus.className = "status";
-    catalogStatus.hidden = false;
-    catalogStatus.textContent = t("fy.mixLoading", { title: mix.title });
+    paintStatus(catalogStatus, t("fy.mixLoading", { title: mix.title }), { extra: "inline" });
     try {
       const tracks = await api.streamMix(mix.id, mix.options);
       if (!tracks.length) throw new Error(t("fy.noCatalog"));
       play(tracks, 0, { shuffle: false, radio: { kind: "catalog", mix_id: mix.id, options: mix.options ?? null } });
-      catalogStatus.hidden = true;
+      paintStatus(catalogStatus, "");
     } catch (error) {
-      catalogStatus.className = "status error";
-      catalogStatus.textContent = errorText(error);
+      paintStatus(catalogStatus, errorText(error), { error: true, extra: "compact" });
       toast(errorText(error), { error: true });
     } finally {
       button.disabled = false;
@@ -247,11 +238,11 @@ export function createForYouView({ play, onTrackAction, toast }) {
       cache.clear();
       catalogLoaded = false;
       catalogGrid.replaceChildren();
-      catalogStatus.hidden = true;
+      paintStatus(catalogStatus, "");
       releasesGeneration += 1;
       releasesLoaded = false;
       releasesRow.replaceChildren();
-      releasesStatus.hidden = true;
+      paintStatus(releasesStatus, "");
       listOptions = null;
       categories = null;
       selected = readSelection();

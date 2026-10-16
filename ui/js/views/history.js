@@ -26,11 +26,11 @@ export function createHistoryView({ play, onTrackAction, toast, openTrackMenu })
       onAction: onTrackAction,
       headerExtra: clearButton,
       onMenu: (track, at) => openTrackMenu(track, at, [
-        { label: t("history.remove"), action: "remove-from-history", icon: "trash", run: () => remove(track) },
+        { label: t("history.remove"), action: "remove-from-history", icon: "trash", destructive: true, run: () => remove(track) },
       ]),
     },
   });
-  screen.element.append(h("div", { class: "page-note footer-note", text: t("history.privacy") }));
+  screen.header.after(h("div", { class: "page-note footer-note", text: t("history.privacy") }));
 
   async function load() {
     const mine = ++generation;

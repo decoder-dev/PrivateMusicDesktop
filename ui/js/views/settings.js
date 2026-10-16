@@ -4,12 +4,14 @@ import { api } from "../api.js";
 import { store, subscribe } from "../store.js";
 import { MODES } from "../visualizer.js";
 import { createEqualizerPanel } from "../equalizer.js";
+import { icon } from "../icons.js";
+import { ACCENTS } from "../persist.js";
 
 const IS_MAC = /Mac/i.test(navigator.platform || navigator.userAgent);
 const MOD = IS_MAC ? "⌘" : "Ctrl";
 
 function section(title, ...rows) {
-  return h("section", { class: "set-section" }, h("h2", { text: title }), ...rows);
+  return h("section", { class: "set-section" }, h("h2", { text: title }), h("div", { class: "set-card" }, ...rows));
 }
 
 function row(label, control, note) {
@@ -20,25 +22,48 @@ function row(label, control, note) {
 
 /** Preferences, shortcuts, account and version. Every change applies at once. */
 export function createSettingsView({ settings, onSettingsChange, onSignOut, toast }) {
+  // Theme and accent apply at once, and the pickers follow.
+  const pick = (patch) => { onSettingsChange(patch); render(); };
   const deviceSelect = h("select", { class: "field", "aria-label": t("set.output"),
     onchange: () => chooseDevice(deviceSelect.value || null) });
   const refreshButton = h("button", { class: "btn", type: "button", onclick: () => loadDevices(), text: t("set.output.refresh") });
 
-  const trayBox = h("input", { type: "checkbox", id: "set-tray",
+  const trayBox = h("input", { type: "checkbox", role: "switch", id: "set-tray",
     onchange: () => { onSettingsChange({ closeToTray: trayBox.checked }); api.setCloseToTray(trayBox.checked).catch(() => {}); } });
   const trayNote = h("div", { class: "set-note" });
 
   const visualizerSelect = h("select", { class: "field", "aria-label": t("set.visualizer"),
     onchange: () => onSettingsChange({ visualizer: visualizerSelect.value }) },
     MODES.map((mode) => h("option", { value: mode, text: t(`np.mode.${mode}`) })));
-  const lyricsBox = h("input", { type: "checkbox", id: "set-lyrics",
+  const lyricsBox = h("input", { type: "checkbox", role: "switch", id: "set-lyrics",
     onchange: () => onSettingsChange({ lyrics: lyricsBox.checked }) });
-  const themeSelect = h("select", { class: "field", "aria-label": t("set.theme"),
-    onchange: () => onSettingsChange({ theme: themeSelect.value }) },
-    ["system", "light", "dark"].map((value) => h("option", { value, text: t(`set.theme.${value}`) })));
-  const accentSelect = h("select", { class: "field", "aria-label": t("set.accent"),
-    onchange: () => onSettingsChange({ accent: accentSelect.value }) },
-    ["blue", "indigo", "purple", "pink", "red", "orange", "yellow", "green", "teal"].map((value) => h("option", { value, text: t(`set.accent.${value}`) })));
+  const flatBox = h("input", { type: "checkbox", role: "switch", id: "set-flat",
+    onchange: () => pick({ flatChrome: flatBox.checked }) });
+
+  // Theme: three circles; accent: a grid of colour dots (radio groups).
+  const themeButtons = ["system", "light", "dark"].map((value) =>
+    h("button", { type: "button", role: "radio", class: "theme-opt", "data-v": value, "aria-checked": "false", onclick: () => pick({ theme: value }) },
+      h("span", { class: `theme-swatch ${{ system: "sys", light: "lt", dark: "dk" }[value]}` }, icon("check", 18)),
+      h("span", { text: t(`set.theme.${value}`) })));
+  const themePicker = h("div", { class: "theme-picker", role: "radiogroup", "aria-label": t("set.theme") }, themeButtons);
+  const accentButtons = ACCENTS.map((value) =>
+    h("button", { type: "button", role: "radio", class: "accent-opt", "data-v": value, title: t(`set.accent.${value}`), "aria-label": t(`set.accent.${value}`), "aria-checked": "false",
+      onclick: () => pick({ accent: value }) }, icon("check", 18)));
+  const accentGrid = h("div", { class: "accent-grid", role: "radiogroup", "aria-label": t("set.accent") }, accentButtons);
+  /** Arrow keys move through a radio group like native radios do. */
+  for (const group of [themePicker, accentGrid]) {
+    group.addEventListener("keydown", (event) => {
+      if (!["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"].includes(event.key)) return;
+      const items = [...group.querySelectorAll("[role=radio]")];
+      const index = items.indexOf(document.activeElement);
+      if (index < 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const next = items[(index + (event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length];
+      next.focus();
+      next.click();
+    });
+  }
 
   const equalizer = createEqualizerPanel({ settings, onSettingsChange });
 
@@ -53,19 +78,23 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
   ];
 
   const element = h("section", { class: "view settings", hidden: true },
-    h("header", { class: "view-header" }, h("h1", { text: t("set.title") })),
+    h("header", { class: "view-header" }, h("div", { class: "vh-text" }, h("h1", { text: t("set.title") }))),
     h("div", { class: "set-body" },
       section(t("set.sound"),
         row(t("set.output"), h("div", { class: "set-inline" }, deviceSelect, refreshButton), t("set.output.note"))),
-      section(t("set.appearance"), row(t("set.theme"), themeSelect), row(t("set.accent"), accentSelect)),
+      section(t("set.appearance"),
+        row(t("set.theme"), themePicker),
+        row(t("set.accent"), accentGrid),
+        h("div", { class: "set-row" },
+          h("label", { class: "set-check", for: "set-flat" }, h("span", {}, t("set.flat"), h("div", { class: "set-note", text: t("set.flat.note") })), flatBox))),
       section(t("eq.title"), equalizer.element),
       section(t("set.window"),
         h("div", { class: "set-row" },
-          h("label", { class: "set-check", for: "set-tray" }, trayBox, h("span", { text: t("set.tray") })),
+          h("label", { class: "set-check", for: "set-tray" }, h("span", { text: t("set.tray") }), trayBox),
           trayNote)),
       section(t("set.np"),
         row(t("set.visualizer"), visualizerSelect),
-        h("div", { class: "set-row" }, h("label", { class: "set-check", for: "set-lyrics" }, lyricsBox, h("span", { text: t("set.lyrics") })))),
+        h("div", { class: "set-row" }, h("label", { class: "set-check", for: "set-lyrics" }, h("span", { text: t("set.lyrics") }), lyricsBox))),
       section(t("set.keys"),
         h("table", { class: "set-keys" }, h("tbody", {},
           keys.map(([combo, label]) => h("tr", {}, h("td", {}, h("kbd", { text: combo })), h("td", { text: t(label) })))))),
@@ -108,14 +137,16 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
     trayBox.checked = settings.closeToTray;
     visualizerSelect.value = settings.visualizer ?? "bars";
     lyricsBox.checked = settings.lyrics !== false;
-    themeSelect.value = settings.theme ?? "system";
-    accentSelect.value = settings.accent ?? "blue";
+    flatBox.checked = settings.flatChrome === true;
+    for (const button of themeButtons) button.setAttribute("aria-checked", String(button.dataset.v === (settings.theme ?? "system")));
+    for (const button of accentButtons) button.setAttribute("aria-checked", String(button.dataset.v === (settings.accent ?? "blue")));
     const profile = store.session.profile;
     accountName.textContent = profile ? `${profile.first_name} ${profile.last_name}`.trim() : "";
     persistNote.hidden = store.session.persistent !== false;
   }
 
   subscribe("session", render);
+
 
   return {
     element,

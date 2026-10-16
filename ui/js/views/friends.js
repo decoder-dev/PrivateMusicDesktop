@@ -4,6 +4,8 @@ import { errorText, t } from "../i18n.js";
 import { h } from "../dom.js";
 import { icon } from "../icons.js";
 import { playlistCard } from "./playlists.js";
+import { artBox, paintStatus, backButton, pageHero, watchSegmented } from "../ui-parts.js";
+import { enter } from "../motion.js";
 
 const fullName = (friend) => `${friend.first_name} ${friend.last_name}`.trim();
 
@@ -14,9 +16,11 @@ const fullName = (friend) => `${friend.first_name} ${friend.last_name}`.trim();
 const friendError = (error) => (error?.kind === "vk" ? t("friends.restricted") : errorText(error));
 
 function avatar(friend) {
-  return friend.photo_url
-    ? h("img", { class: "avatar", src: friend.photo_url, alt: "", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" })
-    : h("span", { class: "avatar empty" }, icon("artist", 22));
+  if (!friend.photo_url) return h("span", { class: "avatar empty" }, icon("artist", 22));
+  const image = h("img", { class: "avatar", src: friend.photo_url, alt: "", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" });
+  // A photo that fails to load falls back to the placeholder.
+  image.addEventListener("error", () => image.replaceWith(h("span", { class: "avatar empty" }, icon("artist", 22))));
+  return image;
 }
 
 /**
@@ -37,19 +41,19 @@ export function createFriendsView({ play, onTrackAction, toast }) {
   const status = h("div", { class: "status", role: "status", hidden: true });
   const list = h("div", { class: "friend-list", role: "list" });
   const listScreen = h("section", { class: "view" },
-    h("header", { class: "view-header" }, h("h1", { text: t("friends.title") })), status, list);
+    h("header", { class: "view-header" }, h("div", { class: "vh-text" }, h("h1", { text: t("friends.title") }))), status, list);
 
   function setStatus(text, { error = false } = {}) {
-    status.textContent = text ?? "";
-    status.hidden = !text;
-    status.className = `status${error ? " error" : ""}`;
+    paintStatus(status, text, { error });
+    listScreen.classList.toggle("state-on", !!text);
   }
 
   function renderFriends() {
     list.replaceChildren(...friends.map((person) =>
       h("button", { class: "friend", type: "button", role: "listitem", "data-friend": String(person.id), "aria-label": t("friends.open", { name: fullName(person) }), onclick: () => openFriend(person) },
         avatar(person),
-        h("span", { class: "friend-name", text: fullName(person) }))));
+        h("span", { class: "friend-name", text: fullName(person) }),
+        h("span", { class: "chev" }, icon("chevronRight", 14)))));
   }
 
   async function load() {
@@ -63,6 +67,7 @@ export function createFriendsView({ play, onTrackAction, toast }) {
           if (mine !== generation) return;
           friends = items.slice();
           renderFriends();
+          setStatus("");
         },
       });
       if (all === null) return;
@@ -78,11 +83,12 @@ export function createFriendsView({ play, onTrackAction, toast }) {
   }
 
   // --------------------------------------------------------------- one friend
-  const backToFriends = h("button", { class: "icon-btn", type: "button", title: t("friends.back"), "aria-label": t("friends.back"), onclick: () => showList() }, icon("back", 20));
-  const friendPhoto = h("div", { class: "page-art round friend-photo" });
+  const backToFriends = backButton(t("friends.back"), () => showList());
+  const friendPhoto = h("span", { class: "hero-art page-art round friend-photo" });
   const friendName = h("h1");
   const tabs = h("div", { class: "tabs", role: "tablist", "aria-label": t("friends.title") },
     ["tracks", "playlists"].map((id) => h("button", { type: "button", role: "tab", "data-tab": id, onclick: () => selectTab(id), text: t(`friends.${id}`) })));
+  watchSegmented(tabs);
 
   const tracks = createTracksScreen({
     title: t("friends.tracks"),
@@ -95,12 +101,12 @@ export function createFriendsView({ play, onTrackAction, toast }) {
   const tracksPane = h("div", { class: "tab-pane", "data-pane": "tracks" }, tracks.element);
   const playlistsPane = h("div", { class: "tab-pane", "data-pane": "playlists", hidden: true }, playlistStatus, playlistGrid);
   const friendScreen = h("section", { class: "view", hidden: true },
-    h("header", { class: "view-header page-head" }, backToFriends, friendPhoto, h("div", { class: "page-info" }, friendName)),
+    pageHero({ back: backToFriends, art: friendPhoto, body: [h("div", { class: "kicker", text: t("friends.kicker") }), friendName] }),
     h("div", { class: "tab-bar" }, tabs), tracksPane, playlistsPane);
 
   function selectTab(id) {
     tab = id;
-    for (const button of tabs.children) button.setAttribute("aria-selected", String(button.dataset.tab === id));
+    for (const button of tabs.querySelectorAll("button")) button.setAttribute("aria-selected", String(button.dataset.tab === id));
     tracksPane.hidden = id !== "tracks";
     playlistsPane.hidden = id !== "playlists";
     if (id === "playlists" && playlistsFor !== friend) loadPlaylists();
@@ -110,12 +116,11 @@ export function createFriendsView({ play, onTrackAction, toast }) {
     friend = person;
     playlistsFor = null;
     friendName.textContent = fullName(person);
-    friendPhoto.replaceChildren(person.photo_url
-      ? h("img", { src: person.photo_url, alt: "", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" })
-      : icon("artist", 28));
+    friendPhoto.replaceChildren(artBox(person.photo_url, { glyph: "artist", size: 28, className: "round" }));
     listScreen.hidden = true;
     playlistScreen.hidden = true;
     friendScreen.hidden = false;
+    enter(friendScreen);
     playlistGrid.replaceChildren();
     setPlaylistStatus("");
     selectTab("tracks");
@@ -139,9 +144,7 @@ export function createFriendsView({ play, onTrackAction, toast }) {
   }
 
   function setPlaylistStatus(text, { error = false } = {}) {
-    playlistStatus.textContent = text ?? "";
-    playlistStatus.hidden = !text;
-    playlistStatus.className = `status${error ? " error" : ""}`;
+    paintStatus(playlistStatus, text, { error, kind: "cards", extra: "compact" });
   }
 
   async function loadPlaylists() {
@@ -168,11 +171,13 @@ export function createFriendsView({ play, onTrackAction, toast }) {
   let playlistToken = 0;
   const playlistTracks = createTracksScreen({
     title: "",
+    hero: true,
+    kicker: t("playlists.kicker"),
     hooks: {
       emptyText: t("library.empty"),
       onPlay: play,
       onAction: onTrackAction,
-      back: h("button", { class: "icon-btn", type: "button", title: t("playlists.back"), "aria-label": t("playlists.back"), onclick: () => closePlaylist() }, icon("back", 20)),
+      back: backButton(t("playlists.back"), () => closePlaylist()),
     },
   });
   const playlistScreen = playlistTracks.element;
@@ -181,7 +186,10 @@ export function createFriendsView({ play, onTrackAction, toast }) {
   async function openPlaylist(playlist) {
     friendScreen.hidden = true;
     playlistScreen.hidden = false;
+    enter(playlistScreen);
     playlistTracks.setTitle(playlist.title);
+    playlistTracks.setCover(playlist.artwork_url);
+    playlistTracks.setNote(playlist.description ?? "");
     playlistTracks.setTracks([]);
     playlistTracks.setStatus(t("loading"));
     const mine = ++playlistToken;
@@ -206,6 +214,7 @@ export function createFriendsView({ play, onTrackAction, toast }) {
     playlistToken++;
     playlistScreen.hidden = true;
     friendScreen.hidden = false;
+    enter(friendScreen);
   }
 
   function showList() {
@@ -216,6 +225,7 @@ export function createFriendsView({ play, onTrackAction, toast }) {
     friendScreen.hidden = true;
     playlistScreen.hidden = true;
     listScreen.hidden = false;
+    enter(listScreen);
   }
 
   const element = h("div", { class: "view" }, listScreen, friendScreen, playlistScreen);

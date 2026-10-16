@@ -1,12 +1,13 @@
 import { h } from "../dom.js";
 import { t, errorText } from "../i18n.js";
 import { api } from "../api.js";
+import { icon } from "../icons.js";
 
 /** The sign-in screen. VK's own page opens in a separate window. */
 export function createLoginView({ onError }) {
   const message = h("p", { class: "message", role: "status" });
   const button = h("button", { class: "btn primary", type: "button", onclick: start }, t("login.button"));
-  const note = h("p", { class: "note", hidden: true, text: t("login.notPersistent") });
+  const note = h("p", { class: "note", hidden: true, role: "note" }, icon("alert", 16), h("span", { text: t("login.notPersistent") }));
   let waiting = false;
 
   async function start() {
@@ -28,6 +29,7 @@ export function createLoginView({ onError }) {
 
   const element = h("div", { class: "login" },
     h("div", { class: "box" },
+      h("div", { class: "app-icon", "aria-hidden": "true" }, icon("note", 32)),
       h("h1", { text: t("login.title") }),
       h("p", { text: t("login.lead") }),
       button, message, note));

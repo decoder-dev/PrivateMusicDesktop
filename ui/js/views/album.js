@@ -1,6 +1,7 @@
 import { api } from "../api.js";
 import { createTracksScreen } from "../tracks-screen.js";
-import { errorText, t } from "../i18n.js";
+import { errorText, t, tn } from "../i18n.js";
+import { artBox, backButton, pageHero, headerOnScroll } from "../ui-parts.js";
 import { h } from "../dom.js";
 import { icon } from "../icons.js";
 import { subscribe } from "../store.js";
@@ -21,40 +22,48 @@ export function createAlbumView({ play, onTrackAction, toast, back }) {
   let generation = 0;
   let busy = false;
 
-  const cover = h("div", { class: "page-art" });
+  const cover = h("span", { class: "hero-art page-art" });
   const title = h("h1");
   const artists = h("div", { class: "page-artists" });
   const meta = h("div", { class: "page-note" });
   const followButton = h("button", { class: "btn follow", type: "button", onclick: () => follow() });
-  const backButton = h("button", { class: "icon-btn", type: "button", title: t("playlists.back"), "aria-label": t("playlists.back"), onclick: () => back() }, icon("back", 20));
-  const head = h("header", { class: "view-header page-head" }, backButton, cover, h("div", { class: "page-info" }, title, artists, meta), followButton);
+  const listenButton = h("button", { class: "btn primary", type: "button", hidden: true,
+    onclick: () => tracks.visible.length && play(tracks.visible, 0, { shuffle: false }) }, icon("play", 14), t("artist.listen"));
+  const shuffleButton = h("button", { class: "icon-btn circle-btn", type: "button", hidden: true, title: t("shuffle"), "aria-label": t("shuffle"),
+    onclick: () => tracks.visible.length && play(tracks.visible, Math.floor(Math.random() * tracks.visible.length), { shuffle: true }) }, icon("shuffle", 16));
+  const head = pageHero({
+    back: backButton(t("playlists.back"), () => back()),
+    art: cover,
+    body: [h("div", { class: "kicker", text: t("album.kicker") }), title, artists, meta],
+    actions: [listenButton, shuffleButton, followButton],
+  });
 
   const tracks = createTracksScreen({
     title: t("album.tracks"),
     heading: "h2",
+    playable: false,
     hooks: { emptyText: t("album.empty"), onPlay: play, onAction: onTrackAction },
   });
   const element = h("section", { class: "view album-view" }, head, tracks.element);
+  headerOnScroll(head, tracks.list.element);
 
   function renderFollow() {
     if (!album) return;
     const on = isFollowed(album);
     followButton.textContent = on ? t("album.unfollow") : t("album.follow");
     followButton.setAttribute("aria-pressed", String(on));
-    followButton.classList.toggle("primary", !on);
+    followButton.classList.toggle("on", on);
     followButton.disabled = busy;
   }
 
   function render() {
     title.textContent = album.title;
-    cover.replaceChildren(album.artwork_url
-      ? h("img", { src: album.artwork_url, alt: "", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" })
-      : icon("album", 40));
+    cover.replaceChildren(artBox(album.artwork_url, { glyph: "album", size: 40 }));
     artists.replaceChildren(...album.artists.flatMap((artist, i) => [
       i ? ", " : null,
       h("button", { class: "link-text", type: "button", title: t("artist.open"), onclick: () => openArtist(artist), text: artist.name }),
     ]).filter(Boolean));
-    meta.textContent = [album.year, album.count ? t("album.count", { n: album.count }) : null].filter(Boolean).join(" · ");
+    meta.textContent = [album.year, album.count ? tn("album.count", album.count) : null].filter(Boolean).join(" · ");
     renderFollow();
   }
 
@@ -86,6 +95,7 @@ export function createAlbumView({ play, onTrackAction, toast, back }) {
     ensureAlbums().catch(() => {}); // the follow state; the album's own flag covers a failure
     tracks.setTracks([]);
     tracks.setStatus(t("loading"));
+    listenButton.hidden = shuffleButton.hidden = true;
     let collected = [];
     let offset = 0;
     try {
@@ -103,6 +113,7 @@ export function createAlbumView({ play, onTrackAction, toast, back }) {
       }
       tracks.clearStatus();
       tracks.setTracks(collected);
+      listenButton.hidden = shuffleButton.hidden = collected.length === 0;
     } catch (error) {
       if (mine !== generation) return;
       loadedKey = null; // let the next visit try again

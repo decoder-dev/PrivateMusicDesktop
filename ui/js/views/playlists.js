@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { createTracksScreen } from "../tracks-screen.js";
-import { errorText, t } from "../i18n.js";
+import { errorText, t, tn } from "../i18n.js";
 import { h } from "../dom.js";
 import { icon } from "../icons.js";
 import { subscribe } from "../store.js";
@@ -10,15 +10,15 @@ import { allPlaylists, ensurePlaylists, isOwn, replacePlaylist, dropPlaylist, ch
 import { ensureAlbums, followedAlbums } from "../my-albums.js";
 import { albumCard } from "../album-card.js";
 import { openAlbum } from "../navigation.js";
+import { artBox, paintStatus, backButton, headerOnScroll } from "../ui-parts.js";
+import { enter } from "../motion.js";
 
 export function playlistCard(playlist, open) {
-  const art = playlist.artwork_url
-    ? h("img", { class: "art", src: playlist.artwork_url, alt: "", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" })
-    : h("div", { class: "art empty" }, icon("playlist", 36));
+  const art = h("span", { class: "card-art art" }, artBox(playlist.artwork_url, { glyph: "playlist", size: 36, className: "fill" }), h("span", { class: "play-chip" }, icon("play", 12)));
   return h("button", { class: "card", type: "button", onclick: () => open(playlist) },
     art,
     h("div", { class: "name", text: playlist.title }),
-    h("div", { class: "count", text: t("playlists.tracks", { n: playlist.count }) }));
+    h("div", { class: "count", text: tn("playlists.tracks", playlist.count) }));
 }
 
 export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu, newPlaylist }) {
@@ -30,27 +30,30 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
 
   const status = h("div", { class: "status", role: "status", hidden: true });
   const grid = h("div", { class: "grid" });
-  const header = h("header", { class: "view-header" }, h("h1", { text: t("playlists.title") }),
-    h("button", { class: "btn primary", type: "button", onclick: () => newPlaylist(), text: t("pl.new") }));
+  const header = h("header", { class: "view-header" }, h("div", { class: "vh-text" }, h("h1", { text: t("playlists.title") })),
+    h("button", { class: "btn primary", type: "button", onclick: () => newPlaylist() }, icon("plus", 14), t("pl.new")));
   // Followed releases, below the playlists.
   const albumsStatus = h("div", { class: "status", role: "status", hidden: true });
   const albumsGrid = h("div", { class: "grid followed-albums" });
-  const shelves = h("div", { class: "page-scroll" }, grid,
+  const shelves = h("div", { class: "page-scroll" }, status, grid,
     h("h2", { class: "shelf-title", text: t("albums.title") }), albumsStatus, albumsGrid);
-  const listScreen = h("section", { class: "view" }, header, status, shelves);
+  const listScreen = h("section", { class: "view" }, header, shelves);
+  headerOnScroll(header, shelves);
 
   const editButton = h("button", { class: "btn", type: "button", onclick: () => edit(), text: t("pl.edit") });
   const deleteButton = h("button", { class: "btn danger-text", type: "button", onclick: () => remove(), text: t("pl.delete") });
   const detail = createTracksScreen({
     title: "",
+    hero: true,
+    kicker: t("playlists.kicker"),
     hooks: {
       emptyText: t("library.empty"),
       onPlay: play,
       onAction: onTrackAction,
       onMenu: (track, at, index) => openTrackMenu(track, at, current && isOwn(current)
-        ? [{ label: t("menu.removeFrom"), action: "remove-from-playlist", icon: "trash", run: () => removeTrack(track, index) }]
+        ? [{ label: t("menu.removeFrom"), action: "remove-from-playlist", icon: "trash", destructive: true, run: () => removeTrack(track, index) }]
         : []),
-      back: h("button", { class: "icon-btn", type: "button", title: t("playlists.back"), "aria-label": t("playlists.back"), onclick: () => showList() }, icon("back", 20)),
+      back: backButton(t("playlists.back"), () => showList()),
       headerExtra: h("div", { class: "set-inline pl-owner" }, editButton, deleteButton),
     },
   });
@@ -62,9 +65,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
     const list = allPlaylists();
     grid.replaceChildren(...list.map((p) => playlistCard(p, open)));
     if (loaded) {
-      status.hidden = list.length > 0;
-      status.className = "status";
-      status.textContent = list.length ? "" : t("playlists.empty");
+      paintStatus(status, list.length ? "" : t("playlists.empty"));
     }
   }
 
@@ -77,7 +78,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
     renderGrid();
     if (current) {
       const fresh = allPlaylists().find((p) => same(p, current));
-      if (fresh) { current = fresh; detail.setTitle(fresh.title); }
+      if (fresh) { current = fresh; detail.setTitle(fresh.title); detail.setNote(fresh.description ?? ""); }
     }
   });
   subscribe("session", renderOwner);
@@ -87,17 +88,13 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
     if (!albumsLoaded) return;
     const list = followedAlbums();
     albumsGrid.replaceChildren(...list.map((album) => albumCard(album, openAlbum)));
-    albumsStatus.hidden = list.length > 0;
-    albumsStatus.className = "status";
-    albumsStatus.textContent = list.length ? "" : t("albums.empty");
+    paintStatus(albumsStatus, list.length ? "" : t("albums.empty"), { extra: "compact" });
   }
   subscribe("albums", renderAlbums);
 
   async function loadAlbums() {
     const mine = generation;
-    albumsStatus.hidden = false;
-    albumsStatus.className = "status";
-    albumsStatus.textContent = t("loading");
+    paintStatus(albumsStatus, t("loading"), { kind: "cards" });
     try {
       await ensureAlbums();
       if (mine !== generation) return;
@@ -105,8 +102,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
       renderAlbums();
     } catch (error) {
       if (mine !== generation) return;
-      albumsStatus.className = "status error";
-      albumsStatus.textContent = errorText(error);
+      paintStatus(albumsStatus, errorText(error), { error: true, extra: "compact" });
     }
   }
 
@@ -115,6 +111,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
     current = null;
     detail.element.hidden = true;
     listScreen.hidden = false;
+    enter(listScreen);
   }
 
   async function open(playlist) {
@@ -122,7 +119,10 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
     renderOwner();
     listScreen.hidden = true;
     detail.element.hidden = false;
+    enter(detail.element);
     detail.setTitle(playlist.title);
+    detail.setCover(playlist.artwork_url);
+    detail.setNote(playlist.description ?? "");
     detail.setTracks([]);
     detail.setStatus(t("loading"));
     const mine = ++detailGeneration;
@@ -184,7 +184,23 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
       tracks = tracks.filter((_, i) => i !== index);
       detail.setTracks(tracks);
       changeCount(playlist, -1);
-      toast(t("pl.removed", { title: playlist.title }));
+      toast(t("pl.removed", { title: playlist.title }), {
+        action: { label: t("toast.undo"), run: () => undoRemove(playlist, track, index) },
+      });
+    } catch (error) {
+      toast(errorText(error), { error: true });
+    }
+  }
+
+  /** The undo banner: puts the track back (VK may append it) and says so. */
+  async function undoRemove(playlist, track, index) {
+    try {
+      await api.addToPlaylist(playlist, track);
+      changeCount(playlist, 1);
+      if (playlist === current || (current && same(playlist, current))) {
+        tracks = [...tracks.slice(0, index), track, ...tracks.slice(index)];
+        detail.setTracks(tracks);
+      }
     } catch (error) {
       toast(errorText(error), { error: true });
     }
@@ -192,9 +208,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
 
   async function load() {
     const mine = ++generation;
-    status.hidden = false;
-    status.className = "status";
-    status.textContent = t("loading");
+    paintStatus(status, t("loading"), { kind: "cards" });
     try {
       await ensurePlaylists();
       if (mine !== generation) return;
@@ -202,8 +216,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
       renderGrid();
     } catch (error) {
       if (mine === generation) {
-        status.className = "status error";
-        status.textContent = errorText(error);
+        paintStatus(status, errorText(error), { error: true });
       }
       toast(errorText(error), { error: true });
     }

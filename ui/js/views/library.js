@@ -17,6 +17,7 @@ export function createLibraryView({ play, onTrackAction, toast }) {
       onPlay: play,
       onAction: onTrackAction,
       pinLiked: false, // everything here is liked; the heart shows on hover only
+      onRetry: () => { loaded = false; loading = false; load(); },
     },
   });
   let tracks = [];
