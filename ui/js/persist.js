@@ -28,6 +28,10 @@ function readEq(saved) {
   return { on: saved?.on === true, gains, preset: typeof saved?.preset === "string" ? saved.preset : "flat" };
 }
 
+export const ACCENTS = ["blue", "indigo", "violet", "pink", "red", "orange", "green", "teal", "banana"];
+// Older versions called two of the accents by other names.
+const RENAMED = { purple: "violet", yellow: "banana" };
+
 export function loadSettings() {
   const saved = read(SETTINGS) ?? {};
   const volume = Number.isFinite(saved.volume) ? Math.min(1, Math.max(0, saved.volume)) : 1;
@@ -41,7 +45,8 @@ export function loadSettings() {
     outputDevice: typeof saved.outputDevice === "string" && saved.outputDevice ? saved.outputDevice : null,
     visualizer: ["bars", "mirror", "wave", "radial", "off"].includes(saved.visualizer) ? saved.visualizer : null,
     theme: ["system", "light", "dark"].includes(saved.theme) ? saved.theme : "system",
-    accent: ["blue", "indigo", "purple", "pink", "red", "orange", "yellow", "green", "teal"].includes(saved.accent) ? saved.accent : "blue",
+    accent: ACCENTS.includes(RENAMED[saved.accent] ?? saved.accent) ? (RENAMED[saved.accent] ?? saved.accent) : "blue",
+    flatChrome: saved.flatChrome === true,
   };
 }
 

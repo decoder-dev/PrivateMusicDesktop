@@ -1,0 +1,192 @@
+/* Design tokens. Values mirror the iOS app (App/AppPalette.swift,
+   App/AppSettings.swift, UI/Bubble/*): the classic palette, the nine accents,
+   the radii, the elevations and the system-like motion curves. */
+
+@font-face { font-family: "Inter"; font-weight: 400; font-style: normal; font-display: swap; src: url("../fonts/Inter-Regular.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 500; font-style: normal; font-display: swap; src: url("../fonts/Inter-Medium.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 600; font-style: normal; font-display: swap; src: url("../fonts/Inter-SemiBold.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 700; font-style: normal; font-display: swap; src: url("../fonts/Inter-Bold.woff2") format("woff2"); }
+
+:root {
+  color-scheme: light dark;
+
+  /* Typeface: SF on macOS, Segoe UI (Variable) on Windows, the bundled Inter
+     on Linux, then whatever the system offers. */
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", Inter, system-ui, "Noto Sans", Roboto, Cantarell, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Cascadia Mono", "DejaVu Sans Mono", monospace;
+
+  /* Neutral palette: light (App/AppPalette.swift classic; text-2 is a little stronger than iOS's .secondary so 13px text passes 4.5:1). */
+  --page-top: #ffffff;
+  --page-bottom: #f6f6f6;
+  --surface: #f4f4f4;
+  --text: #000000;
+  --text-2: rgb(60 60 67 / 0.72);
+  --text-3: rgb(60 60 67 / 0.34);
+  --danger: #c7242e;
+  --danger-fill: #d6525c;
+  --success: #38a370;
+  --warning: #b86d0a;
+  --shadow-rgb: 0 0 0;
+
+  /* Hairline and strokes (UI/ContrastPolicy.swift, PremiumDesign.swift:46,117). */
+  --hair: 1px;
+  --hover: color-mix(in srgb, var(--text) 6%, transparent);
+  --pressed: color-mix(in srgb, var(--text) 10%, transparent);
+  --line-card: color-mix(in srgb, var(--text) 7%, transparent);
+  --line: color-mix(in srgb, var(--text) 10%, transparent);
+  --line-glass: color-mix(in srgb, var(--text) 11%, transparent);
+  --line-placeholder: color-mix(in srgb, var(--text) 12%, transparent);
+
+  /* Accent (App/AppSettings.swift AppAccent): --accent follows the theme, --on-accent is the readable label
+     (black on the dark-theme accents, white on the light ones: the higher WCAG contrast, as onAccent does). */
+  --accent: var(--a-l);
+  --on-accent: #ffffff;
+  --a-l: #1a6be0;
+  --a-d: #3385fa;
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --accent-fill: color-mix(in srgb, var(--accent) 18%, transparent);
+  --accent-row: color-mix(in srgb, var(--accent) 8%, transparent);
+  --accent-wash: color-mix(in srgb, var(--accent) 14%, transparent);
+
+  /* Role colours of mixes and context tiles (BubbleGamut). */
+  --role-station: #d98c3d;
+  --role-artist: #d1617a;
+  --role-mood: #339480;
+  --role-mix: #8557c7;
+
+  /* Shape (PremiumDesign.swift:6-14, BubbleFoundation.swift:46-59). */
+  --r-card: 22px;
+  --r-compact: 16px;
+  --r-control: 14px;
+  --r-tile: 20px;
+  --r-pill: 999px;
+
+  /* Space and layout. */
+  --s-xs: 4px; --s-s: 8px; --s-m: 12px; --s-l: 16px; --s-xl: 20px; --s-xxl: 24px; --s-section: 32px;
+  --gutter: 24px;
+  --row: 56px;
+  --sidebar: 232px;
+  --bar-h: 80px;
+  --bar-gap: 12px;
+  --clear: calc(var(--bar-h) + var(--bar-gap) + 16px);
+
+  /* Elevation (BubbleComponents.swift:78-107, PremiumDesign.swift:55-60); CSS blur is twice SwiftUI's radius. */
+  --sh-card: 0 8px 18px rgb(0 0 0 / 0.04);
+  --sh-card-i: 0 14px 28px rgb(0 0 0 / 0.07);
+  --sh-rest: 0 4px 20px rgb(0 0 0 / 0.10);
+  --sh-float: 0 8px 36px rgb(0 0 0 / 0.16);
+  --sh-bar: 0 3px 16px rgb(0 0 0 / 0.08);
+  --sh-art: 0 8px 32px rgb(0 0 0 / 0.16);
+  --sh-art-head: 0 8px 32px rgb(0 0 0 / 0.22);
+  --sh-art-mini: 0 1px 6px rgb(0 0 0 / 0.18);
+  --sh-cta: 0 4px 16px color-mix(in srgb, var(--accent) 18%, transparent);
+  --scrim: rgb(0 0 0 / 0.30);
+  --tint-amt: 18%;
+
+  /* Materials: blur is for chrome the content passes under, and nothing else. */
+  --glass: color-mix(in srgb, var(--surface) 62%, transparent);
+  --glass-strong: color-mix(in srgb, var(--surface) 80%, transparent);
+  --glass-blur: saturate(1.6) blur(24px);
+  --glass-strong-blur: saturate(1.6) blur(32px);
+
+  /* Motion. */
+  --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-std: cubic-bezier(0.4, 0, 0.2, 1);
+  --t-press: 60ms; --t-release: 180ms; --t-hover: 140ms; --t-focus: 120ms; --t-pop: 160ms;
+  --t-toast: 240ms; --t-dialog: 240ms; --t-page: 260ms; --t-push: 340ms; --t-sheet: 420ms;
+}
+
+/* Dark: the system asks for it and the app is not forced to light, or the app forces it. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page-top: #000000;
+    --page-bottom: #0e0e0e;
+    --surface: #131313;
+    --text: #ffffff;
+    --text-2: rgb(235 235 245 / 0.62);
+    --text-3: rgb(235 235 245 / 0.30);
+    --danger: #ff6b72;
+    --warning: #f09e33;
+    --accent: var(--a-d);
+    --on-accent: #000000;
+    --sh-rest: 0 4px 20px rgb(0 0 0 / 0.20);
+    --sh-float: 0 8px 36px rgb(0 0 0 / 0.30);
+    --sh-bar: 0 3px 16px rgb(0 0 0 / 0.18);
+    --sh-art: 0 8px 32px rgb(0 0 0 / 0.34);
+    --scrim: rgb(0 0 0 / 0.45);
+    --tint-amt: 32%;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page-top: #000000;
+  --page-bottom: #0e0e0e;
+  --surface: #131313;
+  --text: #ffffff;
+  --text-2: rgb(235 235 245 / 0.62);
+  --text-3: rgb(235 235 245 / 0.30);
+  --danger: #ff6b72;
+  --warning: #f09e33;
+  --accent: var(--a-d);
+  --on-accent: #000000;
+  --sh-rest: 0 4px 20px rgb(0 0 0 / 0.20);
+  --sh-float: 0 8px 36px rgb(0 0 0 / 0.30);
+  --sh-bar: 0 3px 16px rgb(0 0 0 / 0.18);
+  --sh-art: 0 8px 32px rgb(0 0 0 / 0.34);
+  --scrim: rgb(0 0 0 / 0.45);
+  --tint-amt: 32%;
+}
+:root[data-theme="light"] { color-scheme: light; }
+
+/* The nine accents (AppAccent): a light and a dark value each. */
+:root[data-accent="blue"]   { --a-l: #1a6be0; --a-d: #3385fa; }
+:root[data-accent="indigo"] { --a-l: #4f52db; --a-d: #6e73fa; }
+:root[data-accent="violet"] { --a-l: #874ccc; --a-d: #b275f7; }
+:root[data-accent="pink"]   { --a-l: #bf3670; --a-d: #fa66a3; }
+:root[data-accent="red"]    { --a-l: #c73338; --a-d: #fa6161; }
+:root[data-accent="orange"] { --a-l: #a6570f; --a-d: #ff9933; }
+:root[data-accent="green"]  { --a-l: #1c7a45; --a-d: #4ccc7a; }
+:root[data-accent="teal"]   { --a-l: #0f787a; --a-d: #3dcccc; }
+:root[data-accent="banana"] { --a-l: #805600; --a-d: #f4d66f; }
+
+/* Higher contrast: stronger strokes, no translucency. */
+@media (prefers-contrast: more) {
+  :root {
+    --hair: 1.2px;
+    --line-card: color-mix(in srgb, var(--text) 22%, transparent);
+    --line: color-mix(in srgb, var(--text) 22%, transparent);
+    --line-glass: color-mix(in srgb, var(--text) 22%, transparent);
+    --line-placeholder: color-mix(in srgb, var(--text) 22%, transparent);
+    --glass: var(--surface);
+    --glass-strong: var(--surface);
+    --text-2: color-mix(in srgb, var(--text) 78%, transparent);
+  }
+}
+@media (min-resolution: 2dppx) {
+  :root { --hair: 0.75px; }
+}
+@media (prefers-contrast: more) and (min-resolution: 2dppx) {
+  :root { --hair: 1.2px; }
+}
+
+/* Flat chrome: the system asks for no transparency, the user prefers a simpler
+   look, or the window is in the background. Glass becomes an opaque surface. */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass: var(--surface);
+    --glass-strong: var(--surface);
+    --line-glass: color-mix(in srgb, var(--text) 18%, transparent);
+  }
+}
+:root[data-chrome="flat"] {
+  --glass: var(--surface);
+  --glass-strong: var(--surface);
+  --line-glass: color-mix(in srgb, var(--text) 18%, transparent);
+}
+
+@media (max-width: 760px) { :root { --gutter: 16px; } }
+@media (max-width: 350px) { :root { --gutter: 14px; } }
+@media (max-width: 900px) { :root { --sidebar: 64px; } }
+@media (max-width: 640px) { :root { --bar-h: 88px; --bar-gap: 8px; } }
+@media (pointer: coarse) { :root { --hit: 44px; } }
