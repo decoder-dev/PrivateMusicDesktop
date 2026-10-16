@@ -575,6 +575,12 @@ const language = (navigator.language || "ru").toLowerCase().startsWith("ru") ? "
 /** "ru" or "en": for dates and numbers that the browser formats itself. */
 export const locale = language;
 
+/** Adds strings from a module that owns its own texts: `{ ru: {…}, en: {…} }`. */
+export function addStrings(entries) {
+  Object.assign(dictionary.ru, entries.ru);
+  Object.assign(dictionary.en, entries.en);
+}
+
 export function t(key, values = {}) {
   const text = dictionary[language][key] ?? dictionary.en[key] ?? key;
   return text.replace(/\{(\w+)\}/g, (_, name) => String(values[name] ?? ""));
@@ -599,6 +605,7 @@ export function errorText(error) {
     case "unauthorized": return t("error.unauthorized");
     case "offline": return t("error.offline");
     case "timeout": return t("error.timeout");
+    case "network": return t("error.network");
     case "stream":
     case "http": return t("error.stream");
     default: return (error && error.message) || t("error.default");

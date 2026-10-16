@@ -8,6 +8,7 @@
 //! one must be https (loopback http only for tests), carry no credentials and
 //! stay under the size limits below.
 
+use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::io::Read;
@@ -24,12 +25,17 @@ use url::Url;
 
 use super::buffer::{ElementaryKind, SharedBuffer};
 use super::cmaf::Cmaf;
+use crate::net;
 use crate::{Error, Result};
 
 const MAX_PLAYLIST_BYTES: usize = 2 * 1024 * 1024;
 const MAX_SEGMENT_BYTES: usize = 48 * 1024 * 1024;
 const MAX_SEGMENTS: i32 = 4000;
 const MAX_PLAYLIST_DEPTH: usize = 3;
+/// Tries per playlist, key or segment request (the first plus two more, each
+/// on a fresh connection when the last one failed in transport).
+const REQUEST_ATTEMPTS: u32 = 3;
+
 pub const MAX_STREAM_BYTES: usize = 150 * 1024 * 1024;
 
 #[derive(Clone, Debug)]
@@ -124,7 +130,8 @@ pub fn spawn_fetch(url: String, config: FetchConfig, buffer: SharedBuffer) -> Jo
 }
 
 struct Fetcher<'a> {
-    http: Client,
+    /// The client and the connection generation it was built under.
+    http: RefCell<(u64, Client)>,
     config: &'a FetchConfig,
     buffer: &'a SharedBuffer,
 }
@@ -134,8 +141,12 @@ fn run(url: &str, config: &FetchConfig, buffer: &SharedBuffer) -> Result<()> {
         return run_offline(name, config, buffer);
     }
     let start = parse_url(url, config)?;
-    let allow_loopback = config.allow_loopback_http;
-    let http = Client::builder()
+    let fetcher = Fetcher { http: RefCell::new((net::epoch(), build_client(config.allow_loopback_http))), config, buffer };
+    fetcher.run(start)
+}
+
+fn build_client(allow_loopback: bool) -> Client {
+    Client::builder()
         .connect_timeout(Duration::from_secs(15))
         .timeout(Duration::from_secs(60))
         .dns_resolver(std::sync::Arc::new(PublicResolver { allow_loopback }))
@@ -148,9 +159,8 @@ fn run(url: &str, config: &FetchConfig, buffer: &SharedBuffer) -> Result<()> {
                 attempt.follow()
             }
         }))
-        .build()?;
-    let fetcher = Fetcher { http, config, buffer };
-    fetcher.run(start)
+        .build()
+        .expect("the stream client configuration is valid")
 }
 
 fn is_loopback(url: &Url) -> bool {
@@ -240,28 +250,69 @@ impl Fetcher<'_> {
         if self.buffer.is_cancelled() { Err(Error::Cancelled) } else { Ok(()) }
     }
 
-    fn send(&self, url: &Url, range: Option<(u64, u64)>) -> Result<Response> {
-        let mut last = Error::Offline;
-        for attempt in 0..2 {
-            self.check_cancel()?;
-            let mut request = self.http.get(url.clone()).header(USER_AGENT, self.config.user_agent.as_str());
-            if let Some((start, length)) = range {
-                request = request.header(RANGE, format!("bytes={}-{}", start, start + length - 1));
-            }
-            match request.send() {
-                Ok(response) if response.status().is_success() => return Ok(response),
-                Ok(response) => last = Error::Http(response.status().as_u16()),
-                Err(err) => last = Error::from(err),
-            }
-            let retryable = matches!(last, Error::Timeout | Error::Offline | Error::Transport(_))
-                || matches!(last, Error::Http(408 | 429 | 500..=599));
-            if attempt == 0 && retryable {
-                std::thread::sleep(Duration::from_millis(250));
-                continue;
-            }
-            break;
+    /// The client for the next request: rebuilt first if the network changed
+    /// since it was made, so no request goes out on a socket from the old one.
+    fn http(&self) -> Client {
+        let mut slot = self.http.borrow_mut();
+        let now = net::epoch();
+        if slot.0 != now {
+            log::info!("network changed: stream download continues on new connections");
+            *slot = (now, build_client(self.config.allow_loopback_http));
         }
-        Err(last)
+        slot.1.clone()
+    }
+
+    /// Sleeps `seconds`, waking early (with `Cancelled`) if playback moved on.
+    fn nap(&self, seconds: f64) -> Result<()> {
+        let end = std::time::Instant::now() + Duration::from_secs_f64(seconds);
+        while std::time::Instant::now() < end {
+            self.check_cancel()?;
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        self.check_cancel()
+    }
+
+    /// Runs one network step up to [`REQUEST_ATTEMPTS`] times. A bad connection
+    /// (reset, timeout, DNS, TLS) or a busy server (408/429/5xx) is retried
+    /// with a short jittered back-off, the former on brand-new connections.
+    /// 401/403/404/410 are not: the address has expired, and only a fresh one
+    /// from VK (the controller's job) helps.
+    fn retrying<T>(&self, step: impl Fn() -> Result<T>) -> Result<T> {
+        let mut attempt = 0;
+        loop {
+            attempt += 1;
+            self.check_cancel()?;
+            let error = match step() {
+                Ok(value) => return Ok(value),
+                Err(error) => error,
+            };
+            let connectivity = net::is_connectivity(&error);
+            let busy = matches!(error, Error::Http(408 | 429 | 500..=599));
+            if attempt >= REQUEST_ATTEMPTS || !(connectivity || busy) {
+                return Err(error);
+            }
+            log::info!("stream request: {} → {}retrying (attempt {}/{REQUEST_ATTEMPTS})", error.kind(), if connectivity { "new connection, " } else { "" }, attempt + 1);
+            if connectivity {
+                *self.http.borrow_mut() = (net::epoch(), build_client(self.config.allow_loopback_http));
+            }
+            self.nap(net::backoff(attempt - 1, 0.3, 2.0, 0.3, net::jitter_unit()))?;
+        }
+    }
+
+    fn send(&self, url: &Url, range: Option<(u64, u64)>) -> Result<Response> {
+        self.retrying(|| self.send_once(url, range))
+    }
+
+    fn send_once(&self, url: &Url, range: Option<(u64, u64)>) -> Result<Response> {
+        let mut request = self.http().get(url.clone()).header(USER_AGENT, self.config.user_agent.as_str());
+        if let Some((start, length)) = range {
+            request = request.header(RANGE, format!("bytes={}-{}", start, start + length - 1));
+        }
+        match request.send() {
+            Ok(response) if response.status().is_success() => Ok(response),
+            Ok(response) => Err(Error::Http(response.status().as_u16())),
+            Err(err) => Err(Error::from(err)),
+        }
     }
 
     /// Whole body, capped.
@@ -270,7 +321,7 @@ impl Fetcher<'_> {
         let mut chunk = [0u8; 16 * 1024];
         loop {
             self.check_cancel()?;
-            let n = response.read(&mut chunk).map_err(|e| Error::Transport(e.to_string()))?;
+            let n = response.read(&mut chunk).map_err(|e| net::read_error(&e))?;
             if n == 0 {
                 return Ok(out);
             }
@@ -282,9 +333,14 @@ impl Fetcher<'_> {
     }
 
     fn get_bytes(&self, url: &Url, range: Option<(u64, u64)>, cap: usize) -> Result<Vec<u8>> {
-        let response = self.send(url, range)?;
-        let status = response.status().as_u16();
-        let body = self.read_all(response, cap)?;
+        // The request and the reading of its body are one step: a connection
+        // that drops in the middle of a segment fetches that segment again.
+        let body = self.retrying(|| {
+            let response = self.send_once(url, range)?;
+            let status = response.status().as_u16();
+            Ok((status, self.read_all(response, cap)?))
+        })?;
+        let (status, body) = body;
         match range {
             None => Ok(body),
             Some((start, length)) => {
@@ -307,7 +363,7 @@ impl Fetcher<'_> {
         let mut filled = 0;
         while filled < 16 {
             self.check_cancel()?;
-            let n = response.read(&mut head[filled..]).map_err(|e| Error::Transport(e.to_string()))?;
+            let n = response.read(&mut head[filled..]).map_err(|e| net::read_error(&e))?;
             if n == 0 {
                 break;
             }
@@ -338,7 +394,7 @@ impl Fetcher<'_> {
         let mut chunk = [0u8; 32 * 1024];
         loop {
             self.check_cancel()?;
-            let n = response.read(&mut chunk).map_err(|e| Error::Transport(e.to_string()))?;
+            let n = response.read(&mut chunk).map_err(|e| net::read_error(&e))?;
             if n == 0 {
                 return Ok(());
             }

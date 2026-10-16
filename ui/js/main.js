@@ -30,6 +30,7 @@ import { openMenu } from "./menu.js";
 import { formDialog } from "./dialog.js";
 import { ensurePlaylists, ownPlaylists, addPlaylist, changeCount, forgetPlaylists } from "./my-playlists.js";
 import { loadSettings, saveSettings, saveQueue, loadQueue, clearQueue } from "./persist.js";
+import { handleBackendEvent as networkEvent, isNetworkError, setReloader, initNetwork } from "./network.js";
 
 
 const root = document.getElementById("app");
@@ -344,6 +345,7 @@ async function showApp() {
   shell?.dispose();
   clear(root);
   shell = buildShell();
+  setReloader(() => shell?.views[store.view]?.show?.());
   root.append(shell.element);
   shell.show("library");
   api.profile().then((profile) => {
@@ -405,6 +407,7 @@ async function signOut() {
 // ------------------------------------------------------------ backend events
 
 function onBackendEvent(event) {
+  networkEvent(event);
   switch (event.type) {
     case "state": {
       const previousVolume = store.player.volume;
@@ -423,7 +426,8 @@ function onBackendEvent(event) {
       nowPlaying?.feed(event.bands);
       break;
     case "error":
-      toast(errorText(event), { error: true });
+      // A connection failure gets the VPN card (network.js) instead of a toast.
+      if (!isNetworkError(event)) toast(errorText(event), { error: true });
       break;
     case "session_expired":
       api.sessionState().then((session) => {
@@ -531,5 +535,6 @@ async function start() {
 }
 
 installTooltips();
+initNetwork();
 start();
 window.addEventListener("beforeunload", () => unlisten.forEach((fn) => fn()));

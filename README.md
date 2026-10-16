@@ -182,6 +182,43 @@ cd src-tauri && cargo tauri build                     # installers
 Optional tests: `live_vk` (real VK endpoints, needs network) and `cpal_smoke`
 (real audio backend, e.g. ALSA null device) are `#[ignore]`d by default.
 
+## VPN and network changes
+
+VK ties API tokens, signed stream URLs and cookies to the network the client was on,
+so switching a VPN on or off (or Wi-Fi to cable) while the app runs leaves stale
+connections and stream addresses behind. The app heals itself, as far as it can:
+
+- **Network watcher.** While audio plays or the window is focused (and never otherwise:
+  the thread sleeps without wake-ups) the engine compares, every 8 s, the local addresses
+  the OS would use to reach the internet (a UDP `connect`, no packet is sent; IPv4 to a
+  generic and to a VK address, IPv6 by /64). A change drops every pooled connection,
+  marks all cached stream URLs stale and tells the window (`network`: `changed`, then `ok`
+  once it holds still for ~2.5 s, or `unreachable`).
+- **Playback.** A stream that fails (403/404/410/401, connection reset, timeout, DNS, TLS,
+  or audio that stays dry for 20 s) is resumed at the same position from a fresh
+  `audio.getById` URL on new connections, with exponential back-off and jitter
+  (connection problems: 6 attempts, 0.4 s then 1.2 s doubling to 20 s; dead addresses:
+  3 attempts, the first immediate; iOS rules: one `getById` per attempt, no extra
+  retries inside it). A connection problem never skips tracks: after the last attempt
+  playback pauses with an error and **Try again**, and starts by itself when the network
+  settles. A dead track is skipped as before (at most three in a row). Downloaded tracks
+  are never touched. The queue and position are kept throughout.
+- **API calls.** After a transport error the pooled connections are dropped. Reads are
+  retried (3 tries, back-off with jitter); writes (likes, playlist changes, follow) are
+  never retried. A session VK stops accepting (error 5, 28, or "validation required",
+  17) is renewed once from the cookie and the call repeated once; no loops. Lyrics and
+  cover requests retry once and otherwise fail silently.
+- **Window.** A network failure (timeout, transport) on a screen, in playback or in the
+  sign-in window shows "Не удаётся подключиться к VK" with the hint to try the VPN off (or
+  on), **Try again** and "How to check your VPN" (Windows/macOS/Linux). It is a
+  suggestion, never a claim that a VPN was detected, and it is not shown for sign-in,
+  refused-request or track errors. Failed loads repeat by themselves when the network
+  returns, and "Connection restored" is shown once. If VK's login page does not load
+  within 25 s the sign-in window reports it and Try again reloads it (same restrictions:
+  VK hosts over https only).
+- **Logs** name each step without URLs or tokens: `stream 403 → refreshing url (attempt
+  2/3)`, `network changed: dropping connections`, `recovered after 3.2 s`.
+
 ## Security model
 
 - **Tokens** live only in the OS keyring (Secret Service / Credential Manager /

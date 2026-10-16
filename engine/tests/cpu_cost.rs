@@ -88,3 +88,61 @@ fn playing_a_track_in_real_time_is_nearly_free() {
     assert!(share < 0.05, "playback uses {:.1}% of a core", share * 100.0);
     drop(player);
 }
+
+/// The network watcher only looks while audio plays or the window is focused:
+/// each look is three UDP `connect`s (nothing is sent), and idle it never wakes.
+#[test]
+fn the_network_watcher_costs_nothing_idle_and_next_to_nothing_while_playing() {
+    use pm_engine::net::{MonitorConfig, NetworkMonitor, SystemAddresses};
+
+    fn watcher_wakeups() -> u64 {
+        let mut total = 0;
+        for task in std::fs::read_dir("/proc/self/task").unwrap().flatten() {
+            let status = std::fs::read_to_string(task.path().join("status")).unwrap_or_default();
+            if status.lines().next().unwrap_or("").contains("pm-net") {
+                total += status
+                    .lines()
+                    .find_map(|l| l.strip_prefix("voluntary_ctxt_switches:"))
+                    .and_then(|v| v.trim().parse::<u64>().ok())
+                    .unwrap_or(0);
+            }
+        }
+        total
+    }
+
+    /// utime + stime of the watcher thread alone (the other test in this
+    /// binary plays audio at the same time).
+    fn watcher_cpu_seconds() -> f64 {
+        let mut ticks = 0.0;
+        for task in std::fs::read_dir("/proc/self/task").unwrap().flatten() {
+            let stat = std::fs::read_to_string(task.path().join("stat")).unwrap_or_default();
+            let Some(end) = stat.rfind(')') else { continue };
+            if !stat[..end].contains("(pm-net") {
+                continue;
+            }
+            let fields: Vec<&str> = stat[end + 2..].split_whitespace().collect();
+            ticks += fields[11].parse::<f64>().unwrap_or(0.0) + fields[12].parse::<f64>().unwrap_or(0.0);
+        }
+        ticks / 100.0
+    }
+
+    // One look per second: eight times the real rate (8 s), so the cost is visible.
+    let config = MonitorConfig { poll: Duration::from_secs(1), confirm: Duration::from_millis(500) };
+    let monitor = NetworkMonitor::spawn(Arc::new(SystemAddresses), config, |_| {});
+    std::thread::sleep(Duration::from_millis(300));
+    let idle_before = watcher_wakeups();
+    std::thread::sleep(Duration::from_secs(3));
+    assert_eq!(watcher_wakeups() - idle_before, 0, "nothing playing, window not focused: not a single wake-up");
+
+    monitor.set_playing(true);
+    std::thread::sleep(Duration::from_millis(300));
+    let (cpu_before, wake_before, wall) = (watcher_cpu_seconds(), watcher_wakeups(), Instant::now());
+    std::thread::sleep(Duration::from_secs(6));
+    let seconds = wall.elapsed().as_secs_f64();
+    let share = (watcher_cpu_seconds() - cpu_before) / seconds;
+    let rate = (watcher_wakeups() - wake_before) as f64 / seconds;
+    println!("network watcher at one look per second: {:.4} % of one core, {rate:.2} wake-ups/s (real rate is 8x lower)", share * 100.0);
+    assert!(share < 0.005, "{:.3} %", share * 100.0);
+    assert!(rate < 2.5, "{rate:.2} wake-ups/s");
+    monitor.set_playing(false);
+}
