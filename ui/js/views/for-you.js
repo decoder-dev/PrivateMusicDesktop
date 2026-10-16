@@ -36,12 +36,16 @@ export function createForYouView({ play, onTrackAction, toast }) {
   const tuning = h("details", { class: "mix-tuning", ontoggle: (event) => {
     if (event.target.open) loadTuning();
   } }, h("summary", { text: t("fy.tune") }), tuningContent);
+  // A shelf shows only with something to show: its items, or one line saying
+  // why there are none. An empty answer hides it altogether.
   const catalogStatus = h("div", { class: "status", role: "status", hidden: true });
   const catalogGrid = h("div", { class: "mix-grid" });
-  const catalogShelf = h("section", { class: "mix-catalog" }, h("h2", { class: "shelf-title", text: t("fy.catalog") }), catalogStatus, catalogGrid);
+  const catalogTitle = h("h2", { class: "shelf-title", text: t("fy.catalog") });
+  const catalogShelf = h("section", { class: "mix-catalog", hidden: true }, catalogTitle, catalogStatus, catalogGrid);
   const releasesStatus = h("div", { class: "status", role: "status", hidden: true });
   const releasesRow = h("div", { class: "release-row" });
-  const releasesShelf = h("section", { class: "mix-catalog new-releases" }, h("h2", { class: "shelf-title", text: t("fy.releases") }), releasesStatus, releasesRow);
+  const releasesTitle = h("h2", { class: "shelf-title", text: t("fy.releases") });
+  const releasesShelf = h("section", { class: "mix-catalog new-releases", hidden: true }, releasesTitle, releasesStatus, releasesRow);
 
   const screen = createTracksScreen({
     title: t("fy.title"),
@@ -59,7 +63,21 @@ export function createForYouView({ play, onTrackAction, toast }) {
   function renderTabs() {
     for (const button of tabs.querySelectorAll("button")) button.setAttribute("aria-selected", String(button.dataset.source === current));
     tuning.hidden = current !== "mix";
-    catalogShelf.hidden = current !== "mix";
+    paintShelves();
+  }
+
+  // What each shelf holds, so showing and hiding stays in one place.
+  const shelfState = { catalog: "empty", releases: "empty" };
+  function paintShelves() {
+    catalogShelf.hidden = current !== "mix" || shelfState.catalog === "empty";
+    releasesShelf.hidden = shelfState.releases === "empty";
+  }
+
+  /** One compact line: the reason and a link to try again. */
+  function paintShelfError(status, title, error, retry) {
+    paintStatus(status, errorText(error), { error: true, extra: "inline" });
+    status.append(h("button", { class: "link-text retry-link", type: "button", text: t("fy.retryTune"), onclick: retry }));
+    title.hidden = true;
   }
 
   async function load(id, { force = false } = {}) {
@@ -154,12 +172,13 @@ export function createForYouView({ play, onTrackAction, toast }) {
   async function loadCatalog(force = false) {
     if (catalogLoaded && !force) return;
     const mine = ++catalogGeneration;
-    paintStatus(catalogStatus, t("loading"), { kind: "tiles", extra: "compact" });
-    catalogGrid.replaceChildren();
+    // No placeholder: a shelf that turns out empty must not flash a panel.
+    // A retry keeps its error line, with the link disabled, until the answer.
+    catalogStatus.querySelector(".retry-link")?.setAttribute("disabled", "");
     try {
       const mixes = await api.catalogMixes();
       if (mine !== catalogGeneration) return;
-      const visible = mixes.filter((mix) => mix.id !== "common");
+      const visible = mixes;
       catalogGrid.replaceChildren(...visible.map((mix) => {
         const button = h("button", { class: "mix-tile", type: "button", onclick: () => playCatalogMix(mix, button) },
           artBox(mix.artwork_url),
@@ -169,19 +188,22 @@ export function createForYouView({ play, onTrackAction, toast }) {
         return button;
       }));
       catalogLoaded = true;
-      paintStatus(catalogStatus, visible.length ? "" : t("fy.noCatalog"), { extra: "compact" });
+      paintStatus(catalogStatus, "");
+      catalogTitle.hidden = false;
+      shelfState.catalog = visible.length ? "items" : "empty";
     } catch (error) {
       if (mine !== catalogGeneration) return;
-      paintStatus(catalogStatus, errorText(error), { error: true, extra: "compact" });
-      catalogStatus.append(h("button", { class: "btn", type: "button", text: t("fy.refresh"), onclick: () => loadCatalog(true) }));
+      catalogGrid.replaceChildren();
+      paintShelfError(catalogStatus, catalogTitle, error, () => loadCatalog(true));
+      shelfState.catalog = "error";
     }
+    paintShelves();
   }
 
   async function loadReleases(force = false) {
     if (releasesLoaded && !force) return;
     const mine = ++releasesGeneration;
-    paintStatus(releasesStatus, t("loading"), { kind: "cards", extra: "compact" });
-    releasesRow.replaceChildren();
+    releasesStatus.querySelector(".retry-link")?.setAttribute("disabled", "");
     try {
       const albums = await api.newReleases();
       if (mine !== releasesGeneration) return;
@@ -189,12 +211,16 @@ export function createForYouView({ play, onTrackAction, toast }) {
       releasesRow.replaceChildren(...albums.map((album) =>
         albumCard(album.title?.trim() ? album : { ...album, title: t("album.untitled") }, () => openAlbum(album))));
       releasesLoaded = true;
-      paintStatus(releasesStatus, albums.length ? "" : t("fy.noReleases"), { extra: "compact" });
+      paintStatus(releasesStatus, "");
+      releasesTitle.hidden = false;
+      shelfState.releases = albums.length ? "items" : "empty";
     } catch (error) {
       if (mine !== releasesGeneration) return;
-      paintStatus(releasesStatus, errorText(error), { error: true, extra: "compact" });
-      releasesStatus.append(h("button", { class: "btn", type: "button", text: t("fy.refresh"), onclick: () => loadReleases(true) }));
+      releasesRow.replaceChildren();
+      paintShelfError(releasesStatus, releasesTitle, error, () => loadReleases(true));
+      shelfState.releases = "error";
     }
+    paintShelves();
   }
 
   async function playCatalogMix(mix, button) {
@@ -203,10 +229,12 @@ export function createForYouView({ play, onTrackAction, toast }) {
     try {
       const tracks = await api.streamMix(mix.id, mix.options);
       if (!tracks.length) throw new Error(t("fy.noCatalog"));
-      play(tracks, 0, { shuffle: false, radio: { kind: "catalog", mix_id: mix.id, options: mix.options ?? null } });
+      // The plain personal stream is the same radio as the "My mix" tab.
+      const personal = mix.id === "common" && !mix.options;
+      play(tracks, 0, { shuffle: false, radio: personal ? { kind: "personal", options: null } : { kind: "catalog", mix_id: mix.id, options: mix.options ?? null } });
       paintStatus(catalogStatus, "");
     } catch (error) {
-      paintStatus(catalogStatus, errorText(error), { error: true, extra: "compact" });
+      paintStatus(catalogStatus, errorText(error), { error: true, extra: "inline" });
       toast(errorText(error), { error: true });
     } finally {
       button.disabled = false;
@@ -239,10 +267,15 @@ export function createForYouView({ play, onTrackAction, toast }) {
       catalogLoaded = false;
       catalogGrid.replaceChildren();
       paintStatus(catalogStatus, "");
+      catalogTitle.hidden = false;
       releasesGeneration += 1;
       releasesLoaded = false;
       releasesRow.replaceChildren();
       paintStatus(releasesStatus, "");
+      releasesTitle.hidden = false;
+      shelfState.catalog = "empty";
+      shelfState.releases = "empty";
+      paintShelves();
       listOptions = null;
       categories = null;
       selected = readSelection();
