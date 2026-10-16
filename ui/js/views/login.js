@@ -29,7 +29,9 @@ export function createLoginView({ onError }) {
 
   const element = h("div", { class: "login" },
     h("div", { class: "box" },
-      h("div", { class: "app-icon", "aria-hidden": "true" }, icon("note", 32)),
+      h("div", { class: "login-art", "aria-hidden": "true" },
+        h("i", { class: "tile a" }, icon("artist", 26)), h("i", { class: "tile b" }, icon("album", 26)),
+        h("div", { class: "app-icon" }, icon("note", 40))),
       h("h1", { text: t("login.title") }),
       h("p", { text: t("login.lead") }),
       button, message, note));

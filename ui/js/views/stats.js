@@ -3,7 +3,7 @@ import { errorText, locale, t } from "../i18n.js";
 import { h } from "../dom.js";
 import { icon } from "../icons.js";
 import { confirmDialog } from "../dialog.js";
-import { artBox, watchSegmented, paintStatus } from "../ui-parts.js";
+import { artBox, watchSegmented, paintStatus, fillPanel } from "../ui-parts.js";
 
 const SCOPES = ["month", "year", "all"];
 
@@ -30,7 +30,15 @@ const dayTitle = (key) => {
 };
 const hourText = (hour) => `${String(hour).padStart(2, "0")}:00`;
 
+/** A thin capsule showing how this entry compares with the most played one. */
+function shareBar(share) {
+  const bar = h("span", { class: "stat-share", "aria-hidden": "true" }, h("i"));
+  bar.firstChild.style.width = `${Math.max(4, Math.round(share * 100))}%`; // CSSOM: allowed under the CSP
+  return bar;
+}
+
 function topList(title, entries, { artwork }) {
+  const most = Math.max(...entries.map((entry) => entry.plays), 1);
   return h("section", { class: "set-section stat-section", "data-section": artwork ? "tracks" : "artists" },
     h("h2", { text: title }),
     h("ol", { class: "stat-list set-card" }, entries.map((entry, index) =>
@@ -39,7 +47,8 @@ function topList(title, entries, { artwork }) {
         artwork ? artBox(entry.artwork_url) : null,
         h("span", { class: "stat-titles" },
           h("span", { class: "stat-title", text: entry.title }),
-          entry.subtitle ? h("span", { class: "stat-sub", text: entry.subtitle }) : null),
+          entry.subtitle ? h("span", { class: "stat-sub", text: entry.subtitle }) : null,
+          shareBar(entry.plays / most)),
         h("span", { class: "stat-count", text: `×${entry.plays}` })))));
 }
 
@@ -76,9 +85,10 @@ export function createStatsView({ toast }) {
   function renderBody(view) {
     const { summary } = view;
     if (summary.is_empty) {
-      return [h("div", { class: "empty-state stat-empty" },
-        h("strong", { text: t("stats.emptyTitle") }),
-        h("div", { text: t("stats.emptyDetail") }))];
+      const empty = h("div", { class: "empty-state stat-empty" });
+      fillPanel(empty, "", "chart");
+      empty.append(h("strong", { text: t("stats.emptyTitle") }), h("div", { text: t("stats.emptyDetail") }));
+      return [empty];
     }
     const peak = Math.max(...summary.hour_seconds, 1);
     const habits = [
@@ -104,7 +114,8 @@ export function createStatsView({ toast }) {
         h("div", { class: "set-card stat-when" },
         h("div", { class: "hour-chart", role: "img", "aria-label": t("stats.chartLabel") },
           summary.hour_seconds.map((seconds, hour) => {
-            const bar = h("span", { class: `hour-bar${hour === summary.peak_hour ? " peak" : ""}`, "data-hour": String(hour) });
+            const bar = h("span", { class: `hour-bar${hour === summary.peak_hour ? " peak" : ""}`, "data-hour": String(hour),
+              title: `${hourText(hour)} · ${formatListening(seconds)}` });
             bar.style.height = `${Math.max(3, Math.round(64 * seconds / peak))}px`; // CSSOM: the CSP forbids style attributes
             return bar;
           })),

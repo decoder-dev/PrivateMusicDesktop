@@ -13,6 +13,13 @@ const SOURCES = {
 };
 
 /** VK's personal mix and recommendations, one tab each, loaded on first look. */
+/** A stable colour family per mix, so each card keeps its look between visits. */
+function mixHue(text) {
+  let hash = 0;
+  for (const char of text) hash = (hash * 31 + char.codePointAt(0)) >>> 0;
+  return hash % 5;
+}
+
 export function createForYouView({ play, onTrackAction, toast }) {
   let current = "mix";
   const cache = new Map(); // source -> tracks
@@ -180,7 +187,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
       if (mine !== catalogGeneration) return;
       const visible = mixes;
       catalogGrid.replaceChildren(...visible.map((mix) => {
-        const button = h("button", { class: "mix-tile", type: "button", onclick: () => playCatalogMix(mix, button) },
+        const button = h("button", { class: `mix-tile hue-${mixHue(`${mix.section_title ?? ""}${mix.title}`)}`, type: "button", onclick: () => playCatalogMix(mix, button) },
           artBox(mix.artwork_url),
           h("span", { class: "mix-text" },
             mix.section_title ? h("span", { class: "mix-tile-section", text: mix.section_title }) : null,
