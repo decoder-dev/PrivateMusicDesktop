@@ -48,11 +48,11 @@ const dictionary = {
     "set.accent": "Цвет акцента",
     "set.accent.blue": "Синий",
     "set.accent.indigo": "Индиго",
-    "set.accent.purple": "Фиолетовый",
+    "set.accent.violet": "Фиолетовый",
     "set.accent.pink": "Розовый",
     "set.accent.red": "Красный",
     "set.accent.orange": "Оранжевый",
-    "set.accent.yellow": "Жёлтый",
+    "set.accent.banana": "Банановый",
     "set.accent.green": "Зелёный",
     "set.accent.teal": "Бирюзовый",
     "set.output": "Устройство вывода",
@@ -110,7 +110,10 @@ const dictionary = {
     "library.filter": "Фильтр по названию или исполнителю",
     "library.filterShort": "Фильтр",
     "library.loaded": "Загружено {n} из {total}",
-    "library.count": "{n} треков",
+    "library.count.one": "{n} трек",
+    "library.count.few": "{n} трека",
+    "library.count.many": "{n} треков",
+    "library.count.other": "{n} трека",
     "library.empty": "В вашей музыке пока ничего нет.",
     "library.noMatches": "Ничего не найдено.",
     "play": "Играть",
@@ -131,7 +134,10 @@ const dictionary = {
     "playlists.title": "Плейлисты",
     "playlists.empty": "Плейлистов пока нет.",
     "playlists.back": "Назад",
-    "playlists.tracks": "{n} треков",
+    "playlists.tracks.one": "{n} трек",
+    "playlists.tracks.few": "{n} трека",
+    "playlists.tracks.many": "{n} треков",
+    "playlists.tracks.other": "{n} трека",
     "menu.more": "Ещё",
     "menu.addTo": "Добавить в плейлист",
     "menu.newPlaylist": "Новый плейлист…",
@@ -200,7 +206,10 @@ const dictionary = {
     "album.unfollowed": "Альбом убран из ваших альбомов",
     "album.denied": "Не удалось загрузить треки этого альбома. Попробуйте ещё раз или найдите его в поиске.",
     "album.empty": "В альбоме нет треков.",
-    "album.count": "{n} треков",
+    "album.count.one": "{n} трек",
+    "album.count.few": "{n} трека",
+    "album.count.many": "{n} треков",
+    "album.count.other": "{n} трека",
     "album.open": "Открыть альбом",
     "albums.title": "Альбомы",
     "albums.empty": "Сохранённых альбомов пока нет.",
@@ -264,6 +273,24 @@ const dictionary = {
     "error.timeout": "Сервер не отвечает.",
     "error.stream": "Не удалось воспроизвести трек.",
     "error.default": "Что-то пошло не так.",
+    "field.clear": "Очистить",
+    "np.nowPlaying": "Сейчас играет",
+    "np.queue": "Очередь",
+    "np.queue.now": "Сейчас играет",
+    "np.queue.next": "Далее",
+    "np.queue.empty": "Очередь пуста.",
+    "np.more": "Ещё",
+    "np.lyrics": "Текст",
+    "artist.listen": "Слушать",
+    "artist.kicker": "Исполнитель",
+    "album.kicker": "Альбом",
+    "playlists.kicker": "Плейлист",
+    "friends.kicker": "Друг",
+    "toast.undo": "Отменить",
+    "set.flat": "Упрощённый вид",
+    "set.flat.note": "Без размытия и прозрачности: панели станут сплошными. Так легче для слабых компьютеров.",
+    "set.theme.pick": "Тема оформления",
+    "set.accent.pick": "Цвет акцента",
   },
   en: {
     "app.name": "Private Music",
@@ -361,7 +388,8 @@ const dictionary = {
     "library.filter": "Filter by title or artist",
     "library.filterShort": "Filter",
     "library.loaded": "Loaded {n} of {total}",
-    "library.count": "{n} tracks",
+    "library.count.one": "{n} track",
+    "library.count.other": "{n} tracks",
     "library.empty": "Your music is empty.",
     "library.noMatches": "Nothing found.",
     "play": "Play",
@@ -382,7 +410,8 @@ const dictionary = {
     "playlists.title": "Playlists",
     "playlists.empty": "No playlists yet.",
     "playlists.back": "Back",
-    "playlists.tracks": "{n} tracks",
+    "playlists.tracks.one": "{n} track",
+    "playlists.tracks.other": "{n} tracks",
     "menu.more": "More",
     "menu.addTo": "Add to playlist",
     "menu.newPlaylist": "New playlist…",
@@ -451,7 +480,8 @@ const dictionary = {
     "album.unfollowed": "Album removed from your albums",
     "album.denied": "Could not load this album's tracks. Try again or find it in search.",
     "album.empty": "This album has no tracks.",
-    "album.count": "{n} tracks",
+    "album.count.one": "{n} track",
+    "album.count.other": "{n} tracks",
     "album.open": "Open the album",
     "albums.title": "Albums",
     "albums.empty": "No saved albums yet.",
@@ -515,6 +545,24 @@ const dictionary = {
     "error.timeout": "The server is not responding.",
     "error.stream": "Could not play this track.",
     "error.default": "Something went wrong.",
+    "field.clear": "Clear",
+    "np.nowPlaying": "Now playing",
+    "np.queue": "Queue",
+    "np.queue.now": "Now playing",
+    "np.queue.next": "Up next",
+    "np.queue.empty": "The queue is empty.",
+    "np.more": "More",
+    "np.lyrics": "Lyrics",
+    "artist.listen": "Listen",
+    "artist.kicker": "Artist",
+    "album.kicker": "Album",
+    "playlists.kicker": "Playlist",
+    "friends.kicker": "Friend",
+    "toast.undo": "Undo",
+    "set.flat": "Simplified look",
+    "set.flat.note": "No blur or transparency: panels become solid. Easier on slower computers.",
+    "set.theme.pick": "Appearance",
+    "set.accent.pick": "Accent colour",
   },
 };
 
@@ -526,6 +574,19 @@ export const locale = language;
 export function t(key, values = {}) {
   const text = dictionary[language][key] ?? dictionary.en[key] ?? key;
   return text.replace(/\{(\w+)\}/g, (_, name) => String(values[name] ?? ""));
+}
+
+const pluralRules = new Intl.PluralRules(language);
+
+/**
+ * A count with its noun in the right form: `key.one`, `key.few`, `key.many`
+ * or `key.other` (Russian: 1 трек, 2 трека, 5 треков, 21 трек, 11 треков).
+ */
+export function tn(key, n, values = {}) {
+  const category = pluralRules.select(n);
+  const own = dictionary[language];
+  const text = own[`${key}.${category}`] ?? own[`${key}.other`] ?? dictionary.en[`${key}.${category === "one" ? "one" : "other"}`] ?? key;
+  return text.replace(/\{(\w+)\}/g, (_, name) => String(name === "n" ? n : values[name] ?? ""));
 }
 
 export function errorText(error) {
