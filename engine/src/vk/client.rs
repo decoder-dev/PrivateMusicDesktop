@@ -227,11 +227,21 @@ impl VkClient {
     /// VK's recommendations for the user, or "more like this" when a seed
     /// track is given (VK's own radio-from-a-track).
     pub fn recommendations(&self, session: &Session, seed: Option<&Track>) -> Result<Vec<Track>> {
+        self.recommendations_with(session, seed, false)
+    }
+
+    /// The radio's refills: shuffled, like the iOS radio cursor asks, so a
+    /// seed that comes round again does not give the same page twice.
+    pub fn shuffled_recommendations(&self, session: &Session, seed: &Track) -> Result<Vec<Track>> {
+        self.recommendations_with(session, Some(seed), true)
+    }
+
+    fn recommendations_with(&self, session: &Session, seed: Option<&Track>, shuffle: bool) -> Result<Vec<Track>> {
         let user = match session.user_id {
             Some(user) => Some(user),
             None => self.user_id(session).ok(),
         };
-        let mut params = vec![("count", "100".to_string()), ("shuffle", "0".to_string())];
+        let mut params = vec![("count", "100".to_string()), ("shuffle", if shuffle { "1" } else { "0" }.to_string())];
         if let Some(user) = user {
             params.push(("user_id", user.to_string()));
         }
@@ -297,6 +307,60 @@ impl VkClient {
         let mut seen = std::collections::HashSet::new();
         mixes.retain(|mix| seen.insert(format!("{}\n{}", mix.id, mix.options.as_deref().unwrap_or(""))));
         Ok(mixes)
+    }
+
+    /// The "New releases" shelf, as the iOS client builds it: release-shaped
+    /// albums from the root `catalog.getAudio` payload, and, only when that
+    /// holds none, the albums of the catalogue sections that look like
+    /// release shelves (`catalog.getSection`, at most eight, in parallel).
+    /// A section that fails is dropped; a dead session or network is not.
+    pub fn new_releases(&self, session: &Session) -> Result<Vec<Album>> {
+        let mut releases = Vec::new();
+        let mut sections = Vec::new();
+        match self.call(session, "catalog.getAudio", &[("need_blocks", "1".into())]) {
+            Ok(root) => {
+                collect_albums(&root, &mut releases);
+                collect_catalog_sections(&root, &mut sections);
+            }
+            Err(error) if is_fatal(&error) => return Err(error),
+            // Section hydration below may still recover usable content.
+            Err(error) => log::debug!("catalog.getAudio: {}, trying the sections", error.kind()),
+        }
+        let mut releases = dedupe_by(releases, Album::id);
+        if releases.is_empty() {
+            let mut seen = std::collections::HashSet::new();
+            let wanted: Vec<&CatalogSection> = sections
+                .iter()
+                .filter(|s| s.id.len() <= 512 && !s.id.chars().any(char::is_control))
+                .filter(|s| seen.insert(s.id.as_str()) && s.looks_like_releases())
+                .take(HYDRATION_LIMIT)
+                .collect();
+            let hydrated: Vec<Result<Vec<Album>>> = std::thread::scope(|scope| {
+                let jobs: Vec<_> = wanted
+                    .iter()
+                    .map(|section| {
+                        scope.spawn(move || {
+                            let payload = self.call(session, "catalog.getSection", &[("section_id", section.id.clone())])?;
+                            let mut found = Vec::new();
+                            collect_albums(&payload, &mut found);
+                            Ok(found)
+                        })
+                    })
+                    .collect();
+                jobs.into_iter().map(|job| job.join().unwrap_or(Err(Error::Cancelled))).collect()
+            });
+            for result in hydrated {
+                match result {
+                    Ok(found) => releases.extend(found),
+                    Err(error) if matches!(error, Error::Unauthorized) => return Err(error),
+                    Err(error) => log::debug!("catalog.getSection dropped: {}", error.kind()),
+                }
+            }
+            releases = dedupe_by(releases, Album::id);
+        }
+        // An album the window could not open again is not worth a card.
+        releases.retain(|album| album.album_id > 0);
+        Ok(releases)
     }
 
     /// VK's own plain text for a track's `lyrics_id`.
@@ -934,6 +998,77 @@ fn artist_album_page(list: Vec<Album>, list_total: Option<u32>, catalog: Vec<Alb
         return Page { items, total, next_offset: model::next_offset(offset, received, total) };
     }
     slice_page(catalog, offset, count)
+}
+
+/// Most catalogue sections hydrated for one shelf.
+const HYDRATION_LIMIT: usize = 8;
+
+/// A section of the catalogue as `catalog.getAudio` lists them.
+struct CatalogSection {
+    id: String,
+    title: String,
+    url: Option<String>,
+}
+
+impl CatalogSection {
+    fn looks_like_releases(&self) -> bool {
+        const MARKERS: [&str; 9] = ["release", "релиз", "нов", "выход", "премьер", "album", "альбом", "new music", "свеж"];
+        let blob = format!("{} {}", self.title, self.url.as_deref().unwrap_or("")).to_lowercase();
+        MARKERS.iter().any(|marker| blob.contains(marker))
+    }
+}
+
+/// A real section id is not just a number: `-2000123456` is an
+/// owner-negated object id, so a single leading minus is ignored first.
+fn is_section_id(id: &str) -> bool {
+    let id = id.trim();
+    let digits = id.strip_prefix('-').unwrap_or(id);
+    !digits.is_empty() && !digits.chars().all(|c| c.is_numeric())
+}
+
+fn catalog_section(value: &Value) -> Option<CatalogSection> {
+    let object = value.as_object()?;
+    let id = scalar_text(object.get("id")).or_else(|| scalar_text(object.get("section_id")))?;
+    if id.is_empty() {
+        return None;
+    }
+    let kind = scalar_text(object.get("type")).or_else(|| scalar_text(object.get("data_type"))).unwrap_or_default();
+    let url = scalar_text(object.get("url"));
+    let looks_like_section = url.as_deref().is_some_and(|u| u.contains("audios"))
+        || kind.to_lowercase().contains("section")
+        || object.contains_key("blocks")
+        || object.contains_key("next_from");
+    // The loose clause: a title and a url describe a playlist or an album as
+    // well as a section, so there the id itself has to look like a section's.
+    let titled_link = object.contains_key("title") && url.is_some() && is_section_id(&id);
+    if !(looks_like_section || titled_link) {
+        return None;
+    }
+    let title = scalar_text(object.get("title")).or_else(|| scalar_text(object.get("name"))).unwrap_or_default();
+    Some(CatalogSection { id, title, url })
+}
+
+/// Sections listed anywhere in a catalogue response (`catalog.sections`,
+/// `sections`, or section-shaped objects).
+fn collect_catalog_sections(value: &Value, out: &mut Vec<CatalogSection>) {
+    fn visit(value: &Value, out: &mut Vec<CatalogSection>, depth: u8) {
+        if depth > 16 {
+            return;
+        }
+        match value {
+            Value::Array(list) => list.iter().for_each(|v| visit(v, out, depth + 1)),
+            Value::Object(object) => {
+                let listed = object.get("catalog").and_then(|c| c.get("sections")).into_iter().chain(object.get("sections"));
+                for list in listed.filter_map(Value::as_array) {
+                    out.extend(list.iter().filter_map(catalog_section));
+                }
+                out.extend(catalog_section(value));
+                object.values().for_each(|v| visit(v, out, depth + 1));
+            }
+            _ => {}
+        }
+    }
+    visit(value, out, 0);
 }
 
 /// Release-shaped objects anywhere in a catalogue response. Audio rows also

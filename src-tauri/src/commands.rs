@@ -1,6 +1,6 @@
 //! The window's entire view of the engine: thin, validated wrappers.
 
-use pm_engine::app::SessionState;
+use pm_engine::app::{RadioSource, SessionState};
 use pm_engine::controller::State;
 use pm_engine::queue::Repeat;
 use pm_engine::vk::{Album, AlbumTracks, Artist, ArtistAlbums, MusicMix, Page, Playlist, Profile, Track};
@@ -287,6 +287,20 @@ pub async fn catalog_mixes(state: TauriState<'_, AppState>) -> CommandResult<Vec
 pub async fn stream_mix(state: TauriState<'_, AppState>, mix_id: String, options: Option<String>) -> CommandResult<Vec<Track>> {
     let app = state.app.clone();
     blocking(move || app.stream_mix(&mix_id, options.as_deref())).await
+}
+
+#[tauri::command]
+pub async fn new_releases(state: TauriState<'_, AppState>) -> CommandResult<Vec<Album>> {
+    let app = state.app.clone();
+    blocking(move || app.new_releases()).await
+}
+
+/// Plays a queue that keeps refilling from the mix, stream or seed it came from.
+#[tauri::command]
+pub async fn play_radio(state: TauriState<'_, AppState>, source: RadioSource, tracks: Vec<Track>, index: usize) -> CommandResult<()> {
+    let tracks = checked_queue(tracks)?;
+    let app = state.app.clone();
+    blocking(move || app.play_radio(source, tracks, index)).await
 }
 
 #[tauri::command]

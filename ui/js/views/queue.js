@@ -1,4 +1,5 @@
 import { api } from "../api.js";
+import { h } from "../dom.js";
 import { createTracksScreen } from "../tracks-screen.js";
 import { t } from "../i18n.js";
 import { store, subscribe } from "../store.js";
@@ -17,6 +18,18 @@ export function createQueueView() {
       },
     },
   });
+
+  // A queue started from a mix says so: it keeps refilling while it plays.
+  const note = h("div", { class: "status radio-note", role: "note", hidden: true });
+  screen.element.insertBefore(note, screen.list.element);
+  const noteKeys = { personal: "queue.radio.personal", catalog: "queue.radio.catalog", similar: "queue.radio.similar" };
+  function renderNote(player) {
+    const key = noteKeys[player.radio];
+    note.textContent = key ? t(key) : "";
+    note.hidden = !key;
+  }
+  subscribe("player", renderNote);
+  renderNote(store.player);
 
   // The queue can be thousands of tracks long and changes on every skip, so
   // it is only drawn while it is on screen.
@@ -44,6 +57,7 @@ export function createQueueView() {
     },
     reset() {
       dirty = true;
+      note.hidden = true;
       screen.setTracks([]);
     },
   };

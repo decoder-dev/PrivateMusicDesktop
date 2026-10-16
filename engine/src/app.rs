@@ -3,11 +3,12 @@
 
 use std::sync::{Arc, Mutex};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::audio::Sink;
 use crate::controller::{Controller, UiEvent};
+use crate::radio::{self, RadioFetch, RadioKind, RadioRequest};
 use crate::lyrics::{from_plain, GeniusLyrics, LrcLib, Lyrics};
 use crate::offline::{OfflineStore, OfflineTrack};
 use crate::stream::fetch::fetch_to_end;
@@ -78,6 +79,19 @@ fn checked_album(album: &Album) -> Result<()> {
         return Err(Error::InvalidRequest);
     }
     Ok(())
+}
+
+/// Where an endless queue refills from, as the window names it.
+#[derive(Debug, Clone, Deserialize)]
+#[allow(clippy::large_enum_variant)] // handed over once per radio
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum RadioSource {
+    /// The personal stream mix, with the tuning the window applied.
+    Personal { options: Option<String> },
+    /// A catalogue mix.
+    Catalog { mix_id: String, options: Option<String> },
+    /// VK's radio seeded with a track ("more like this").
+    Similar { seed: Track },
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -193,6 +207,57 @@ impl App {
             weak.upgrade().ok_or(Error::Unauthorized)?.refresh(stale)
         }));
         App { core }
+    }
+}
+
+impl App {
+    /// Plays `tracks` from `index` and keeps the queue filling from `source`
+    /// while it plays (see [`radio`]). The tracks are what the window already
+    /// loaded from that same source.
+    pub fn play_radio(&self, source: RadioSource, tracks: Vec<Track>, index: usize) -> Result<()> {
+        let weak = Arc::downgrade(&self.core);
+        let ask = move |call: &dyn Fn(&VkClient, &Session) -> Result<Vec<Track>>| -> Result<Vec<Track>> {
+            weak.upgrade().ok_or(Error::Unauthorized)?.api(call)
+        };
+        let (kind, offset, seeds, fetch): (RadioKind, u32, Vec<Track>, RadioFetch) = match source {
+            RadioSource::Personal { options } => {
+                let options = checked_mix_options(options.as_deref())?;
+                let fetch: RadioFetch = Arc::new(move |request| {
+                    let RadioRequest::Page { offset } = request else { return Ok(Vec::new()) };
+                    let (offset, options) = (*offset, options.clone());
+                    ask(&|client, session| client.stream_mix(session, "common", offset, radio::PAGE_SIZE, options.as_deref()))
+                });
+                (RadioKind::Personal, radio::FIRST_REFILL_OFFSET, Vec::new(), fetch)
+            }
+            RadioSource::Catalog { mix_id, options } => {
+                let mix_id = checked_mix_id(&mix_id)?.to_string();
+                let options = checked_mix_options(options.as_deref())?;
+                let fetch: RadioFetch = Arc::new(move |request| {
+                    let RadioRequest::Page { offset } = request else { return Ok(Vec::new()) };
+                    let (offset, options, mix_id) = (*offset, options.clone(), mix_id.clone());
+                    ask(&|client, session| client.stream_mix(session, &mix_id, offset, radio::PAGE_SIZE, options.as_deref()))
+                });
+                (RadioKind::Catalog, radio::FIRST_REFILL_OFFSET, Vec::new(), fetch)
+            }
+            RadioSource::Similar { seed } => {
+                if seed.track_id <= 0 || seed.owner_id == 0 {
+                    return Err(Error::InvalidRequest);
+                }
+                let fetch: RadioFetch = Arc::new(move |request| {
+                    let RadioRequest::Seed(seed) = request else { return Ok(Vec::new()) };
+                    let seed = seed.clone();
+                    ask(&|client, session| client.shuffled_recommendations(session, &seed))
+                });
+                // The seed first, then what the window already got for it.
+                let seeds = std::iter::once(seed).chain(tracks.iter().cloned()).collect();
+                (RadioKind::Similar, 0, seeds, fetch)
+            }
+        };
+        if tracks.is_empty() {
+            return Err(Error::InvalidRequest);
+        }
+        self.controller.play_radio(tracks, index, kind, fetch, offset, seeds);
+        Ok(())
     }
 }
 
@@ -378,6 +443,11 @@ impl Core {
             }
             Ok(tracks)
         })
+    }
+
+    /// The "New releases" shelf of VK's catalogue.
+    pub fn new_releases(&self) -> Result<Vec<Album>> {
+        self.api(|client, session| client.new_releases(session))
     }
 
     pub fn recommendations(&self) -> Result<Vec<Track>> {
