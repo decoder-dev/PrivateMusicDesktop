@@ -106,9 +106,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download --repo '${{ github.repository }}' --pattern '*-setup.exe' --dir "$env:RUNNER_TEMP\previous"
-          $old = (Get-ChildItem "$env:RUNNER_TEMP\previous\*-setup.exe" | Select-Object -First 1).FullName
           $new = (Get-ChildItem 'target\release\bundle\nsis\*-setup.exe' | Select-Object -First 1).FullName
+          gh release download --repo '${{ github.repository }}' --pattern '*-setup.exe' --dir "$env:RUNNER_TEMP\previous"
+          $previous = Get-ChildItem "$env:RUNNER_TEMP\previous\*-setup.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($previous) { $old = $previous.FullName } else {
+            Write-Host '::notice::No earlier release exists: installing the new build over itself instead.'
+            $old = $new
+          }
           scripts\upgrade-check.ps1 -Old $old -New $new
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
