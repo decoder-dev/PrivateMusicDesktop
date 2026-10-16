@@ -735,6 +735,11 @@ test("menus: the sub-menu opens beside its parent, flips to the left when the ri
     await rows(page).nth(2).click({ button: "right", position: { x: 560, y: 20 } });
     await page.click(".menu [data-action=add-to-playlist]");
     await page.waitForSelector(".menu.sub");
+    // The sub-menu is placed after it is attached: wait for it to settle beside its parent.
+    await page.waitForFunction(() => {
+      const [parent, sub] = [...document.querySelectorAll(".menu")].map((m) => m.getBoundingClientRect());
+      return sub && (sub.right <= parent.left + 1 || sub.left >= parent.right - 1) && sub.left >= 0 && sub.right <= 1000;
+    });
     const [parent, sub] = await page.evaluate(() => [...document.querySelectorAll(".menu")].map((m) => { const r = m.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; }));
     assert.ok(sub.right <= parent.left + 1 || sub.left >= parent.right - 1, "the two menus do not overlap");
     assert.ok(sub.left >= 0 && sub.right <= 1000);
