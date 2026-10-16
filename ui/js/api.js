@@ -58,6 +58,15 @@ export const api = {
   followedAlbums: (offset, count) => invoke("followed_albums", { offset, count }),
   albumTracks: (album, offset, count) => invoke("album_tracks", { album, offset, count }),
   followAlbum: (album, follow) => invoke("follow_album", { album, follow }),
+  friends: (offset, count) => invoke("friends", { offset, count }),
+  friendTracks: (ownerId, offset, count) => invoke("friend_tracks", { ownerId, offset, count }),
+  friendPlaylists: (ownerId, offset, count) => invoke("friend_playlists", { ownerId, offset, count }),
+  history: () => invoke("history"),
+  historyRemove: (trackId) => invoke("history_remove", { trackId }),
+  historyClear: () => invoke("history_clear"),
+  listeningStats: (scope, choice = null) => invoke("listening_stats", { scope, choice }),
+  resetListeningStats: () => invoke("reset_listening_stats"),
+  setUtcOffset: (minutes) => invoke("set_utc_offset", { minutes }),
 };
 
 export const trackKey = (track) => `${track.owner_id}_${track.track_id}`;

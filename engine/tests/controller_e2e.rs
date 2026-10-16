@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 use common::*;
 use pm_engine::audio::{SimulatedSink, Sink};
 use pm_engine::controller::{Controller, State, Status, UiEvent};
+use pm_engine::history::History;
 use pm_engine::queue::Repeat;
 use pm_engine::vk::{Session, Track, VkClient};
 
@@ -330,4 +331,40 @@ fn a_restored_queue_waits_and_then_starts_at_the_saved_position() {
     assert_eq!(state.position, 9.0);
     rig.controller.toggle();
     rig.wait("playing from the saved spot", |s| s.status == Status::Playing && s.position >= 9.0);
+}
+
+// ------------------------------------------------------------ play history
+
+#[test]
+fn a_track_listened_to_for_thirty_percent_lands_in_the_history() {
+    if !require_ffmpeg() { return; }
+    let (_dir, media) = media_dir();
+    let vk = FakeVk::start(media.base.clone(), true);
+    // Four times real time: a report every quarter second is a one-second step.
+    let rig = rig(&vk.base, 4.0);
+    let history = History::with_clock(None, || 1_772_620_200);
+    history.set_account(Some(7));
+    rig.controller.set_history(history.clone());
+    rig.controller.play_tracks(vec![track(1, Some(format!("{}/index.m3u8", media.base)))], 0);
+    rig.wait("the track to end", |s| s.status == Status::Idle && s.position == 0.0 && vk.calls.lock().unwrap().is_empty());
+    let entries = history.entries();
+    assert_eq!(entries.len(), 1, "{entries:?}");
+    assert_eq!(entries[0].track.id(), "7_1");
+    assert_eq!(history.stats("all", None).unwrap().summary.plays, 1);
+}
+
+#[test]
+fn skipping_to_the_end_is_not_listening() {
+    if !require_ffmpeg() { return; }
+    let (_dir, media) = media_dir();
+    let vk = FakeVk::start(media.base.clone(), true);
+    let rig = rig(&vk.base, 4.0);
+    let history = History::with_clock(None, || 1_772_620_200);
+    history.set_account(Some(7));
+    rig.controller.set_history(history.clone());
+    rig.controller.play_tracks(vec![track(1, Some(format!("{}/index.m3u8", media.base)))], 0);
+    rig.wait("playback", |s| s.status == Status::Playing);
+    rig.controller.seek(11.0);
+    rig.wait("the track to end", |s| s.status == Status::Idle && s.position == 0.0);
+    assert!(history.entries().is_empty(), "about two seconds of a twelve-second track were heard");
 }

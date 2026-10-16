@@ -136,6 +136,7 @@ fn main() {
                 },
                 AppOptions {
                     offline_dir: handle.path().app_data_dir().ok().map(|dir| dir.join("downloads")),
+                    history_dir: handle.path().app_data_dir().ok().map(|dir| dir.join("history")),
                     ..AppOptions::default()
                 },
             );
@@ -242,6 +243,15 @@ fn main() {
             commands::followed_albums,
             commands::album_tracks,
             commands::follow_album,
+            commands::friends,
+            commands::friend_tracks,
+            commands::friend_playlists,
+            commands::history,
+            commands::history_remove,
+            commands::history_clear,
+            commands::listening_stats,
+            commands::reset_listening_stats,
+            commands::set_utc_offset,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build the application")
@@ -250,6 +260,12 @@ fn main() {
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = event {
                 tray::show_main(app);
+            }
+            if let tauri::RunEvent::Exit = event {
+                // Whatever was played since the last timed save goes to disk.
+                if let Some(state) = app.try_state::<AppState>() {
+                    state.app.flush_history();
+                }
             }
             let _ = (app, event);
         });

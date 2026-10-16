@@ -8,6 +8,7 @@ use serde_json::Value;
 
 use crate::audio::Sink;
 use crate::controller::{Controller, UiEvent};
+use crate::history::{History, HistoryEntry, StatsView};
 use crate::lyrics::{from_plain, GeniusLyrics, LrcLib, Lyrics};
 use crate::offline::{OfflineStore, OfflineTrack};
 use crate::stream::fetch::fetch_to_end;
@@ -28,6 +29,10 @@ const MAX_QUERY: usize = 500;
 
 fn checked_offset(offset: u32) -> Result<u32> {
     (offset <= MAX_OFFSET).then_some(offset).ok_or(Error::InvalidRequest)
+}
+
+fn checked_person(owner_id: i64) -> Result<i64> {
+    (owner_id > 0).then_some(owner_id).ok_or(Error::InvalidRequest)
 }
 
 fn checked_artist_id(id: &str) -> Result<&str> {
@@ -117,11 +122,15 @@ pub struct Core {
     lrclib: Option<LrcLib>,
     genius: Option<GeniusLyrics>,
     offline: Option<Arc<OfflineStore>>,
+    history: Arc<History>,
 }
 
 pub struct AppOptions {
     /// Where downloads are kept; `None` disables them.
     pub offline_dir: Option<std::path::PathBuf>,
+    /// Where the play history and statistics are kept; `None` keeps them in
+    /// memory only.
+    pub history_dir: Option<std::path::PathBuf>,
     pub lyrics_base: String,
     pub fetch: FetchConfig,
     pub token_url: String,
@@ -136,6 +145,7 @@ impl Default for AppOptions {
             volume: 1.0,
             lyrics_base: crate::lyrics::LRCLIB_BASE.to_string(),
             offline_dir: None,
+            history_dir: None,
         }
     }
 }
@@ -175,12 +185,19 @@ impl App {
             offline: options.offline_dir.and_then(|dir| {
                 OfflineStore::open(dir).map_err(|e| log::warn!("downloads unavailable: {e}")).ok().map(Arc::new)
             }),
+            history: History::open(options.history_dir),
         };
+        app.controller.set_history(app.history.clone());
         if let Some(store) = &app.offline {
             app.controller.set_offline(store.clone());
         }
         match app.store.load() {
-            Ok(Some(session)) => app.controller.set_session(Some(session)),
+            Ok(Some(session)) => {
+                if session.user_id.is_some() {
+                    app.history.set_account(session.user_id);
+                }
+                app.controller.set_session(Some(session));
+            }
             Ok(None) => {}
             Err(error) => {
                 log::warn!("secret store unavailable: {error}");
@@ -221,6 +238,10 @@ impl Core {
         };
         *Self::lock(&self.persistent) = saved;
         *Self::lock(&self.profile) = None;
+        // A refreshed token may not name its user: keep the account we know.
+        if session.user_id.is_some() {
+            self.history.set_account(session.user_id);
+        }
         self.controller.set_session(Some(session));
     }
 
@@ -231,6 +252,7 @@ impl Core {
             log::warn!("could not clear the session: {error}");
         }
         *Self::lock(&self.profile) = None;
+        self.history.set_account(None);
         self.controller.set_session(None);
     }
 
@@ -296,6 +318,10 @@ impl Core {
             return Ok(profile);
         }
         let profile = self.api(|client, session| client.profile(session))?;
+        // A session that did not name its user: the history starts now.
+        if self.history.account().is_none() && self.controller.session().is_some() {
+            self.history.set_account(Some(profile.id));
+        }
         *Self::lock(&self.profile) = Some(profile.clone());
         Ok(profile)
     }
@@ -464,8 +490,63 @@ impl Core {
         }
     }
 
+    // The play history and statistics live on this computer only.
+
+    pub fn history(&self) -> Vec<HistoryEntry> {
+        self.history.entries()
+    }
+
+    pub fn history_remove(&self, track_id: &str) -> Result<bool> {
+        if track_id.is_empty() || track_id.len() > 64 || !track_id.chars().all(|c| c.is_ascii_digit() || c == '_' || c == '-') {
+            return Err(Error::InvalidRequest);
+        }
+        Ok(self.history.remove(track_id))
+    }
+
+    pub fn history_clear(&self) {
+        self.history.clear();
+    }
+
+    pub fn listening_stats(&self, scope: &str, choice: Option<&str>) -> Result<StatsView> {
+        self.history.stats(scope, choice)
+    }
+
+    pub fn reset_listening_stats(&self) {
+        self.history.reset_stats();
+    }
+
+    /// Minutes east of UTC, reported by the window, for hours and weekdays.
+    pub fn set_utc_offset(&self, minutes: i32) -> Result<()> {
+        self.history.set_utc_offset(minutes)
+    }
+
+    /// Writes the history to disk now (the app is closing).
+    pub fn flush_history(&self) {
+        self.history.flush();
+    }
+
     pub fn playlists(&self, offset: u32, count: u32) -> Result<Page<Playlist>> {
         self.api(|client, session| client.playlists(session, offset, count.clamp(1, 200)))
+    }
+
+    /// The signed-in user's friends.
+    pub fn friends(&self, offset: u32, count: u32) -> Result<Page<Profile>> {
+        let offset = checked_offset(offset)?;
+        self.api(|client, session| client.friends(session, offset, count.clamp(1, 200)))
+    }
+
+    /// A friend's tracks. `owner_id` must be a person (VK ids of people are
+    /// positive), never a community and never "0".
+    pub fn friend_tracks(&self, owner_id: i64, offset: u32, count: u32) -> Result<Page<Track>> {
+        let owner_id = checked_person(owner_id)?;
+        let offset = checked_offset(offset)?;
+        self.api(|client, session| client.friend_tracks(session, owner_id, offset, count.clamp(1, 300)))
+    }
+
+    pub fn friend_playlists(&self, owner_id: i64, offset: u32, count: u32) -> Result<Page<Playlist>> {
+        let owner_id = checked_person(owner_id)?;
+        let offset = checked_offset(offset)?;
+        self.api(|client, session| client.friend_playlists(session, owner_id, offset, count.clamp(1, 200)))
     }
 
     pub fn playlist_tracks(&self, playlist: &Playlist, offset: u32, count: u32) -> Result<Page<Track>> {

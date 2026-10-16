@@ -11,7 +11,7 @@ import { ensureAlbums, followedAlbums } from "../my-albums.js";
 import { albumCard } from "../album-card.js";
 import { openAlbum } from "../navigation.js";
 
-function card(playlist, open) {
+export function playlistCard(playlist, open) {
   const art = playlist.artwork_url
     ? h("img", { class: "art", src: playlist.artwork_url, alt: "", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" })
     : h("div", { class: "art empty" }, icon("playlist", 36));
@@ -60,7 +60,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
 
   function renderGrid() {
     const list = allPlaylists();
-    grid.replaceChildren(...list.map((p) => card(p, open)));
+    grid.replaceChildren(...list.map((p) => playlistCard(p, open)));
     if (loaded) {
       status.hidden = list.length > 0;
       status.className = "status";

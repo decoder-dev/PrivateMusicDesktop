@@ -323,10 +323,14 @@ impl VkClient {
 
     pub fn playlists(&self, session: &Session, offset: u32, count: u32) -> Result<Page<Playlist>> {
         let user = self.user_id(session)?;
+        self.playlists_of(session, user, offset, count)
+    }
+
+    fn playlists_of(&self, session: &Session, owner_id: i64, offset: u32, count: u32) -> Result<Page<Playlist>> {
         let value = self.call(
             session,
             "audio.getPlaylists",
-            &[("owner_id", user.to_string()), ("count", count.to_string()), ("offset", offset.to_string())],
+            &[("owner_id", owner_id.to_string()), ("count", count.to_string()), ("offset", offset.to_string())],
         )?;
         let (entries, raw_count) = collect_entries(&value);
         // Followed releases come back in the same list; they belong on the
@@ -341,6 +345,43 @@ impl VkClient {
         let total = value.get("count").and_then(model::int).unwrap_or(0).max(0) as u32;
         let total = total.max(offset + raw_count);
         Ok(Page { items, total, next_offset: model::next_offset(offset, raw_count, total) })
+    }
+
+    /// The user's friends (`friends.get`), by name, with their photos.
+    pub fn friends(&self, session: &Session, offset: u32, count: u32) -> Result<Page<Profile>> {
+        let value = self.call(
+            session,
+            "friends.get",
+            &[
+                ("fields", "photo_200".into()),
+                ("order", "name".into()),
+                ("offset", offset.to_string()),
+                ("count", count.to_string()),
+            ],
+        )?;
+        let (entries, raw_count) = collect_entries(&value);
+        // Deleted or banned accounts come back without a name: not listed.
+        let items: Vec<Profile> =
+            entries.iter().filter(|entry| entry.get("deactivated").is_none()).filter_map(model::parse_profile).collect();
+        let total = value.get("count").and_then(model::int).map(|n| n.max(0) as u32).unwrap_or(0).max(offset + raw_count);
+        Ok(Page { items, total, next_offset: model::next_offset(offset, raw_count, total) })
+    }
+
+    /// A friend's "My music" (`audio.get` of their id). VK refuses when they
+    /// keep it private; that comes back as the usual VK error.
+    pub fn friend_tracks(&self, session: &Session, owner_id: i64, offset: u32, count: u32) -> Result<Page<Track>> {
+        let user = self.user_id(session)?;
+        let value = self.call(
+            session,
+            "audio.get",
+            &[("owner_id", owner_id.to_string()), ("count", count.to_string()), ("offset", offset.to_string())],
+        )?;
+        Ok(tracks_page(&value, offset, Some(user)))
+    }
+
+    /// A friend's playlists (`audio.getPlaylists` of their id).
+    pub fn friend_playlists(&self, session: &Session, owner_id: i64, offset: u32, count: u32) -> Result<Page<Playlist>> {
+        self.playlists_of(session, owner_id, offset, count)
     }
 
     fn own_playlist(&self, session: &Session, playlist: &Playlist) -> Result<()> {
