@@ -1,3 +1,4 @@
+import { morph } from "./motion.js";
 import { h, formatTime } from "./dom.js";
 import { icon } from "./icons.js";
 import { t } from "./i18n.js";
@@ -21,9 +22,9 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
 
   const shuffleButton = h("button", { class: "icon-btn", type: "button", title: t("shuffle.toggle"), "aria-label": t("shuffle.toggle"), "aria-pressed": "false",
     onclick: () => { api.setShuffle(!store.player.shuffle); } }, icon("shuffle", 18));
-  const previousButton = h("button", { class: "icon-btn", type: "button", title: t("previous"), "aria-label": t("previous"), onclick: () => api.previous() }, icon("prev", 20));
-  const playButton = h("button", { class: "icon-btn play", type: "button", title: t("play"), "aria-label": t("play"), onclick: () => api.toggle() }, icon("play", 20));
-  const nextButton = h("button", { class: "icon-btn", type: "button", title: t("next"), "aria-label": t("next"), onclick: () => api.next() }, icon("next", 20));
+  const previousButton = h("button", { class: "icon-btn", type: "button", title: t("previous"), "data-kbd": "Ctrl+Left", "aria-label": t("previous"), onclick: () => api.previous() }, icon("prev", 20));
+  const playButton = h("button", { class: "icon-btn play", type: "button", title: t("play"), "data-kbd": "Space", "aria-label": t("play"), onclick: () => api.toggle() }, icon("play", 20));
+  const nextButton = h("button", { class: "icon-btn", type: "button", title: t("next"), "data-kbd": "Ctrl+Right", "aria-label": t("next"), onclick: () => api.next() }, icon("next", 20));
   const repeatButton = h("button", { class: "icon-btn", type: "button", title: t("repeat.off"), "aria-label": t("repeat.off"),
     onclick: () => { api.setRepeat({ off: "all", all: "one", one: "off" }[store.player.repeat] ?? "off"); } }, icon("repeat", 18));
 
@@ -39,7 +40,7 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
   bindRange(seek);
   const buffering = h("div", { class: "buffering", hidden: true, role: "status", text: t("buffering") });
 
-  const muteButton = h("button", { class: "icon-btn", type: "button", title: t("mute"), "aria-label": t("mute"),
+  const muteButton = h("button", { class: "icon-btn", type: "button", title: t("mute"), "data-kbd": "M", "aria-label": t("mute"),
     onclick: () => toggleMute() }, icon("volume", 18));
   const volume = h("input", {
     class: "reveal", type: "range", min: "0", max: "100", step: "1", value: "100", "aria-label": t("volume"),
@@ -58,7 +59,7 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
     setVolume(store.player.volume > 0 ? 0 : lastVolume || 1);
   }
 
-  const expandButton = h("button", { class: "icon-btn", type: "button", title: t("np.open"), "aria-label": t("np.open"),
+  const expandButton = h("button", { class: "icon-btn", type: "button", title: t("np.open"), "data-kbd": "F", "aria-label": t("np.open"),
     onclick: () => onExpand?.() }, icon("expand", 18));
   const likeButton = h("button", { class: "icon-btn like", type: "button", hidden: true, onclick: () => onLike?.(store.player.track) }, icon("heart", 18));
   function renderLike() {
@@ -72,7 +73,11 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
     likeButton.setAttribute("aria-label", label);
     likeButton.setAttribute("aria-pressed", String(liked));
     likeButton.disabled = isBusy(track);
+    const changed = likeButton.dataset.liked !== String(liked);
+    likeButton.dataset.liked = String(liked);
     likeButton.replaceChildren(icon(liked ? "heart-on" : "heart", 18));
+    if (changed && likeButton.dataset.ready) morph(likeButton.firstChild);
+    likeButton.dataset.ready = "1";
   }
   const coverButton = h("button", { class: "cover-button", type: "button", title: t("np.open"), "aria-label": t("np.open"), onclick: () => onExpand?.() }, coverSlot);
 
@@ -117,8 +122,13 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
 
     const playing = player.status === "playing" || player.status === "buffering" || player.status === "loading";
     const spinning = player.status === "buffering" || player.status === "loading";
-    playButton.replaceChildren(icon(playing && player.status !== "loading" ? "pause" : "play", 20), ...(spinning ? [h("span", { class: "spin-over", "aria-hidden": "true" }, h("span", { class: "spinner" }))] : []));
+    const glyph = playing && player.status !== "loading" ? "pause" : "play";
+    const changed = playButton.dataset.glyph !== glyph;
+    playButton.dataset.glyph = glyph;
+    playButton.replaceChildren(icon(glyph, 20), ...(spinning ? [h("span", { class: "spin-over", "aria-hidden": "true" }, h("span", { class: "spinner" }))] : []));
     playButton.classList.toggle("is-buffering", spinning);
+    if (changed && playButton.dataset.ready) morph(playButton.firstChild);
+    playButton.dataset.ready = "1";
     const label = playing && player.status !== "loading" ? t("pause") : t("play");
     playButton.title = label;
     playButton.setAttribute("aria-label", label);

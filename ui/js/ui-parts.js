@@ -2,8 +2,9 @@
 // slider fill, status/skeleton states, segmented control, hero header.
 
 import { h } from "./dom.js";
-import { icon } from "./icons.js";
+import { icon, illustration } from "./icons.js";
 import { t } from "./i18n.js";
+import { coverPalette } from "./palette.js";
 
 /**
  * Artwork. The placeholder (accent gradient and a glyph) sits behind the image,
@@ -77,7 +78,7 @@ function skeleton(kind) {
  * element: loading becomes a static skeleton (the text stays for screen
  * readers), anything else a status panel. Empty text hides the element.
  */
-export function paintStatus(element, text, { error = false, kind = "rows", extra = "" } = {}) {
+export function paintStatus(element, text, { error = false, kind = "rows", extra = "", art = null } = {}) {
   if (!text) {
     element.hidden = true;
     element.className = `status${extra ? ` ${extra}` : ""}`;
@@ -93,7 +94,20 @@ export function paintStatus(element, text, { error = false, kind = "rows", extra
   }
   element.removeAttribute("aria-busy");
   element.className = `status${error ? " error" : ""}${extra ? ` ${extra}` : ""}`;
-  element.textContent = text;
+  fillPanel(element, text, error ? "error" : art);
+}
+
+/** Sets a panel's text, with the small illustration above it when the panel is a real one (not an inline line). */
+export function fillPanel(element, text, art) {
+  const panel = !/\b(inline|progress|radio-note)\b/.test(element.className);
+  if (panel && art !== false) {
+    element.classList.add("has-il");
+    const label = h("span", { class: "status-text", text });
+    element.replaceChildren(illustration(art ?? "music"), label);
+  } else {
+    element.classList.remove("has-il");
+    element.textContent = text;
+  }
 }
 
 /**
@@ -139,4 +153,24 @@ export function headerOnScroll(header, scroller) {
       header.classList.toggle("is-scrolled", scroller.scrollTop > 2);
     });
   }, { passive: true });
+}
+
+/**
+ * Colour ambience behind a hero header: two soft radial washes from the cover's
+ * palette (the engine already extracts it), drawn as gradients, so there is no
+ * blur and no raster to repaint. Without a cover, or when the palette cannot be
+ * read, the header simply stays plain.
+ */
+export async function setAmbience(header, url) {
+  const token = (header._ambience = (header._ambience ?? 0) + 1);
+  if (!url) { header.classList.remove("has-amb"); return; }
+  try {
+    const palette = await coverPalette(url);
+    if (token !== header._ambience) return;
+    header.style.setProperty("--amb-a", palette.primary);
+    header.style.setProperty("--amb-b", palette.secondary ?? palette.primary);
+    header.classList.add("has-amb");
+  } catch {
+    if (token === header._ambience) header.classList.remove("has-amb");
+  }
 }

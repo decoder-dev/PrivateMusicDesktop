@@ -8,7 +8,7 @@ import { trackKey } from "./api.js";
 import { isLiked, isBusy } from "./likes.js";
 import { isDownloaded, isDownloading } from "./downloads.js";
 import { openArtistOf } from "./navigation.js";
-import { artBox, paintStatus, pageHero, searchField, headerOnScroll } from "./ui-parts.js";
+import { artBox, paintStatus, pageHero, searchField, headerOnScroll, setAmbience, fillPanel } from "./ui-parts.js";
 
 /**
  * The common screen for every list of tracks: header, optional filter,
@@ -123,7 +123,7 @@ export function createTracksScreen({ title, filterable = false, playable = true,
   function renderEmpty() {
     const show = visible.length === 0 && !status.textContent;
     empty.hidden = !show;
-    if (show) empty.textContent = all.length === 0 ? (hooks.emptyText ?? "") : t("library.noMatches");
+    if (show) fillPanel(empty, all.length === 0 ? (hooks.emptyText ?? "") : t("library.noMatches"), all.length === 0 ? hooks.art : "search");
     // No dead buttons: with nothing to play they are not shown at all.
     for (const button of [playButton, shuffleButton]) if (button) button.hidden = visible.length === 0;
     renderState();
@@ -148,7 +148,7 @@ export function createTracksScreen({ title, filterable = false, playable = true,
     header,
     setTitle(text) { heading.textContent = text; },
     setKicker(text) { const node = header.querySelector(".kicker"); if (node) node.textContent = text; },
-    setCover(url) { heroArt?.replaceChildren(artBox(url, { glyph: "playlist", size: 40 })); },
+    setCover(url) { heroArt?.replaceChildren(artBox(url, { glyph: "playlist", size: 40 })); if (hero) setAmbience(header, url); },
     setNote(text) { if (note) { note.textContent = text ?? ""; note.hidden = !text; } },
     setTracks(tracks) {
       all = tracks;

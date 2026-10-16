@@ -72,3 +72,33 @@ export function icon(name, size = 18) {
   }
   return svg;
 }
+
+const svgEl = (tag, attrs) => {
+  const node = document.createElementNS(NS, tag);
+  for (const [name, value] of Object.entries(attrs)) node.setAttribute(name, String(value));
+  return node;
+};
+
+const ILLUSTRATIONS = { music: "note", error: "alert", download: "download", search: "search", friends: "friends", history: "history", playlist: "playlist", queue: "queue", chart: "chart", album: "album", artist: "artist" };
+
+/**
+ * A small empty-state picture: a soft accent wash behind two tilted cards with a
+ * glyph on the front one. Drawn with CSS classes (il-*), so it follows the theme
+ * and the accent; static, decorative (aria-hidden).
+ */
+export function illustration(kind = "music") {
+  const svg = svgEl("svg", { class: "il", viewBox: "0 0 120 88", width: 120, height: 88, "aria-hidden": "true", focusable: "false" });
+  svg.append(
+    svgEl("ellipse", { class: "il-wash", cx: 60, cy: 48, rx: 54, ry: 34 }),
+    svgEl("rect", { class: "il-card back", x: 24, y: 16, width: 52, height: 52, rx: 14, transform: "rotate(-9 50 42)" }),
+    svgEl("rect", { class: "il-card front", x: 44, y: 18, width: 52, height: 52, rx: 14, transform: "rotate(6 70 44)" }),
+    svgEl("circle", { class: "il-dot a", cx: 22, cy: 66, r: 3 }),
+    svgEl("circle", { class: "il-dot b", cx: 104, cy: 22, r: 2.5 }),
+  );
+  const glyph = icon(ILLUSTRATIONS[kind] ?? "note", 26);
+  glyph.setAttribute("class", "il-glyph");
+  glyph.setAttribute("x", "57");
+  glyph.setAttribute("y", "31");
+  svg.append(glyph);
+  return svg;
+}

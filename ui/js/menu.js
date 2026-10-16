@@ -42,7 +42,8 @@ export function openMenu({ x, y }, items, { label } = {}) {
       }));
     document.body.append(element);
     // Keep the menu on screen; a sub-menu flips to the parent's left side.
-    const box = element.getBoundingClientRect();
+    // Layout size, not the painted box: the pop-in animation scales the menu while it is measured.
+    const box = { width: element.offsetWidth, height: element.offsetHeight };
     const margin = 8;
     let left = at.x;
     if (parent && left + box.width > window.innerWidth - margin) left = parent.left - box.width - 2;
@@ -61,7 +62,8 @@ export function openMenu({ x, y }, items, { label } = {}) {
 
   function openSub(item, button) {
     while (stack.length > 1 && stack[stack.length - 1].element !== button.closest(".menu")) stack.pop().element.remove();
-    const parentBox = button.closest(".menu").getBoundingClientRect();
+    const parentMenu = button.closest(".menu");
+    const parentBox = { left: parentMenu.offsetLeft, right: parentMenu.offsetLeft + parentMenu.offsetWidth };
     const box = button.getBoundingClientRect();
     build(item.items, { x: parentBox.right + 2, y: box.top - 6 }, { parent: parentBox });
   }

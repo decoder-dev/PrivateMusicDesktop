@@ -44,3 +44,10 @@ export function enter(element) {
   element.classList.add("enter");
   element.addEventListener("animationend", () => element.classList.remove("enter"), { once: true });
 }
+
+/** A one-shot glyph swap (play/pause, heart): the new glyph pops in. Only when the glyph actually changed. */
+export function morph(element) {
+  if (!motionOk() || !element) return;
+  element.classList.add("morph");
+  element.addEventListener("animationend", () => element.classList.remove("morph"), { once: true });
+}
