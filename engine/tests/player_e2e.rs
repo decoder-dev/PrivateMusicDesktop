@@ -237,7 +237,7 @@ fn no_audio_device_is_reported_as_a_failure() {
     player.play("1_1", "https://cdn.example/a/index.m3u8", 10.0, 0.0, lab_config());
     let start = Instant::now();
     while events.lock().unwrap().is_empty() {
-        assert!(start.elapsed() < Duration::from_secs(5));
+        assert!(start.elapsed() < Duration::from_secs(40), "no failure event: the fetcher retries a dead address before giving up, and Windows takes about 2 s per refused connection");
         std::thread::sleep(Duration::from_millis(5));
     }
     assert!(matches!(events.lock().unwrap()[0], PlayerEvent::Failed { .. }));
@@ -253,7 +253,7 @@ fn a_nan_volume_never_reaches_the_device() {
     rig.player.play("1_1", "http://127.0.0.1:9/nothing.m3u8", 1.0, 0.0, lab_config());
     let start = Instant::now();
     while !rig.has(|e| matches!(e, PlayerEvent::Failed { .. })) {
-        assert!(start.elapsed() < Duration::from_secs(5));
+        assert!(start.elapsed() < Duration::from_secs(40), "no failure event: the fetcher retries a dead address before giving up, and Windows takes about 2 s per refused connection");
         std::thread::sleep(Duration::from_millis(5));
     }
     let gain = f32::from_bits(rig.volume.load(Ordering::Relaxed));
