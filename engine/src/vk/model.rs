@@ -180,6 +180,14 @@ pub struct MusicMix {
     pub options: Option<String>,
 }
 
+impl MusicMix {
+    /// Identity of a mix: its stream id plus the tuning, so two moods of the
+    /// same stream stay apart.
+    pub fn key(&self) -> String {
+        format!("{}\n{}", self.id, self.options.as_deref().unwrap_or(""))
+    }
+}
+
 impl Profile {
     pub fn display_name(&self) -> String {
         format!("{} {}", self.first_name, self.last_name).trim().to_string()

@@ -215,9 +215,15 @@
       if (config.forYouFails) throw { kind: "offline", message: "No internet connection." };
       return Array.from({ length: 100 }, (_, i) => makeTrack(7000 + i, { title: `Микс ${i + 1}` }));
     },
-    catalog_mixes: async () => config.catalogMixes
-      ? [{ id: "m7", title: "Спокойный вечер", subtitle: "", artwork_url: null, section_title: "Настроение", options: "{\"mood\":[\"calm\"]}" }]
-      : [],
+    catalog_mixes: async () => {
+      await delay(10);
+      if (config.catalogFails) throw { kind: "offline", message: "No internet connection." };
+      if (config.noCatalog) return [];
+      const common = { id: "common", title: "Мой микс", subtitle: "", artwork_url: null, section_title: null, options: null };
+      return config.catalogMixes
+        ? [common, { id: "m7", title: "Спокойный вечер", subtitle: "", artwork_url: null, section_title: "Настроение", options: "{\"mood\":[\"calm\"]}" }]
+        : [common];
+    },
     stream_mix: async ({ mixId }) => {
       await delay(10);
       return Array.from({ length: 40 }, (_, i) => makeTrack(6000 + i, { title: `Мини ${mixId} ${i + 1}` }));
