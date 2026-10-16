@@ -17,6 +17,7 @@ use rand::rngs::StdRng;
 use rand::SeedableRng;
 use serde::Serialize;
 
+use crate::history::History;
 use crate::audio::{PlayerEvent, PlayerHandle, Remote, Sink};
 use crate::offline::OfflineStore;
 use crate::queue::{Queue, Repeat};
@@ -87,6 +88,7 @@ struct Shared {
     fetch_template: FetchConfig,
     refresher: OnceLock<Refresher>,
     offline: OnceLock<Arc<OfflineStore>>,
+    history: OnceLock<Arc<History>>,
 }
 
 /// Renews an expired session (see [`Controller::set_refresher`]).
@@ -157,6 +159,10 @@ impl Shared {
             return;
         };
         let start = std::mem::take(&mut inner.pending_start).clamp(0.0, f64::from(track.duration));
+        // A fresh start: listening to it counts from zero again.
+        if let Some(history) = self.history.get() {
+            history.restart();
+        }
         inner.status = Status::Loading;
         inner.position = start;
         inner.duration = f64::from(track.duration);
@@ -254,6 +260,9 @@ impl Shared {
                     inner.position = seconds;
                     if duration > 0.0 {
                         inner.duration = duration;
+                    }
+                    if let (Some(history), Some(track)) = (self.history.get(), inner.queue.current()) {
+                        history.tick(track, seconds, inner.duration, inner.status == Status::Playing);
                     }
                     events.push(UiEvent::State(inner.state()));
                 }
@@ -373,6 +382,7 @@ impl Controller {
             fetch_template,
             refresher: OnceLock::new(),
             offline: OnceLock::new(),
+            history: OnceLock::new(),
         });
         let callback_shared = shared.clone();
         let player = PlayerHandle::spawn(make_sink, move |event| callback_shared.on_player_event(event));
@@ -404,6 +414,11 @@ impl Controller {
     /// Where downloaded tracks are played from. Set once by the app.
     pub fn set_offline(&self, store: Arc<OfflineStore>) {
         let _ = self.shared.offline.set(store);
+    }
+
+    /// Where plays are recorded for the history and statistics. Set once by the app.
+    pub fn set_history(&self, history: Arc<History>) {
+        let _ = self.shared.history.set(history);
     }
 
     /// The download settings playback uses (user agent, size cap).

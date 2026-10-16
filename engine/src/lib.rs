@@ -10,6 +10,7 @@ pub mod artwork;
 pub mod audio;
 pub mod controller;
 pub mod error;
+pub mod history;
 pub mod lyrics;
 pub mod media_sync;
 pub mod offline;
