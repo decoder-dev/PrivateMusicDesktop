@@ -21,12 +21,11 @@ use url::Url;
 
 use crate::AppState;
 
-/// Set by the CI smoke test: when VK's page has loaded, write a line here and
-/// quit. It proves the sign-in window really loads on every platform.
+/// Set by CI: verify both page loading and private cookie access, then quit.
 pub static SMOKE_REPORT: OnceLock<PathBuf> = OnceLock::new();
+static SMOKE_PAGE_LOADED: AtomicBool = AtomicBool::new(false);
 
 const LOGIN_URL: &str = "https://vk.ru/login";
-const COOKIE_URL: &str = "https://vk.ru/";
 const POLL: Duration = Duration::from_millis(1500);
 const SESSION_COOKIES: [&str; 3] = ["remixsid", "remixsid6", "remixnsid"];
 
@@ -66,8 +65,26 @@ fn session_header(cookies: &[(String, String)]) -> Option<String> {
     signed_in.then(|| cookies.iter().map(|(n, v)| format!("{n}={v}")).collect::<Vec<_>>().join("; "))
 }
 
+/// Read the whole private cookie store: looking up just vk.ru/ drops
+/// host-only cookies set by login.vk.ru, where web_token is requested.
+/// Never forward cookies from VK ID, vk.com or an unrelated site to it.
+fn token_cookies(cookies: &[tauri::webview::Cookie<'_>]) -> Vec<(String, String)> {
+    let mut cookies: Vec<_> = cookies.iter().filter(|cookie| {
+        let domain = cookie.domain().unwrap_or("").trim_start_matches('.');
+        (domain.eq_ignore_ascii_case("vk.ru") || domain.eq_ignore_ascii_case("login.vk.ru"))
+            && cookie.path().unwrap_or("/") == "/"
+    }).collect();
+    // As in a browser, prefer the host-specific value when names collide.
+    cookies.sort_by_key(|cookie| std::cmp::Reverse(cookie.domain().unwrap_or("").len()));
+    let mut seen = std::collections::HashSet::new();
+    cookies.into_iter().filter(|cookie| seen.insert(cookie.name().to_string()))
+        .map(|cookie| (cookie.name().to_string(), cookie.value().to_string())).collect()
+}
+
 pub fn start(handle: &AppHandle, state: &AppState) -> Result<(), String> {
     if let Some(existing) = handle.get_webview_window("login") {
+        let _ = existing.unminimize();
+        let _ = existing.show();
         let _ = existing.set_focus();
         return Ok(());
     }
@@ -89,17 +106,15 @@ pub fn start(handle: &AppHandle, state: &AppState) -> Result<(), String> {
             }
             allowed
         })
-        .on_page_load(|window, payload| {
+        .on_page_load(|_window, payload| {
             if payload.event() != PageLoadEvent::Finished {
                 return;
             }
             let host = payload.url().host_str().unwrap_or("").to_string();
             log::info!("sign-in window: page loaded on {host}");
-            if let Some(report) = SMOKE_REPORT.get() {
-                if is_vk_host(&host) {
-                    let _ = std::fs::write(report, format!("loaded {host}\n"));
-                    window.app_handle().exit(0);
-                }
+            if SMOKE_REPORT.get().is_some() && is_vk_host(&host) {
+                // The worker must also prove that private cookies are readable.
+                SMOKE_PAGE_LOADED.store(true, Ordering::SeqCst);
             }
         })
         .build()
@@ -112,7 +127,6 @@ pub fn start(handle: &AppHandle, state: &AppState) -> Result<(), String> {
     let app = state.app.clone();
     std::thread::spawn(move || {
         let outcome = poll(&handle, &window, &running);
-        running.store(false, Ordering::SeqCst);
         match outcome {
             Some(Ok(session)) => {
                 app.sign_in(session);
@@ -127,6 +141,7 @@ pub fn start(handle: &AppHandle, state: &AppState) -> Result<(), String> {
                 let _ = handle.emit("pm-login", "cancelled");
             }
         }
+        running.store(false, Ordering::SeqCst);
     });
     Ok(())
 }
@@ -137,21 +152,59 @@ fn poll(
     window: &tauri::WebviewWindow,
     running: &Arc<AtomicBool>,
 ) -> Option<Result<pm_engine::vk::Session, Error>> {
-    let cookie_url: Url = COOKIE_URL.parse().ok()?;
     let mut failures = 0;
+    let mut last_header = None;
     loop {
         std::thread::sleep(POLL);
         if handle.get_webview_window("login").is_none() || !running.load(Ordering::SeqCst) {
             return None;
         }
-        let Ok(cookies) = window.cookies_for_url(cookie_url.clone()) else { continue };
-        let pairs: Vec<(String, String)> = cookies.iter().map(|c| (c.name().to_string(), c.value().to_string())).collect();
+        if SMOKE_REPORT.get().is_some() && SMOKE_PAGE_LOADED.load(Ordering::SeqCst) {
+            let verified = smoke_cookie_store(window);
+            if let Some(report) = SMOKE_REPORT.get() {
+                let _ = std::fs::write(report, if verified {
+                    "loaded VK; private cookie store verified\n"
+                } else {
+                    "error private cookie store probe failed\n"
+                });
+            }
+            handle.exit(if verified { 0 } else { 1 });
+            return None;
+        }
+        let cookies = match window.cookies() {
+            Ok(cookies) => cookies,
+            Err(_) => {
+                log::warn!("sign-in window: could not read the private cookie store");
+                return Some(Err(Error::Transport("sign-in cookie store unavailable".into())));
+            }
+        };
+        let pairs = token_cookies(&cookies);
         let Some(header) = session_header(&pairs) else { continue };
+        if last_header.as_ref() != Some(&header) {
+            failures = 0;
+            last_header = Some(header.clone());
+            log::info!("sign-in window: session detected, exchanging token");
+        }
         match exchange_web_session(&header, WEB_USER_AGENT) {
-            Ok(session) => return Some(Ok(session)),
+            Ok(session) => {
+                // Closing the window during the HTTP request cancels adoption.
+                if handle.get_webview_window("login").is_none() || !running.load(Ordering::SeqCst) {
+                    return None;
+                }
+                log::info!("sign-in window: token exchange succeeded");
+                return Some(Ok(session));
+            }
             // A cookie exists but VK does not call it signed in yet (a 2FA or
             // captcha step): keep waiting.
-            Err(Error::Unauthorized) => continue,
+            Err(Error::Unauthorized) => {
+                failures += 1;
+                if failures == 3 {
+                    log::warn!("sign-in window: VK has not confirmed the web session");
+                    let _ = handle.emit("pm-login", "pending:unauthorized");
+                }
+                // Keep the browser session for 2FA, without hammering VK.
+                std::thread::sleep(Duration::from_secs(5));
+            }
             Err(error) => {
                 failures += 1;
                 if failures >= 3 {
@@ -160,6 +213,30 @@ fn poll(
             }
         }
     }
+}
+
+/// Exercises the actual native cookie manager in the isolated CI window.
+/// No credentials or token requests are involved.
+fn smoke_cookie_store(window: &tauri::WebviewWindow) -> bool {
+    use tauri::webview::Cookie;
+    let probes = [
+        Cookie::build(("pm_probe_root", "root")).domain(".vk.ru").path("/").secure(true).http_only(true).build(),
+        Cookie::build(("pm_probe_login", "login")).domain("login.vk.ru").path("/").secure(true).http_only(true).build(),
+    ];
+    for cookie in &probes {
+        if window.set_cookie(cookie.clone()).is_err() { return false; }
+    }
+    let mut verified = false;
+    for _ in 0..10 {
+        if let Ok(cookies) = window.cookies() {
+            let pairs = token_cookies(&cookies);
+            verified = probes.iter().all(|probe| pairs.iter().any(|(name, value)| name == probe.name() && value == probe.value()));
+            if verified { break; }
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    for cookie in probes { let _ = window.delete_cookie(cookie); }
+    verified
 }
 
 #[cfg(test)]
@@ -201,5 +278,28 @@ mod tests {
         assert_eq!(session_header(&anonymous), None);
         let signed_in = vec![("remixlang".to_string(), "0".to_string()), ("remixsid".to_string(), "abc".to_string())];
         assert_eq!(session_header(&signed_in).as_deref(), Some("remixlang=0; remixsid=abc"));
+    }
+
+    #[test]
+    fn token_exchange_keeps_login_host_cookies_and_excludes_other_hosts() {
+        use tauri::webview::Cookie;
+        let cookie = |name, value, domain| Cookie::build((name, value)).domain(domain).path("/").build();
+        let cookies = vec![
+            cookie("remixsid", "root", ".vk.ru"),
+            cookie("web_token", "host-only", "login.vk.ru"),
+            cookie("id_session", "private", "id.vk.ru"),
+            cookie("other", "private", ".vk.com"),
+            cookie("foreign", "private", "vk.ru.evil.example"),
+        ];
+        let header = session_header(&token_cookies(&cookies)).unwrap();
+        assert!(header.contains("remixsid=root"));
+        assert!(header.contains("web_token=host-only"));
+        assert!(!header.contains("private"));
+        let scoped = vec![
+            cookie("remixsid", "root", ".vk.ru"),
+            cookie("remixsid", "login", "login.vk.ru"),
+            Cookie::build(("wrong_path", "private")).domain("vk.ru").path("/login").build(),
+        ];
+        assert_eq!(session_header(&token_cookies(&scoped)).as_deref(), Some("remixsid=login"));
     }
 }

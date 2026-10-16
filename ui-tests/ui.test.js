@@ -23,6 +23,29 @@ test("signed out: shows the sign-in screen, and signing in opens the library", a
   } finally { await app.close(); }
 });
 
+test("pending sign-in can be brought back, reports verification and recovers after cancellation", async () => {
+  const app = await openApp({ config: { signedIn: false, loginPending: true } });
+  try {
+    const { page } = app;
+    await page.click(".login .btn");
+    await page.getByRole("button", { name: "Вернуться к окну VK" }).click();
+    assert.equal(await page.evaluate(() => window.__mock.count("login_start")), 2);
+    await page.evaluate(() => window.__mock.emit("pm-login", "pending:unauthorized"));
+    await page.waitForFunction(() => document.querySelector(".login .message").textContent.includes("VK пока не подтвердил"));
+    await page.evaluate(() => window.__mock.emit("pm-login", "cancelled"));
+    await page.getByRole("button", { name: "Войти через VK" }).click();
+    await page.evaluate(() => window.__mock.emit("pm-login", "error:timeout"));
+    await page.waitForFunction(() => document.querySelector(".login .message").textContent === "Сервер не отвечает.");
+    await page.click(".login .btn");
+    await page.evaluate(() => {
+      window.__mock.state.session.signed_in = true;
+      window.__mock.emit("pm-login", "success");
+    });
+    await waitForLibrary(page);
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
 test("a warning is shown when the sign-in cannot be remembered", async () => {
   const app = await openApp({ config: { signedIn: false, persistent: false } });
   try {
