@@ -30,13 +30,33 @@ import { formDialog } from "./dialog.js";
 import { ensurePlaylists, ownPlaylists, addPlaylist, changeCount, forgetPlaylists } from "./my-playlists.js";
 import { loadSettings, saveSettings, saveQueue, loadQueue, clearQueue } from "./persist.js";
 
+
 const root = document.getElementById("app");
 const settings = loadSettings();
 function applyAppearance() {
   if (settings.theme === "system") delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = settings.theme;
   document.documentElement.dataset.accent = settings.accent;
+  applyChrome();
 }
+
+// Blur and translucency are for a window that is being looked at: the simplified
+// look in Settings, or a window in the background for a while, makes the chrome flat.
+let backgrounded = false;
+let backgroundTimer = 0;
+function applyChrome() {
+  const flat = settings.flatChrome || backgrounded;
+  if (flat) document.documentElement.dataset.chrome = "flat";
+  else delete document.documentElement.dataset.chrome;
+}
+function setBackgrounded(value) {
+  clearTimeout(backgroundTimer);
+  if (!value) { backgrounded = false; applyChrome(); return; }
+  backgroundTimer = setTimeout(() => { backgrounded = true; applyChrome(); }, document.hidden ? 0 : 5000);
+}
+window.addEventListener("blur", () => setBackgrounded(true));
+window.addEventListener("focus", () => setBackgrounded(false));
+document.addEventListener("visibilitychange", () => setBackgrounded(document.hidden));
 applyAppearance();
 let shell = null;
 let nowPlaying = null;
@@ -181,7 +201,7 @@ function persistSettings(patch) {
 /** From the settings screen: saved, and pushed to whatever shows them now. */
 function applySettings(patch) {
   persistSettings(patch);
-  if ("theme" in patch || "accent" in patch) applyAppearance();
+  if ("theme" in patch || "accent" in patch || "flatChrome" in patch) applyAppearance();
   nowPlaying?.applySettings(patch);
 }
 
@@ -226,25 +246,37 @@ function buildShellParts() {
     ["settings", "nav.settings", "settings"],
   ];
 
+  // Groups: the library, then what is playing, then the settings.
+  const groupEnds = new Set(["search", "downloads"]);
   const nav = h("nav", { class: "nav", "aria-label": t("app.name") },
-    items.map(([id, label, glyph]) =>
-      h("button", { type: "button", "data-view": id, onclick: () => show(id) },
+    items.flatMap(([id, label, glyph]) => [
+      // The label is also the name and tooltip: the narrow sidebar shows icons only.
+      h("button", { type: "button", "data-view": id, title: t(label), "aria-label": t(label), onclick: () => show(id) },
         h("span", { class: "glyph" }, icon(glyph, 18)),
-        h("span", { class: "label", text: t(label) }))));
+        h("span", { class: "label", text: t(label) })),
+      groupEnds.has(id) ? h("div", { class: "nav-sep", "aria-hidden": "true" }) : null,
+    ]).filter(Boolean));
+  const avatar = h("span", { class: "avatar-lite", "aria-hidden": "true" });
   const name = h("div", { class: "name" });
-  const account = h("div", { class: "account" }, name,
-    h("button", { class: "link", type: "button", onclick: signOut }, t("account.signOut")));
-  const main = h("main", { class: "main" }, ...Object.values(views).map((v) => v.element));
-  nowPlaying = createNowPlaying({ settings, onSettingsChange: persistSettings, onLike: like });
+  const account = h("div", { class: "account" }, avatar,
+    h("div", { class: "who" }, name,
+      h("button", { class: "link", type: "button", title: t("account.signOut"), "aria-label": t("account.signOut"), onclick: signOut },
+        h("span", { class: "ico" }, icon("logout", 16)), h("span", { class: "txt", text: t("account.signOut") }))));
+  nowPlaying = createNowPlaying({ settings, onSettingsChange: persistSettings, onLike: like, onMenu: (track, at) => openTrackMenu(track, at) });
   const bar = createPlayerBar({ onSettingsChange: persistSettings, onExpand: () => nowPlaying.show(), onLike: like });
+  const main = h("main", { class: "main" }, ...Object.values(views).map((v) => v.element), bar.element);
 
   const element = h("div", { class: "shell" },
-    h("aside", { class: "sidebar" }, h("div", { class: "brand", text: t("app.name") }), nav, h("div", { class: "spacer" }), account),
+    h("aside", { class: "sidebar" },
+      h("div", { class: "brand" }, h("span", { class: "brand-mark", "aria-hidden": "true" }, icon("note", 16)), h("span", { class: "brand-name", text: t("app.name") })),
+      nav, h("div", { class: "spacer" }), account),
     main,
-    h("footer", { class: "player" }, bar.element),
     nowPlaying.element);
 
-  function display(id) {
+  function display(id, direction = "") {
+    // Set before the view is shown: pages that are pushed slide in, the rest settle.
+    if (direction) main.dataset.dir = direction;
+    else delete main.dataset.dir;
     set("view", id);
     for (const [key, view] of Object.entries(views)) view.element.hidden = key !== id;
     // A page opened from a screen keeps that screen's place in the sidebar.
@@ -266,14 +298,14 @@ function buildShellParts() {
     nowPlaying?.close();
     stack.push(current);
     current = { id, payload };
-    display(id);
+    display(id, "push");
     views[id].open(payload);
   }
 
   function back() {
     const previous = stack.pop() ?? { id: "library", payload: null };
     current = previous;
-    display(previous.id);
+    display(previous.id, "back");
     if (previous.payload) views[previous.id].open(previous.payload);
   }
 
@@ -282,7 +314,9 @@ function buildShellParts() {
   return {
     element, views, bar, show,
     setProfile(profile) {
-      name.textContent = profile ? `${profile.first_name} ${profile.last_name}`.trim() : "";
+      const full = profile ? `${profile.first_name} ${profile.last_name}`.trim() : "";
+      name.textContent = full;
+      avatar.textContent = [...full.split(/\s+/).filter(Boolean).slice(0, 2).map((word) => [...word][0].toUpperCase())].join("");
       views.settings.setProfile(profile);
     },
   };

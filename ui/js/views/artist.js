@@ -5,6 +5,7 @@ import { errorText, t } from "../i18n.js";
 import { h } from "../dom.js";
 import { icon } from "../icons.js";
 import { albumCard } from "../album-card.js";
+import { artBox, paintStatus, backButton, pageHero, headerOnScroll } from "../ui-parts.js";
 import { openAlbum } from "../navigation.js";
 
 const TRACKS = 50;
@@ -28,15 +29,24 @@ export function createArtistView({ play, onTrackAction, toast, back }) {
   let loadingTracks = false;
   let loadingAlbums = false;
 
-  const photo = h("div", { class: "page-art round" });
+  const photo = h("span", { class: "hero-art page-art round" });
   const name = h("h1");
   const note = h("div", { class: "page-note", hidden: true });
-  const backButton = h("button", { class: "icon-btn", type: "button", title: t("playlists.back"), "aria-label": t("playlists.back"), onclick: () => back() }, icon("back", 20));
-  const head = h("header", { class: "view-header page-head" }, backButton, photo, h("div", { class: "page-info" }, name, note));
+  const listenButton = h("button", { class: "btn primary", type: "button", hidden: true,
+    onclick: () => tracks.visible.length && play(tracks.visible, 0, { shuffle: false }) }, icon("play", 14), t("artist.listen"));
+  const shuffleButton = h("button", { class: "icon-btn circle-btn", type: "button", hidden: true, title: t("shuffle"), "aria-label": t("shuffle"),
+    onclick: () => tracks.visible.length && play(tracks.visible, Math.floor(Math.random() * tracks.visible.length), { shuffle: true }) }, icon("shuffle", 16));
+  const head = pageHero({
+    back: backButton(t("playlists.back"), () => back()),
+    art: photo,
+    body: [h("div", { class: "kicker", text: t("artist.kicker") }), name, note],
+    actions: [listenButton, shuffleButton],
+  });
 
   const tracks = createTracksScreen({
     title: t("artist.popular"),
     heading: "h2",
+    playable: false,
     hooks: { emptyText: t("artist.noTracks"), onPlay: play, onAction: onTrackAction },
   });
   tracks.element.classList.add("artist-tracks");
@@ -46,6 +56,7 @@ export function createArtistView({ play, onTrackAction, toast, back }) {
   const albumsHeading = h("h2", { class: "shelf-title", text: t("artist.albums") });
   const scroller = h("div", { class: "page-scroll" }, tracks.element, albumsHeading, albumsStatus, grid);
   const element = h("section", { class: "view artist-view" }, head, scroller);
+  headerOnScroll(head, scroller);
 
   // Popular tracks have their own bounded scroller; album cards use the
   // surrounding page scroller. Fetch another page only when the relevant
@@ -64,15 +75,11 @@ export function createArtistView({ play, onTrackAction, toast, back }) {
 
   function renderHeader(artist) {
     name.textContent = artist.name;
-    photo.replaceChildren(artist.photo_url
-      ? h("img", { src: artist.photo_url, alt: "", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" })
-      : icon("artist", 40));
+    photo.replaceChildren(artBox(artist.photo_url, { glyph: "artist", size: 36, className: "round" }));
   }
 
   function setAlbumsStatus(text, { error = false } = {}) {
-    albumsStatus.textContent = text ?? "";
-    albumsStatus.hidden = !text;
-    albumsStatus.className = `status${error ? " error" : ""}`;
+    paintStatus(albumsStatus, text, { error, kind: "cards", extra: "compact" });
   }
 
   async function loadTracks(id, query, mine) {
@@ -89,6 +96,7 @@ export function createArtistView({ play, onTrackAction, toast, back }) {
       tracks.setTracks(trackItems);
       trackNextOffset = page.next_offset;
       fitTracks(page.items.length);
+      listenButton.hidden = shuffleButton.hidden = trackItems.length === 0;
     } catch (error) {
       if (mine !== generation) return;
       loadedKey = null; // let the next visit try again
@@ -175,6 +183,7 @@ export function createArtistView({ play, onTrackAction, toast, back }) {
     const mine = ++generation;
     renderHeader(artist);
     note.hidden = true;
+    listenButton.hidden = shuffleButton.hidden = true;
     scroller.scrollTop = 0;
     let id = artist.id;
     if (!id) {
@@ -221,6 +230,7 @@ export function createArtistView({ play, onTrackAction, toast, back }) {
       tracks.clearStatus();
       grid.replaceChildren();
       setAlbumsStatus("");
+      listenButton.hidden = shuffleButton.hidden = true;
     },
   };
 }

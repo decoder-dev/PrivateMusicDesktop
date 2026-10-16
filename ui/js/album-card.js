@@ -1,15 +1,14 @@
 import { h } from "./dom.js";
 import { icon } from "./icons.js";
-import { t } from "./i18n.js";
+import { tn } from "./i18n.js";
+import { artBox } from "./ui-parts.js";
 
 const artistLine = (album) => album.artists.map((a) => a.name).join(", ");
 
 /** A release in a grid: cover, title, and year or artist under it. */
 export function albumCard(album, open, { showArtist = true } = {}) {
-  const art = album.artwork_url
-    ? h("img", { class: "art", src: album.artwork_url, alt: "", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" })
-    : h("div", { class: "art empty" }, icon("album", 36));
-  const details = [album.year, showArtist ? artistLine(album) : null, !showArtist && album.count ? t("album.count", { n: album.count }) : null]
+  const art = h("span", { class: "card-art art" }, artBox(album.artwork_url, { glyph: "album", size: 36, className: "fill" }), h("span", { class: "play-chip" }, icon("play", 12)));
+  const details = [album.year, showArtist ? artistLine(album) : null, !showArtist && album.count ? tn("album.count", album.count) : null]
     .filter(Boolean).join(" · ");
   return h("button", { class: "card album-card", type: "button", onclick: () => open(album) },
     art,
@@ -19,9 +18,7 @@ export function albumCard(album, open, { showArtist = true } = {}) {
 
 /** An artist in a grid: round photo and name. */
 export function artistCard(artist, open) {
-  const art = artist.photo_url
-    ? h("img", { class: "art", src: artist.photo_url, alt: "", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" })
-    : h("div", { class: "art empty" }, icon("artist", 36));
+  const art = h("span", { class: "card-art art" }, artBox(artist.photo_url, { glyph: "artist", size: 36, className: "fill round" }));
   return h("button", { class: "card artist-card", type: "button", onclick: () => open(artist) },
     art,
     h("div", { class: "name", text: artist.name }));

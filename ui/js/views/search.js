@@ -2,6 +2,8 @@ import { api } from "../api.js";
 import { createTracksScreen } from "../tracks-screen.js";
 import { errorText, t } from "../i18n.js";
 import { h } from "../dom.js";
+import { icon } from "../icons.js";
+import { searchField, paintStatus, watchSegmented } from "../ui-parts.js";
 import { albumCard, artistCard } from "../album-card.js";
 import { openAlbum, openArtist } from "../navigation.js";
 
@@ -24,8 +26,8 @@ export function createSearchView({ play, onTrackAction, toast }) {
   // query: query -> list.
   const shelves = { artists: new Map(), albums: new Map() };
 
-  const input = h("input", {
-    class: "field", type: "search", placeholder: t("search.placeholder"), "aria-label": t("search.placeholder"),
+  const field = searchField({
+    placeholder: t("search.placeholder"), label: t("search.placeholder"),
     autocomplete: "off", spellcheck: "false",
     oninput: () => {
       clearTimeout(debounce);
@@ -38,6 +40,7 @@ export function createSearchView({ play, onTrackAction, toast }) {
       }
     },
   });
+  const input = field.input;
 
   const screen = createTracksScreen({
     title: t("search.title"),
@@ -45,10 +48,11 @@ export function createSearchView({ play, onTrackAction, toast }) {
   });
   // The search box lives in the header, next to the title.
   const header = screen.element.querySelector(".view-header");
-  header.insertBefore(input, header.querySelector(".meta"));
+  header.insertBefore(field.element, header.querySelector(".vh-actions"));
 
   const tabs = h("div", { class: "tabs", role: "tablist", "aria-label": t("search.title") },
     TABS.map((id) => h("button", { type: "button", role: "tab", "data-tab": id, onclick: () => select(id), text: t(`search.tab.${id}`) })));
+  watchSegmented(tabs);
   const recentHeading = h("div", { class: "search-recents-head" },
     h("h2", { class: "shelf-title", text: t("search.recent") }),
     h("button", { class: "btn", type: "button", text: t("search.clearRecent"), onclick: clearRecent }));
@@ -73,10 +77,10 @@ export function createSearchView({ play, onTrackAction, toast }) {
   }, { passive: true });
 
   function renderTabs() {
-    for (const button of tabs.children) button.setAttribute("aria-selected", String(button.dataset.tab === tab));
+    for (const button of tabs.querySelectorAll("button")) button.setAttribute("aria-selected", String(button.dataset.tab === tab));
     for (const [id, pane] of Object.entries(panes)) pane.hidden = id !== tab;
     // Play and Shuffle act on the tracks.
-    for (const button of header.querySelectorAll(".btn")) button.hidden = tab !== "tracks";
+    header.querySelector(".vh-actions").hidden = tab !== "tracks";
   }
 
   function renderRecent() {
@@ -84,11 +88,12 @@ export function createSearchView({ play, onTrackAction, toast }) {
     recentHeading.hidden = !visible;
     recentList.hidden = !visible;
     recentList.replaceChildren(...recent.map((item) => {
-      const use = h("button", { class: "search-recent-query", type: "button", text: item, onclick: () => {
+      const use = h("button", { class: "search-recent-query", type: "button", onclick: () => {
         input.value = item;
+        field.sync();
         run(item);
-      } });
-      const remove = h("button", { class: "search-recent-remove", type: "button", text: "×", title: t("search.removeRecent", { query: item }), "aria-label": t("search.removeRecent", { query: item }), onclick: () => removeRecent(item) });
+      } }, icon("history", 14), h("span", { text: item }));
+      const remove = h("button", { class: "search-recent-remove", type: "button", title: t("search.removeRecent", { query: item }), "aria-label": t("search.removeRecent", { query: item }), onclick: () => removeRecent(item) }, icon("close", 14));
       return h("div", { class: "search-recent" }, use, remove);
     }));
   }
@@ -125,6 +130,8 @@ export function createSearchView({ play, onTrackAction, toast }) {
 
   function setShelfStatus(id, text, { error = false } = {}) {
     const { status } = shelfParts[id];
+    if (text === t("loading")) return paintStatus(status, text, { kind: "cards" });
+    status.removeAttribute("aria-busy");
     status.textContent = text ?? "";
     status.hidden = !text;
     status.className = `empty-state${error ? " error" : ""}`;
@@ -220,6 +227,7 @@ export function createSearchView({ play, onTrackAction, toast }) {
       query = "";
       renderRecent();
       input.value = "";
+      field.sync();
       shelves.artists.clear();
       shelves.albums.clear();
       select("tracks");

@@ -10,6 +10,7 @@ export function createQueueView() {
     playable: false,
     hooks: {
       emptyText: t("queue.empty"),
+      pinLiked: false, // hearts show on hover; a column of marks on every row says nothing
       rowActions: [["close", "remove", t("remove")]],
       isSelected: (_track, index) => index === store.queue.current,
       onPlay: (_tracks, index) => api.jump(index),
@@ -20,7 +21,7 @@ export function createQueueView() {
   });
 
   // A queue started from a mix says so: it keeps refilling while it plays.
-  const note = h("div", { class: "status radio-note", role: "note", hidden: true });
+  const note = h("div", { class: "radio-note", role: "note", hidden: true });
   screen.element.insertBefore(note, screen.list.element);
   const noteKeys = { personal: "queue.radio.personal", catalog: "queue.radio.catalog", similar: "queue.radio.similar" };
   function renderNote(player) {

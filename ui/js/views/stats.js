@@ -3,6 +3,7 @@ import { errorText, locale, t } from "../i18n.js";
 import { h } from "../dom.js";
 import { icon } from "../icons.js";
 import { confirmDialog } from "../dialog.js";
+import { artBox, watchSegmented, paintStatus } from "../ui-parts.js";
 
 const SCOPES = ["month", "year", "all"];
 
@@ -32,14 +33,10 @@ const hourText = (hour) => `${String(hour).padStart(2, "0")}:00`;
 function topList(title, entries, { artwork }) {
   return h("section", { class: "set-section stat-section", "data-section": artwork ? "tracks" : "artists" },
     h("h2", { text: title }),
-    h("ol", { class: "stat-list" }, entries.map((entry, index) =>
+    h("ol", { class: "stat-list set-card" }, entries.map((entry, index) =>
       h("li", { class: "stat-row" },
         h("span", { class: "stat-rank", text: String(index + 1) }),
-        artwork
-          ? (entry.artwork_url
-            ? h("img", { class: "cover", src: entry.artwork_url, alt: "", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" })
-            : h("div", { class: "cover empty" }, icon("note", 18)))
-          : null,
+        artwork ? artBox(entry.artwork_url) : null,
         h("span", { class: "stat-titles" },
           h("span", { class: "stat-title", text: entry.title }),
           entry.subtitle ? h("span", { class: "stat-sub", text: entry.subtitle }) : null),
@@ -57,13 +54,14 @@ export function createStatsView({ toast }) {
 
   const tabs = h("div", { class: "tabs", role: "tablist", "aria-label": t("stats.period") },
     SCOPES.map((id) => h("button", { type: "button", role: "tab", "data-scope": id, onclick: () => select(id), text: t(`stats.${id}`) })));
+  watchSegmented(tabs);
   const chooser = h("select", { class: "field", "aria-label": t("stats.period"), onchange: () => { chosen[scope] = chooser.value; load(); } });
   const periodTitle = h("div", { class: "stat-period" });
   const body = h("div", { class: "stat-body" });
   const note = h("div", { class: "page-note", text: t("stats.privacy") });
   const resetButton = h("button", { class: "btn danger-text", type: "button", onclick: () => reset(), text: t("stats.reset"), hidden: true });
   const element = h("section", { class: "view stats-view" },
-    h("header", { class: "view-header" }, h("h1", { text: t("stats.title") })),
+    h("header", { class: "view-header" }, h("div", { class: "vh-text" }, h("h1", { text: t("stats.title") }))),
     h("div", { class: "page-scroll" },
       h("div", { class: "stat-controls" }, tabs, chooser, periodTitle),
       body,
@@ -71,7 +69,7 @@ export function createStatsView({ toast }) {
 
   function select(id) {
     scope = id;
-    for (const button of tabs.children) button.setAttribute("aria-selected", String(button.dataset.scope === id));
+    for (const button of tabs.querySelectorAll("button")) button.setAttribute("aria-selected", String(button.dataset.scope === id));
     load();
   }
 
@@ -103,6 +101,7 @@ export function createStatsView({ toast }) {
       summary.top_tracks.length ? topList(t("stats.topTracks"), summary.top_tracks, { artwork: true }) : null,
       h("section", { class: "set-section stat-section", "data-section": "when" },
         h("h2", { text: t("stats.when") }),
+        h("div", { class: "set-card stat-when" },
         h("div", { class: "hour-chart", role: "img", "aria-label": t("stats.chartLabel") },
           summary.hour_seconds.map((seconds, hour) => {
             const bar = h("span", { class: `hour-bar${hour === summary.peak_hour ? " peak" : ""}`, "data-hour": String(hour) });
@@ -110,12 +109,12 @@ export function createStatsView({ toast }) {
             return bar;
           })),
         h("div", { class: "hour-axis", "aria-hidden": "true" }, [0, 6, 12, 18].map((hour) => h("span", { text: String(hour).padStart(2, "0") }))),
-        ...habits),
+        ...habits)),
     ];
   }
 
   function renderControls(view) {
-    for (const button of tabs.children) button.setAttribute("aria-selected", String(button.dataset.scope === scope));
+    for (const button of tabs.querySelectorAll("button")) button.setAttribute("aria-selected", String(button.dataset.scope === scope));
     const period = view.summary.period;
     const options = scope === "month" ? view.months : scope === "year" ? view.years.map(String) : [];
     const current = scope === "month" ? period.key : scope === "year" ? String(period.year) : "";
