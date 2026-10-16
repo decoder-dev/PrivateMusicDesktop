@@ -405,3 +405,55 @@ select.field { padding: 7px 10px; }
 @media (max-width: 900px) {
   .page-art { width: 64px; height: 64px; }
 }
+
+/* ---------- compact desktop layouts and clearer interaction ---------- */
+.nav button[aria-current="page"] {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent);
+  font-weight: 650;
+}
+.btn:not(:disabled):active, .icon-btn:not(:disabled):active,
+.tabs button:not(:disabled):active, .mix-tuning > summary:active {
+  background: var(--surface-hover);
+}
+.btn.primary:not(:disabled):active, .controls .play:not(:disabled):active {
+  background: var(--accent);
+  filter: brightness(0.88);
+}
+.row[aria-selected="true"] { background: color-mix(in srgb, var(--accent) 8%, var(--bg)); }
+.row:focus-within { background: var(--surface-hover); }
+.field::placeholder { color: var(--text-secondary); opacity: 0.8; }
+.card:focus-visible .name, .mix-tile:focus-visible .mix-tile-title { color: var(--accent); }
+.settings .set-control { min-width: min(240px, 100%); }
+.set-section h2 { letter-spacing: 0.01em; }
+.mix-tile { padding: 4px; }
+.mix-tile-title, .mix-tile-section { padding-inline: 4px; }
+
+@media (max-width: 640px) {
+  :root { --player: 82px; }
+  .view-header { padding: 14px 16px 10px; gap: 8px; }
+  .view-header h1 { font-size: 20px; }
+  .row { padding-inline: 16px; gap: 9px; grid-template-columns: 36px minmax(0, 1fr) 44px 56px; }
+  .row .cover { width: 36px; height: 36px; }
+  .grid, .settings .set-body { padding-inline: 16px; }
+  .grid { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 14px; }
+  .shelf-title { margin-inline: 16px; }
+  .tab-bar { padding-inline: 16px; }
+  .page-head { padding-inline: 16px; }
+  .player-inner { grid-template-columns: minmax(76px, 1fr) auto; gap: 8px; padding-inline: 12px; }
+  .now { gap: 8px; }
+  .now .cover, .cover-slot { width: 44px; height: 44px; }
+  .transport { grid-column: 2; }
+  .controls { gap: 2px; }
+  .controls .icon-btn { width: 32px; height: 32px; }
+  .controls .play { width: 38px; height: 38px; }
+  .seek { grid-template-columns: 34px minmax(52px, 1fr) 34px; gap: 6px; font-size: 11px; }
+  .volume { display: none; }
+  .settings .set-body { gap: 12px; }
+  .set-section { padding: 12px; }
+  .set-row { align-items: flex-start; gap: 8px; }
+  .set-inline { width: 100%; }
+  .set-inline .field { flex: 1 1 150px; }
+  .eq-bands { gap: 2px; }
+  .eq-slider { width: 18px; }
+}
