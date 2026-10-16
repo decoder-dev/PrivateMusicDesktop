@@ -1108,9 +1108,28 @@ test("lyrics: 'not found' and failures are different messages, and a failure can
     const { page } = app;
     await playAndOpen(app);
     await page.waitForSelector(".ly-message .np-chip");
-    assert.match(await page.locator(".ly-message").innerText(), /Не удалось загрузить текст/);
+    assert.match(await page.locator(".ly-message").innerText(), /Не удалось загрузить текст: нет связи с сервисом текстов\./);
     await page.click(".ly-message .np-chip");
     await page.waitForFunction(() => window.__mock.count("lyrics") === 2);
+  } finally { await app.close(); }
+
+  // Other kinds of failure keep the generic message, and can still be retried.
+  app = await openApp({ config: { signedIn: true, lyricsFail: "http" } });
+  try {
+    const { page } = app;
+    await playAndOpen(app);
+    await page.waitForSelector(".ly-message .np-chip");
+    assert.equal((await page.locator(".ly-message").innerText()).trim().split("\n")[0], "Не удалось загрузить текст.");
+    await page.click(".ly-message .np-chip");
+    await page.waitForFunction(() => window.__mock.count("lyrics") === 2);
+  } finally { await app.close(); }
+
+  app = await openApp({ config: { signedIn: true, lyricsFail: "timeout" } });
+  try {
+    const { page } = app;
+    await playAndOpen(app);
+    await page.waitForSelector(".ly-message .np-chip");
+    assert.match(await page.locator(".ly-message").innerText(), /нет связи с сервисом текстов/);
   } finally { await app.close(); }
 });
 

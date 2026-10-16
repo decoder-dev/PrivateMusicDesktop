@@ -94,9 +94,10 @@ export function createLyricsPanel() {
       cache.set(key, lyrics ?? null);
       if (mine !== token) return;
       if (lyrics) show(lyrics); else message(t("ly.none"));
-    } catch {
+    } catch (error) {
       if (mine !== token) return;
-      message(t("ly.error"), () => load(track));
+      const unreachable = ["offline", "timeout", "network"].includes(error && error.kind);
+      message(t(unreachable ? "ly.errorNetwork" : "ly.error"), () => load(track));
     }
   }
 

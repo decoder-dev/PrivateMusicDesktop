@@ -146,6 +146,8 @@ pub struct AppOptions {
     /// memory only.
     pub history_dir: Option<std::path::PathBuf>,
     pub lyrics_base: String,
+    /// Genius search host; empty turns the Genius fallback off.
+    pub genius_base: String,
     pub fetch: FetchConfig,
     pub token_url: String,
     pub volume: f32,
@@ -158,6 +160,7 @@ impl Default for AppOptions {
             token_url: TOKEN_URL.to_string(),
             volume: 1.0,
             lyrics_base: crate::lyrics::LRCLIB_BASE.to_string(),
+            genius_base: crate::lyrics::GENIUS_BASE.to_string(),
             offline_dir: None,
             history_dir: None,
         }
@@ -195,7 +198,7 @@ impl App {
             generation: Mutex::new(0),
             token_url: options.token_url,
             lrclib: LrcLib::with_base(&options.lyrics_base).ok(),
-            genius: GeniusLyrics::new().ok(),
+            genius: GeniusLyrics::with_base(&options.genius_base).ok(),
             offline: options.offline_dir.and_then(|dir| {
                 OfflineStore::open(dir).map_err(|e| log::warn!("downloads unavailable: {e}")).ok().map(Arc::new)
             }),
@@ -515,12 +518,21 @@ impl Core {
 
     /// Lyrics for a track: timed LRCLIB first, then the exact VK lyric id,
     /// Genius when its search result matches, then plain LRCLIB text.
+    ///
+    /// A source that fails does not hide another source's answer. `Err` is
+    /// returned only when no source gave a definitive answer ("found" or
+    /// "none"), so the user is told "could not load" only when we really could
+    /// not find out; the failure is in the log either way.
     pub fn lyrics(&self, track: &Track) -> Result<Option<Lyrics>> {
-        let mut failure = None;
+        let mut failure: Option<Error> = None;
+        let mut answered = false;
         let lrc = match self.lrclib.as_ref().map(|l| l.lookup(track)) {
-            Some(Ok(found)) => found,
+            Some(Ok(found)) => {
+                answered = true;
+                found
+            }
             Some(Err(error)) => {
-                log::debug!("lrclib: {error}");
+                log::warn!("lyrics source failed: {}", crate::lyrics::describe("lrclib", &error));
                 failure = Some(error);
                 None
             }
@@ -532,31 +544,36 @@ impl Core {
         if let Some(id) = track.lyrics_id {
             match self.api(|client, session| client.lyrics_text(session, id)) {
                 Ok(Some(text)) => {
+                    answered = true;
                     if let Some(found) = from_plain("VK", &text) {
                         return Ok(Some(found));
                     }
                 }
-                Ok(None) => {}
+                Ok(None) => answered = true,
                 Err(Error::Unauthorized) => return Err(Error::Unauthorized),
-                Err(error) => failure = failure.or(Some(error)),
+                Err(error) => {
+                    log::warn!("lyrics source failed: {}", crate::lyrics::describe("vk lyrics", &error));
+                    failure = failure.or(Some(error));
+                }
             }
         }
         if let Some(genius) = &self.genius {
             match genius.lookup(track) {
                 Ok(Some(found)) => return Ok(Some(found)),
-                Ok(None) => {}
+                Ok(None) => answered = true,
                 Err(error) => {
                     // Genius is an optional last-resort source. Its public
                     // endpoints can reject automated requests; that must not
                     // turn "no lyrics found" into a playback-facing error.
-                    log::debug!("Genius lyrics unavailable: {error}");
+                    log::warn!("lyrics source failed: {}", crate::lyrics::describe("genius", &error));
+                    failure = failure.or(Some(error));
                 }
             }
         }
         match (lrc, failure) {
             (Some(found), _) => Ok(Some(found)),
-            (None, Some(error)) => Err(error),
-            (None, None) => Ok(None),
+            (None, Some(error)) if !answered => Err(error),
+            (None, _) => Ok(None),
         }
     }
 
