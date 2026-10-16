@@ -1,6 +1,8 @@
 import { h } from "../dom.js";
 import { api } from "../api.js";
 import { createTracksScreen } from "../tracks-screen.js";
+import { albumCard } from "../album-card.js";
+import { openAlbum } from "../navigation.js";
 import { errorText, t } from "../i18n.js";
 
 const SOURCES = {
@@ -17,6 +19,11 @@ export function createForYouView({ play, onTrackAction, toast }) {
   let selected = readSelection();
   let catalogLoaded = false;
   let catalogGeneration = 0;
+  let releasesLoaded = false;
+  let releasesGeneration = 0;
+  // The tuning the list on screen was loaded with: a queue started from it
+  // keeps refilling from the same mix.
+  let listOptions = null;
 
   const tabs = h("div", { class: "tabs", role: "tablist" },
     Object.entries(SOURCES).map(([id, source]) =>
@@ -29,17 +36,22 @@ export function createForYouView({ play, onTrackAction, toast }) {
   const catalogStatus = h("div", { class: "status", role: "status", hidden: true });
   const catalogGrid = h("div", { class: "mix-grid" });
   const catalogShelf = h("section", { class: "mix-catalog" }, h("h2", { class: "shelf-title", text: t("fy.catalog") }), catalogStatus, catalogGrid);
+  const releasesStatus = h("div", { class: "status", role: "status", hidden: true });
+  const releasesRow = h("div", { class: "release-row" });
+  const releasesShelf = h("section", { class: "mix-catalog new-releases" }, h("h2", { class: "shelf-title", text: t("fy.releases") }), releasesStatus, releasesRow);
 
   const screen = createTracksScreen({
     title: t("fy.title"),
     hooks: {
       emptyText: t("fy.empty"),
-      onPlay: play,
+      onPlay: (tracks, index, options) =>
+        play(tracks, index, current === "mix" ? { ...options, radio: { kind: "personal", options: listOptions } } : options),
       onAction: onTrackAction,
       headerExtra: h("div", { class: "set-inline" }, tabs, tuning, refresh),
     },
   });
-  screen.element.insertBefore(catalogShelf, screen.list.element);
+  // The shelves scroll on their own, so a long catalogue never pushes the list off the screen.
+  screen.element.insertBefore(h("div", { class: "fy-shelves" }, catalogShelf, releasesShelf), screen.list.element);
 
   function renderTabs() {
     for (const button of tabs.children) button.setAttribute("aria-selected", String(button.dataset.source === current));
@@ -51,6 +63,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
     const options = id === "mix" ? encodeSelection(selected) : null;
     const cacheKey = id === "mix" ? `mix:${options ?? "plain"}` : id;
     if (!force && cache.has(cacheKey)) {
+      if (id === "mix") listOptions = options;
       screen.clearStatus();
       screen.setTracks(cache.get(cacheKey));
       return;
@@ -63,6 +76,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
       const tracks = id === "mix" ? await api.mix(options) : await SOURCES[id].load();
       cache.set(cacheKey, tracks);
       if (mine !== generation) return;
+      if (id === "mix") listOptions = options;
       screen.clearStatus();
       screen.setTracks(tracks);
     } catch (error) {
@@ -165,6 +179,30 @@ export function createForYouView({ play, onTrackAction, toast }) {
     }
   }
 
+  async function loadReleases(force = false) {
+    if (releasesLoaded && !force) return;
+    const mine = ++releasesGeneration;
+    releasesStatus.className = "status";
+    releasesStatus.hidden = false;
+    releasesStatus.textContent = t("loading");
+    releasesRow.replaceChildren();
+    try {
+      const albums = await api.newReleases();
+      if (mine !== releasesGeneration) return;
+      // A release VK sends without a title still gets a card.
+      releasesRow.replaceChildren(...albums.map((album) =>
+        albumCard(album.title?.trim() ? album : { ...album, title: t("album.untitled") }, () => openAlbum(album))));
+      releasesLoaded = true;
+      releasesStatus.textContent = albums.length ? "" : t("fy.noReleases");
+      releasesStatus.hidden = !!albums.length;
+    } catch (error) {
+      if (mine !== releasesGeneration) return;
+      releasesStatus.className = "status error";
+      releasesStatus.replaceChildren(document.createTextNode(errorText(error)), h("span", { text: " " }),
+        h("button", { class: "btn", type: "button", text: t("fy.refresh"), onclick: () => loadReleases(true) }));
+    }
+  }
+
   async function playCatalogMix(mix, button) {
     button.disabled = true;
     catalogStatus.className = "status";
@@ -173,7 +211,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
     try {
       const tracks = await api.streamMix(mix.id, mix.options);
       if (!tracks.length) throw new Error(t("fy.noCatalog"));
-      play(tracks, 0, { shuffle: false });
+      play(tracks, 0, { shuffle: false, radio: { kind: "catalog", mix_id: mix.id, options: mix.options ?? null } });
       catalogStatus.hidden = true;
     } catch (error) {
       catalogStatus.className = "status error";
@@ -201,6 +239,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
     show() {
       if (!cache.has(current)) load(current);
       loadCatalog();
+      loadReleases();
     },
     reset() {
       generation += 1;
@@ -209,6 +248,11 @@ export function createForYouView({ play, onTrackAction, toast }) {
       catalogLoaded = false;
       catalogGrid.replaceChildren();
       catalogStatus.hidden = true;
+      releasesGeneration += 1;
+      releasesLoaded = false;
+      releasesRow.replaceChildren();
+      releasesStatus.hidden = true;
+      listOptions = null;
       categories = null;
       selected = readSelection();
       tuning.open = false;

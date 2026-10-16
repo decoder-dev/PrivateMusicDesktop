@@ -217,6 +217,8 @@ fn main() {
             commands::mix_settings,
             commands::catalog_mixes,
             commands::stream_mix,
+            commands::new_releases,
+            commands::play_radio,
             commands::recommendations,
             commands::similar,
             commands::add_to_library,

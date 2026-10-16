@@ -339,6 +339,10 @@ select.field { padding: 7px 10px; }
 .mix-tile img, .mix-placeholder { display: grid; place-items: center; width: 100%; aspect-ratio: 1; border-radius: 9px; object-fit: cover; background: var(--surface); color: var(--text-secondary); font-size: 42px; }
 .mix-tile:hover img, .mix-tile:hover .mix-placeholder { outline: 2px solid var(--accent); outline-offset: -2px; }
 .mix-tile-title { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
+.fy-shelves { flex: none; max-height: 42%; overflow-y: auto; }
+.release-row { display: flex; gap: 12px; overflow-x: auto; padding: 4px 4px 8px; }
+.release-row .card { flex: none; width: 148px; border-radius: 10px; padding: 4px; }
+.radio-note { padding: 4px 24px 8px; font-size: 13px; }
 .mix-tile-section { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); font-size: 12px; }
 
 /* ---------- equaliser ---------- */

@@ -20,6 +20,7 @@ use serde::Serialize;
 use crate::audio::{PlayerEvent, PlayerHandle, Remote, Sink};
 use crate::offline::OfflineStore;
 use crate::queue::{Queue, Repeat};
+use crate::radio::{self, Radio, RadioFetch, RadioKind};
 use crate::stream::FetchConfig;
 use crate::vk::{Session, Track, VkClient};
 use crate::Error;
@@ -49,6 +50,8 @@ pub struct State {
     pub repeat: Repeat,
     pub queue_index: Option<usize>,
     pub queue_len: usize,
+    /// Set while the queue refills itself from a mix or a seeded radio.
+    pub radio: Option<RadioKind>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -77,6 +80,9 @@ struct Inner {
     refreshed: HashSet<String>,
     /// Where the next start of the current track begins (a restored session).
     pending_start: f64,
+    /// The endless source the queue refills from, if it came from one.
+    radio: Option<Radio>,
+    radio_generation: u64,
 }
 
 struct Shared {
@@ -109,6 +115,7 @@ impl Inner {
             repeat: self.queue.repeat(),
             queue_index: self.queue.current_index(),
             queue_len: self.queue.len(),
+            radio: self.radio.as_ref().map(|r| r.kind),
         }
     }
 
@@ -150,6 +157,10 @@ impl Shared {
 
     /// Starts the queue's current track, or stops when there is none.
     fn start_current(self: &Arc<Self>, inner: &mut Inner, events: &mut Vec<UiEvent>) {
+        if let Some(radio) = inner.radio.as_mut() {
+            radio.waiting = false;
+        }
+        self.maybe_refill(inner);
         let Some(track) = inner.queue.current().cloned() else {
             inner.status = Status::Idle;
             self.remote().stop();
@@ -219,6 +230,84 @@ impl Shared {
                     events.push(UiEvent::State(inner.state()));
                 }),
                 Err(error) => shared.fail_track(&track, error),
+            }
+        });
+    }
+
+    /// Starts a radio round on a worker thread when the queue is running low.
+    fn maybe_refill(self: &Arc<Self>, inner: &mut Inner) {
+        let upcoming = inner.queue.upcoming();
+        let Some(radio) = inner.radio.as_mut() else { return };
+        if !radio.wants_refill(upcoming) {
+            return;
+        }
+        radio.in_flight = true;
+        let generation = radio.generation;
+        let shared = self.clone();
+        std::thread::spawn(move || shared.refill(generation));
+    }
+
+    /// One radio round: up to a few requests until something new arrives.
+    fn refill(self: &Arc<Self>, generation: u64) {
+        let mut added_total = 0;
+        let mut failure = None;
+        for attempt in 0..radio::ATTEMPTS {
+            let step = self.with(|inner, _| {
+                inner.radio.as_ref().filter(|r| r.generation == generation).map(|r| (r.next_request(), r.fetch.clone()))
+            });
+            let Some((request, fetch)) = step else { return };
+            let Some(request) = request else { break };
+            let proposed = match fetch(&request) {
+                Ok(tracks) => tracks,
+                Err(error) => {
+                    log::debug!("radio refill: {}", error.kind());
+                    failure = Some(error);
+                    break;
+                }
+            };
+            let added = self.with(|inner, events| {
+                let Inner { queue, radio, .. } = inner;
+                let radio = radio.as_mut().filter(|r| r.generation == generation)?;
+                radio.answered(&request);
+                let fresh = radio.fresh(proposed);
+                let room = radio::UPCOMING_LIMIT.saturating_sub(queue.upcoming());
+                let appended = queue.append_unique(fresh, room);
+                radio.record(&appended);
+                if !appended.is_empty() {
+                    events.push(inner.queue_event());
+                    events.push(UiEvent::State(inner.state()));
+                }
+                Some(appended.len())
+            });
+            match added {
+                None => return,
+                Some(0) if attempt + 1 < radio::ATTEMPTS => std::thread::sleep(radio::ATTEMPT_PAUSE),
+                Some(0) => {}
+                Some(n) => {
+                    added_total = n;
+                    break;
+                }
+            }
+        }
+        self.with(|inner, events| {
+            let Some(radio) = inner.radio.as_mut().filter(|r| r.generation == generation) else { return };
+            radio.in_flight = false;
+            radio.finish_round(added_total, failure.as_ref());
+            if std::mem::take(&mut radio.waiting) {
+                // The queue ran dry while this round was on its way.
+                if added_total > 0 && inner.queue.advance(false).is_some() {
+                    inner.failures = 0;
+                    inner.refreshed.clear();
+                    events.push(inner.queue_event());
+                    self.start_current(inner, events);
+                } else {
+                    inner.status = Status::Idle;
+                    inner.position = 0.0;
+                    events.push(UiEvent::State(inner.state()));
+                }
+            } else if added_total > 0 {
+                // Still short after this page: ask for the next one.
+                self.maybe_refill(inner);
             }
         });
     }
@@ -293,6 +382,15 @@ impl Shared {
                 if inner.queue.advance(true).is_some() {
                     events.push(inner.queue_event());
                     self.start_current(inner, events);
+                } else if inner.radio.as_ref().is_some_and(|r| !r.done) {
+                    // An endless queue is never over: wait for its next page.
+                    if let Some(radio) = inner.radio.as_mut() {
+                        radio.waiting = true;
+                    }
+                    inner.status = Status::Loading;
+                    inner.position = 0.0;
+                    events.push(UiEvent::State(inner.state()));
+                    self.maybe_refill(inner);
                 } else {
                     inner.status = Status::Idle;
                     inner.position = 0.0;
@@ -366,6 +464,8 @@ impl Controller {
                 failures: 0,
                 refreshed: HashSet::new(),
                 pending_start: 0.0,
+                radio: None,
+                radio_generation: 0,
             }),
             client,
             remote: OnceLock::new(),
@@ -386,6 +486,7 @@ impl Controller {
             let signed_out = session.is_none();
             inner.session = session;
             if signed_out {
+                inner.radio = None;
                 inner.queue.clear();
                 inner.status = Status::Idle;
                 self.shared.remote().stop();
@@ -424,6 +525,23 @@ impl Controller {
         self.shared.with(|inner, events| {
             let Inner { queue, rng, .. } = inner;
             queue.replace(tracks, index, rng);
+            inner.radio = None;
+            inner.failures = 0;
+            inner.refreshed.clear();
+            events.push(inner.queue_event());
+            self.shared.start_current(inner, events);
+        });
+    }
+
+    /// Plays a queue that keeps refilling from its source (see [`radio`]).
+    /// `offset` is where a stream mix continues, `seeds` the tracks a seeded
+    /// radio starts asking about; `tracks` count as already heard.
+    pub fn play_radio(&self, tracks: Vec<Track>, index: usize, kind: RadioKind, fetch: RadioFetch, offset: u32, seeds: Vec<Track>) {
+        self.shared.with(|inner, events| {
+            let Inner { queue, rng, .. } = inner;
+            queue.replace(tracks, index, rng);
+            inner.radio_generation += 1;
+            inner.radio = Some(Radio::new(kind, inner.radio_generation, fetch, offset, seeds, inner.queue.tracks()));
             inner.failures = 0;
             inner.refreshed.clear();
             events.push(inner.queue_event());
@@ -437,6 +555,7 @@ impl Controller {
         self.shared.with(|inner, events| {
             let Inner { queue, rng, .. } = inner;
             queue.replace(tracks, index, rng);
+            inner.radio = None;
             inner.status = Status::Idle;
             inner.pending_start = if position.is_finite() { position.max(0.0) } else { 0.0 };
             inner.position = inner.pending_start;
@@ -613,6 +732,9 @@ impl Controller {
         self.shared.with(|inner, events| {
             let was_last = inner.queue.at_last();
             let was_current = inner.queue.remove(index);
+            if inner.queue.is_empty() {
+                inner.radio = None;
+            }
             if was_current && was_last && !inner.queue.is_empty() {
                 // Removing the last track of the queue while it plays: the
                 // queue is over, unless it repeats. Never replay the previous one.
@@ -638,12 +760,16 @@ impl Controller {
                 }
             } else {
                 events.push(UiEvent::State(inner.state()));
+                self.shared.maybe_refill(inner);
             }
         });
     }
 
     pub fn stop(&self) {
         self.shared.with(|inner, events| {
+            if let Some(radio) = inner.radio.as_mut() {
+                radio.waiting = false;
+            }
             inner.status = Status::Idle;
             inner.position = 0.0;
             self.shared.remote().stop();

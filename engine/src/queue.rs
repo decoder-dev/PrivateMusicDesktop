@@ -159,6 +159,37 @@ impl Queue {
         }
     }
 
+    /// Tracks still to come after the current one, in play order.
+    pub fn upcoming(&self) -> usize {
+        match self.cursor {
+            Some(cursor) => self.order.len().saturating_sub(cursor + 1),
+            None => self.order.len(),
+        }
+    }
+
+    /// Appends tracks the queue does not hold yet (by track id), at most
+    /// `room` of them, to the end of the play order. Returns what was added.
+    /// An empty queue takes nothing: an endless source must not revive a
+    /// queue the user has emptied.
+    pub fn append_unique(&mut self, tracks: Vec<Track>, room: usize) -> Vec<Track> {
+        if self.cursor.is_none() {
+            return Vec::new();
+        }
+        let mut known: std::collections::HashSet<String> = self.tracks.iter().map(Track::id).collect();
+        let mut added = Vec::new();
+        for track in tracks {
+            if added.len() >= room {
+                break;
+            }
+            if known.insert(track.id()) {
+                self.tracks.push(track.clone());
+                self.order.push(self.tracks.len() - 1);
+                added.push(track);
+            }
+        }
+        added
+    }
+
     /// True when the current track is the last one in play order.
     pub fn at_last(&self) -> bool {
         self.cursor.is_some_and(|c| c + 1 == self.order.len())
@@ -354,6 +385,22 @@ mod tests {
         assert_eq!(q.current().unwrap().stream_url.as_deref(), Some("https://new.example/a"));
         assert_eq!(q.tracks().iter().filter(|t| t.stream_url.is_some()).count(), 2);
         assert_eq!(q.current_index(), Some(1));
+    }
+
+    #[test]
+    fn appending_skips_known_tracks_and_respects_the_room() {
+        let (mut q, _) = queue(3);
+        assert_eq!(q.upcoming(), 2);
+        let added = q.append_unique(vec![track(2), track(4), track(4), track(5), track(6)], 2);
+        assert_eq!(added.iter().map(|t| t.track_id).collect::<Vec<_>>(), vec![4, 5]);
+        assert_eq!(ids(&q), vec![1, 2, 3, 4, 5]);
+        assert_eq!(q.upcoming(), 4);
+        q.advance(false);
+        q.advance(false);
+        assert_eq!(q.upcoming(), 2);
+        assert!(q.append_unique(vec![track(9)], 0).is_empty());
+        let mut empty = Queue::default();
+        assert!(empty.append_unique(vec![track(1)], 5).is_empty(), "an emptied queue stays empty");
     }
 
     #[test]

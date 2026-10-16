@@ -45,7 +45,7 @@
 
   const state = {
     session: { signed_in: !!config.signedIn, profile: null, persistent: config.persistent !== false },
-    player: { status: "idle", track: null, position: 0, duration: 0, volume: 1, shuffle: false, repeat: "off", queue_index: null, queue_len: 0 },
+    player: { status: "idle", track: null, position: 0, duration: 0, volume: 1, shuffle: false, repeat: "off", queue_index: null, queue_len: 0, radio: null },
     queue: [],
     followedAlbums: [],
   };
@@ -119,10 +119,16 @@
     },
     player_state: () => state.player,
     play_tracks: ({ tracks, index }) => {
-      state.queue = tracks; state.player.queue_index = index; startCurrent(); emitQueue(); emitState();
+      state.queue = tracks; state.player.queue_index = index; state.player.radio = null; startCurrent(); emitQueue(); emitState();
+    },
+    // A queue that refills itself: the engine's own rules are tested in Rust,
+    // here the window only has to ask for it and show that it is a mix.
+    play_radio: ({ source, tracks, index }) => {
+      if (config.radioFails) throw { kind: "invalid", message: "Invalid request." };
+      state.queue = tracks; state.player.queue_index = index; state.player.radio = source.kind; startCurrent(); emitQueue(); emitState();
     },
     load_queue: ({ tracks, index, position }) => {
-      state.queue = tracks; state.player.queue_index = index; startCurrent();
+      state.queue = tracks; state.player.queue_index = index; state.player.radio = null; startCurrent();
       state.player.status = "idle"; state.player.position = position; emitQueue(); emitState();
     },
     toggle: () => {
@@ -165,7 +171,22 @@
       if (config.forYouFails) throw { kind: "offline", message: "No internet connection." };
       return Array.from({ length: 100 }, (_, i) => makeTrack(7000 + i, { title: `Микс ${i + 1}` }));
     },
-    catalog_mixes: async () => [],
+    catalog_mixes: async () => config.catalogMixes
+      ? [{ id: "m7", title: "Спокойный вечер", subtitle: "", artwork_url: null, section_title: "Настроение", options: "{\"mood\":[\"calm\"]}" }]
+      : [],
+    stream_mix: async ({ mixId }) => {
+      await delay(10);
+      return Array.from({ length: 40 }, (_, i) => makeTrack(6000 + i, { title: `Мини ${mixId} ${i + 1}` }));
+    },
+    new_releases: async () => {
+      await delay(10);
+      if (config.releasesFail) throw { kind: "offline", message: "No internet connection." };
+      if (config.noReleases) return [];
+      return [
+        ...Array.from({ length: 5 }, (_, i) => makeAlbum(30 + i, { title: `Релиз ${i + 1}`, year: 2025 })),
+        makeAlbum(35, { title: "  " }),
+      ];
+    },
     recommendations: async () => { await delay(20); return Array.from({ length: 30 }, (_, i) => makeTrack(8000 + i, { title: `Рек ${i + 1}` })); },
     similar: async ({ track }) => {
       await delay(10);
