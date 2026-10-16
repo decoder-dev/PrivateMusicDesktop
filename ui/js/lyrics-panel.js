@@ -1,6 +1,7 @@
 import { h } from "./dom.js";
 import { t } from "./i18n.js";
 import { api, trackKey } from "./api.js";
+import { motionOk } from "./motion.js";
 
 const CACHE_LIMIT = 60;
 /** The line counts as current slightly before its stamp, so it lights as it is sung. */
@@ -13,7 +14,6 @@ const HAND_SCROLL_MS = 4000;
  * song (click one to jump there), or plain text when no timing exists.
  */
 export function createLyricsPanel() {
-  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const cache = new Map();
   let token = 0;
   let current = null; // the track being shown
@@ -124,7 +124,7 @@ export function createLyricsPanel() {
     node.classList.add("active");
     if ((!autoFollow || Date.now() < handScrollUntil) && !force) return;
     const top = node.offsetTop - body.clientHeight / 2 + node.offsetHeight / 2;
-    body.scrollTo({ top, behavior: reduceMotion || force ? "auto" : "smooth" });
+    body.scrollTo({ top, behavior: !motionOk() || force ? "auto" : "smooth" });
   }
 
   function snap(position) {

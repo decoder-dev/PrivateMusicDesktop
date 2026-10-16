@@ -7,9 +7,12 @@ import { createVisualizer, MODES } from "./visualizer.js";
 import { createLyricsPanel } from "./lyrics-panel.js";
 import { isLiked, isBusy } from "./likes.js";
 import { hasArtist, openArtistOf } from "./navigation.js";
+import { motionOk, onMotionChange, afterAnimation } from "./motion.js";
+import { coverPalette } from "./palette.js";
+import { artBox, bindRange, syncRange } from "./ui-parts.js";
 
 const IDLE_MS = 3000;
-const PALETTES = new Map();
+const QUEUE_ROWS = 100;
 
 /** Colours for a track without a usable cover: stable, from its name. */
 function fallbackColors(track) {
@@ -33,25 +36,31 @@ function toHex(color) {
  * The full-screen "now playing" view: the cover as a blurred backdrop, big
  * artwork, transport, and a live spectrum drawn from what is really playing.
  */
-export function createNowPlaying({ settings, onSettingsChange, onLike }) {
-  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu }) {
   let open = false;
+  let queueOpen = false;
+  let userChoseMode = MODES.includes(settings.visualizer);
   let dragging = false;
   let idleTimer = 0;
   let paletteToken = 0;
   let coverUrl = null;
   let windowFullscreen = false;
   let lyricsOn = settings.lyrics !== false;
-  let mode = MODES.includes(settings.visualizer) ? settings.visualizer : reduceMotion ? "off" : "bars";
+  let mode = MODES.includes(settings.visualizer) ? settings.visualizer : motionOk() ? "bars" : "off";
 
-  const backdrop = h("div", { class: "np-backdrop" });
+  // Two stacked copies of the cover, 240 px each, blurred small and scaled up; they cross-fade on a track change.
+  const layers = [0, 1].map(() => h("img", { class: "np-bd", alt: "", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" }));
+  let frontLayer = 0;
+  let backdropToken = 0;
+  const backdrop = h("div", { class: "np-backdrop" }, layers);
   const canvas = h("canvas", { class: "np-canvas", "aria-hidden": "true" });
   const coverBox = h("div", { class: "np-cover" });
   const title = h("div", { class: "np-title" });
   const artist = h("button", { class: "np-artist link-text", type: "button", title: t("artist.open"), disabled: true,
     onclick: () => { const track = store.player.track; close(); openArtistOf(track); } });
   const upNext = h("div", { class: "np-next" });
-  const likeButton = h("button", { class: "np-btn np-like", type: "button", onclick: () => onLike?.(store.player.track) }, icon("heart", 22));
+  const kickerAlbum = h("div", { class: "k2" });
+  const likeButton = h("button", { class: "np-btn np-like", type: "button", onclick: () => onLike?.(store.player.track) }, icon("heart", 20));
   function renderLike() {
     const track = store.player.track;
     likeButton.hidden = !track;
@@ -63,13 +72,13 @@ export function createNowPlaying({ settings, onSettingsChange, onLike }) {
     likeButton.setAttribute("aria-label", label);
     likeButton.setAttribute("aria-pressed", String(liked));
     likeButton.disabled = isBusy(track);
-    likeButton.replaceChildren(icon(liked ? "heart-on" : "heart", 22));
+    likeButton.replaceChildren(icon(liked ? "heart-on" : "heart", 20));
   }
 
   const closeButton = h("button", { class: "np-btn", type: "button", title: t("np.close"), "aria-label": t("np.close"), onclick: () => close() }, icon("chevron", 22));
   const modeButton = h("button", { class: "np-btn", type: "button", onclick: () => cycleMode() }, icon("visualizer", 20));
   const lyricsButton = h("button", { class: "np-btn", type: "button", title: t("ly.toggle"), "aria-label": t("ly.toggle"), "aria-pressed": String(lyricsOn),
-    onclick: () => setLyrics(!lyricsOn) }, icon("lyrics", 20));
+    onclick: () => (queueOpen ? showLyricsPanel() : setLyrics(!lyricsOn)) }, icon("lyrics", 20));
   const lyrics = createLyricsPanel();
   const windowButton = h("button", { class: "np-btn", type: "button", title: t("np.fullscreen"), "aria-label": t("np.fullscreen"), "aria-pressed": "false",
     onclick: () => toggleWindowFullscreen() }, icon("expand", 20));
@@ -77,27 +86,54 @@ export function createNowPlaying({ settings, onSettingsChange, onLike }) {
   const shuffleButton = h("button", { class: "np-btn", type: "button", title: t("shuffle.toggle"), "aria-label": t("shuffle.toggle"), "aria-pressed": "false",
     onclick: () => api.setShuffle(!store.player.shuffle) }, icon("shuffle", 20));
   const previousButton = h("button", { class: "np-btn", type: "button", title: t("previous"), "aria-label": t("previous"), onclick: () => api.previous() }, icon("prev", 24));
-  const playButton = h("button", { class: "np-play", type: "button", title: t("play"), "aria-label": t("play"), onclick: () => api.toggle() }, icon("play", 30));
+  const playButton = h("button", { class: "np-play", type: "button", title: t("play"), "aria-label": t("play"), onclick: () => api.toggle() }, icon("play", 28));
   const nextButton = h("button", { class: "np-btn", type: "button", title: t("next"), "aria-label": t("next"), onclick: () => api.next() }, icon("next", 24));
   const repeatButton = h("button", { class: "np-btn", type: "button", title: t("repeat.off"), "aria-label": t("repeat.off"),
     onclick: () => api.setRepeat({ off: "all", all: "one", one: "off" }[store.player.repeat] ?? "off") }, icon("repeat", 20));
 
   const elapsed = h("span", { text: "0:00" });
-  const total = h("span", { text: "0:00" });
+  const remaining = (seconds) => `-${formatTime(Math.max(0, seconds))}`;
+  const total = h("span", { text: remaining(0) });
   const seek = h("input", {
     type: "range", min: "0", max: "0", step: "1", value: "0", "aria-label": t("seek"),
-    oninput: () => { dragging = true; elapsed.textContent = formatTime(Number(seek.value)); },
+    oninput: () => { dragging = true; elapsed.textContent = formatTime(Number(seek.value)); total.textContent = remaining(Number(seek.max) - Number(seek.value)); },
     onchange: () => { api.seek(Number(seek.value)); dragging = false; lyrics.snap(Number(seek.value)); },
+  });
+  bindRange(seek);
+
+  // Quick actions under the transport: lyrics, queue, and the track's menu.
+  const quick = (name, label, onclick, pressed) => {
+    const button = h("button", { type: "button", onclick, ...(pressed === undefined ? {} : { "aria-pressed": String(pressed) }) },
+      h("span", { class: "q-ico" }, icon(name, 18)), h("span", { text: label }));
+    return button;
+  };
+  const quickLyrics = quick("lyrics", t("np.lyrics"), () => (queueOpen ? showLyricsPanel() : setLyrics(!lyricsOn)), lyricsOn);
+  const quickQueue = quick("queue", t("np.queue"), () => setQueueOpen(!queueOpen), false);
+  const quickMore = quick("more", t("np.more"), () => {
+    const box = quickMore.getBoundingClientRect();
+    const track = store.player.track;
+    if (track) onMenu?.(track, { x: box.left, y: box.top });
+  });
+
+  const queueList = h("div", { class: "nq-list" });
+  const queuePanel = h("section", { class: "np-queue", "aria-label": t("np.queue"), hidden: true },
+    h("div", { class: "nq-head", text: t("np.queue") }), queueList);
+  queueList.addEventListener("click", (event) => {
+    const row = event.target.closest?.(".nq-row");
+    if (row) api.jump(Number(row.dataset.index));
   });
 
   const element = h("div", { class: "np", role: "dialog", "aria-modal": "true", "aria-label": t("np.open"), hidden: true },
     backdrop,
     canvas,
-    h("div", { class: "np-top" }, closeButton, h("div", { class: "np-spacer" }), lyricsButton, modeButton, windowButton),
-    h("div", { class: "np-stage" }, coverBox, h("div", { class: "np-info" }, title, h("div", { class: "np-artist-row" }, artist, likeButton), upNext), lyrics.element),
+    h("div", { class: "np-top" }, closeButton, h("div", { class: "np-kicker" }, h("div", { class: "k1", text: t("np.nowPlaying") }), kickerAlbum), lyricsButton, modeButton, windowButton),
+    h("div", { class: "np-stage" },
+      h("div", { class: "np-main" }, coverBox, h("div", { class: "np-info" }, title, h("div", { class: "np-artist-row" }, artist, likeButton), upNext)),
+      lyrics.element, queuePanel),
     h("div", { class: "np-bottom" },
       h("div", { class: "np-seek" }, elapsed, seek, total),
-      h("div", { class: "np-controls" }, shuffleButton, previousButton, playButton, nextButton, repeatButton)));
+      h("div", { class: "np-controls" }, shuffleButton, previousButton, playButton, nextButton, repeatButton),
+      h("div", { class: "np-quick" }, quickLyrics, quickQueue, quickMore)));
 
   const visualizer = createVisualizer(canvas);
   visualizer.setMode(mode);
@@ -123,22 +159,62 @@ export function createNowPlaying({ settings, onSettingsChange, onLike }) {
 
   function cycleMode() {
     mode = MODES[(MODES.indexOf(mode) + 1) % MODES.length];
+    userChoseMode = true;
     visualizer.setMode(mode);
     onSettingsChange?.({ visualizer: mode });
     renderMode();
     syncEngine();
   }
 
+  /** Lyrics and the queue share one side panel; the queue wins while it is open. */
+  function renderSide() {
+    const side = queueOpen ? "queue" : lyricsOn ? "lyrics" : "none";
+    element.dataset.side = side;
+    element.dataset.lyrics = lyricsOn ? "on" : "off";
+    lyrics.setVisible(side === "lyrics");
+    queuePanel.hidden = side !== "queue";
+    lyricsButton.setAttribute("aria-pressed", String(side === "lyrics"));
+    quickLyrics.setAttribute("aria-pressed", String(side === "lyrics"));
+    quickQueue.setAttribute("aria-pressed", String(side === "queue"));
+    if (side === "queue") renderQueuePanel();
+  }
+
   function setLyrics(on) {
     lyricsOn = on;
-    lyricsButton.setAttribute("aria-pressed", String(on));
-    element.dataset.lyrics = on ? "on" : "off";
-    lyrics.setVisible(on);
+    renderSide();
     onSettingsChange?.({ lyrics: on });
     if (on && open) {
       lyrics.setTrack(store.player.track);
       lyrics.snap(store.player.position || 0);
     }
+  }
+
+  function showLyricsPanel() {
+    queueOpen = false;
+    setLyrics(true);
+  }
+
+  function setQueueOpen(on) {
+    queueOpen = on;
+    renderSide();
+  }
+
+  function renderQueuePanel() {
+    if (!open || queuePanel.hidden) return;
+    const { tracks, current } = store.queue;
+    queueList.replaceChildren();
+    if (!tracks.length || current == null) {
+      queueList.append(h("div", { class: "nq-empty", text: t("np.queue.empty") }));
+      return;
+    }
+    const row = (track, index) => {
+      const button = h("button", { type: "button", class: `nq-row${index === current ? " current" : ""}`, "data-index": String(index), ...(index === current ? { "aria-current": "true" } : {}) },
+        artBox(track.artwork_url, { size: 16 }), h("span", { class: "t" }, h("b", { text: track.title }), h("span", { text: track.artist })));
+      return button;
+    };
+    queueList.append(h("div", { class: "nq-label", text: t("np.queue.now") }), row(tracks[current], current));
+    const upcoming = tracks.slice(current + 1, current + 1 + QUEUE_ROWS);
+    if (upcoming.length) queueList.append(h("div", { class: "nq-label", text: t("np.queue.next") }), ...upcoming.map((track, i) => row(track, current + 1 + i)));
   }
 
   // -------------------------------------------------------------- palette
@@ -149,29 +225,45 @@ export function createNowPlaying({ settings, onSettingsChange, onLike }) {
     visualizer.setColors(toHex(primary), toHex(secondary));
   }
 
+  function layoutBackdrop() {
+    backdrop.style.setProperty("--bd-scale", String(Math.max(window.innerWidth, window.innerHeight) / 240 * 1.3));
+  }
+
+  /** Fades the new cover in over the old one. */
+  async function setBackdrop(url) {
+    const mine = ++backdropToken;
+    if (!url) {
+      for (const layer of layers) layer.classList.remove("show");
+      return;
+    }
+    const next = layers[1 - frontLayer];
+    next.src = url;
+    try { await next.decode(); } catch { return; }
+    if (mine !== backdropToken) return;
+    next.classList.add("show");
+    layers[frontLayer].classList.remove("show");
+    frontLayer = 1 - frontLayer;
+  }
+
   async function updateCover(track) {
     const url = track?.artwork_url ?? null;
     if (url === coverUrl && coverBox.firstChild) return;
     coverUrl = url;
     const token = ++paletteToken;
     if (url) {
-      coverBox.replaceChildren(h("img", { src: url, alt: "", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" }));
-      backdrop.replaceChildren(h("img", { src: url, alt: "", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" }));
+      const image = h("img", { src: url, alt: "", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" });
+      image.addEventListener("error", () => image.replaceWith(h("div", { class: "np-placeholder" }, icon("note", 96))));
+      coverBox.replaceChildren(image);
     } else {
       coverBox.replaceChildren(h("div", { class: "np-placeholder" }, icon("note", 96)));
-      backdrop.replaceChildren();
     }
+    setBackdrop(url);
     const [a, b] = fallbackColors(track);
     applyColors(a, b);
     if (!url) return;
     try {
-      if (!PALETTES.has(url)) {
-        const palette = await api.artworkPalette(url);
-        if (PALETTES.size > 100) PALETTES.clear();
-        PALETTES.set(url, palette);
-      }
+      const palette = await coverPalette(url);
       if (token !== paletteToken) return;
-      const palette = PALETTES.get(url);
       applyColors(palette.primary, palette.secondary);
     } catch {
       // Keep the colours made from the name.
@@ -185,6 +277,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike }) {
     title.textContent = track ? track.title : t("nothing");
     artist.textContent = track ? track.artist : "";
     artist.disabled = !hasArtist(track);
+    kickerAlbum.textContent = track?.album_title ?? "";
     updateCover(track);
     if (lyricsOn) {
       lyrics.setTrack(track);
@@ -193,7 +286,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike }) {
 
     const playing = player.status === "playing" || player.status === "buffering";
     const showPause = playing || player.status === "loading";
-    playButton.replaceChildren(icon(showPause ? "pause" : "play", 30));
+    playButton.replaceChildren(icon(showPause ? "pause" : "play", 28));
     const label = showPause ? t("pause") : t("play");
     playButton.title = label;
     playButton.setAttribute("aria-label", label);
@@ -204,14 +297,16 @@ export function createNowPlaying({ settings, onSettingsChange, onLike }) {
     repeatButton.title = repeatLabel;
     repeatButton.setAttribute("aria-label", repeatLabel);
     repeatButton.replaceChildren(icon("repeat", 20), ...(player.repeat === "one" ? [h("span", { class: "np-one", text: "1" })] : []));
+    quickMore.disabled = !track;
 
     const duration = Math.max(0, player.duration || 0);
     seek.max = String(Math.max(duration, 1));
-    total.textContent = formatTime(duration);
     if (!dragging) {
       seek.value = String(Math.min(player.position || 0, duration || 0));
       elapsed.textContent = formatTime(player.position || 0);
+      total.textContent = remaining(duration - (player.position || 0));
     }
+    syncRange(seek);
     seek.disabled = !track;
     previousButton.disabled = nextButton.disabled = playButton.disabled = !track && player.queue_len === 0;
 
@@ -223,6 +318,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike }) {
     const { tracks, current } = store.queue;
     const next = current != null ? tracks[current + 1] : null;
     upNext.textContent = next ? `${t("np.next")}: ${next.artist} — ${next.title}` : "";
+    renderQueuePanel();
   }
 
   // ----------------------------------------------------------- idle, keys
@@ -290,10 +386,11 @@ export function createNowPlaying({ settings, onSettingsChange, onLike }) {
   function show() {
     if (open) return;
     open = true;
+    element.classList.remove("closing");
     element.hidden = false;
+    layoutBackdrop();
     renderMode();
-    element.dataset.lyrics = lyricsOn ? "on" : "off";
-    lyrics.setVisible(lyricsOn);
+    renderSide();
     visualizer.start();
     render(store.player);
     renderLike();
@@ -306,13 +403,32 @@ export function createNowPlaying({ settings, onSettingsChange, onLike }) {
   function close() {
     if (!open) return;
     open = false;
-    element.hidden = true;
     clearTimeout(idleTimer);
+    element.classList.remove("idle");
     visualizer.stop();
     lyrics.forget();
     syncEngine();
     if (windowFullscreen) toggleWindowFullscreen(false);
+    // The sheet settles away; with motion off this runs at once.
+    element.classList.add("closing");
+    afterAnimation(element, () => {
+      if (open) return;
+      element.hidden = true;
+      element.classList.remove("closing");
+    }, 450);
   }
+
+  const onResize = () => { if (open) layoutBackdrop(); };
+  window.addEventListener("resize", onResize);
+  // Reduce motion can be switched on while the app runs: stop the spectrum then.
+  const stopWatching = onMotionChange((ok) => {
+    if (ok || mode === "off" || userChoseMode) return;
+    mode = "off";
+    visualizer.setMode(mode);
+    renderMode();
+    syncEngine();
+  });
+  own(() => { window.removeEventListener("resize", onResize); stopWatching(); });
 
   subscribe("player", (player) => { if (open) { render(player); renderLike(); } });
   subscribe("likes", () => { if (open) renderLike(); });
@@ -328,6 +444,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike }) {
     applySettings(patch) {
       if (patch.visualizer && MODES.includes(patch.visualizer) && patch.visualizer !== mode) {
         mode = patch.visualizer;
+        userChoseMode = true;
         visualizer.setMode(mode);
         renderMode();
         syncEngine();
