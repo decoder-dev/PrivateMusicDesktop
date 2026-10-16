@@ -3,6 +3,9 @@ import test from "node:test";
 import { openApp } from "./harness.js";
 
 const rows = (page) => page.locator(".main > .view:not([hidden]) .row");
+// The suite runs with reduced motion (every state change is instant, so nothing waits for an
+// animation); tests about motion ask for it explicitly.
+const motionApp = (options = {}) => openApp({ ...options, reducedMotion: "no-preference" });
 
 async function waitForLibrary(page) {
   await page.waitForFunction(() => document.querySelectorAll(".row").length > 0);
@@ -58,7 +61,7 @@ test("the library renders only the visible rows but scrolls through all of them"
   try {
     const { page } = app;
     await waitForLibrary(page);
-    assert.match(await page.locator(".main > .view:not([hidden]) .meta").innerText(), /1234 треков/);
+    assert.match(await page.locator(".main > .view:not([hidden]) .meta").innerText(), /^1234 трека$/);
     const domRows = await rows(page).count();
     assert.ok(domRows > 5 && domRows < 40, `expected a window of rows, got ${domRows}`);
     await page.evaluate(() => { const l = document.querySelector(".main > .view:not([hidden]) .list"); l.scrollTop = l.scrollHeight; });
@@ -232,24 +235,509 @@ test("titles from VK are text, never markup", async () => {
   } finally { await app.close(); }
 });
 
-test("flat: nothing in the UI animates or transitions", async () => {
+// ------------------------------------------------------------ motion and design
+
+/** "rgb(…)", "rgba(…)" or "color(srgb r g b / a)" as [r, g, b, a] with 0-255 channels. */
+function parseColor(text) {
+  const srgb = text.match(/^color\(srgb ([\d.e-]+) ([\d.e-]+) ([\d.e-]+)(?: \/ ([\d.e-]+))?\)$/);
+  if (srgb) return [srgb[1], srgb[2], srgb[3]].map((v) => Number(v) * 255).concat(srgb[4] === undefined ? 1 : Number(srgb[4]));
+  const rgb = text.match(/^rgba?\(([^)]+)\)$/);
+  assert.ok(rgb, `cannot read colour ${text}`);
+  const [r, g, b, a = "1"] = rgb[1].split(/[,/\s]+/).filter(Boolean);
+  return [Number(r), Number(g), Number(b), Number(a)];
+}
+const hexColor = (text) => [1, 3, 5].map((i) => parseInt(text.slice(i, i + 2), 16));
+const luminance = ([r, g, b]) => {
+  const lin = (v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+};
+const contrast = (a, b) => { const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
+const over = ([r, g, b, a], [br, bg, bb]) => [r * a + br * (1 - a), g * a + bg * (1 - a), b * a + bb * (1 - a)];
+
+test("motion: reduced motion removes all motion", async () => {
+  const app = await openApp({ config: { signedIn: true }, reducedMotion: "reduce" });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    // Interact with everything that animates when motion is on.
+    await rows(page).nth(1).click({ button: "right" });
+    await page.waitForSelector(".menu");
+    await page.click(".menu [data-action=add-to-playlist]");
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await page.click(".nav button[data-view=playlists]");
+    await page.click(".main > .view:not([hidden]) .view:not([hidden]) .view-header .btn.primary");
+    await page.waitForSelector(".dialog[open]");
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => !document.querySelector(".dialog"));
+    await page.click(".nav button[data-view=library]");
+    await rows(page).first().dblclick();
+    await playAndOpenFrom(page);
+    await page.waitForTimeout(250);
+    await frames(page);
+    const slow = await page.evaluate(() => {
+      const bad = [];
+      const limit = 0.00002; // 0.01 ms, in seconds
+      for (const el of document.querySelectorAll("*")) {
+        for (const pseudo of [null, "::before", "::after"]) {
+          const s = getComputedStyle(el, pseudo);
+          const durations = [...s.transitionDuration.split(","), ...s.animationDuration.split(",")].map((d) => parseFloat(d));
+          if (durations.some((d) => d > limit)) bad.push(`${el.tagName}.${el.className}${pseudo ?? ""} ${s.transitionDuration} ${s.animationDuration}`);
+        }
+      }
+      return bad;
+    });
+    assert.deepEqual(slow, []);
+    assert.equal(await page.evaluate(() => document.getAnimations().length), 0);
+    // Closing is instant too: nothing waits for an animation to end.
+    await page.keyboard.press("Escape");
+    await page.waitForSelector(".np", { state: "hidden", timeout: 1500 });
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+/** Lets a few frames pass: finished transitions are only retired when the page paints. */
+const frames = (page) => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve)))));
+
+async function playAndOpenFrom(page) {
+  await page.waitForFunction(() => { const t = document.querySelector(".player .title")?.textContent; return t && t !== "Ничего не играет"; });
+  await page.click(".player .volume .icon-btn:last-child");
+  await page.waitForSelector(".np:not([hidden])");
+}
+
+test("motion: nothing runs continuously while idle, and rows never transition", async () => {
+  const app = await motionApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await page.waitForTimeout(700);
+    await frames(page);
+    const running = () => page.evaluate(() => document.getAnimations()
+      .filter((a) => a.playState === "running")
+      .map((a) => ({ name: a.animationName ?? a.transitionProperty ?? "", infinite: a.effect?.getComputedTiming().iterations === Infinity })));
+    assert.deepEqual(await running(), [], "an idle library has no running animation");
+    // Rows are recreated while scrolling, so no row or part of one may transition.
+    const rowTransitions = await page.evaluate(() => [...document.querySelectorAll(".row, .row *")]
+      .filter((el) => getComputedStyle(el).transitionDuration.split(",").some((d) => parseFloat(d) > 0)).length);
+    assert.equal(rowTransitions, 0);
+    // With the full-screen view open and the visualizer on, only the canvas moves: no CSS loop.
+    await rows(page).first().dblclick();
+    await playAndOpenFrom(page);
+    await page.waitForTimeout(800);
+    await frames(page);
+    assert.equal(await page.locator(".np").getAttribute("data-mode"), "bars");
+    const loops = (await running()).filter((a) => a.infinite);
+    assert.deepEqual(loops, []);
+    assert.deepEqual(await running(), [], "after the open transition nothing is animating");
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("motion: screens, dialogs and the full-screen view animate in and out when motion is allowed, and come back to rest", async () => {
+  const app = await motionApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    // A dialog fades out (class "closing") and is then removed.
+    await page.click(".nav button[data-view=playlists]");
+    await page.click(".main > .view:not([hidden]) .view:not([hidden]) .view-header .btn.primary");
+    await page.waitForSelector(".dialog[open]");
+    await page.keyboard.press("Escape");
+    await page.waitForSelector(".dialog.closing", { timeout: 1000 });
+    await page.waitForFunction(() => !document.querySelector(".dialog"), null, { timeout: 2000 });
+    // Pages that are pushed say so; the sidebar does not.
+    await page.click(".nav button[data-view=library]");
+    assert.equal(await page.locator(".main").getAttribute("data-dir"), null);
+    await rows(page).first().locator(".artist").click();
+    await page.waitForSelector(".artist-view:not([hidden])");
+    assert.equal(await page.locator(".main").getAttribute("data-dir"), "push");
+    await page.click(".artist-view button[aria-label=Назад]");
+    await page.waitForFunction(() => document.querySelector(".main").dataset.dir === "back");
+    // The full-screen view settles away before it is hidden.
+    await rows(page).first().dblclick();
+    await playAndOpenFrom(page);
+    await page.keyboard.press("Escape");
+    await page.waitForSelector(".np.closing", { timeout: 1000 });
+    await page.waitForSelector(".np", { state: "hidden", timeout: 2000 });
+    // A toast fades out as well.
+    await rows(page).nth(1).hover();
+    await rows(page).nth(1).locator("[data-action=like]").click();
+    await page.waitForSelector(".toast");
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("motion: the system setting is read live, not once", async () => {
+  const app = await motionApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await playAndOpen(app);
+    assert.equal(await page.locator(".np").getAttribute("data-mode"), "bars");
+    await page.waitForFunction(() => document.querySelectorAll(".ly-line").length === 40);
+    await page.evaluate(() => {
+      window.__behaviors = [];
+      const original = Element.prototype.scrollTo;
+      Element.prototype.scrollTo = function (options) { window.__behaviors.push(options?.behavior); return original.call(this, options); };
+    });
+    await at(page, 100);
+    await page.waitForFunction(() => document.querySelector(".ly-line.active")?.textContent === "Строка 19");
+    assert.equal(await page.evaluate(() => window.__behaviors.at(-1)), "smooth", "lyrics glide while motion is allowed");
+    // The person switches "reduce motion" on while the window is open.
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.waitForFunction(() => document.querySelector(".np").dataset.mode === "off");
+    await at(page, 150);
+    await page.waitForFunction(() => document.querySelector(".ly-line.active")?.textContent !== "Строка 19");
+    assert.equal(await page.evaluate(() => window.__behaviors.at(-1)), "auto", "and jump when it is off");
+    assert.equal(await page.evaluate(() => window.__mock.state.visualizer), false);
+  } finally { await app.close(); }
+});
+
+test("effects: blur is limited to chrome, nothing keeps will-change, and flat chrome removes every blur", async () => {
+  const app = await motionApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await rows(page).first().dblclick();
+    await page.waitForFunction(() => document.querySelector(".player .title")?.textContent === "Трек 1");
+    await rows(page).nth(1).click({ button: "right" });
+    await page.waitForSelector(".menu");
+    await page.waitForTimeout(400);
+    const audit = () => page.evaluate(() => {
+      const blurred = [], filtered = [], willChange = [], loopsAll = [];
+      for (const el of document.querySelectorAll("*")) {
+        const s = getComputedStyle(el);
+        if (s.backdropFilter !== "none") blurred.push({ matches: el.matches(".glass"), name: `${el.tagName}.${el.className}` });
+        if (s.filter !== "none") filtered.push({ allowed: !!el.closest(".np-backdrop, .home-atmosphere"), name: `${el.tagName}.${el.className}` });
+        if (s.willChange !== "auto") willChange.push(`${el.tagName}.${el.className}`);
+        const durations = s.transitionDuration.split(",").map((d) => parseFloat(d));
+        if (s.transitionProperty.split(",").map((p) => p.trim()).includes("all") && durations.some((d) => d > 0)) loopsAll.push(`${el.tagName}.${el.className}`);
+      }
+      return { blurred, filtered, willChange, transitionAll: loopsAll };
+    });
+    const found = await audit();
+    assert.ok(found.blurred.length >= 2, "the player bar and the menu are glass");
+    assert.deepEqual(found.blurred.filter((b) => !b.matches), [], "only .glass chrome blurs");
+    assert.deepEqual(found.filtered.filter((f) => !f.allowed), [], "filter lives in the full-screen backdrop only");
+    assert.deepEqual(found.willChange, []);
+    assert.deepEqual(found.transitionAll, [], "no transition: all");
+    // Content under the menu and the bar is not blurred by anything else: the list and its rows.
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector(".list")).backdropFilter), "none");
+
+    // The simplified look (Settings) and a background window make the chrome flat: no backdrop filter anywhere.
+    await page.keyboard.press("Escape");
+    await page.click(".nav button[data-view=settings]");
+    await page.check("#set-flat");
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.chrome), "flat");
+    assert.equal(JSON.parse(await page.evaluate(() => localStorage.getItem("pm.settings.v1"))).flatChrome, true);
+    const flat = await audit();
+    assert.deepEqual(flat.blurred, []);
+    await page.uncheck("#set-flat");
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.chrome), undefined);
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+const ACCENTS = {
+  blue: ["#1a6be0", "#3385fa"], indigo: ["#4f52db", "#6e73fa"], violet: ["#874ccc", "#b275f7"], pink: ["#bf3670", "#fa66a3"],
+  red: ["#c73338", "#fa6161"], orange: ["#a6570f", "#ff9933"], green: ["#1c7a45", "#4ccc7a"], teal: ["#0f787a", "#3dcccc"], banana: ["#805600", "#f4d66f"],
+};
+
+test("design: every accent has the iOS value in light, in explicit dark and in system dark, with a readable label", async () => {
+  for (const [scheme, theme] of [["light", null], ["dark", null], ["dark", "dark"], ["dark", "light"], ["light", "dark"]]) {
+    const app = await openApp({ config: { signedIn: false }, colorScheme: scheme });
+    try {
+      const { page } = app;
+      await page.waitForSelector(".login");
+      const dark = theme ? theme === "dark" : scheme === "dark";
+      for (const [accent, [light, night]] of Object.entries(ACCENTS)) {
+        const read = await page.evaluate(([t, a]) => {
+          const root = document.documentElement;
+          if (t) root.dataset.theme = t; else delete root.dataset.theme;
+          root.dataset.accent = a;
+          const s = getComputedStyle(root);
+          return { accent: s.getPropertyValue("--accent").trim(), on: s.getPropertyValue("--on-accent").trim() };
+        }, [theme, accent]);
+        assert.equal(read.accent, dark ? night : light, `${accent} in ${scheme}/${theme ?? "system"}`);
+        assert.equal(read.on, dark ? "#000000" : "#ffffff");
+        const ratio = contrast(hexColor(read.accent), hexColor(read.on));
+        assert.ok(ratio >= 4.5, `${accent} ${read.accent} with ${read.on}: ${ratio.toFixed(2)}`);
+      }
+    } finally { await app.close(); }
+  }
+});
+
+test("design: secondary text stays readable on the page and on surfaces in both themes", async () => {
+  for (const scheme of ["light", "dark"]) {
+    const app = await openApp({ config: { signedIn: true }, colorScheme: scheme });
+    try {
+      const { page } = app;
+      await waitForLibrary(page);
+      const colours = await page.evaluate(() => {
+        const read = (css) => { const el = document.createElement("div"); el.style.cssText = css; document.body.append(el); const s = getComputedStyle(el); const out = [s.color, s.backgroundColor]; el.remove(); return out; };
+        const root = getComputedStyle(document.documentElement);
+        return {
+          text2: read("color: var(--text-2); background: var(--surface)"),
+          pageTop: root.getPropertyValue("--page-top").trim(), pageBottom: root.getPropertyValue("--page-bottom").trim(), surface: root.getPropertyValue("--surface").trim(),
+        };
+      });
+      assert.deepEqual([colours.pageTop, colours.pageBottom, colours.surface], scheme === "dark" ? ["#000000", "#0e0e0e", "#131313"] : ["#ffffff", "#f6f6f6", "#f4f4f4"]);
+      const [fg, bg] = colours.text2.map(parseColor);
+      assert.ok(contrast(over(fg, bg), bg.slice(0, 3)) >= 4.5, `${scheme}: secondary text on a surface`);
+      const onPage = contrast(over(fg, hexColor(colours.pageBottom)), hexColor(colours.pageBottom));
+      assert.ok(onPage >= 4.5, `${scheme}: secondary text on the page ${onPage.toFixed(2)}`);
+    } finally { await app.close(); }
+  }
+});
+
+test("design: a liked heart takes the accent, never red, and the playing row is marked", async () => {
+  const app = await openApp({ config: { signedIn: true }, colorScheme: "dark" });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await rows(page).first().dblclick();
+    await page.waitForSelector(".player .like.on");
+    const [heart, accent] = await page.evaluate(() => {
+      const probe = document.createElement("i");
+      probe.style.color = "var(--accent)";
+      document.body.append(probe);
+      const accent = getComputedStyle(probe).color;
+      probe.remove();
+      return [getComputedStyle(document.querySelector(".player .like.on")).color, accent];
+    });
+    assert.equal(heart, accent);
+    // The playing row: the title is accent, the artist is not, and a playback indicator sits in the row.
+    const row = rows(page).first();
+    const [title, artist] = await row.evaluate((el) => [getComputedStyle(el.querySelector(".title")).color, getComputedStyle(el.querySelector(".artist")).color]);
+    assert.equal(title, accent);
+    assert.notEqual(artist, accent);
+    assert.equal(await row.locator(".pbars").count(), 1);
+    await page.click(".player .play"); // pause: the capsules become a pause glyph
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .pbars.paused"));
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("design: the collapsed sidebar names every button, and keyboard focus is visible", async () => {
+  const app = await openApp({ config: { signedIn: true }, viewport: { width: 760, height: 620 } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    const buttons = await page.locator(".nav button").evaluateAll((all) => all.map((b) => ({ view: b.dataset.view, title: b.title, label: b.getAttribute("aria-label"), text: b.querySelector(".label").textContent, labelShown: getComputedStyle(b.querySelector(".label")).display !== "none" })));
+    assert.equal(buttons.length, 10);
+    for (const b of buttons) {
+      assert.equal(b.labelShown, false, `${b.view}: the label is hidden in the narrow sidebar`);
+      assert.ok(b.title && b.title === b.text && b.label === b.text, `${b.view}: tooltip and accessible name`);
+    }
+    assert.equal(await page.getByRole("button", { name: "Поиск" }).count(), 1);
+    assert.ok(await page.locator(".account .link").getAttribute("aria-label"), "sign out has a name without its text");
+    await page.focus(".nav button[data-view=queue]");
+    await page.keyboard.press("Tab");
+    const ring = await page.evaluate(() => { const s = getComputedStyle(document.activeElement); return [s.outlineStyle, s.outlineWidth]; });
+    assert.deepEqual(ring, ["solid", "2px"]);
+    // Tab through the sidebar and the bar: every stop has a visible ring or a visible state.
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("design: counts use the right plural form in Russian and English", async () => {
+  const forms = (page, key, numbers) => page.evaluate(async ([k, ns]) => { const { tn } = await import("./js/i18n.js"); return ns.map((n) => tn(k, n)); }, [key, numbers]);
+  const ru = await openApp({ config: { signedIn: true } });
+  try {
+    assert.deepEqual(await forms(ru.page, "library.count", [0, 1, 2, 4, 5, 11, 12, 14, 21, 22, 25, 101, 111, 1234]), [
+      "0 треков", "1 трек", "2 трека", "4 трека", "5 треков", "11 треков", "12 треков", "14 треков", "21 трек", "22 трека", "25 треков", "101 трек", "111 треков", "1234 трека"]);
+    assert.deepEqual(await forms(ru.page, "playlists.tracks", [1, 3]), ["1 трек", "3 трека"]);
+    assert.deepEqual(await forms(ru.page, "album.count", [1, 12]), ["1 трек", "12 треков"]);
+  } finally { await ru.close(); }
+  const en = await openApp({ config: { signedIn: true }, language: "en-US" });
+  try {
+    assert.deepEqual(await forms(en.page, "library.count", [0, 1, 2, 21]), ["0 tracks", "1 track", "2 tracks", "21 tracks"]);
+  } finally { await en.close(); }
+});
+
+test("design: an old accent name is migrated, and the settings pickers show and change the choice", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await page.evaluate(() => localStorage.setItem("pm.settings.v1", JSON.stringify({ accent: "purple", theme: "dark" })));
+    await page.reload();
+    await waitForLibrary(page);
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.accent), "violet");
+    await page.click(".nav button[data-view=settings]");
+    assert.equal(await page.locator(".accent-opt[aria-checked=true]").getAttribute("data-v"), "violet");
+    assert.equal(await page.locator(".theme-opt[aria-checked=true]").getAttribute("data-v"), "dark");
+    await page.click(".accent-opt[data-v=banana]");
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.accent), "banana");
+    await page.click(".theme-opt[data-v=light]");
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), "light");
+    const saved = JSON.parse(await page.evaluate(() => localStorage.getItem("pm.settings.v1")));
+    assert.deepEqual([saved.accent, saved.theme], ["banana", "light"]);
+    assert.equal(await page.locator("#set-tray[role=switch]").count(), 1);
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("design: no screen overflows horizontally at 640, 760, 900, 1120 and 1440 px", async () => {
+  for (const width of [640, 760, 900, 1120, 1440]) {
+    const app = await openApp({ config: { signedIn: true, catalogMixes: true, history: [1, 2, 3] }, viewport: { width, height: 720 } });
+    try {
+      const { page } = app;
+      await waitForLibrary(page);
+      await rows(page).nth(1).dblclick();
+      await page.waitForFunction(() => document.querySelector(".player .title")?.textContent === "Трек 2");
+      for (const id of ["library", "forYou", "playlists", "friends", "search", "queue", "history", "stats", "downloads", "settings"]) {
+        await page.click(`.nav button[data-view=${id}]`);
+        await page.waitForTimeout(120);
+        const over = await page.evaluate(() => {
+          const wide = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+          const main = document.querySelector(".main");
+          const bar = document.querySelector(".player").getBoundingClientRect();
+          return { wide, main: main.scrollWidth - main.clientWidth, barOutside: bar.left < 0 || bar.right > window.innerWidth };
+        });
+        assert.deepEqual(over, { wide: 0, main: 0, barOutside: false }, `${id} at ${width}px`);
+      }
+      assert.deepEqual(app.problems.filter((p) => !p.includes("Failed to load resource")), []);
+    } finally { await app.close(); }
+  }
+});
+
+test("full screen: with lyrics the panel never runs under the controls, narrow or wide, and the cover steps aside", async () => {
+  for (const [width, height] of [[760, 620], [700, 560], [1280, 800], [900, 700]]) {
+    const app = await openApp({ config: { signedIn: true }, viewport: { width, height } });
+    try {
+      const { page } = app;
+      await playAndOpen(app);
+      await page.waitForFunction(() => document.querySelectorAll(".ly-line").length === 40);
+      await at(page, 100);
+      const box = await page.evaluate(() => {
+        const rect = (selector) => { const r = document.querySelector(selector).getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, height: r.height }; };
+        return { ly: rect(".ly"), bottom: rect(".np-bottom"), top: rect(".np-top"), cover: getComputedStyle(document.querySelector(".np-main")).display, side: document.querySelector(".np").dataset.side };
+      });
+      assert.equal(box.side, "lyrics");
+      assert.ok(box.ly.bottom <= box.bottom.top + 1, `${width}x${height}: lyrics end at ${box.ly.bottom}, controls start at ${box.bottom.top}`);
+      assert.ok(box.ly.top >= box.top.bottom - 1, `${width}x${height}: lyrics start below the header`);
+      assert.ok(box.ly.height > 120, "there is room to read");
+      if (width <= 860) assert.equal(box.cover, "none", "the lyrics take the place of the cover");
+      // The queue shares the panel and also stays above the controls.
+      await page.click(".np-quick button:nth-child(2)");
+      await page.waitForSelector(".np-queue:not([hidden])");
+      const queue = await page.evaluate(() => ({ q: document.querySelector(".np-queue").getBoundingClientRect().bottom, c: document.querySelector(".np-bottom").getBoundingClientRect().top, ly: document.querySelector(".ly").hidden }));
+      assert.ok(queue.q <= queue.c + 1);
+      assert.equal(queue.ly, true);
+      const wanted = Number(await page.locator(".np-queue .nq-row").nth(2).getAttribute("data-index"));
+      await page.locator(".np-queue .nq-row").nth(2).click();
+      assert.equal((await page.evaluate(() => window.__mock.last("jump"))).args.index, wanted);
+      assert.deepEqual(app.problems, []);
+    } finally { await app.close(); }
+  }
+});
+
+test("full screen: it follows the theme, and the controls fade instead of vanishing", async () => {
+  for (const scheme of ["dark", "light"]) {
+    const app = await motionApp({ config: { signedIn: true }, colorScheme: scheme });
+    try {
+      const { page } = app;
+      await playAndOpen(app);
+      const colour = await page.evaluate(() => getComputedStyle(document.querySelector(".np-title")).color);
+      assert.equal(colour, scheme === "dark" ? "rgb(255, 255, 255)" : "rgb(0, 0, 0)");
+      const weight = await page.evaluate(() => getComputedStyle(document.querySelector(".np-title")).fontWeight);
+      assert.equal(weight, "700", "bold, never heavy");
+      // After a pause with no pointer movement the controls fade (opacity), they are not display:none or hidden.
+      await page.waitForFunction(() => document.querySelector(".np").classList.contains("idle"), null, { timeout: 6000 });
+      await page.waitForTimeout(400);
+      const faded = await page.evaluate(() => { const s = getComputedStyle(document.querySelector(".np-bottom")); return [s.opacity, s.visibility]; });
+      assert.deepEqual(faded, ["0", "visible"]);
+      await page.mouse.move(300, 300);
+      await page.waitForFunction(() => getComputedStyle(document.querySelector(".np-bottom")).opacity === "1");
+    } finally { await app.close(); }
+  }
+});
+
+test("hero headers: artist, album and playlist show a cover, a kicker and their actions", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await openArtistFromRow(page, 4);
+    assert.equal(await page.locator(".artist-view .kicker").innerText(), "Исполнитель");
+    await page.waitForSelector(".artist-view .page-art img");
+    const photo = await page.locator(".artist-view .page-art .art-box").evaluate((el) => [getComputedStyle(el).borderTopLeftRadius, el.getBoundingClientRect().width]);
+    assert.equal(photo[1], 88);
+    assert.equal(photo[0], "50%", "the artist photo is a circle");
+    await page.click(".artist-view .hero-actions .btn.primary");
+    await page.waitForFunction(() => window.__mock.last("play_tracks")?.args.tracks.length === 30);
+    await page.waitForSelector(".artist-view .artist-albums .card");
+    await page.locator(".artist-view .artist-albums .card").first().click();
+    await page.waitForSelector(".album-view:not([hidden])");
+    assert.equal(await page.locator(".album-view .kicker").innerText(), "Альбом");
+    assert.equal(await page.locator(".album-view .page-art .art-box").evaluate((el) => el.getBoundingClientRect().width), 136);
+    await page.click(".nav button[data-view=playlists]");
+    await page.locator(".grid .card", { hasText: "Дорога" }).click();
+    await page.waitForFunction(() => document.querySelectorAll(".main > .view:not([hidden]) .view:not([hidden]) .row").length === 3);
+    assert.equal(await page.locator(`${visibleView} .view:not([hidden]) .kicker`).innerText(), "Плейлист");
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("states: loading shows a skeleton, empty and failed lists a panel; dead buttons are hidden", async () => {
+  const loading = await openApp({ config: { signedIn: true, pageDelay: 3000 } });
+  try {
+    const { page } = loading;
+    await page.waitForSelector(".main > .view:not([hidden]) .status.loading");
+    assert.ok((await page.locator(".status.loading .sk-row").count()) >= 5);
+    assert.equal(await page.locator(".status.loading").getAttribute("aria-busy"), "true");
+    assert.match(await page.locator(".status.loading .sr-only").innerText(), /Загрузка/);
+    assert.equal(await page.locator(".main > .view:not([hidden]) .vh-actions .btn").isHidden(), true, "no Play with nothing to play");
+  } finally { await loading.close(); }
+  const empty = await openApp({ config: { signedIn: true, libraryTotal: 0 } });
+  try {
+    const { page } = empty;
+    await page.waitForSelector(".main > .view:not([hidden]) .empty-state:not([hidden])");
+    assert.equal(await page.locator(".main > .view:not([hidden]) .vh-actions .btn").isHidden(), true);
+    assert.equal(await page.locator(".main > .view:not([hidden]) .list").isHidden(), true, "the panel takes the list's place");
+  } finally { await empty.close(); }
+  const failing = await openApp({ config: { signedIn: true, failing: ["library"] } });
+  try {
+    const { page } = failing;
+    await page.waitForSelector(".main > .view:not([hidden]) .status.error");
+    await page.waitForSelector(".main > .view:not([hidden]) .status.error .retry");
+    await failing.page.evaluate(() => { window.__mock.config.failing = []; });
+    await page.click(".main > .view:not([hidden]) .retry");
+    await waitForLibrary(page);
+  } finally { await failing.close(); }
+});
+
+test("undo: removing a track from a playlist offers an undo banner that puts it back", async () => {
   const app = await openApp({ config: { signedIn: true } });
   try {
     const { page } = app;
     await waitForLibrary(page);
-    const offenders = await page.evaluate(() => {
-      const bad = [];
-      // The full-screen view is the one place allowed to have effects.
-      for (const el of document.querySelectorAll("*:not(.np):not(.np *)")) {
-        const s = getComputedStyle(el);
-        const durations = [...s.transitionDuration.split(","), ...s.animationDuration.split(",")].map((d) => parseFloat(d));
-        if (durations.some((d) => d > 0) || s.animationName !== "none") bad.push(el.tagName + "." + el.className);
-        if (s.boxShadow !== "none" || s.textShadow !== "none" || s.filter !== "none" || s.backdropFilter !== "none") bad.push("effect:" + el.tagName + "." + el.className);
-      }
-      return bad;
-    });
-    assert.deepEqual(offenders, []);
-    assert.equal(await page.evaluate(() => document.getAnimations().length), 0);
+    await page.click(".nav button[data-view=playlists]");
+    await page.locator(".grid .card", { hasText: "Дорога" }).click();
+    await page.waitForFunction(() => document.querySelectorAll(".main > .view:not([hidden]) .view:not([hidden]) .row").length === 3);
+    await page.locator(`${visibleView} .view:not([hidden]) .row`).first().click({ button: "right" });
+    await page.click(".menu [data-action=remove-from-playlist]");
+    await page.waitForSelector(".toast.undo .toast-action");
+    assert.equal(await page.locator(".toast.undo .toast-action").innerText(), "Отменить");
+    assert.equal(await page.locator(`${visibleView} .view:not([hidden]) .row`).count(), 2);
+    await page.click(".toast.undo .toast-action");
+    await page.waitForFunction(() => window.__mock.count("add_to_playlist") === 1);
+    await page.waitForFunction(() => document.querySelectorAll(".main > .view:not([hidden]) .view:not([hidden]) .row").length === 3);
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("menus: the sub-menu opens beside its parent, flips to the left when the right is full, and never covers it", async () => {
+  const app = await openApp({ config: { signedIn: true }, viewport: { width: 1000, height: 700 } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    // Right-click far to the right so the sub-menu cannot open on that side.
+    await rows(page).nth(2).click({ button: "right", position: { x: 560, y: 20 } });
+    await page.click(".menu [data-action=add-to-playlist]");
+    await page.waitForSelector(".menu.sub");
+    const [parent, sub] = await page.evaluate(() => [...document.querySelectorAll(".menu")].map((m) => { const r = m.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; }));
+    assert.ok(sub.right <= parent.left + 1 || sub.left >= parent.right - 1, "the two menus do not overlap");
+    assert.ok(sub.left >= 0 && sub.right <= 1000);
+    assert.ok(sub.bottom <= 700 && sub.top >= 0);
   } finally { await app.close(); }
 });
 
@@ -327,8 +815,12 @@ test("the saved queue comes back after a restart without starting to play", asyn
   } finally { await app.close(); }
 });
 
-test("layouts: narrow window collapses the sidebar; dark scheme is readable; screenshots", async () => {
-  for (const [name, viewport, colorScheme] of [["wide-light", { width: 1120, height: 740 }, "light"], ["wide-dark", { width: 1120, height: 740 }, "dark"], ["narrow-dark", { width: 760, height: 620 }, "dark"]]) {
+test("layouts: narrow window collapses the sidebar; light and dark are readable; screenshots", async () => {
+  const shots = process.env.PM_SCREENSHOTS;
+  for (const [name, viewport, colorScheme] of [
+    ["wide-light", { width: 1120, height: 740 }, "light"], ["wide-dark", { width: 1120, height: 740 }, "dark"],
+    ["narrow-dark", { width: 760, height: 620 }, "dark"], ["narrow-light", { width: 760, height: 620 }, "light"],
+  ]) {
     const app = await openApp({ config: { signedIn: true }, viewport, colorScheme });
     try {
       const { page } = app;
@@ -337,8 +829,39 @@ test("layouts: narrow window collapses the sidebar; dark scheme is readable; scr
       await page.waitForFunction(() => document.querySelector(".player .title")?.textContent === "Трек 3");
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
       assert.equal(overflow, false, `${name}: horizontal overflow`);
-      if (process.env.PM_SCREENSHOTS) await page.screenshot({ path: `${process.env.PM_SCREENSHOTS}/${name}.png` });
+      const sidebar = await page.evaluate(() => document.querySelector(".sidebar").getBoundingClientRect().width);
+      assert.equal(sidebar, viewport.width <= 900 ? 64 : 232, `${name}: sidebar width`);
+      if (!shots) continue;
+      await page.screenshot({ path: `${shots}/${name}.png` });
+      await rows(page).nth(4).click({ button: "right" });
+      await page.waitForSelector(".menu");
+      await page.screenshot({ path: `${shots}/${name}-menu.png` });
+      await page.keyboard.press("Escape");
+      await rows(page).nth(1).hover();
+      await rows(page).nth(1).locator("[data-action=like]").click();
+      await page.waitForSelector(".toast");
+      await page.screenshot({ path: `${shots}/${name}-toast.png` });
+      await page.click(".nav button[data-view=playlists]");
+      await page.click(".main > .view:not([hidden]) .view:not([hidden]) .view-header .btn.primary");
+      await page.waitForSelector(".dialog[open]");
+      await page.screenshot({ path: `${shots}/${name}-dialog.png` });
+      await page.keyboard.press("Escape");
+      await page.waitForFunction(() => !document.querySelector(".dialog"));
+      await page.click(".player .volume .icon-btn:last-child");
+      await page.waitForSelector(".np:not([hidden])");
+      await page.waitForFunction(() => document.querySelectorAll(".ly-line").length > 0);
+      await page.screenshot({ path: `${shots}/${name}-np-lyrics.png` });
     } finally { await app.close(); }
+  }
+  // Empty, loading and failed states, in both themes.
+  for (const [name, config] of [["loading", { pageDelay: 3000 }], ["empty", { libraryTotal: 0 }], ["error", { failing: ["library"] }]]) {
+    for (const colorScheme of ["dark", "light"]) {
+      const app = await openApp({ config: { signedIn: true, ...config }, colorScheme });
+      try {
+        await app.page.waitForSelector(`.main > .view:not([hidden]) ${name === "loading" ? ".status.loading" : name === "empty" ? ".empty-state:not([hidden])" : ".status.error"}`);
+        if (shots) await app.page.screenshot({ path: `${shots}/state-${name}-${colorScheme}.png` });
+      } finally { await app.close(); }
+    }
   }
 });
 
@@ -363,7 +886,7 @@ async function playAndOpen(app, { index = 0 } = {}) {
 }
 
 test("full screen: opens from the player bar, asks the engine for the spectrum only while open", async () => {
-  const app = await openApp({ config: { signedIn: true } });
+  const app = await motionApp({ config: { signedIn: true } });
   try {
     const { page } = app;
     await playAndOpen(app);
@@ -382,7 +905,7 @@ test("full screen: opens from the player bar, asks the engine for the spectrum o
 });
 
 test("full screen: every visualizer mode draws, and 'off' stops the analysis", async () => {
-  const app = await openApp({ config: { signedIn: true } });
+  const app = await motionApp({ config: { signedIn: true } });
   try {
     const { page } = app;
     await playAndOpen(app);
@@ -404,7 +927,7 @@ test("full screen: every visualizer mode draws, and 'off' stops the analysis", a
 });
 
 test("full screen: the bars sink to nothing once playback pauses", async () => {
-  const app = await openApp({ config: { signedIn: true } });
+  const app = await motionApp({ config: { signedIn: true } });
   try {
     const { page } = app;
     await playAndOpen(app);
@@ -1020,7 +1543,7 @@ test("playlists: create one, add a track to it from the menu, rename it, remove 
 
     await page.click(".nav button[data-view=playlists]");
     await page.waitForFunction(() => document.querySelector(".grid .card .name")?.textContent === "Ночь");
-    assert.match(await page.locator(".grid .card").first().innerText(), /1 треков/);
+    assert.match(await page.locator(".grid .card").first().innerText(), /\b1 трек$/m);
     await page.click(".grid .card >> nth=0");
     await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .view:not([hidden]) .row .title")?.textContent === "Трек 3");
 
@@ -1647,5 +2170,24 @@ test("the sidebar still fits the smallest window with the new sections", async (
     await page.locator(".nav button[data-view=settings]").scrollIntoViewIfNeeded();
     await page.click(".nav button[data-view=settings]");
     await page.waitForSelector(".settings:not([hidden])");
+  } finally { await app.close(); }
+});
+
+test("the sidebar starts a screen over: a click on Playlists or Friends while one is open returns to its list", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await page.click(".nav button[data-view=playlists]");
+    await page.locator(".grid .card", { hasText: "Дорога" }).click();
+    await page.waitForFunction(() => document.querySelectorAll(".main > .view:not([hidden]) .view:not([hidden]) .row").length === 3);
+    await page.click(".nav button[data-view=playlists]");
+    await page.waitForFunction(() => document.querySelectorAll(".main > .view:not([hidden]) .view:not([hidden]) .card").length >= 3);
+    await page.click(".nav button[data-view=friends]");
+    await page.click(".friend >> nth=0");
+    await waitShown(page, ".row", 5);
+    await page.click(".nav button[data-view=friends]");
+    await waitShown(page, ".friend", 3);
+    assert.deepEqual(app.problems.filter((p) => !p.includes("Failed to load resource")), []);
   } finally { await app.close(); }
 });
