@@ -450,8 +450,10 @@ impl Core {
                 Ok(Some(found)) => return Ok(Some(found)),
                 Ok(None) => {}
                 Err(error) => {
-                    log::debug!("genius lyrics: {error}");
-                    failure = failure.or(Some(error));
+                    // Genius is an optional last-resort source. Its public
+                    // endpoints can reject automated requests; that must not
+                    // turn "no lyrics found" into a playback-facing error.
+                    log::debug!("Genius lyrics unavailable: {error}");
                 }
             }
         }
