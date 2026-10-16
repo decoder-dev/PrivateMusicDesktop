@@ -36,6 +36,17 @@ way. `native/` is a copy of the one in decoder-dev/PrivateMusic2: keep them in s
   attempts in a row, and the queue then simply ends. The Queue view says when it
   is a mix. Playing anything else turns the radio off.
 - Search remembers recent queries, which can be reused, removed or cleared.
+- Friends' music: the friends list with photos; open a friend to see their tracks and
+  playlists (a playlist opens into its tracks), play from there, and use the hearts and
+  the track menu as anywhere else. A friend who keeps their audio private gets a plain
+  message instead of VK's error.
+- History and statistics, kept on this computer only: a track lands in **History**
+  (the last 250, newest first, filterable, removable one by one or all at once) once
+  30 % of it has really been listened to, as in the iOS app (seeking and pausing do
+  not count). **Statistics** shows time listening, plays and days with music, top
+  artists and tracks, and when you listen (hour of the day, favourite weekday, busiest
+  day) for a month, a year or all time, with a reset button. Nothing is sent to VK
+  (the iOS app's optional "report playback to VK" setting is not ported).
 - Downloads: any track can be saved to the app's folder and then plays with no
   internet (the file is the decrypted audio, not VK's encrypted stream).
 - A ten-band equaliser with presets.
@@ -134,6 +145,13 @@ Optional tests: `live_vk` (real VK endpoints, needs network) and `cpal_smoke`
   stream URLs https-only and never loopback, private or link-local addresses (also across redirects); no redirects on VK API calls, where a
   token is attached).
 - Logs never contain tokens or cookies.
+- **Listening history** is one small JSON file per VK account in the app data folder
+  (`history/listening-<VK user id>.json`): the last 250 tracks (title, artist, cover
+  address and the ids VK uses for them, plus a track's access key where VK gave one,
+  which is needed to play it again), and per-month counters. It never holds a token, a
+  cookie or a stream address, it is bounded in size, it is never sent anywhere, and
+  *Clear* (History) and *Reset statistics* remove their parts of it. A damaged or hand-edited file is
+  set aside or repaired on load.
 
 ## Known limits
 

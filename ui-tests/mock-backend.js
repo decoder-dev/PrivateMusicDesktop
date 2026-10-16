@@ -43,11 +43,55 @@
   ];
   const playlistTracks = new Map();
 
+  // Friends: Анна has music and playlists, Борис keeps his audio private (VK
+  // answers with an error), Ёлка has nothing. `friendsTotal` makes a long list.
+  const friends = config.friendsTotal
+    ? Array.from({ length: config.friendsTotal }, (_, i) => ({ id: 100 + i, first_name: `Друг${i + 1}`, last_name: "Тестов", photo_url: null }))
+    : [
+      { id: 11, first_name: "Анна", last_name: "Смирнова", photo_url: "https://cdn.example/anna.jpg" },
+      { id: 12, first_name: "Борис", last_name: "Закрытый", photo_url: null },
+      { id: 13, first_name: "Ёлка", last_name: "Пустая", photo_url: null },
+    ];
+  if (config.hostileFriend) friends[0].first_name = config.hostileFriend;
+  const friendTrackList = (id) => Array.from({ length: 5 }, (_, i) => makeTrack(30000 + id * 10 + i, { title: `Друг ${id}: трек ${i + 1}`, owner_id: id }));
+  const friendPlaylistList = (id) => [
+    { playlist_id: 1, owner_id: id, title: "Плейлист друга", description: null, count: 3, artwork_url: null, access_key: "fk" },
+    { playlist_id: 2, owner_id: id, title: "Ещё один", description: null, count: 2, artwork_url: "https://cdn.example/fp.jpg", access_key: null },
+  ];
+  const privateAudio = () => ({ kind: "vk", message: "VK error 201: Access denied: user hid his audio" });
+
+  // Listening history and statistics, as the engine would answer them.
+  const history = (config.history ?? []).map((n) => ({ track: makeTrack(n, { title: `Из истории ${n}` }), played_at: 1_772_620_200 - n }));
+  const statsMonths = { "2026-03": { plays: 40, seconds: 5400 + 25, peak: 19, weekday: 3, days: 6 }, "2026-02": { plays: 25, seconds: 1800, peak: 8, weekday: 1, days: 3 } };
+  const statsFor = (scope, choice) => {
+    const months = state.statsEmpty ? [] : Object.keys(statsMonths);
+    const years = state.statsEmpty ? [] : [2026];
+    const key = scope === "month" ? choice ?? months[0] ?? "2026-04" : null;
+    const picked = scope === "month" ? (state.statsEmpty ? [] : [statsMonths[key]].filter(Boolean)) : (state.statsEmpty ? [] : Object.values(statsMonths));
+    const plays = picked.reduce((sum, m) => sum + m.plays, 0);
+    const seconds = picked.reduce((sum, m) => sum + m.seconds, 0);
+    const hour_seconds = Array.from({ length: 24 }, (_, i) => (picked.length && i === picked[0].peak ? seconds / 2 : picked.length ? 10 : 0));
+    const period = scope === "month" ? { kind: "month", key } : scope === "year" ? { kind: "year", year: Number(choice ?? 2026) } : { kind: "all" };
+    const entry = (id, title, subtitle, n) => ({ id, title, subtitle, artwork_url: subtitle ? `https://cdn.example/${id}.jpg` : null, plays: n, seconds: n * 200 });
+    return {
+      summary: {
+        period, total_seconds: seconds, plays, active_days: picked.reduce((sum, m) => sum + m.days, 0),
+        top_artists: plays ? [entry("a1", "Кино", null, 12), entry("a2", "Исполнитель 2", null, 7)] : [],
+        top_tracks: plays ? [entry("7_1", "Группа крови", "Кино", 5), entry("7_2", "Трек 2", "Исполнитель 2", 3)] : [],
+        hour_seconds, peak_hour: plays ? picked[0].peak : null, favourite_weekday: plays ? picked[0].weekday : null,
+        busiest_day: plays ? { key: "2026-03-04", seconds: 3600 } : null, is_empty: plays === 0 && seconds === 0,
+      },
+      months, years,
+    };
+  };
+
   const state = {
     session: { signed_in: !!config.signedIn, profile: null, persistent: config.persistent !== false },
     player: { status: "idle", track: null, position: 0, duration: 0, volume: 1, shuffle: false, repeat: "off", queue_index: null, queue_len: 0, radio: null },
     queue: [],
     followedAlbums: [],
+    history,
+    statsEmpty: !!config.statsEmpty,
   };
 
   const emit = (event, payload) => (handlers.get(event) ?? []).forEach((fn) => fn({ payload }));
@@ -273,6 +317,34 @@
       if (follow) state.followedAlbums.unshift({ ...album, is_followed: true });
     },
   };
+
+  Object.assign(commands, {
+    friends: async ({ offset, count }) => { await delay(config.pageDelay ?? 5); return page(friends, offset, count); },
+    friend_tracks: async ({ ownerId, offset, count }) => {
+      await delay(10);
+      if (ownerId === 12) throw privateAudio();
+      return page(ownerId === 13 ? [] : friendTrackList(ownerId), offset, count);
+    },
+    friend_playlists: async ({ ownerId, offset, count }) => {
+      await delay(10);
+      if (ownerId === 12) throw privateAudio();
+      return page(ownerId === 13 ? [] : friendPlaylistList(ownerId), offset, count);
+    },
+    history: () => state.history.map((entry) => ({ ...entry })),
+    history_remove: ({ trackId }) => {
+      const before = state.history.length;
+      state.history = state.history.filter((entry) => `${entry.track.owner_id}_${entry.track.track_id}` !== trackId);
+      return state.history.length !== before;
+    },
+    history_clear: () => { state.history = []; },
+    listening_stats: async ({ scope, choice }) => {
+      await delay(5);
+      if (config.statsFail) throw { kind: "invalid", message: "Invalid request." };
+      return statsFor(scope, choice);
+    },
+    reset_listening_stats: () => { state.statsEmpty = true; },
+    set_utc_offset: ({ minutes }) => { state.utcOffset = minutes; },
+  });
 
   window.__TAURI__ = {
     core: {

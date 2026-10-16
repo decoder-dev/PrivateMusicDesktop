@@ -19,6 +19,9 @@ import { createForYouView } from "./views/for-you.js";
 import { createDownloadsView } from "./views/downloads.js";
 import { createArtistView } from "./views/artist.js";
 import { createAlbumView } from "./views/album.js";
+import { createFriendsView } from "./views/friends.js";
+import { createHistoryView } from "./views/history.js";
+import { createStatsView } from "./views/stats.js";
 import { setRouter, hasArtist, hasAlbum, linkedArtists, openArtist, openArtistOf, openAlbumOf } from "./navigation.js";
 import { forgetAlbums } from "./my-albums.js";
 import { toggleDownload, refreshDownloads } from "./downloads.js";
@@ -201,6 +204,9 @@ function buildShellParts() {
     forYou: createForYouView(ctx),
     downloads: createDownloadsView(ctx),
     playlists: createPlaylistsView(ctx),
+    friends: createFriendsView(ctx),
+    history: createHistoryView(ctx),
+    stats: createStatsView(ctx),
     search: createSearchView(ctx),
     queue: createQueueView(),
     settings: createSettingsView({ settings, onSettingsChange: applySettings, onSignOut: signOut, toast }),
@@ -211,8 +217,11 @@ function buildShellParts() {
     ["library", "nav.library", "note"],
     ["forYou", "nav.forYou", "sparkles"],
     ["playlists", "nav.playlists", "playlist"],
+    ["friends", "nav.friends", "friends"],
     ["search", "nav.search", "search"],
     ["queue", "nav.queue", "queue"],
+    ["history", "nav.history", "history"],
+    ["stats", "nav.stats", "chart"],
     ["downloads", "nav.downloads", "download"],
     ["settings", "nav.settings", "settings"],
   ];
@@ -309,10 +318,21 @@ async function showApp() {
   await applyStartupState();
 }
 
+/**
+ * The statistics group listening by the hour of the user's own clock; only
+ * the window knows its time zone, so it tells the engine (and again when the
+ * clock may have changed, e.g. daylight saving time or travel).
+ */
+function syncTimeZone() {
+  api.setUtcOffset(-new Date().getTimezoneOffset()).catch(() => {});
+}
+window.addEventListener("focus", () => { if (shell) syncTimeZone(); });
+
 /** Pushes saved settings to the engine, and brings back the last queue. */
 async function applyStartupState() {
   try {
     api.setCloseToTray(settings.closeToTray).catch(() => {});
+    syncTimeZone();
     if (settings.outputDevice) await api.setOutputDevice(settings.outputDevice).catch(() => {});
     if (settings.eq.on) api.setEqualizer(settings.eq.gains).catch(() => {});
     await api.setVolume(settings.volume);

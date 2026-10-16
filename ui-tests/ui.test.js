@@ -1306,3 +1306,346 @@ test("artist page: opens from the player bar and from the full-screen view", asy
     assert.equal(await page.evaluate(() => window.__mock.state.visualizer), false, "closing the view stops the analysis");
   } finally { await app.close(); }
 });
+
+// ------------------------------------------------- friends, history, statistics
+
+const view = ".main > .view:not([hidden])";
+
+// Nested screens keep hidden siblings in the DOM: count what is really on screen.
+const shown = (page, selector) => page.locator(`.main ${selector}:visible`);
+const waitShown = (page, selector, n) =>
+  page.waitForFunction(([sel, count]) => [...document.querySelectorAll(`.main ${sel}`)].filter((e) => e.offsetParent !== null).length === count, [selector, n]);
+
+async function openSection(page, id) {
+  await page.click(`.nav button[data-view=${id}]`);
+}
+
+test("friends: the list shows names and photos, and a friend opens into tracks that play, like and have a menu", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await openSection(page, "friends");
+    await page.waitForFunction(() => document.querySelectorAll(".friend").length === 3);
+    assert.deepEqual(await page.locator(".friend .friend-name").allInnerTexts(), ["Анна Смирнова", "Борис Закрытый", "Ёлка Пустая"]);
+    assert.equal(await page.locator(".friend img.avatar").count(), 1, "only Анна has a photo; the others get a placeholder");
+    assert.equal(await page.locator(".friend .avatar.empty").count(), 2);
+    assert.equal(await page.locator(".nav button[data-view=friends]").getAttribute("aria-current"), "page");
+
+    await page.click(".friend >> nth=0");
+    await waitShown(page, ".row", 5);
+    assert.equal(await shown(page, "h1").innerText(), "Анна Смирнова");
+    assert.equal(await shown(page, ".friend-photo img").count(), 1);
+    assert.equal(await page.evaluate(() => window.__mock.last("friend_tracks").args.ownerId), 11);
+    assert.deepEqual(app.problems.filter((p) => !p.includes("Failed to load resource")), []);
+
+    await shown(page, ".row").nth(2).dblclick();
+    const play = await page.evaluate(() => window.__mock.last("play_tracks"));
+    assert.equal(play.args.index, 2);
+    assert.equal(play.args.tracks.length, 5);
+    assert.ok(play.args.tracks.every((t) => t.owner_id === 11));
+    await page.waitForFunction(() => document.querySelector(".player .title")?.textContent === "Друг 11: трек 3");
+
+    // The heart adds to My music, as everywhere else.
+    await shown(page, ".row").nth(1).hover();
+    await shown(page, ".row").nth(1).locator("[data-action=like]").click();
+    await page.waitForFunction(() => window.__mock.count("add_to_library") === 1);
+    assert.equal(await page.evaluate(() => window.__mock.last("add_to_library").args.track.title), "Друг 11: трек 2");
+
+    // The track menu is the usual one.
+    await shown(page, ".row").nth(3).click({ button: "right" });
+    await page.waitForSelector(".menu [data-action=play-next]");
+    assert.ok(await page.locator(".menu [data-action=add-to-playlist]").count() > 0);
+    await page.keyboard.press("Escape");
+    assert.deepEqual(app.problems.filter((p) => !p.includes("Failed to load resource")), []);
+  } finally { await app.close(); }
+});
+
+test("friends: playlists open into tracks, with Back at every step", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await openSection(page, "friends");
+    await page.waitForSelector(".friend");
+    await page.click(".friend >> nth=0");
+    await waitShown(page, ".row", 5);
+    await shown(page, "[role=tab][data-tab=playlists]").click();
+    await waitShown(page, ".friend-playlists .card", 2);
+    assert.equal(await page.evaluate(() => window.__mock.last("friend_playlists").args.ownerId), 11);
+    assert.equal(await shown(page, ".row").count(), 0, "the tracks tab is hidden");
+
+    await page.locator(".friend-playlists .card", { hasText: "Плейлист друга" }).click();
+    await waitShown(page, ".row", 3);
+    assert.ok((await shown(page, ".row .title").first().innerText()).startsWith("Плейлист друга:"));
+    const opened = await page.evaluate(() => window.__mock.last("playlist_tracks").args.playlist);
+    assert.deepEqual([opened.owner_id, opened.playlist_id, opened.access_key], [11, 1, "fk"]);
+    // Playing from here queues the playlist.
+    await shown(page, ".row").first().dblclick();
+    assert.equal((await page.evaluate(() => window.__mock.last("play_tracks"))).args.tracks.length, 3);
+    // Someone else's playlist offers no editing.
+    assert.equal(await shown(page, ".pl-owner .btn").count(), 0);
+
+    await shown(page, ".icon-btn[aria-label=Назад]").click();
+    await shown(page, "[role=tab][data-tab=playlists][aria-selected=true]").waitFor();
+    await shown(page, ".icon-btn[aria-label='К друзьям']").click();
+    await waitShown(page, ".friend", 3);
+    // Another friend starts on Tracks again.
+    await page.click(".friend >> nth=2");
+    await shown(page, "[role=tab][data-tab=tracks][aria-selected=true]").waitFor();
+    assert.deepEqual(app.problems.filter((p) => !p.includes("Failed to load resource")), []);
+  } finally { await app.close(); }
+});
+
+test("friends: private audio gets a plain message, an empty friend an empty state", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await openSection(page, "friends");
+    await page.waitForSelector(".friend");
+    await page.click(".friend >> nth=1");
+    await shown(page, ".status.error").first().waitFor();
+    const text = await shown(page, ".status.error").first().innerText();
+    assert.equal(text, "Музыка может быть скрыта владельцем или недоступна для этой сессии VK.");
+    assert.ok(!text.includes("VK error"), "VK's own wording is not shown");
+    assert.equal(await shown(page, ".row").count(), 0);
+    await shown(page, "[role=tab][data-tab=playlists]").click();
+    await shown(page, "[data-pane=playlists] .status.error").waitFor();
+    assert.equal(await shown(page, "[data-pane=playlists] .status.error").innerText(), text);
+
+    await shown(page, ".icon-btn[aria-label='К друзьям']").click();
+    await page.click(".friend >> nth=2");
+    await shown(page, "[data-pane=tracks] .empty-state").waitFor();
+    assert.equal(await shown(page, "[data-pane=tracks] .empty-state").innerText(), "В этом разделе нет доступной музыки.");
+    await shown(page, "[role=tab][data-tab=playlists]").click();
+    await page.waitForFunction(() => [...document.querySelectorAll(".main [data-pane=playlists] .status")].some((e) => e.offsetParent && e.textContent.includes("нет или они скрыты")));
+  } finally { await app.close(); }
+});
+
+test("friends: a network failure is shown as such, and a long list loads completely", async () => {
+  const app = await openApp({ config: { signedIn: true, failing: ["friends"] } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await openSection(page, "friends");
+    await shown(page, ".status.error").first().waitFor();
+    assert.equal(await shown(page, ".status.error").first().innerText(), "Нет подключения к интернету.");
+  } finally { await app.close(); }
+  const long = await openApp({ config: { signedIn: true, friendsTotal: 450 } });
+  try {
+    const { page } = long;
+    await waitForLibrary(page);
+    await openSection(page, "friends");
+    await page.waitForFunction(() => document.querySelectorAll(".friend").length === 450);
+    assert.equal(await page.evaluate(() => window.__mock.count("friends")), 3, "200 + 200 + 50");
+  } finally { await long.close(); }
+});
+
+test("friends: names are text, never markup", async () => {
+  const hostile = `<img src=x onerror="window.__pwned=1">`;
+  const app = await openApp({ config: { signedIn: true, hostileFriend: hostile } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await openSection(page, "friends");
+    await page.waitForSelector(".friend");
+    assert.ok((await page.locator(".friend .friend-name").first().innerText()).startsWith("<img"));
+    await page.click(".friend >> nth=0");
+    await shown(page, "h1").waitFor();
+    assert.ok((await shown(page, "h1").innerText()).startsWith("<img"));
+    assert.equal(await page.evaluate(() => window.__pwned), undefined);
+    assert.equal(await page.locator("img[src=x]").count(), 0);
+  } finally { await app.close(); }
+});
+
+test("history: recent tracks play as a queue, filter, drop one at a time and clear", async () => {
+  const app = await openApp({ config: { signedIn: true, history: [1, 2, 3, 4] } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await openSection(page, "history");
+    await page.waitForFunction(() => document.querySelectorAll(".main > .view:not([hidden]) .row").length === 4);
+    assert.deepEqual(await rows(page).locator(".title").allInnerTexts(), ["Из истории 1", "Из истории 2", "Из истории 3", "Из истории 4"]);
+    assert.match(await page.locator(`${view} .footer-note`).innerText(), /только на этом компьютере/);
+
+    await rows(page).nth(1).dblclick();
+    const play = await page.evaluate(() => window.__mock.last("play_tracks"));
+    assert.equal(play.args.index, 1);
+    assert.equal(play.args.tracks.length, 4);
+
+    await page.fill(`${view} input[type=search]`, "истории 3");
+    await page.waitForFunction(() => document.querySelectorAll(".main > .view:not([hidden]) .row").length === 1);
+    await page.fill(`${view} input[type=search]`, "");
+    await page.waitForFunction(() => document.querySelectorAll(".main > .view:not([hidden]) .row").length === 4);
+
+    await rows(page).nth(1).click({ button: "right" });
+    await page.click(".menu [data-action=remove-from-history]");
+    await page.waitForFunction(() => document.querySelectorAll(".main > .view:not([hidden]) .row").length === 3);
+    assert.equal(await page.evaluate(() => window.__mock.last("history_remove").args.trackId), "7_2");
+    assert.equal(await page.evaluate(() => window.__mock.state.history.length), 3);
+
+    await page.click(`${view} .view-header .btn.danger-text`);
+    await page.click(".dialog .btn:not(.danger)");
+    assert.equal(await page.evaluate(() => window.__mock.count("history_clear")), 0, "cancelling keeps the history");
+    await page.click(`${view} .view-header .btn.danger-text`);
+    await page.click(".dialog .btn.danger");
+    await page.waitForSelector(`${view} .empty-state:not([hidden])`);
+    assert.equal(await page.locator(`${view} .empty-state`).innerText(), "История пуста. Здесь появятся треки, которые вы прослушали.");
+    assert.equal(await page.locator(`${view} .view-header .btn.danger-text`).isDisabled(), true);
+    assert.equal(await page.evaluate(() => window.__mock.state.history.length), 0);
+    assert.deepEqual(app.problems.filter((p) => !p.includes("Failed to load resource")), []);
+  } finally { await app.close(); }
+});
+
+test("history: a track counted while another plays shows up when the track changes", async () => {
+  const app = await openApp({ config: { signedIn: true, history: [1] } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await openSection(page, "history");
+    await page.waitForFunction(() => document.querySelectorAll(".main > .view:not([hidden]) .row").length === 1);
+    const before = await page.evaluate(() => window.__mock.count("history"));
+    // The engine counts the second track while the first one plays.
+    await page.evaluate(() => {
+      window.__mock.state.history.unshift({ track: { ...window.__mock.state.history[0].track, track_id: 77, title: "Новый в истории" }, played_at: 1 });
+    });
+    assert.equal(await rows(page).count(), 1, "nothing reloads by itself");
+    await rows(page).first().dblclick();
+    await page.waitForFunction((n) => window.__mock.count("history") > n, before);
+    await page.waitForFunction(() => [...document.querySelectorAll(".main > .view:not([hidden]) .row .title")].some((e) => e.textContent === "Новый в истории"));
+  } finally { await app.close(); }
+});
+
+test("history: empty history shows its message and nothing to clear", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await openSection(page, "history");
+    await page.waitForSelector(`${view} .empty-state:not([hidden])`);
+    assert.equal(await page.locator(`${view} .view-header .btn.danger-text`).isDisabled(), true);
+  } finally { await app.close(); }
+});
+
+test("statistics: totals, tops, busiest times, and the period filter", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await openSection(page, "stats");
+    await page.waitForSelector(`${view} [data-stat=time]`);
+    const text = (selector) => page.locator(`${view} ${selector}`).innerText();
+    assert.equal(await text("[data-stat=time]"), "1 ч 30 мин");
+    assert.equal(await text("[data-stat=plays]"), "40");
+    assert.equal(await text("[data-stat=days]"), "6");
+    assert.deepEqual(await page.locator(`${view} [data-section=artists] .stat-row`).allInnerTexts().then((rowsText) => rowsText.map((r) => r.replace(/\s+/g, " "))), ["1 Кино ×12", "2 Исполнитель 2 ×7"]);
+    assert.match(await page.locator(`${view} [data-section=tracks] .stat-row`).first().innerText(), /Группа крови\s+Кино\s+×5/);
+    assert.equal(await page.locator(`${view} .hour-bar`).count(), 24);
+    assert.equal(await page.locator(`${view} .hour-bar.peak`).getAttribute("data-hour"), "19");
+    assert.equal(await text("[data-fact=hour]"), "Чаще всего: 19:00");
+    assert.equal(await text("[data-fact=weekday]"), "Любимый день недели: среда");
+    assert.match(await text("[data-fact=day]"), /^Самый музыкальный день: 4 марта$/);
+    assert.match(await text(".page-note"), /не отправляются в VK/);
+    assert.match(await text(".stat-controls"), /март 2026/);
+
+    // Two months have data: the chooser lists them, newest first.
+    assert.deepEqual(await page.locator(`${view} .stat-controls select option`).evaluateAll((o) => o.map((e) => e.value)), ["2026-03", "2026-02"]);
+    await page.selectOption(`${view} .stat-controls select`, "2026-02");
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) [data-stat=plays]")?.textContent === "25");
+    assert.deepEqual((await page.evaluate(() => window.__mock.last("listening_stats"))).args, { scope: "month", choice: "2026-02" });
+
+    await page.click(`${view} [role=tab][data-scope=year]`);
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) [data-stat=plays]")?.textContent === "65");
+    assert.equal((await page.evaluate(() => window.__mock.last("listening_stats"))).args.scope, "year");
+    assert.equal(await page.locator(`${view} .stat-controls select`).isHidden(), true, "one year: nothing to choose");
+    assert.equal(await text(".stat-period"), "2026");
+
+    await page.click(`${view} [role=tab][data-scope=all]`);
+    await page.waitForFunction(() => window.__mock.last("listening_stats").args.scope === "all" && document.querySelector(".main > .view:not([hidden]) .stat-controls .stat-period")?.hidden);
+    assert.equal(await page.locator(`${view} [role=tab][data-scope=all]`).getAttribute("aria-selected"), "true");
+    assert.equal(await page.locator(`${view} [data-stat=plays]`).innerText(), "65");
+    assert.deepEqual(app.problems.filter((p) => !p.includes("Failed to load resource")), []);
+  } finally { await app.close(); }
+});
+
+test("statistics: reset asks first, then shows the empty state; privacy note stays", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await openSection(page, "stats");
+    await page.waitForSelector(`${view} [data-stat=time]`);
+    await page.click(`${view} .stat-foot .btn`);
+    assert.match(await page.locator(".dialog .dialog-text").innerText(), /История прослушивания останется/);
+    await page.click(".dialog .btn:not(.danger)");
+    assert.equal(await page.evaluate(() => window.__mock.count("reset_listening_stats")), 0);
+    await page.click(`${view} .stat-foot .btn`);
+    await page.click(".dialog .btn.danger");
+    await page.waitForSelector(`${view} .stat-empty`);
+    assert.equal(await page.evaluate(() => window.__mock.count("reset_listening_stats")), 1);
+    assert.match(await page.locator(`${view} .stat-empty`).innerText(), /Пока мало данных/);
+    assert.equal(await page.locator(`${view} .stat-foot .btn`).isHidden(), true, "nothing left to reset");
+    assert.match(await page.locator(`${view} .stat-foot .page-note`).innerText(), /только на этом устройстве/);
+    assert.equal(await page.locator(`${view} [data-stat=time]`).count(), 0);
+  } finally { await app.close(); }
+});
+
+test("statistics: empty data and failures are explained", async () => {
+  const empty = await openApp({ config: { signedIn: true, statsEmpty: true } });
+  try {
+    const { page } = empty;
+    await waitForLibrary(page);
+    await openSection(page, "stats");
+    await page.waitForSelector(`${view} .stat-empty`);
+    assert.match(await page.locator(`${view} .stat-controls`).innerText(), /\S/, "the current month is named even without data");
+    assert.equal(await page.locator(`${view} .stat-foot .btn`).isHidden(), true);
+  } finally { await empty.close(); }
+  const failing = await openApp({ config: { signedIn: true, statsFail: true } });
+  try {
+    const { page } = failing;
+    await waitForLibrary(page);
+    await openSection(page, "stats");
+    await page.waitForSelector(`${view} .status.error`);
+    assert.equal(await page.locator(`${view} .status.error`).innerText(), "Invalid request.");
+  } finally { await failing.close(); }
+});
+
+test("the window tells the engine its UTC offset, and the English UI has the new sections", async () => {
+  const app = await openApp({ config: { signedIn: true }, language: "en-US" });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await page.waitForFunction(() => window.__mock.count("set_utc_offset") > 0);
+    const expected = await page.evaluate(() => -new Date().getTimezoneOffset());
+    assert.equal(await page.evaluate(() => window.__mock.last("set_utc_offset").args.minutes), expected);
+    assert.deepEqual(await page.locator(".nav button .label").allInnerTexts(), ["My music", "For you", "Playlists", "Friends", "Search", "Queue", "History", "Statistics", "Downloads", "Settings"]);
+    await openSection(page, "stats");
+    await page.waitForSelector(`${view} [data-stat=time]`);
+    assert.equal(await page.locator(`${view} [data-stat=time]`).innerText(), "1 h 30 min");
+    assert.equal(await page.locator(`${view} [data-fact=weekday]`).innerText(), "Favourite day of the week: Wednesday");
+    assert.equal(await page.locator(`${view} [data-fact=day]`).innerText(), "Busiest day: March 4");
+    await openSection(page, "friends");
+    await page.waitForSelector(".friend");
+    assert.equal(await shown(page, "h1").innerText(), "Friends' music");
+  } finally { await app.close(); }
+});
+
+test("the sidebar still fits the smallest window with the new sections", async () => {
+  const app = await openApp({ config: { signedIn: true }, viewport: { width: 780, height: 540 } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    const fits = await page.evaluate(() => {
+      const sidebar = document.querySelector(".sidebar");
+      const account = document.querySelector(".account").getBoundingClientRect();
+      return { overflow: sidebar.scrollHeight > sidebar.clientHeight, accountBottom: account.bottom, sidebarBottom: sidebar.getBoundingClientRect().bottom };
+    });
+    assert.equal(fits.overflow, false);
+    assert.ok(fits.accountBottom <= fits.sidebarBottom + 1);
+    // The last entry can be reached.
+    await page.locator(".nav button[data-view=settings]").scrollIntoViewIfNeeded();
+    await page.click(".nav button[data-view=settings]");
+    await page.waitForSelector(".settings:not([hidden])");
+  } finally { await app.close(); }
+});
