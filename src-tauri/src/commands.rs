@@ -2,6 +2,7 @@
 
 use pm_engine::app::{RadioSource, SessionState};
 use pm_engine::controller::State;
+use pm_engine::history::{HistoryEntry, StatsView};
 use pm_engine::queue::Repeat;
 use pm_engine::vk::{Album, AlbumTracks, Artist, ArtistAlbums, MusicMix, Page, Playlist, Profile, Track};
 use pm_engine::Error;
@@ -444,4 +445,58 @@ pub async fn album_tracks(state: TauriState<'_, AppState>, album: Album, offset:
 pub async fn follow_album(state: TauriState<'_, AppState>, album: Album, follow: bool) -> CommandResult<()> {
     let app = state.app.clone();
     blocking(move || app.follow_album(&album, follow)).await
+}
+
+// Friends' music.
+
+#[tauri::command]
+pub async fn friends(state: TauriState<'_, AppState>, offset: u32, count: u32) -> CommandResult<Page<Profile>> {
+    let app = state.app.clone();
+    blocking(move || app.friends(offset, count)).await
+}
+
+#[tauri::command]
+pub async fn friend_tracks(state: TauriState<'_, AppState>, owner_id: i64, offset: u32, count: u32) -> CommandResult<Page<Track>> {
+    let app = state.app.clone();
+    blocking(move || app.friend_tracks(owner_id, offset, count)).await
+}
+
+#[tauri::command]
+pub async fn friend_playlists(state: TauriState<'_, AppState>, owner_id: i64, offset: u32, count: u32) -> CommandResult<Page<Playlist>> {
+    let app = state.app.clone();
+    blocking(move || app.friend_playlists(owner_id, offset, count)).await
+}
+
+// Listening history and statistics: local to this computer.
+
+#[tauri::command]
+pub fn history(state: TauriState<'_, AppState>) -> Vec<HistoryEntry> {
+    state.app.history()
+}
+
+#[tauri::command]
+pub fn history_remove(state: TauriState<'_, AppState>, track_id: String) -> CommandResult<bool> {
+    Ok(state.app.history_remove(&track_id)?)
+}
+
+#[tauri::command]
+pub fn history_clear(state: TauriState<'_, AppState>) {
+    state.app.history_clear();
+}
+
+/// `scope` is "month", "year" or "all"; `choice` is "YYYY-MM" or "YYYY".
+#[tauri::command]
+pub fn listening_stats(state: TauriState<'_, AppState>, scope: String, choice: Option<String>) -> CommandResult<StatsView> {
+    Ok(state.app.listening_stats(&scope, choice.as_deref())?)
+}
+
+#[tauri::command]
+pub fn reset_listening_stats(state: TauriState<'_, AppState>) {
+    state.app.reset_listening_stats();
+}
+
+/// The window's UTC offset in minutes east, so hours follow the user's clock.
+#[tauri::command]
+pub fn set_utc_offset(state: TauriState<'_, AppState>, minutes: i32) -> CommandResult<()> {
+    Ok(state.app.set_utc_offset(minutes)?)
 }
