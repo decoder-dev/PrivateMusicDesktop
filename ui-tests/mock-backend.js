@@ -364,7 +364,7 @@
     },
   };
   window.__mock = {
-    calls, state, emit, emitState, emitQueue,
+    calls, state, config, emit, emitState, emitQueue,
     last: (command) => [...calls].reverse().find((c) => c.command === command),
     count: (command) => calls.filter((c) => c.command === command).length,
     sessionExpired: () => { state.session = { signed_in: false, profile: null, persistent: true }; emit("pm-event", { type: "session_expired" }); },

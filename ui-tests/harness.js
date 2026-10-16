@@ -9,7 +9,7 @@ const uiRoot = path.resolve(here, "../ui");
 const mockSource = fs.readFileSync(path.join(here, "mock-backend.js"), "utf8");
 const csp = JSON.parse(fs.readFileSync(path.resolve(here, "../src-tauri/tauri.conf.json"), "utf8")).app.security.csp;
 
-const types = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8" };
+const types = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".woff2": "font/woff2" };
 
 export function startServer() {
   const server = http.createServer((request, response) => {
@@ -27,7 +27,7 @@ export function startServer() {
   return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve({ server, url: `http://127.0.0.1:${server.address().port}/` })));
 }
 
-export async function openApp({ config = {}, viewport = { width: 1120, height: 740 }, colorScheme = "light", language = "ru-RU", reducedMotion = "no-preference" } = {}) {
+export async function openApp({ config = {}, viewport = { width: 1120, height: 740 }, colorScheme = "light", language = "ru-RU", reducedMotion = "reduce" } = {}) {
   const { server, url } = await startServer();
   const executablePath = process.env.PM_CHROMIUM ?? "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
   const browser = await chromium.launch({ executablePath: fs.existsSync(executablePath) ? executablePath : undefined, args: ["--no-sandbox"] });
