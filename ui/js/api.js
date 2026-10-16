@@ -37,6 +37,9 @@ export const api = {
   mixSettings: () => invoke("mix_settings"),
   catalogMixes: () => invoke("catalog_mixes"),
   streamMix: (mixId, options = null) => invoke("stream_mix", { mixId, options }),
+  newReleases: () => invoke("new_releases"),
+  /** Plays a queue that keeps refilling from `source`: { kind: "personal"|"catalog"|"similar", … }. */
+  playRadio: (source, tracks, index) => invoke("play_radio", { source, tracks, index }),
   recommendations: () => invoke("recommendations"),
   similar: (track) => invoke("similar", { track }),
   addToLibrary: (track) => invoke("add_to_library", { track }),

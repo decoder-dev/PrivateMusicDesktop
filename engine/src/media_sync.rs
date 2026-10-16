@@ -151,7 +151,7 @@ mod tests {
     fn state(status: Status, track: Option<Track>, position: f64) -> State {
         State {
             status, track, position, duration: 200.0, volume: 1.0, shuffle: false, repeat: Repeat::Off,
-            queue_index: Some(0), queue_len: 1,
+            queue_index: Some(0), queue_len: 1, radio: None,
         }
     }
 

@@ -14,6 +14,7 @@ pub mod lyrics;
 pub mod media_sync;
 pub mod offline;
 pub mod queue;
+pub mod radio;
 pub mod store;
 pub mod stream;
 pub mod unmask;

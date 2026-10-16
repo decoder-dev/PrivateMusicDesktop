@@ -765,7 +765,8 @@ test("for you: the mix and recommendations load on first look, play, and refresh
     await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .title")?.textContent === "Микс 1");
     assert.equal(await page.evaluate(() => window.__mock.count("mix")), 1, "switching back uses what was loaded");
     await page.click(".main > .view:not([hidden]) .view-header .btn.primary");
-    await page.waitForFunction(() => window.__mock.last("play_tracks")?.args.tracks.length === 100);
+    await page.waitForFunction(() => window.__mock.last("play_radio")?.args.tracks.length === 100);
+    assert.equal(await page.evaluate(() => window.__mock.count("play_tracks")), 0, "a mix plays as a radio, not as a fixed list");
     await page.click(".main > .view:not([hidden]) .view-header .set-inline .btn");
     await page.waitForFunction(() => window.__mock.count("mix") === 2);
     assert.deepEqual(app.problems, []);
@@ -783,6 +784,115 @@ test("for you: a failure says so in the list", async () => {
   } finally { await app.close(); }
 });
 
+test("for you: new releases show as album cards that open the album page", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    assert.equal(await page.evaluate(() => window.__mock.count("new_releases")), 0, "nothing is fetched before it is opened");
+    await page.click(".nav button[data-view=forYou]");
+    await page.waitForFunction(() => document.querySelectorAll(".new-releases .card").length === 6);
+    const names = await page.locator(".new-releases .card .name").allInnerTexts();
+    assert.deepEqual(names, ["Релиз 1", "Релиз 2", "Релиз 3", "Релиз 4", "Релиз 5", "Альбом"], "a release without a title still gets a card");
+    assert.match(await page.locator(".new-releases .card .count").first().innerText(), /2025 · Исполнитель 5/);
+    assert.equal(await page.locator(".new-releases h2").innerText(), "Новые релизы");
+    await page.locator(".new-releases .card").nth(1).click();
+    await page.waitForSelector(".album-view:not([hidden])");
+    await page.waitForFunction(() => document.querySelectorAll(".album-view .row").length === 12);
+    assert.equal(await page.locator(".album-view h1").innerText(), "Релиз 2");
+    const asked = await page.evaluate(() => window.__mock.last("album_tracks").args.album);
+    assert.deepEqual([asked.album_id, asked.owner_id], [31, -2000]);
+    await page.click(".album-view button[aria-label=Назад]");
+    await page.waitForFunction(() => document.querySelectorAll(".new-releases .card").length === 6);
+    assert.equal(await page.evaluate(() => window.__mock.count("new_releases")), 1, "coming back keeps the shelf");
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("for you: an empty or failing new-releases shelf says so, and a failure can be retried", async () => {
+  const empty = await openApp({ config: { signedIn: true, noReleases: true } });
+  try {
+    await empty.page.click(".nav button[data-view=forYou]");
+    await empty.page.waitForFunction(() => document.querySelector(".new-releases .status")?.textContent === "VK не вернул новых релизов.");
+    assert.equal(await empty.page.locator(".new-releases .card").count(), 0);
+  } finally { await empty.close(); }
+  const failing = await openApp({ config: { signedIn: true, releasesFail: true } });
+  try {
+    const { page } = failing;
+    await page.click(".nav button[data-view=forYou]");
+    await page.waitForSelector(".new-releases .status.error");
+    assert.match(await page.locator(".new-releases .status.error").innerText(), /Нет подключения/);
+    await page.click(".new-releases .status.error .btn");
+    await page.waitForFunction(() => window.__mock.count("new_releases") === 2);
+    await page.waitForSelector(".new-releases .status.error");
+    // The mixes below it are not affected.
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .title")?.textContent === "Микс 1");
+  } finally { await failing.close(); }
+});
+
+test("a mix plays as an endless radio: the source travels with the queue and the queue view says so", async () => {
+  const app = await openApp({ config: { signedIn: true, catalogMixes: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await page.click(".nav button[data-view=forYou]");
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .title")?.textContent === "Микс 1");
+    // The personal mix: the list on screen becomes the first part of the radio.
+    await page.locator(".main > .view:not([hidden]) .row").nth(2).dblclick();
+    await page.waitForFunction(() => window.__mock.last("play_radio"));
+    let call = await page.evaluate(() => window.__mock.last("play_radio").args);
+    assert.deepEqual(call.source, { kind: "personal", options: null });
+    assert.equal(call.index, 2);
+    assert.equal(call.tracks.length, 100);
+    await page.click(".nav button[data-view=queue]");
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .radio-note:not([hidden])"));
+    assert.match(await page.locator(".main > .view:not([hidden]) .radio-note").innerText(), /из вашего микса/);
+
+    // A catalogue mix tile: the mix id and its tuning are what the radio refills with.
+    await page.click(".nav button[data-view=forYou]");
+    await page.waitForSelector(".mix-tile");
+    await page.click(".mix-tile");
+    await page.waitForFunction(() => window.__mock.last("play_radio").args.source.kind === "catalog");
+    call = await page.evaluate(() => window.__mock.last("play_radio").args);
+    assert.deepEqual(call.source, { kind: "catalog", mix_id: "m7", options: "{\"mood\":[\"calm\"]}" });
+    assert.equal(call.tracks.length, 40);
+    await page.click(".nav button[data-view=queue]");
+    await page.waitForFunction(() => /из этого микса/.test(document.querySelector(".main > .view:not([hidden]) .radio-note")?.textContent ?? ""));
+
+    // Playing a plain list ends it: no note, and the engine was asked for a fixed queue.
+    await page.click(".nav button[data-view=library]");
+    await waitForLibrary(page);
+    await rows(page).nth(3).dblclick();
+    await page.waitForFunction(() => window.__mock.last("play_tracks"));
+    await page.click(".nav button[data-view=queue]");
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .radio-note")?.hidden === true);
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("for you: the recommendations tab plays a fixed list; a refused radio is reported", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await page.click(".nav button[data-view=forYou]");
+    await page.click(".main > .view:not([hidden]) .tabs button[data-source=recs]");
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .title")?.textContent === "Рек 1");
+    await page.click(".main > .view:not([hidden]) .view-header .btn.primary");
+    await page.waitForFunction(() => window.__mock.last("play_tracks")?.args.tracks.length === 30);
+    assert.equal(await page.evaluate(() => window.__mock.count("play_radio")), 0);
+  } finally { await app.close(); }
+  const refused = await openApp({ config: { signedIn: true, radioFails: true } });
+  try {
+    const { page } = refused;
+    await page.click(".nav button[data-view=forYou]");
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .title")?.textContent === "Микс 1");
+    await page.click(".main > .view:not([hidden]) .view-header .btn.primary");
+    await page.waitForSelector(".toast");
+    assert.match(await page.locator(".toast").innerText(), /Некорректный запрос|Invalid request/);
+  } finally { await refused.close(); }
+});
+
 test("similar tracks: the row button plays the track followed by VK's radio from it", async () => {
   const app = await openApp({ config: { signedIn: true } });
   try {
@@ -790,11 +900,14 @@ test("similar tracks: the row button plays the track followed by VK's radio from
     await waitForLibrary(page);
     await rows(page).nth(1).click({ button: "right" });
     await page.click(".menu [data-action=radio]");
-    await page.waitForFunction(() => window.__mock.last("play_tracks")?.args.tracks.length === 21);
-    const call = await page.evaluate(() => window.__mock.last("play_tracks").args);
+    await page.waitForFunction(() => window.__mock.last("play_radio")?.args.tracks.length === 21);
+    const call = await page.evaluate(() => window.__mock.last("play_radio").args);
     assert.equal(call.tracks[0].title, "Трек 2");
     assert.equal(call.tracks[1].title, "Похожий 1");
     assert.equal(call.index, 0);
+    // The radio is seeded with the track it started from and keeps refilling.
+    assert.equal(call.source.kind, "similar");
+    assert.equal(call.source.seed.title, "Трек 2");
   } finally { await app.close(); }
 });
 

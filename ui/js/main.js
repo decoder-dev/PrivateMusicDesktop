@@ -43,10 +43,12 @@ let lastQueueSave = 0;
 
 // ---------------------------------------------------------------- actions
 
-async function play(tracks, index, { shuffle = false } = {}) {
+async function play(tracks, index, { shuffle = false, radio = null } = {}) {
   try {
     if (shuffle) await api.setShuffle(true);
-    await api.playTracks(tracks, index);
+    // A queue from a mix keeps refilling from it while it plays.
+    if (radio) await api.playRadio(radio, tracks, index);
+    else await api.playTracks(tracks, index);
   } catch (error) {
     toast(errorText(error), { error: true });
   }
@@ -79,7 +81,7 @@ async function playSimilar(track) {
   try {
     const similar = await api.similar(track);
     if (!similar.length) return toast(t("radio.none"));
-    await api.playTracks([track, ...similar], 0);
+    await api.playRadio({ kind: "similar", seed: track }, [track, ...similar], 0);
   } catch (error) {
     toast(errorText(error), { error: true });
   }
