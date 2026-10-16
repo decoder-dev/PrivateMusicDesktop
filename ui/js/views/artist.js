@@ -22,6 +22,11 @@ export function createArtistView({ play, onTrackAction, toast, back }) {
   let current = null; // { id, name } as opened
   let loadedKey = null;
   let generation = 0;
+  let trackNextOffset = null;
+  let albumNextOffset = null;
+  let trackItems = [];
+  let loadingTracks = false;
+  let loadingAlbums = false;
 
   const photo = h("div", { class: "page-art round" });
   const name = h("h1");
@@ -42,6 +47,17 @@ export function createArtistView({ play, onTrackAction, toast, back }) {
   const scroller = h("div", { class: "page-scroll" }, tracks.element, albumsHeading, albumsStatus, grid);
   const element = h("section", { class: "view artist-view" }, head, scroller);
 
+  // Popular tracks have their own bounded scroller; album cards use the
+  // surrounding page scroller. Fetch another page only when the relevant
+  // viewport approaches its end.
+  tracks.list.element.addEventListener("scroll", () => {
+    const el = tracks.list.element;
+    if (el.scrollTop + el.clientHeight > el.scrollHeight - ROW_HEIGHT * 2) loadMoreTracks();
+  }, { passive: true });
+  scroller.addEventListener("scroll", () => {
+    if (scroller.scrollTop + scroller.clientHeight > scroller.scrollHeight - 400) loadMoreAlbums();
+  }, { passive: true });
+
   function fitTracks(count) {
     tracks.list.element.style.height = `${Math.min(Math.max(count, 0), VISIBLE_ROWS) * ROW_HEIGHT}px`;
   }
@@ -60,6 +76,8 @@ export function createArtistView({ play, onTrackAction, toast, back }) {
   }
 
   async function loadTracks(id, query, mine) {
+    trackNextOffset = null;
+    trackItems = [];
     tracks.setTracks([]);
     fitTracks(0);
     tracks.setStatus(t("loading"));
@@ -67,7 +85,9 @@ export function createArtistView({ play, onTrackAction, toast, back }) {
       const page = id ? await api.artistTracks(id, 0, TRACKS) : await api.search(query, 0, TRACKS);
       if (mine !== generation) return;
       tracks.clearStatus();
-      tracks.setTracks(page.items);
+      trackItems = page.items;
+      tracks.setTracks(trackItems);
+      trackNextOffset = page.next_offset;
       fitTracks(page.items.length);
     } catch (error) {
       if (mine !== generation) return;
@@ -77,7 +97,29 @@ export function createArtistView({ play, onTrackAction, toast, back }) {
     }
   }
 
+  async function loadMoreTracks() {
+    if (loadingTracks || trackNextOffset == null || !current) return;
+    loadingTracks = true;
+    const mine = generation;
+    try {
+      const page = current.id
+        ? await api.artistTracks(current.id, trackNextOffset, TRACKS)
+        : await api.search(current.name, trackNextOffset, TRACKS);
+      if (mine !== generation) return;
+      const known = new Set(trackItems.map((track) => `${track.owner_id}_${track.track_id}`));
+      trackItems = trackItems.concat(page.items.filter((track) => !known.has(`${track.owner_id}_${track.track_id}`)));
+      tracks.setTracks(trackItems);
+      fitTracks(trackItems.length);
+      trackNextOffset = page.next_offset;
+    } catch (error) {
+      if (mine === generation) toast(errorText(error), { error: true });
+    } finally {
+      loadingTracks = false;
+    }
+  }
+
   async function loadAlbums(id, query, mine) {
+    albumNextOffset = null;
     grid.replaceChildren();
     setAlbumsStatus(t("loading"));
     try {
@@ -89,9 +131,12 @@ export function createArtistView({ play, onTrackAction, toast, back }) {
         // user clicked if it gave none.
         if (result.artist) renderHeader({ ...result.artist, name: result.artist.name || current.name });
         albums = result.albums.items;
+        albumNextOffset = result.albums.next_offset;
       } else {
-        albums = (await api.searchAlbums(query, 0, ALBUMS)).items;
+        const page = await api.searchAlbums(query, 0, ALBUMS);
         if (mine !== generation) return;
+        albums = page.items;
+        albumNextOffset = page.next_offset;
       }
       grid.replaceChildren(...albums.map((album) => albumCard(album, openAlbum, { showArtist: !id })));
       setAlbumsStatus(albums.length ? "" : t("artist.noAlbums"));
@@ -99,6 +144,26 @@ export function createArtistView({ play, onTrackAction, toast, back }) {
       if (mine !== generation) return;
       loadedKey = null;
       setAlbumsStatus(errorText(error), { error: true });
+    }
+  }
+
+  async function loadMoreAlbums() {
+    if (loadingAlbums || albumNextOffset == null || !current) return;
+    loadingAlbums = true;
+    const mine = generation;
+    try {
+      const result = current.id
+        ? await api.artistAlbums(current.id, albumNextOffset, ALBUMS)
+        : await api.searchAlbums(current.name, albumNextOffset, ALBUMS);
+      if (mine !== generation) return;
+      const albums = current.id ? result.albums.items : result.items;
+      grid.append(...albums.map((album) => albumCard(album, openAlbum)));
+      albumNextOffset = current.id ? result.albums.next_offset : result.next_offset;
+      setAlbumsStatus("");
+    } catch (error) {
+      if (mine === generation) setAlbumsStatus(errorText(error), { error: true });
+    } finally {
+      loadingAlbums = false;
     }
   }
 
@@ -122,6 +187,7 @@ export function createArtistView({ play, onTrackAction, toast, back }) {
         if (mine !== generation) return;
         if (found) {
           id = found.id;
+          current = { ...current, id };
           renderHeader(found);
         } else {
           note.textContent = t("artist.notFound");
@@ -144,8 +210,13 @@ export function createArtistView({ play, onTrackAction, toast, back }) {
     open,
     reset() {
       generation++;
+      trackNextOffset = null;
+      albumNextOffset = null;
+      loadingTracks = false;
+      loadingAlbums = false;
       loadedKey = null;
       current = null;
+      trackItems = [];
       tracks.setTracks([]);
       tracks.clearStatus();
       grid.replaceChildren();

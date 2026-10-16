@@ -3,7 +3,7 @@
 use pm_engine::app::SessionState;
 use pm_engine::controller::State;
 use pm_engine::queue::Repeat;
-use pm_engine::vk::{Album, AlbumTracks, Artist, ArtistAlbums, Page, Playlist, Profile, Track};
+use pm_engine::vk::{Album, AlbumTracks, Artist, ArtistAlbums, MusicMix, Page, Playlist, Profile, Track};
 use pm_engine::Error;
 use serde::Serialize;
 use tauri::{AppHandle, State as TauriState};
@@ -266,9 +266,27 @@ pub fn set_output_device(state: TauriState<'_, AppState>, name: Option<String>) 
 }
 
 #[tauri::command]
-pub async fn mix(state: TauriState<'_, AppState>) -> CommandResult<Vec<Track>> {
+pub async fn mix(state: TauriState<'_, AppState>, options: Option<String>) -> CommandResult<Vec<Track>> {
     let app = state.app.clone();
-    blocking(move || app.mix()).await
+    blocking(move || app.mix_with_options(options.as_deref())).await
+}
+
+#[tauri::command]
+pub async fn mix_settings(state: TauriState<'_, AppState>) -> CommandResult<serde_json::Value> {
+    let app = state.app.clone();
+    blocking(move || app.mix_settings()).await
+}
+
+#[tauri::command]
+pub async fn catalog_mixes(state: TauriState<'_, AppState>) -> CommandResult<Vec<MusicMix>> {
+    let app = state.app.clone();
+    blocking(move || app.catalog_mixes()).await
+}
+
+#[tauri::command]
+pub async fn stream_mix(state: TauriState<'_, AppState>, mix_id: String, options: Option<String>) -> CommandResult<Vec<Track>> {
+    let app = state.app.clone();
+    blocking(move || app.stream_mix(&mix_id, options.as_deref())).await
 }
 
 #[tauri::command]

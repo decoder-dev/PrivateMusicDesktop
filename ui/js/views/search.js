@@ -8,6 +8,8 @@ import { openAlbum, openArtist } from "../navigation.js";
 const PAGE = 50;
 const SHELF = 30;
 const TABS = ["tracks", "artists", "albums"];
+const HISTORY_KEY = "search.recent.queries.v1";
+const HISTORY_LIMIT = 10;
 
 export function createSearchView({ play, onTrackAction, toast }) {
   let sequence = 0;
@@ -17,6 +19,7 @@ export function createSearchView({ play, onTrackAction, toast }) {
   let loadingMore = false;
   let debounce = null;
   let tab = "tracks";
+  let recent = readRecent();
   // Artists and albums are asked for when their tab is first shown for a
   // query: query -> list.
   const shelves = { artists: new Map(), albums: new Map() };
@@ -46,6 +49,10 @@ export function createSearchView({ play, onTrackAction, toast }) {
 
   const tabs = h("div", { class: "tabs", role: "tablist", "aria-label": t("search.title") },
     TABS.map((id) => h("button", { type: "button", role: "tab", "data-tab": id, onclick: () => select(id), text: t(`search.tab.${id}`) })));
+  const recentHeading = h("div", { class: "search-recents-head" },
+    h("h2", { class: "shelf-title", text: t("search.recent") }),
+    h("button", { class: "btn", type: "button", text: t("search.clearRecent"), onclick: clearRecent }));
+  const recentList = h("div", { class: "search-recents" });
   // The track list, its status and empty note move into a pane of their own
   // so the other tabs can take their place.
   const tracksPane = h("div", { class: "tab-pane" }, ...[...screen.element.children].filter((child) => child !== header));
@@ -57,7 +64,8 @@ export function createSearchView({ play, onTrackAction, toast }) {
     shelfParts[id] = { status, grid };
     panes[id] = h("div", { class: "tab-pane", hidden: true }, status, grid);
   }
-  screen.element.append(h("div", { class: "tab-bar" }, tabs), tracksPane, panes.artists, panes.albums);
+  screen.element.append(h("div", { class: "tab-bar" }, tabs), recentHeading, recentList, tracksPane, panes.artists, panes.albums);
+  renderRecent();
 
   screen.list.element.addEventListener("scroll", () => {
     const el = screen.list.element;
@@ -69,6 +77,44 @@ export function createSearchView({ play, onTrackAction, toast }) {
     for (const [id, pane] of Object.entries(panes)) pane.hidden = id !== tab;
     // Play and Shuffle act on the tracks.
     for (const button of header.querySelectorAll(".btn")) button.hidden = tab !== "tracks";
+  }
+
+  function renderRecent() {
+    const visible = !query && recent.length > 0;
+    recentHeading.hidden = !visible;
+    recentList.hidden = !visible;
+    recentList.replaceChildren(...recent.map((item) => {
+      const use = h("button", { class: "search-recent-query", type: "button", text: item, onclick: () => {
+        input.value = item;
+        run(item);
+      } });
+      const remove = h("button", { class: "search-recent-remove", type: "button", text: "×", title: t("search.removeRecent", { query: item }), "aria-label": t("search.removeRecent", { query: item }), onclick: () => removeRecent(item) });
+      return h("div", { class: "search-recent" }, use, remove);
+    }));
+  }
+
+  function saveRecent(value) {
+    const normalized = value.trim();
+    if (!normalized) return;
+    recent = [normalized, ...recent.filter((item) => item.toLocaleLowerCase() !== normalized.toLocaleLowerCase())].slice(0, HISTORY_LIMIT);
+    persistRecent();
+    renderRecent();
+  }
+
+  function removeRecent(value) {
+    recent = recent.filter((item) => item !== value);
+    persistRecent();
+    renderRecent();
+  }
+
+  function clearRecent() {
+    recent = [];
+    try { localStorage.removeItem(HISTORY_KEY); } catch { /* storage can be disabled */ }
+    renderRecent();
+  }
+
+  function persistRecent() {
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(recent)); } catch { /* storage can be disabled */ }
   }
 
   function select(id) {
@@ -120,6 +166,7 @@ export function createSearchView({ play, onTrackAction, toast }) {
     const mine = ++sequence;
     query = text;
     nextOffset = null;
+    renderRecent();
     if (tab !== "tracks") loadShelf(tab);
     if (!text) {
       results = [];
@@ -132,6 +179,7 @@ export function createSearchView({ play, onTrackAction, toast }) {
       const page = await api.search(text, 0, PAGE);
       if (mine !== sequence) return; // a newer query replaced this one
       results = page.items;
+      saveRecent(text);
       nextOffset = page.next_offset;
       screen.clearStatus();
       screen.setTracks(results);
@@ -170,6 +218,7 @@ export function createSearchView({ play, onTrackAction, toast }) {
       results = [];
       nextOffset = null;
       query = "";
+      renderRecent();
       input.value = "";
       shelves.artists.clear();
       shelves.albums.clear();
@@ -178,4 +227,14 @@ export function createSearchView({ play, onTrackAction, toast }) {
       screen.clearStatus();
     },
   };
+}
+
+function readRecent() {
+  try {
+    const value = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "[]");
+    if (!Array.isArray(value)) return [];
+    return [...new Set(value.filter((item) => typeof item === "string").map((item) => item.trim()).filter(Boolean))].slice(0, HISTORY_LIMIT);
+  } catch {
+    return [];
+  }
 }

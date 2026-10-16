@@ -33,6 +33,12 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
     MODES.map((mode) => h("option", { value: mode, text: t(`np.mode.${mode}`) })));
   const lyricsBox = h("input", { type: "checkbox", id: "set-lyrics",
     onchange: () => onSettingsChange({ lyrics: lyricsBox.checked }) });
+  const themeSelect = h("select", { class: "field", "aria-label": t("set.theme"),
+    onchange: () => onSettingsChange({ theme: themeSelect.value }) },
+    ["system", "light", "dark"].map((value) => h("option", { value, text: t(`set.theme.${value}`) })));
+  const accentSelect = h("select", { class: "field", "aria-label": t("set.accent"),
+    onchange: () => onSettingsChange({ accent: accentSelect.value }) },
+    ["blue", "indigo", "purple", "pink", "red", "orange", "yellow", "green", "teal"].map((value) => h("option", { value, text: t(`set.accent.${value}`) })));
 
   const equalizer = createEqualizerPanel({ settings, onSettingsChange });
 
@@ -51,6 +57,7 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
     h("div", { class: "set-body" },
       section(t("set.sound"),
         row(t("set.output"), h("div", { class: "set-inline" }, deviceSelect, refreshButton), t("set.output.note"))),
+      section(t("set.appearance"), row(t("set.theme"), themeSelect), row(t("set.accent"), accentSelect)),
       section(t("eq.title"), equalizer.element),
       section(t("set.window"),
         h("div", { class: "set-row" },
@@ -101,6 +108,8 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
     trayBox.checked = settings.closeToTray;
     visualizerSelect.value = settings.visualizer ?? "bars";
     lyricsBox.checked = settings.lyrics !== false;
+    themeSelect.value = settings.theme ?? "system";
+    accentSelect.value = settings.accent ?? "blue";
     const profile = store.session.profile;
     accountName.textContent = profile ? `${profile.first_name} ${profile.last_name}`.trim() : "";
     persistNote.hidden = store.session.persistent !== false;

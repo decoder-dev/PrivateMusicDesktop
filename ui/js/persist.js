@@ -40,6 +40,8 @@ export function loadSettings() {
     eq: readEq(saved.eq),
     outputDevice: typeof saved.outputDevice === "string" && saved.outputDevice ? saved.outputDevice : null,
     visualizer: ["bars", "mirror", "wave", "radial", "off"].includes(saved.visualizer) ? saved.visualizer : null,
+    theme: ["system", "light", "dark"].includes(saved.theme) ? saved.theme : "system",
+    accent: ["blue", "indigo", "purple", "pink", "red", "orange", "yellow", "green", "teal"].includes(saved.accent) ? saved.accent : "blue",
   };
 }
 

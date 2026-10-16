@@ -4,16 +4,17 @@
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
+use serde_json::Value;
 
 use crate::audio::Sink;
 use crate::controller::{Controller, UiEvent};
-use crate::lyrics::{from_plain, LrcLib, Lyrics};
+use crate::lyrics::{from_plain, GeniusLyrics, LrcLib, Lyrics};
 use crate::offline::{OfflineStore, OfflineTrack};
 use crate::stream::fetch::fetch_to_end;
 use crate::store::SecretStore;
 use crate::stream::FetchConfig;
 use crate::vk::auth::{exchange_at, now_unix};
-use crate::vk::{model, Album, AlbumTracks, Artist, ArtistAlbums, Page, Playlist, Profile, Session, Track, VkClient};
+use crate::vk::{model, Album, AlbumTracks, Artist, ArtistAlbums, MusicMix, Page, Playlist, Profile, Session, Track, VkClient};
 use crate::{Error, Result};
 
 const TOKEN_URL: &str = "https://login.vk.ru/?act=web_token";
@@ -34,12 +35,30 @@ fn checked_artist_id(id: &str) -> Result<&str> {
     model::valid_artist_id(id).then_some(id).ok_or(Error::InvalidRequest)
 }
 
+fn checked_mix_id(id: &str) -> Result<&str> {
+    let id = id.trim();
+    (!id.is_empty() && id.len() <= 256 && !id.chars().any(char::is_control))
+        .then_some(id).ok_or(Error::InvalidRequest)
+}
+
 fn checked_query(query: &str) -> Result<Option<&str>> {
     if query.len() > MAX_QUERY {
         return Err(Error::InvalidRequest);
     }
     let query = query.trim();
     Ok((!query.is_empty()).then_some(query))
+}
+
+fn checked_mix_options(options: Option<&str>) -> Result<Option<String>> {
+    let Some(options) = options else { return Ok(None) };
+    if options.len() > 8_192 {
+        return Err(Error::InvalidRequest);
+    }
+    let value: Value = serde_json::from_str(options).map_err(|_| Error::InvalidRequest)?;
+    if !value.is_object() {
+        return Err(Error::InvalidRequest);
+    }
+    Ok(Some(value.to_string()))
 }
 
 /// An album handed over by the window: a real locator, and an access key or
@@ -96,6 +115,7 @@ pub struct Core {
     generation: Mutex<u64>,
     token_url: String,
     lrclib: Option<LrcLib>,
+    genius: Option<GeniusLyrics>,
     offline: Option<Arc<OfflineStore>>,
 }
 
@@ -151,6 +171,7 @@ impl App {
             generation: Mutex::new(0),
             token_url: options.token_url,
             lrclib: LrcLib::with_base(&options.lyrics_base).ok(),
+            genius: GeniusLyrics::new().ok(),
             offline: options.offline_dir.and_then(|dir| {
                 OfflineStore::open(dir).map_err(|e| log::warn!("downloads unavailable: {e}")).ok().map(Arc::new)
             }),
@@ -323,11 +344,37 @@ impl Core {
 
     /// The personal mix: two pages, so a session lasts a while.
     pub fn mix(&self) -> Result<Vec<Track>> {
+        self.mix_with_options(None)
+    }
+
+    pub fn mix_with_options(&self, options: Option<&str>) -> Result<Vec<Track>> {
+        let options = checked_mix_options(options)?;
         self.api(|client, session| {
-            let mut tracks = client.mix(session, 0, 50)?;
-            if let Ok(more) = client.mix(session, 50, 50) {
+            let mut tracks = client.mix_with_options(session, 0, 50, options.as_deref())?;
+            if let Ok(more) = client.mix_with_options(session, 50, 50, options.as_deref()) {
                 let known: std::collections::HashSet<String> = tracks.iter().map(Track::id).collect();
                 tracks.extend(more.into_iter().filter(|t| !known.contains(&t.id())));
+            }
+            Ok(tracks)
+        })
+    }
+
+    pub fn mix_settings(&self) -> Result<Value> {
+        self.api(|client, session| client.mix_settings(session))
+    }
+
+    pub fn catalog_mixes(&self) -> Result<Vec<MusicMix>> {
+        self.api(|client, session| client.catalog_mixes(session))
+    }
+
+    pub fn stream_mix(&self, mix_id: &str, options: Option<&str>) -> Result<Vec<Track>> {
+        let mix_id = checked_mix_id(mix_id)?.to_string();
+        let options = checked_mix_options(options)?;
+        self.api(|client, session| {
+            let mut tracks = client.stream_mix(session, &mix_id, 0, 50, options.as_deref())?;
+            if let Ok(more) = client.stream_mix(session, &mix_id, 50, 50, options.as_deref()) {
+                let mut seen: std::collections::HashSet<String> = tracks.iter().map(Track::id).collect();
+                tracks.extend(more.into_iter().filter(|track| seen.insert(track.id())));
             }
             Ok(tracks)
         })
@@ -370,8 +417,8 @@ impl Core {
         self.api(|client, session| client.delete_track(session, track))
     }
 
-    /// Lyrics for a track: timed from LRCLIB when its length agrees, else VK's
-    /// own text, else whatever plain text LRCLIB had. `Ok(None)`: none exists.
+    /// Lyrics for a track: timed LRCLIB first, then the exact VK lyric id,
+    /// Genius when its search result matches, then plain LRCLIB text.
     pub fn lyrics(&self, track: &Track) -> Result<Option<Lyrics>> {
         let mut failure = None;
         let lrc = match self.lrclib.as_ref().map(|l| l.lookup(track)) {
@@ -396,6 +443,16 @@ impl Core {
                 Ok(None) => {}
                 Err(Error::Unauthorized) => return Err(Error::Unauthorized),
                 Err(error) => failure = failure.or(Some(error)),
+            }
+        }
+        if let Some(genius) = &self.genius {
+            match genius.lookup(track) {
+                Ok(Some(found)) => return Ok(Some(found)),
+                Ok(None) => {}
+                Err(error) => {
+                    log::debug!("genius lyrics: {error}");
+                    failure = failure.or(Some(error));
+                }
             }
         }
         match (lrc, failure) {

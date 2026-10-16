@@ -5,7 +5,7 @@ use reqwest::header::{ACCEPT, CONTENT_TYPE, RETRY_AFTER, USER_AGENT};
 use serde_json::Value;
 use url::Url;
 
-use super::model::{self, Album, Artist, Page, Playlist, Profile, Track};
+use super::model::{self, Album, Artist, MusicMix, Page, Playlist, Profile, Track};
 use crate::{Error, Result};
 
 pub const DEFAULT_BASE_URL: &str = "https://api.vk.ru";
@@ -248,17 +248,55 @@ impl VkClient {
 
     /// One page of the user's personal VK mix (an endless stream).
     pub fn mix(&self, session: &Session, offset: u32, count: u32) -> Result<Vec<Track>> {
-        let user = session.user_id;
-        let value = self.call(
-            session,
-            "audio.getStreamMixAudios",
-            &[("mix_id", "common".into()), ("count", count.to_string()), ("offset", offset.to_string())],
-        )?;
-        // The response shape varies (a list, or tracks nested in blocks), so
-        // every track-shaped object is collected wherever it sits.
+        self.mix_with_options(session, offset, count, None)
+    }
+
+    /// One page of the personal stream with VK tuning options applied.
+    pub fn mix_with_options(&self, session: &Session, offset: u32, count: u32, options: Option<&str>) -> Result<Vec<Track>> {
+        self.stream_mix(session, "common", offset, count, options)
+    }
+
+    /// One page of a catalogue mix. IDs are validated by the app boundary.
+    pub fn stream_mix(&self, session: &Session, mix_id: &str, offset: u32, count: u32, options: Option<&str>) -> Result<Vec<Track>> {
+        let mut params = vec![
+            ("mix_id", mix_id.to_string()),
+            ("count", count.to_string()),
+            ("offset", offset.to_string()),
+        ];
+        if let Some(options) = options {
+            params.push(("mix_options", options.to_string()));
+        }
+        let value = self.call(session, "audio.getStreamMixAudios", &params)?;
         let mut found = Vec::new();
-        collect_tracks(&value, user, &mut found);
+        collect_tracks(&value, session.user_id, &mut found);
         Ok(dedupe(found))
+    }
+
+    /// VK's mood, activity and genre choices for the personal stream mix.
+    pub fn mix_settings(&self, session: &Session) -> Result<Value> {
+        self.call(session, "audio.getStreamMixSettings", &[("mix_id", "common".into())])
+    }
+
+    /// VK's home catalogue mixes, including mixes inside real catalogue
+    /// sections. Section hydration is bounded so a thin root response still
+    /// gives the desktop the mood and genre shelves shown by the iOS client.
+    pub fn catalog_mixes(&self, session: &Session) -> Result<Vec<MusicMix>> {
+        let root = self.call(session, "catalog.getAudio", &[("need_blocks", "1".into())])?;
+        let mut mixes = Vec::new();
+        collect_mixes(&root, None, &mut mixes);
+        let mut sections = Vec::new();
+        collect_mix_sections(&root, &mut sections);
+        let mut seen_sections = std::collections::HashSet::new();
+        sections.retain(|(id, _)| seen_sections.insert(id.clone()));
+        for (id, title) in sections.into_iter().take(8) {
+            if id.len() > 512 || id.chars().any(char::is_control) { continue; }
+            if let Ok(section) = self.call(session, "catalog.getSection", &[("section_id", id), ("need_blocks", "1".into())]) {
+                collect_mixes(&section, Some(&title), &mut mixes);
+            }
+        }
+        let mut seen = std::collections::HashSet::new();
+        mixes.retain(|mix| seen.insert(format!("{}\n{}", mix.id, mix.options.as_deref().unwrap_or(""))));
+        Ok(mixes)
     }
 
     /// VK's own plain text for a track's `lyrics_id`.
@@ -1075,6 +1113,81 @@ fn collect_tracks(value: &Value, user: Option<i64>, out: &mut Vec<Track>) {
         }
         _ => {}
     }
+}
+
+fn scalar_text(value: Option<&Value>) -> Option<String> {
+    value.and_then(|value| match value {
+        Value::String(text) if !text.trim().is_empty() => Some(text.trim().to_string()),
+        Value::Number(number) => Some(number.to_string()),
+        _ => None,
+    })
+}
+
+fn collect_mixes(value: &Value, section: Option<&str>, out: &mut Vec<MusicMix>) {
+    match value {
+        Value::Array(items) => items.iter().for_each(|item| collect_mixes(item, section, out)),
+        Value::Object(object) => {
+            let kind = scalar_text(object.get("data_type")).or_else(|| scalar_text(object.get("type"))).unwrap_or_default();
+            let mix_id = scalar_text(object.get("mix_id"));
+            let is_mix = mix_id.is_some() || kind.to_ascii_lowercase().contains("stream_mix");
+            if is_mix {
+                let id = mix_id.or_else(|| scalar_text(object.get("id")));
+                let title = scalar_text(object.get("title")).or_else(|| scalar_text(object.get("name")));
+                if let (Some(id), Some(title)) = (id, title) {
+                    let artwork_url = ["photo_1200", "photo_600", "photo_300", "photo_270", "cover_url", "thumb_url", "image", "cover", "icon", "background_image_url", "background_url"]
+                        .iter()
+                        .find_map(|key| {
+                            let value = object.get(*key);
+                            let raw = scalar_text(value).or_else(|| {
+                                value.and_then(|nested| ["photo_600", "photo_300", "photo_270", "url"].iter().find_map(|k| scalar_text(nested.get(*k))))
+                            });
+                            raw.and_then(|url| crate::unmask::secure_remote_url(&url))
+                        });
+                    let options = object.get("mix_options").or_else(|| object.get("options")).and_then(|value| match value {
+                        Value::String(raw) if !raw.is_empty() && raw.len() <= 8_192 => Some(raw.clone()),
+                        Value::Object(_) if value.to_string().len() <= 8_192 => Some(value.to_string()),
+                        _ => None,
+                    });
+                    out.push(MusicMix {
+                        id,
+                        title,
+                        subtitle: scalar_text(object.get("subtitle")).or_else(|| scalar_text(object.get("description"))).or_else(|| scalar_text(object.get("caption"))).unwrap_or_default(),
+                        artwork_url,
+                        section_title: section.map(str::to_string),
+                        options,
+                    });
+                }
+            }
+            object.values().for_each(|item| collect_mixes(item, section, out));
+        }
+        _ => {}
+    }
+}
+
+fn collect_mix_sections(value: &Value, out: &mut Vec<(String, String)>) {
+    fn visit(value: &Value, out: &mut Vec<(String, String)>, depth: u8) {
+        if depth > 12 { return; }
+        match value {
+            Value::Array(items) => items.iter().for_each(|item| visit(item, out, depth + 1)),
+            Value::Object(object) => {
+                let id = scalar_text(object.get("section_id")).or_else(|| scalar_text(object.get("id")));
+                let title = scalar_text(object.get("title")).or_else(|| scalar_text(object.get("name"))).unwrap_or_default();
+                let kind = scalar_text(object.get("type")).or_else(|| scalar_text(object.get("data_type"))).unwrap_or_default();
+                let has_section_shape = kind.to_ascii_lowercase().contains("section") || object.contains_key("blocks") || object.contains_key("next_from") || scalar_text(object.get("url")).is_some_and(|url| url.contains("audios"));
+                let search = format!("{} {}", title, id.as_deref().unwrap_or("")).to_ascii_lowercase();
+                let looks_like_mix = ["mix", "микс", "stream", "radio", "подбор", "жанр", "genre", "mood", "настроен", "vibe", "поток", "активност"]
+                    .iter().any(|marker| search.contains(marker));
+                if has_section_shape && looks_like_mix {
+                    if let Some(id) = id.filter(|id| !id.trim().is_empty() && id.len() <= 512 && !id.chars().all(|c| c.is_ascii_digit() || c == '-')) {
+                        out.push((id, title));
+                    }
+                }
+                object.values().for_each(|item| visit(item, out, depth + 1));
+            }
+            _ => {}
+        }
+    }
+    visit(value, out, 0);
 }
 
 fn tracks_page(value: &Value, offset: u32, user: Option<i64>) -> Page<Track> {

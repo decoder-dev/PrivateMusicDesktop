@@ -19,6 +19,7 @@ pub const LRCLIB_BASE: &str = "https://lrclib.net/";
 /// How far the recording's length may differ from the lyrics' timeline.
 const SYNC_TOLERANCE_SECONDS: f64 = 3.0;
 const MAX_BODY: u64 = 2 * 1024 * 1024;
+const GENIUS_BODY_LIMIT: u64 = 2 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Line {
@@ -195,6 +196,197 @@ pub fn from_plain(source: &str, text: &str) -> Option<Lyrics> {
 pub struct LrcLib {
     http: Client,
     base: Url,
+}
+
+/// Public Genius fallback. Search results are accepted only when both the
+/// title and lead artist match the requested track; URLs are restricted to
+/// `genius.com` and redirects are disabled.
+pub struct GeniusLyrics {
+    http: Client,
+}
+
+impl GeniusLyrics {
+    pub fn new() -> Result<Self> {
+        let http = Client::builder()
+            .connect_timeout(Duration::from_secs(6))
+            .timeout(Duration::from_secs(12))
+            .redirect(reqwest::redirect::Policy::none())
+            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128 Safari/537.36")
+            .build()?;
+        Ok(Self { http })
+    }
+
+    pub fn lookup(&self, track: &Track) -> Result<Option<Lyrics>> {
+        let query = format!("{} {}", track.artist, track.title);
+        let mut search = Url::parse("https://genius.com/api/search/song").map_err(|_| Error::InvalidRequest)?;
+        search.query_pairs_mut().append_pair("per_page", "8").append_pair("q", &query);
+        let value = self.get_json(search)?;
+        let candidates = genius_hits(&value);
+        let candidate = candidates.into_iter().find(|(title, artist, url)| {
+            same_song(&track.title, title) && same_artist(&track.artist, artist) && genius_url(url)
+        });
+        let Some((_, _, url)) = candidate else { return Ok(None) };
+        let page = self.get_text(&url)?;
+        let text = extract_genius_lyrics(&page);
+        Ok(text.filter(|text| !text.trim().is_empty()).map(|text| Lyrics {
+            source: "Genius".into(),
+            text,
+            lines: Vec::new(),
+        }))
+    }
+
+    fn get_json(&self, url: Url) -> Result<serde_json::Value> {
+        let response = self.http.get(url).header("Accept", "application/json").header("Referer", "https://genius.com/").send()?;
+        if !response.status().is_success() { return Err(Error::Http(response.status().as_u16())); }
+        let body = read_capped(response, GENIUS_BODY_LIMIT)?;
+        serde_json::from_slice(&body).map_err(|_| Error::Format("Genius search response".into()))
+    }
+
+    fn get_text(&self, url: &str) -> Result<String> {
+        let parsed = Url::parse(url).map_err(|_| Error::InvalidRequest)?;
+        if !genius_url(url) { return Err(Error::InvalidRequest); }
+        let response = self.http.get(parsed).header("Accept", "text/html").header("Referer", "https://genius.com/").send()?;
+        if !response.status().is_success() { return Err(Error::Http(response.status().as_u16())); }
+        String::from_utf8(read_capped(response, GENIUS_BODY_LIMIT)?)
+            .map_err(|_| Error::Format("Genius page encoding".into()))
+    }
+}
+
+fn read_capped(response: reqwest::blocking::Response, limit: u64) -> Result<Vec<u8>> {
+    let mut body = Vec::new();
+    std::io::Read::read_to_end(&mut std::io::Read::take(response, limit + 1), &mut body)
+        .map_err(|error| Error::Transport(error.to_string()))?;
+    if body.len() as u64 > limit { return Err(Error::Format("Genius response is too large".into())); }
+    Ok(body)
+}
+
+fn genius_url(raw: &str) -> bool {
+    Url::parse(raw).is_ok_and(|url| url.scheme() == "https" && matches!(url.host_str(), Some("genius.com" | "www.genius.com")))
+}
+
+fn genius_hits(value: &serde_json::Value) -> Vec<(String, String, String)> {
+    fn collect(value: &serde_json::Value, out: &mut Vec<(String, String, String)>, depth: u8) {
+        if depth > 8 { return; }
+        match value {
+            serde_json::Value::Object(object) => {
+                if let Some(result) = object.get("result") {
+                    let kind = object.get("type").and_then(serde_json::Value::as_str).unwrap_or("song");
+                    if ["song", "lyric", "top_hit"].contains(&kind) {
+                        if let (Some(title), Some(artist), Some(url)) = (
+                            result.get("title").and_then(serde_json::Value::as_str),
+                            result.get("primary_artist").and_then(|item| item.get("name")).and_then(serde_json::Value::as_str),
+                            result.get("url").and_then(serde_json::Value::as_str),
+                        ) {
+                            out.push((title.to_string(), artist.to_string(), url.to_string()));
+                        }
+                    }
+                }
+                for item in object.values() { collect(item, out, depth + 1); }
+            }
+            serde_json::Value::Array(items) => for item in items { collect(item, out, depth + 1); },
+            _ => {}
+        }
+    }
+    let mut found = Vec::new();
+    collect(value, &mut found, 0);
+    found
+}
+
+fn normalize_lyric_key(value: &str) -> String {
+    let mut result = String::new();
+    for character in value.chars().flat_map(char::to_lowercase) {
+        let latin = match character {
+            'а' => "a", 'б' => "b", 'в' => "v", 'г' => "g", 'д' => "d", 'е' | 'ё' => "e",
+            'ж' => "zh", 'з' => "z", 'и' | 'і' => "i", 'й' => "y", 'к' => "k", 'л' => "l",
+            'м' => "m", 'н' => "n", 'о' => "o", 'п' => "p", 'р' => "r", 'с' => "s",
+            'т' => "t", 'у' => "u", 'ф' => "f", 'х' => "h", 'ц' => "ts", 'ч' => "ch",
+            'ш' => "sh", 'щ' => "sch", 'ы' => "y", 'э' | 'є' => "e", 'ю' => "yu", 'я' => "ya",
+            'ґ' => "g", 'ї' => "i", 'ъ' | 'ь' => "", value if value.is_alphanumeric() => {
+                result.push(value);
+                continue;
+            }
+            _ => "",
+        };
+        result.push_str(latin);
+    }
+    result
+}
+
+fn same_song(wanted: &str, found: &str) -> bool {
+    let wanted = normalize_lyric_key(wanted);
+    let found = normalize_lyric_key(found);
+    !wanted.is_empty() && (wanted == found || (wanted.len() >= 6 && found.len() >= 6 && (wanted.contains(&found) || found.contains(&wanted))))
+}
+
+fn same_artist(wanted: &str, found: &str) -> bool {
+    let wanted = normalize_lyric_key(wanted);
+    let found = normalize_lyric_key(found);
+    !wanted.is_empty() && !found.is_empty() && (wanted == found || (wanted.len() >= 4 && found.len() >= 4 && (wanted.contains(&found) || found.contains(&wanted))))
+}
+
+fn extract_genius_lyrics(html: &str) -> Option<String> {
+    let lower = html.to_ascii_lowercase();
+    let mut cursor = 0;
+    let mut fragments = Vec::new();
+    while let Some(relative) = lower[cursor..].find("<div") {
+        let start = cursor + relative;
+        let open_end = lower[start..].find('>')? + start;
+        let opening = &lower[start..=open_end];
+        if !opening.contains("data-lyrics-container") && !opening.contains("lyrics__container") {
+            cursor = open_end + 1;
+            continue;
+        }
+        let mut depth = 1usize;
+        let mut at = open_end + 1;
+        let content_start = at;
+        while depth > 0 {
+            let next_open = lower[at..].find("<div").map(|index| at + index);
+            let next_close = lower[at..].find("</div").map(|index| at + index);
+            match (next_open, next_close) {
+                (_, Some(close)) if next_open.is_none_or(|open| close < open) => {
+                    depth -= 1;
+                    if depth == 0 {
+                        fragments.push(strip_html(&html[content_start..close]));
+                        at = close + 6;
+                        break;
+                    }
+                    at = close + 6;
+                }
+                (Some(open), _) => {
+                    depth += 1;
+                    at = lower[open..].find('>').map(|end| open + end + 1)?;
+                }
+                _ => break,
+            }
+        }
+        cursor = at;
+    }
+    let joined = fragments.into_iter().filter(|item| !item.trim().is_empty()).collect::<Vec<_>>().join("\n\n");
+    (!joined.is_empty()).then_some(joined)
+}
+
+fn strip_html(fragment: &str) -> String {
+    let mut out = String::new();
+    let mut in_tag = false;
+    let mut tag = String::new();
+    for c in fragment.chars() {
+        if c == '<' {
+            in_tag = true;
+            tag.clear();
+        } else if c == '>' && in_tag {
+            let normalized = tag.trim_start().to_ascii_lowercase();
+            if normalized.starts_with("br") || normalized.starts_with("/p") { out.push('\n'); }
+            in_tag = false;
+        } else if in_tag {
+            tag.push(c);
+        } else {
+            out.push(c);
+        }
+    }
+    for (entity, decoded) in [("&amp;", "&"), ("&quot;", "\""), ("&#39;", "'"), ("&apos;", "'"), ("&lt;", "<"), ("&gt;", ">"), ("&nbsp;", " ")] {
+        out = out.replace(entity, decoded);
+    }
+    out.lines().map(str::trim).filter(|line| !line.is_empty()).collect::<Vec<_>>().join("\n")
 }
 
 impl LrcLib {
