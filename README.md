@@ -64,6 +64,14 @@ right-click the app and choose *Open*.
 Windows installs per user (no administrator rights), in Russian or English
 depending on the system language, with a Start menu entry and an uninstaller.
 
+**Updating** is the same as installing: run the new installer (or `install.ps1`)
+over the old version. It replaces the program in place; the saved sign-in (it
+lives in Windows Credential Manager, not in the install folder) and the app's
+data stay, so you are still signed in. CI proves this on Windows for every build
+and every release: it installs the last release, plants a sign-in and data
+files, installs the new installer over it and fails if anything is gone
+(`scripts/upgrade-check.ps1`).
+
 ### Making a release
 
 1. Raise `version` in `Cargo.toml` and `src-tauri/tauri.conf.json` (they must match).
