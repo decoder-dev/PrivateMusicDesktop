@@ -1,6 +1,7 @@
 import { h } from "./dom.js";
 import { t } from "./i18n.js";
 import { api } from "./api.js";
+import { bindRange, syncRange } from "./ui-parts.js";
 
 export const LABELS = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
 export const PRESETS = {
@@ -22,7 +23,7 @@ export function createEqualizerPanel({ settings, onSettingsChange }) {
   let eq = { ...settings.eq, gains: settings.eq.gains.slice() };
   let timer = 0;
 
-  const toggle = h("input", { type: "checkbox", id: "eq-on", onchange: () => update({ on: toggle.checked }) });
+  const toggle = h("input", { type: "checkbox", role: "switch", id: "eq-on", onchange: () => update({ on: toggle.checked }) });
   const preset = h("select", { class: "field", "aria-label": t("eq.preset"),
     onchange: () => preset.value !== "custom" && update({ gains: PRESETS[preset.value].slice(), preset: preset.value, on: true }) },
     [...Object.keys(PRESETS), "custom"].map((id) => h("option", { value: id, text: t(`eq.${id}`) })));
@@ -40,12 +41,13 @@ export function createEqualizerPanel({ settings, onSettingsChange }) {
         update({ gains, preset: presetFor(gains), on: true });
       },
     });
+    bindRange(input);
     return { input, element: h("div", { class: "eq-band" }, value, input, h("span", { class: "eq-label", text: label })) };
   });
 
   const element = h("div", { class: "eq" },
     h("div", { class: "set-row" },
-      h("label", { class: "set-check", for: "eq-on" }, toggle, h("span", { text: t("eq.on") })),
+      h("label", { class: "set-check", for: "eq-on" }, h("span", { text: t("eq.on") }), toggle),
       h("div", { class: "set-inline" }, preset, reset)),
     h("div", { class: "eq-bands" }, sliders.map((s) => s.element)));
 
@@ -53,7 +55,7 @@ export function createEqualizerPanel({ settings, onSettingsChange }) {
     toggle.checked = eq.on;
     preset.value = presetFor(eq.gains);
     element.classList.toggle("off", !eq.on);
-    sliders.forEach(({ input }, i) => { input.value = String(eq.gains[i]); });
+    sliders.forEach(({ input }, i) => { input.value = String(eq.gains[i]); syncRange(input); });
     values.forEach((node, i) => { node.textContent = `${eq.gains[i] > 0 ? "+" : ""}${eq.gains[i]}`; });
   }
 
