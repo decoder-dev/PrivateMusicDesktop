@@ -25,27 +25,60 @@
 .set-keys tr:first-child td { border-top: 0; }
 .set-keys td:first-child { width: 190px; white-space: nowrap; }
 
-/* Theme and accent pickers (iOS: three gradient circles, a grid of colour dots). */
-.theme-picker, .accent-grid { display: flex; flex-wrap: wrap; gap: 14px; justify-content: flex-end; }
-.theme-opt { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 64px; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--text-2); transition: opacity var(--t-release) var(--ease-std), color var(--t-hover) var(--ease-std); }
+/* Theme and accent pickers. The theme options are small previews of the real UI (a sidebar, a few rows, the player
+   bar) in that theme; "system" is the light preview with the dark one clipped along the true corner-to-corner
+   diagonal, so the edge is anti-aliased. Labels keep one weight and one width: only colour and the ring change. */
+.theme-picker, .accent-grid { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.theme-opt { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; width: 92px; padding: 8px 0 6px; border-radius: 14px; color: var(--text-2); transition: opacity var(--t-release) var(--ease-std), color var(--t-hover) var(--ease-std), background-color var(--t-hover) var(--ease-std); }
+.theme-opt:hover { background: var(--hover); color: var(--text); }
 .theme-opt:active, .accent-opt:active { opacity: 0.85; transition-duration: var(--t-press); }
 .theme-opt[aria-checked="true"] { color: var(--text); }
-.theme-swatch { position: relative; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; border: var(--hair) solid var(--line); color: var(--accent); }
-.theme-swatch.sys { background: linear-gradient(135deg, #fff 50%, #111 50%); }
-.theme-swatch.lt { background: linear-gradient(135deg, #fff, #ececec); }
-.theme-swatch.dk { background: linear-gradient(135deg, #2a2a2a, #000); }
-.theme-opt[aria-checked="true"] .theme-swatch { box-shadow: 0 0 0 2px var(--page-top), 0 0 0 4px var(--accent); }
-.theme-swatch svg { opacity: 0; transition: opacity var(--t-hover) var(--ease-std); }
-.theme-opt[aria-checked="true"] .theme-swatch svg { opacity: 1; }
-.accent-grid { justify-content: flex-start; gap: 12px; }
-.accent-opt {
-  --sw: var(--sw-l); position: relative; width: 40px; height: 40px; border-radius: 50%; background: var(--sw); display: grid; place-items: center; color: #fff;
-  transition: box-shadow var(--t-hover) var(--ease-std), opacity var(--t-release) var(--ease-std);
+.theme-opt:focus-visible, .accent-opt:focus-visible { outline: none; }
+.theme-label { display: block; max-width: 100%; font: 500 12px/16px var(--font); letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+.theme-thumb { position: relative; display: block; width: 72px; height: 48px; }
+.theme-swatch {
+  position: absolute; inset: 0; display: block; overflow: hidden; border-radius: 12px; background: #fff;
+  transition: transform var(--t-hover) var(--ease-out);
 }
-.accent-opt svg { opacity: 0; transition: opacity var(--t-hover) var(--ease-std); }
-.accent-opt[aria-checked="true"] svg { opacity: 1; }
-.accent-opt[aria-checked="true"] { box-shadow: 0 0 0 2px var(--page-top), 0 0 0 4px var(--text); }
-@supports (color: light-dark(#000, #fff)) { .accent-opt { background: light-dark(var(--sw-l), var(--sw-d)); } .accent-opt { color: light-dark(#fff, #000); } }
+.theme-swatch::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 26%, transparent); }
+.theme-opt:hover .theme-swatch { transform: translateY(-1px); }
+.theme-thumb::before { content: ""; position: absolute; inset: -4px; border-radius: 16px; box-shadow: 0 0 0 0 transparent; transition: box-shadow var(--t-hover) var(--ease-std); }
+.theme-opt[aria-checked="true"] .theme-thumb::before { box-shadow: 0 0 0 2px var(--accent); }
+.theme-opt:focus-visible .theme-thumb::after { content: ""; position: absolute; inset: -8px; border-radius: 19px; border: 2px solid var(--text); opacity: 0.85; }
+.tp-ui { position: absolute; inset: 0; display: block; }
+.tp-ui.lt { background: #f6f6f6; --tp-text: 0 0 0; --tp-surface: #ffffff; --tp-side: #ececec; }
+.tp-ui.dk { background: #050505; --tp-text: 255 255 255; --tp-surface: #1c1c1e; --tp-side: #141414; }
+.theme-swatch.sys .tp-ui.dk { clip-path: polygon(100% 0, 100% 100%, 0 100%); }
+.tp-ui i { position: absolute; display: block; }
+.tp-side { left: 0; top: 0; bottom: 0; width: 16px; background: var(--tp-side); border-right: 1px solid rgb(var(--tp-text) / 0.08); }
+.tp-line { left: 22px; height: 5px; border-radius: 3px; background: rgb(var(--tp-text) / 0.2); }
+.tp-line.a { top: 8px; right: 12px; background: var(--accent); opacity: 0.9; }
+.tp-line.b { top: 18px; right: 22px; }
+.tp-line.c { top: 28px; right: 16px; }
+.tp-bar { left: 20px; right: 4px; bottom: 4px; height: 8px; border-radius: 4px; background: var(--tp-surface); box-shadow: 0 0 0 1px rgb(var(--tp-text) / 0.1); }
+.tp-check {
+  position: absolute; right: -6px; top: -6px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent); color: var(--on-accent); box-shadow: 0 0 0 2px var(--surface), 0 1px 4px rgb(0 0 0 / 0.3);
+  opacity: 0; transform: scale(0.6); transition: opacity var(--t-hover) var(--ease-std), transform 220ms var(--ease-ios);
+}
+.theme-opt[aria-checked="true"] .tp-check { opacity: 1; transform: none; }
+.accent-grid { justify-content: flex-start; gap: 4px; margin: -4px; }
+.accent-opt {
+  --sw: var(--sw-l); position: relative; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; color: #fff;
+  transition: opacity var(--t-release) var(--ease-std);
+}
+.accent-opt::before {
+  content: ""; position: absolute; inset: 6px; border-radius: 50%; background: var(--sw);
+  box-shadow: inset 0 0 0 var(--hair) rgb(0 0 0 / 0.12), inset 0 1px 0 rgb(255 255 255 / 0.28);
+  transition: transform 220ms var(--ease-ios), box-shadow var(--t-hover) var(--ease-std);
+}
+.accent-opt:hover::before { transform: scale(1.08); }
+.accent-opt svg { position: relative; opacity: 0; transform: scale(0.6); transition: opacity var(--t-hover) var(--ease-std), transform 220ms var(--ease-ios); }
+.accent-opt[aria-checked="true"] svg { opacity: 1; transform: none; }
+.accent-opt[aria-checked="true"]::after { content: ""; position: absolute; inset: 1px; border-radius: 50%; border: 2px solid var(--text); }
+.accent-opt:focus-visible::after { content: ""; position: absolute; inset: 1px; border-radius: 50%; border: 2px solid var(--accent); }
+.accent-opt[aria-checked="true"]:focus-visible::after { border-color: var(--text); inset: -1px; }
+@supports (color: light-dark(#000, #fff)) { .accent-opt { color: light-dark(#fff, #000); } .accent-opt::before { background: light-dark(var(--sw-l), var(--sw-d)); } }
 .accent-opt[data-v="blue"] { --sw-l: #1a6be0; --sw-d: #3385fa; }
 .accent-opt[data-v="indigo"] { --sw-l: #4f52db; --sw-d: #6e73fa; }
 .accent-opt[data-v="violet"] { --sw-l: #874ccc; --sw-d: #b275f7; }

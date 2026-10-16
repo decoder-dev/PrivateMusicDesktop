@@ -14,9 +14,12 @@ function section(title, ...rows) {
   return h("section", { class: "set-section" }, h("h2", { text: title }), h("div", { class: "set-card" }, ...rows));
 }
 
-function row(label, control, note) {
+/** A small accent tile with a glyph: the leading icon of a settings row. */
+const tile = (glyph) => h("span", { class: "set-ico", "aria-hidden": "true" }, icon(glyph, 16));
+
+function row(label, control, note, glyph) {
   return h("div", { class: "set-row" },
-    h("div", { class: "set-label" }, label, note ? h("div", { class: "set-note", text: note }) : null),
+    h("div", { class: "set-label" }, glyph ? tile(glyph) : null, h("div", { class: "set-text" }, label, note ? h("div", { class: "set-note", text: note }) : null)),
     h("div", { class: "set-control" }, control));
 }
 
@@ -41,13 +44,18 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
     onchange: () => pick({ flatChrome: flatBox.checked }) });
 
   // Theme: three circles; accent: a grid of colour dots (radio groups).
+  const miniUi = (mode) => h("span", { class: `tp-ui ${mode}`, "aria-hidden": "true" },
+    h("i", { class: "tp-side" }), h("i", { class: "tp-line a" }), h("i", { class: "tp-line b" }), h("i", { class: "tp-line c" }), h("i", { class: "tp-bar" }));
   const themeButtons = ["system", "light", "dark"].map((value) =>
-    h("button", { type: "button", role: "radio", class: "theme-opt", "data-v": value, "aria-checked": "false", onclick: () => pick({ theme: value }) },
-      h("span", { class: `theme-swatch ${{ system: "sys", light: "lt", dark: "dk" }[value]}` }, icon("check", 18)),
-      h("span", { text: t(`set.theme.${value}`) })));
+    h("button", { type: "button", role: "radio", class: "theme-opt", "data-v": value, "aria-checked": "false", tabindex: "-1", onclick: () => pick({ theme: value }) },
+      h("span", { class: "theme-thumb" },
+        h("span", { class: `theme-swatch ${{ system: "sys", light: "lt", dark: "dk" }[value]}` },
+          value === "system" ? [miniUi("lt"), miniUi("dk")] : miniUi(value === "light" ? "lt" : "dk")),
+        h("span", { class: "tp-check", "aria-hidden": "true" }, icon("check", 12))),
+      h("span", { class: "theme-label", text: t(`set.theme.${value}`) })));
   const themePicker = h("div", { class: "theme-picker", role: "radiogroup", "aria-label": t("set.theme") }, themeButtons);
   const accentButtons = ACCENTS.map((value) =>
-    h("button", { type: "button", role: "radio", class: "accent-opt", "data-v": value, title: t(`set.accent.${value}`), "aria-label": t(`set.accent.${value}`), "aria-checked": "false",
+    h("button", { type: "button", role: "radio", class: "accent-opt", "data-v": value, title: t(`set.accent.${value}`), "aria-label": t(`set.accent.${value}`), "aria-checked": "false", tabindex: "-1",
       onclick: () => pick({ accent: value }) }, icon("check", 18)));
   const accentGrid = h("div", { class: "accent-grid", role: "radiogroup", "aria-label": t("set.accent") }, accentButtons);
   /** Arrow keys move through a radio group like native radios do. */
@@ -81,20 +89,20 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
     h("header", { class: "view-header" }, h("div", { class: "vh-text" }, h("h1", { text: t("set.title") }))),
     h("div", { class: "set-body" },
       section(t("set.sound"),
-        row(t("set.output"), h("div", { class: "set-inline" }, deviceSelect, refreshButton), t("set.output.note"))),
+        row(t("set.output"), h("div", { class: "set-inline" }, deviceSelect, refreshButton), t("set.output.note"), "volume")),
       section(t("set.appearance"),
-        row(t("set.theme"), themePicker),
-        row(t("set.accent"), accentGrid),
+        row(t("set.theme"), themePicker, null, "sparkles"),
+        row(t("set.accent"), accentGrid, null, "album"),
         h("div", { class: "set-row" },
-          h("label", { class: "set-check", for: "set-flat" }, h("span", {}, t("set.flat"), h("div", { class: "set-note", text: t("set.flat.note") })), flatBox))),
+          h("label", { class: "set-check", for: "set-flat" }, h("span", { class: "set-label" }, tile("settings"), h("span", { class: "set-text" }, t("set.flat"), h("div", { class: "set-note", text: t("set.flat.note") }))), flatBox))),
       section(t("eq.title"), equalizer.element),
       section(t("set.window"),
         h("div", { class: "set-row" },
-          h("label", { class: "set-check", for: "set-tray" }, h("span", { text: t("set.tray") }), trayBox),
+          h("label", { class: "set-check", for: "set-tray" }, h("span", { class: "set-label" }, tile("collapse"), h("span", { class: "set-text", text: t("set.tray") })), trayBox),
           trayNote)),
       section(t("set.np"),
-        row(t("set.visualizer"), visualizerSelect),
-        h("div", { class: "set-row" }, h("label", { class: "set-check", for: "set-lyrics" }, h("span", { text: t("set.lyrics") }), lyricsBox))),
+        row(t("set.visualizer"), visualizerSelect, null, "visualizer"),
+        h("div", { class: "set-row" }, h("label", { class: "set-check", for: "set-lyrics" }, h("span", { class: "set-label" }, tile("lyrics"), h("span", { class: "set-text", text: t("set.lyrics") })), lyricsBox))),
       section(t("set.keys"),
         h("table", { class: "set-keys" }, h("tbody", {},
           keys.map(([combo, label]) => h("tr", {}, h("td", {}, h("kbd", { text: combo })), h("td", { text: t(label) })))))),
@@ -107,6 +115,7 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
 
   async function loadDevices() {
     refreshButton.disabled = true;
+    refreshButton.setAttribute("aria-busy", "true");
     try {
       const names = await api.outputDevices();
       const chosen = settings.outputDevice;
@@ -120,6 +129,7 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
       toast(errorText(error), { error: true });
     } finally {
       refreshButton.disabled = false;
+      refreshButton.removeAttribute("aria-busy");
     }
   }
 
@@ -138,8 +148,17 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
     visualizerSelect.value = settings.visualizer ?? "bars";
     lyricsBox.checked = settings.lyrics !== false;
     flatBox.checked = settings.flatChrome === true;
-    for (const button of themeButtons) button.setAttribute("aria-checked", String(button.dataset.v === (settings.theme ?? "system")));
-    for (const button of accentButtons) button.setAttribute("aria-checked", String(button.dataset.v === (settings.accent ?? "blue")));
+    // Radio groups: the checked one is the single tab stop.
+    for (const button of themeButtons) {
+      const on = button.dataset.v === (settings.theme ?? "system");
+      button.setAttribute("aria-checked", String(on));
+      button.tabIndex = on ? 0 : -1;
+    }
+    for (const button of accentButtons) {
+      const on = button.dataset.v === (settings.accent ?? "blue");
+      button.setAttribute("aria-checked", String(on));
+      button.tabIndex = on ? 0 : -1;
+    }
     const profile = store.session.profile;
     accountName.textContent = profile ? `${profile.first_name} ${profile.last_name}`.trim() : "";
     persistNote.hidden = store.session.persistent !== false;
