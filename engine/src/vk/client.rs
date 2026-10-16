@@ -287,25 +287,24 @@ impl VkClient {
         self.call(session, "audio.getStreamMixSettings", &[("mix_id", "common".into())])
     }
 
-    /// VK's home catalogue mixes, including mixes inside real catalogue
-    /// sections. Section hydration is bounded so a thin root response still
-    /// gives the desktop the mood and genre shelves shown by the iOS client.
+    /// VK's home catalogue mixes, as the iOS client builds them: mixes found
+    /// in the root `catalog.getAudio` payload, plus those of every catalogue
+    /// section that looks like a mix shelf (`catalog.getSection`, at most
+    /// eight, in parallel). The personal `common` mix always comes first, so
+    /// a signed-in user never sees an empty shelf.
     pub fn catalog_mixes(&self, session: &Session) -> Result<Vec<MusicMix>> {
-        let root = self.call(session, "catalog.getAudio", &[("need_blocks", "1".into())])?;
-        let mut mixes = Vec::new();
-        collect_mixes(&root, None, &mut mixes);
-        let mut sections = Vec::new();
-        collect_mix_sections(&root, &mut sections);
-        let mut seen_sections = std::collections::HashSet::new();
-        sections.retain(|(id, _)| seen_sections.insert(id.clone()));
-        for (id, title) in sections.into_iter().take(8) {
-            if id.len() > 512 || id.chars().any(char::is_control) { continue; }
-            if let Ok(section) = self.call(session, "catalog.getSection", &[("section_id", id), ("need_blocks", "1".into())]) {
-                collect_mixes(&section, Some(&title), &mut mixes);
+        let snapshot = self.catalog_snapshot(session, true, false)?;
+        let mut mixes = snapshot.mixes;
+        match mixes.iter().position(|mix| mix.id == COMMON_MIX_ID && mix.options.is_none()) {
+            Some(index) => {
+                let common = mixes.remove(index);
+                mixes.insert(0, common);
             }
+            None => mixes.insert(0, common_mix()),
         }
-        let mut seen = std::collections::HashSet::new();
-        mixes.retain(|mix| seen.insert(format!("{}\n{}", mix.id, mix.options.as_deref().unwrap_or(""))));
+        if mixes.iter().all(|mix| mix.id == COMMON_MIX_ID) {
+            log::warn!("catalog mixes: none found beyond the personal one; {}", snapshot.shape);
+        }
         Ok(mixes)
     }
 
@@ -315,52 +314,87 @@ impl VkClient {
     /// release shelves (`catalog.getSection`, at most eight, in parallel).
     /// A section that fails is dropped; a dead session or network is not.
     pub fn new_releases(&self, session: &Session) -> Result<Vec<Album>> {
+        let snapshot = self.catalog_snapshot(session, false, true)?;
+        // An album the window could not open again is not worth a card.
+        let releases: Vec<Album> = snapshot.releases.into_iter().filter(|album| album.album_id > 0).collect();
+        if releases.is_empty() {
+            log::warn!("catalog new releases: none found; {}", snapshot.shape);
+        }
+        Ok(releases)
+    }
+
+    /// `catalog.getAudio` and the section hydration behind it (iOS
+    /// `catalogSnapshot`). Only what the caller wants is hydrated.
+    fn catalog_snapshot(&self, session: &Session, want_mixes: bool, want_releases: bool) -> Result<CatalogSnapshot> {
+        let mut mixes = Vec::new();
         let mut releases = Vec::new();
         let mut sections = Vec::new();
+        let mut shape = String::from("catalog.getAudio failed");
         match self.call(session, "catalog.getAudio", &[("need_blocks", "1".into())]) {
             Ok(root) => {
+                collect_mixes(&root, None, &mut mixes);
                 collect_albums(&root, &mut releases);
                 collect_catalog_sections(&root, &mut sections);
+                unique_sections(&mut sections);
+                shape = catalog_shape(&root, mixes.len(), releases.len(), &sections);
             }
             Err(error) if is_fatal(&error) => return Err(error),
             // Section hydration below may still recover usable content.
-            Err(error) => log::debug!("catalog.getAudio: {}, trying the sections", error.kind()),
+            Err(error) => log::warn!("catalog.getAudio failed: {}", error.kind()),
         }
+        let mut mixes = dedupe_mixes(mixes);
         let mut releases = dedupe_by(releases, Album::id);
-        if releases.is_empty() {
-            let mut seen = std::collections::HashSet::new();
-            let wanted: Vec<&CatalogSection> = sections
-                .iter()
-                .filter(|s| s.id.len() <= 512 && !s.id.chars().any(char::is_control))
-                .filter(|s| seen.insert(s.id.as_str()) && s.looks_like_releases())
-                .take(HYDRATION_LIMIT)
-                .collect();
-            let hydrated: Vec<Result<Vec<Album>>> = std::thread::scope(|scope| {
-                let jobs: Vec<_> = wanted
-                    .iter()
-                    .map(|section| {
-                        scope.spawn(move || {
-                            let payload = self.call(session, "catalog.getSection", &[("section_id", section.id.clone())])?;
-                            let mut found = Vec::new();
-                            collect_albums(&payload, &mut found);
-                            Ok(found)
-                        })
-                    })
-                    .collect();
-                jobs.into_iter().map(|job| job.join().unwrap_or(Err(Error::Cancelled))).collect()
-            });
-            for result in hydrated {
-                match result {
-                    Ok(found) => releases.extend(found),
-                    Err(error) if matches!(error, Error::Unauthorized) => return Err(error),
-                    Err(error) => log::debug!("catalog.getSection dropped: {}", error.kind()),
-                }
+
+        if want_mixes {
+            let wanted: Vec<&CatalogSection> = sections.iter().filter(|s| s.looks_like_mix()).take(HYDRATION_LIMIT).collect();
+            let mut hydrated = Vec::new();
+            let payloads = self.hydrate(session, &wanted)?;
+            shape.push_str(&format!("; mix sections asked={} answered={}", wanted.len(), payloads.len()));
+            for (section, payload) in payloads {
+                collect_mixes(&payload, Some(section.title.trim()), &mut hydrated);
             }
-            releases = dedupe_by(releases, Album::id);
+            // New mixes are appended; one the root already had only gains
+            // what the root lacked (a cover, a subtitle).
+            mixes.extend(hydrated);
+            mixes = dedupe_mixes(mixes);
         }
-        // An album the window could not open again is not worth a card.
-        releases.retain(|album| album.album_id > 0);
-        Ok(releases)
+        if want_releases && releases.is_empty() {
+            let wanted: Vec<&CatalogSection> = sections.iter().filter(|s| s.looks_like_releases()).take(HYDRATION_LIMIT).collect();
+            let mut hydrated = Vec::new();
+            let payloads = self.hydrate(session, &wanted)?;
+            shape.push_str(&format!("; release sections asked={} answered={}", wanted.len(), payloads.len()));
+            for (_, payload) in payloads {
+                collect_albums(&payload, &mut hydrated);
+            }
+            releases = dedupe_by(hydrated, Album::id);
+        }
+        Ok(CatalogSnapshot { mixes, releases, shape })
+    }
+
+    /// `catalog.getSection` for each section, in parallel. A section that
+    /// fails is dropped (and logged by kind); a dead session is not.
+    fn hydrate<'a>(&self, session: &Session, sections: &[&'a CatalogSection]) -> Result<Vec<(&'a CatalogSection, Value)>> {
+        let results: Vec<Result<Value>> = std::thread::scope(|scope| {
+            let jobs: Vec<_> = sections
+                .iter()
+                .map(|section| scope.spawn(move || self.call(session, "catalog.getSection", &[("section_id", section.id.clone())])))
+                .collect();
+            jobs.into_iter().map(|job| job.join().unwrap_or(Err(Error::Cancelled))).collect()
+        });
+        let mut payloads = Vec::new();
+        for (section, result) in sections.iter().zip(results) {
+            match result {
+                Ok(payload) => payloads.push((*section, payload)),
+                Err(Error::Unauthorized) => return Err(Error::Unauthorized),
+                Err(error) => log::warn!(
+                    "catalog.getSection dropped: {} (section \"{}\", id length {})",
+                    error.kind(),
+                    shown(&section.title),
+                    section.id.len()
+                ),
+            }
+        }
+        Ok(payloads)
     }
 
     /// VK's own plain text for a track's `lyrics_id`.
@@ -1052,11 +1086,154 @@ struct CatalogSection {
 }
 
 impl CatalogSection {
-    fn looks_like_releases(&self) -> bool {
-        const MARKERS: [&str; 9] = ["release", "релиз", "нов", "выход", "премьер", "album", "альбом", "new music", "свеж"];
-        let blob = format!("{} {}", self.title, self.url.as_deref().unwrap_or("")).to_lowercase();
+    /// Title and url, lower case: what the markers are matched against.
+    fn blob(&self) -> String {
+        format!("{} {}", self.title, self.url.as_deref().unwrap_or("")).to_lowercase()
+    }
+
+    fn looks_like_mix(&self) -> bool {
+        const MARKERS: [&str; 33] = [
+            "mix", "микс", "stream", "подбор", "radio", "вкус", "для вас", "for you", "discover", "поток", "mood", "настроен", "активност",
+            "activity", "жанр", "genre", "section=mix", "listen together", "друг", "вайб", "vibe", "спокойн", "грустн", "радост", "энерг", "chart",
+            "чарт", "открыт", "новинк", "плейлист дня", "хит", "kids", "дет",
+        ];
+        let blob = self.blob();
         MARKERS.iter().any(|marker| blob.contains(marker))
     }
+
+    fn looks_like_releases(&self) -> bool {
+        const MARKERS: [&str; 9] = ["release", "релиз", "нов", "выход", "премьер", "album", "альбом", "new music", "свеж"];
+        let blob = self.blob();
+        MARKERS.iter().any(|marker| blob.contains(marker))
+    }
+}
+
+/// One entry per section id, in order; ids that could not be sent are dropped.
+fn unique_sections(sections: &mut Vec<CatalogSection>) {
+    let mut seen = std::collections::HashSet::new();
+    sections.retain(|s| s.id.len() <= 512 && !s.id.chars().any(char::is_control) && seen.insert(s.id.clone()));
+}
+
+/// What `catalog.getAudio` and its hydrated sections gave.
+struct CatalogSnapshot {
+    mixes: Vec<MusicMix>,
+    releases: Vec<Album>,
+    /// Structure of the root answer, for the log when a shelf comes out empty.
+    shape: String,
+}
+
+const COMMON_MIX_ID: &str = "common";
+
+/// The personal stream, titled as the app names it. VK's own wording for it
+/// varies ("Мой микс", "VK Микс"), so it is always replaced with this.
+fn common_mix() -> MusicMix {
+    MusicMix {
+        id: COMMON_MIX_ID.into(),
+        title: "Мой микс".into(),
+        subtitle: "Ваш личный микс по истории прослушивания".into(),
+        artwork_url: None,
+        section_title: None,
+        options: None,
+    }
+}
+
+/// Mixes unique by id and tuning; a repeat only fills what the first lacked.
+fn dedupe_mixes(mixes: Vec<MusicMix>) -> Vec<MusicMix> {
+    let mut out: Vec<MusicMix> = Vec::new();
+    for mix in mixes {
+        match out.iter_mut().find(|known| known.key() == mix.key()) {
+            Some(known) => {
+                if known.title.is_empty() {
+                    known.title = mix.title;
+                }
+                if known.subtitle.is_empty() {
+                    known.subtitle = mix.subtitle;
+                }
+                if known.artwork_url.is_none() {
+                    known.artwork_url = mix.artwork_url;
+                }
+                if known.section_title.is_none() {
+                    known.section_title = mix.section_title;
+                }
+            }
+            None => out.push(mix),
+        }
+    }
+    out
+}
+
+/// A public catalogue label, safe for the log: no control characters, no
+/// long digit runs (a url may carry a user id), cut short.
+fn shown(text: &str) -> String {
+    let mut out = String::new();
+    let mut digits = 0;
+    for c in text.chars().filter(|c| !c.is_control()) {
+        if c.is_ascii_digit() {
+            digits += 1;
+            if digits > 3 {
+                continue;
+            }
+        } else {
+            digits = 0;
+        }
+        out.push(c);
+        if out.chars().count() >= 48 {
+            out.push('…');
+            break;
+        }
+    }
+    out
+}
+
+/// The structure of a catalogue answer and nothing else: key names, counts,
+/// public section labels and block data types. No ids, tokens or raw text.
+fn catalog_shape(root: &Value, mixes: usize, albums: usize, sections: &[CatalogSection]) -> String {
+    fn walk(value: &Value, depth: u8, blocks: &mut usize, kinds: &mut std::collections::BTreeSet<String>, mix_keys: &mut std::collections::BTreeSet<String>) {
+        if depth > 24 {
+            return;
+        }
+        match value {
+            Value::Array(list) => list.iter().for_each(|v| walk(v, depth + 1, blocks, kinds, mix_keys)),
+            Value::Object(object) => {
+                for (key, child) in object {
+                    if key == "blocks" {
+                        *blocks += child.as_array().map_or(0, Vec::len);
+                    }
+                    if key.to_lowercase().contains("mix") {
+                        mix_keys.insert(shown(key));
+                    }
+                    if matches!(key.as_str(), "data_type" | "type") {
+                        if let Some(kind) = child.as_str().filter(|k| k.len() <= 48) {
+                            kinds.insert(shown(kind));
+                        }
+                    }
+                    walk(child, depth + 1, blocks, kinds, mix_keys);
+                }
+            }
+            _ => {}
+        }
+    }
+    let (mut blocks, mut kinds, mut mix_keys) = (0, std::collections::BTreeSet::new(), std::collections::BTreeSet::new());
+    walk(root, 0, &mut blocks, &mut kinds, &mut mix_keys);
+    let keys = match root {
+        Value::Object(object) => object.keys().take(24).map(|k| shown(k)).collect::<Vec<_>>().join(","),
+        Value::Array(list) => format!("<array of {}>", list.len()),
+        _ => "<scalar>".into(),
+    };
+    let listed: Vec<String> = sections
+        .iter()
+        .take(6)
+        .map(|s| format!("\"{}\" {}", shown(&s.title), shown(s.url.as_deref().unwrap_or("-"))))
+        .collect();
+    format!(
+        "root keys=[{keys}] blocks={blocks} sections={} (mix-like {}, release-like {}) first sections=[{}] mixes_in_root={mixes} albums_in_root={albums} types=[{}] mix-ish keys=[{}]",
+        sections.len(),
+        sections.iter().filter(|s| s.looks_like_mix()).count(),
+        sections.iter().filter(|s| s.looks_like_releases()).count(),
+        listed.join("; "),
+        kinds.into_iter().take(24).collect::<Vec<_>>().join(","),
+        mix_keys.into_iter().take(12).collect::<Vec<_>>().join(","),
+    )
 }
 
 /// A real section id is not just a number: `-2000123456` is an
@@ -1093,7 +1270,7 @@ fn catalog_section(value: &Value) -> Option<CatalogSection> {
 /// `sections`, or section-shaped objects).
 fn collect_catalog_sections(value: &Value, out: &mut Vec<CatalogSection>) {
     fn visit(value: &Value, out: &mut Vec<CatalogSection>, depth: u8) {
-        if depth > 16 {
+        if depth > 64 {
             return;
         }
         match value {
@@ -1299,71 +1476,120 @@ fn scalar_text(value: Option<&Value>) -> Option<String> {
     })
 }
 
+/// Every stream-mix tile anywhere in a catalogue answer (iOS `collectMixes`):
+/// an object with a `mix_id`, or typed `…stream_mix…`. A tile without a title
+/// still counts. `section` is the official shelf it was found in.
 fn collect_mixes(value: &Value, section: Option<&str>, out: &mut Vec<MusicMix>) {
-    match value {
-        Value::Array(items) => items.iter().for_each(|item| collect_mixes(item, section, out)),
-        Value::Object(object) => {
-            let kind = scalar_text(object.get("data_type")).or_else(|| scalar_text(object.get("type"))).unwrap_or_default();
-            let mix_id = scalar_text(object.get("mix_id"));
-            let is_mix = mix_id.is_some() || kind.to_ascii_lowercase().contains("stream_mix");
-            if is_mix {
-                let id = mix_id.or_else(|| scalar_text(object.get("id")));
-                let title = scalar_text(object.get("title")).or_else(|| scalar_text(object.get("name")));
-                if let (Some(id), Some(title)) = (id, title) {
-                    let artwork_url = ["photo_1200", "photo_600", "photo_300", "photo_270", "cover_url", "thumb_url", "image", "cover", "icon", "background_image_url", "background_url"]
-                        .iter()
-                        .find_map(|key| {
-                            let value = object.get(*key);
-                            let raw = scalar_text(value).or_else(|| {
-                                value.and_then(|nested| ["photo_600", "photo_300", "photo_270", "url"].iter().find_map(|k| scalar_text(nested.get(*k))))
-                            });
-                            raw.and_then(|url| crate::unmask::secure_remote_url(&url))
-                        });
-                    let options = object.get("mix_options").or_else(|| object.get("options")).and_then(|value| match value {
-                        Value::String(raw) if !raw.is_empty() && raw.len() <= 8_192 => Some(raw.clone()),
-                        Value::Object(_) if value.to_string().len() <= 8_192 => Some(value.to_string()),
-                        _ => None,
-                    });
-                    out.push(MusicMix {
-                        id,
-                        title,
-                        subtitle: scalar_text(object.get("subtitle")).or_else(|| scalar_text(object.get("description"))).or_else(|| scalar_text(object.get("caption"))).unwrap_or_default(),
-                        artwork_url,
-                        section_title: section.map(str::to_string),
-                        options,
-                    });
-                }
-            }
-            object.values().for_each(|item| collect_mixes(item, section, out));
+    fn visit(value: &Value, section: Option<&str>, out: &mut Vec<MusicMix>, depth: u8) {
+        if depth > 64 {
+            return;
         }
-        _ => {}
-    }
-}
-
-fn collect_mix_sections(value: &Value, out: &mut Vec<(String, String)>) {
-    fn visit(value: &Value, out: &mut Vec<(String, String)>, depth: u8) {
-        if depth > 12 { return; }
         match value {
-            Value::Array(items) => items.iter().for_each(|item| visit(item, out, depth + 1)),
+            Value::Array(items) => items.iter().for_each(|item| visit(item, section, out, depth + 1)),
             Value::Object(object) => {
-                let id = scalar_text(object.get("section_id")).or_else(|| scalar_text(object.get("id")));
-                let title = scalar_text(object.get("title")).or_else(|| scalar_text(object.get("name"))).unwrap_or_default();
-                let kind = scalar_text(object.get("type")).or_else(|| scalar_text(object.get("data_type"))).unwrap_or_default();
-                let has_section_shape = kind.to_ascii_lowercase().contains("section") || object.contains_key("blocks") || object.contains_key("next_from") || scalar_text(object.get("url")).is_some_and(|url| url.contains("audios"));
-                let search = format!("{} {}", title, id.as_deref().unwrap_or("")).to_ascii_lowercase();
-                let looks_like_mix = ["mix", "микс", "stream", "radio", "подбор", "жанр", "genre", "mood", "настроен", "vibe", "поток", "активност"]
-                    .iter().any(|marker| search.contains(marker));
-                if has_section_shape && looks_like_mix {
-                    if let Some(id) = id.filter(|id| !id.trim().is_empty() && id.len() <= 512 && !id.chars().all(|c| c.is_ascii_digit() || c == '-')) {
-                        out.push((id, title));
+                let kind = scalar_text(object.get("data_type")).or_else(|| scalar_text(object.get("type"))).unwrap_or_default();
+                let mix_id = scalar_text(object.get("mix_id"));
+                let is_mix = mix_id.is_some() || kind.to_lowercase().contains("stream_mix");
+                if is_mix {
+                    if let Some(id) = mix_id.or_else(|| scalar_text(object.get("id"))) {
+                        let options = object.get("mix_options").and_then(mix_options).or_else(|| object.get("options").and_then(mix_options));
+                        let personal = id == COMMON_MIX_ID && options.is_none();
+                        let title = if personal {
+                            common_mix().title
+                        } else {
+                            scalar_text(object.get("title")).or_else(|| scalar_text(object.get("name"))).unwrap_or_else(|| "Микс".into())
+                        };
+                        out.push(MusicMix {
+                            id,
+                            title,
+                            subtitle: scalar_text(object.get("subtitle")).or_else(|| scalar_text(object.get("description"))).or_else(|| scalar_text(object.get("caption"))).unwrap_or_default(),
+                            artwork_url: mix_cover(object),
+                            section_title: section.filter(|s| !s.is_empty()).map(str::to_string),
+                            options,
+                        });
                     }
                 }
-                object.values().for_each(|item| visit(item, out, depth + 1));
+                object.values().for_each(|item| visit(item, section, out, depth + 1));
             }
             _ => {}
         }
     }
-    visit(value, out, 0);
+    visit(value, section, out, 0);
+}
+
+/// `mix_options` / `options` of a tunable tile: a non-empty string, or an
+/// object re-encoded compactly.
+fn mix_options(value: &Value) -> Option<String> {
+    match value {
+        Value::String(raw) if !raw.is_empty() && raw.len() <= 8_192 => Some(raw.clone()),
+        Value::Object(map) if !map.is_empty() && value.to_string().len() <= 8_192 => Some(value.to_string()),
+        _ => None,
+    }
+}
+
+/// A picture inside a cover-like object: the usual sizes first, then
+/// whatever it nests (iOS `firstRemoteURL`).
+fn first_remote_url(object: &serde_json::Map<String, Value>, depth: u8) -> Option<String> {
+    for key in ["photo_1200", "photo_600", "photo_300", "photo_270", "cover_url", "url"] {
+        if let Some(url) = object.get(key).and_then(Value::as_str).and_then(crate::unmask::secure_remote_url) {
+            return Some(url);
+        }
+    }
+    if depth > 6 {
+        return None;
+    }
+    for value in object.values() {
+        match value {
+            Value::Object(inner) => {
+                if let Some(url) = first_remote_url(inner, depth + 1) {
+                    return Some(url);
+                }
+            }
+            Value::Array(list) => {
+                for item in list {
+                    if let Some(url) = item.as_object().and_then(|inner| first_remote_url(inner, depth + 1)) {
+                        return Some(url);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// The mix tile's own cover (iOS `mixCoverURL`): never the avatar of a
+/// nested owner. A cover given as a list of pictures is read too.
+fn mix_cover(object: &serde_json::Map<String, Value>) -> Option<String> {
+    const KEYS: [&str; 11] = ["photo_1200", "photo_600", "photo_300", "photo_270", "cover_url", "thumb_url", "image", "cover", "icon", "background_image_url", "background_url"];
+    let from_list = |list: &Vec<Value>| {
+        list.iter().find_map(|item| match item {
+            Value::Object(inner) => first_remote_url(inner, 0),
+            Value::String(raw) => crate::unmask::secure_remote_url(raw),
+            _ => None,
+        })
+    };
+    for key in KEYS {
+        match object.get(key) {
+            Some(Value::String(raw)) => {
+                if let Some(url) = crate::unmask::secure_remote_url(raw) {
+                    return Some(url);
+                }
+            }
+            Some(Value::Object(inner)) => {
+                if let Some(url) = first_remote_url(inner, 0) {
+                    return Some(url);
+                }
+            }
+            Some(Value::Array(list)) => {
+                if let Some(url) = from_list(list) {
+                    return Some(url);
+                }
+            }
+            _ => {}
+        }
+    }
+    ["thumbs", "images", "photos"].iter().find_map(|key| object.get(*key).and_then(Value::as_array)).and_then(from_list)
 }
 
 fn tracks_page(value: &Value, offset: u32, user: Option<i64>) -> Page<Track> {
@@ -1478,6 +1704,43 @@ mod tests {
         assert!(is_access_denied(&Error::Vk { code: 7, message: "Permission to perform this action is denied".into() }));
         assert!(!is_access_denied(&Error::Vk { code: 3, message: "Unknown method passed".into() }));
         assert!(is_fatal(&Error::Offline) && is_fatal(&Error::Unauthorized) && !is_fatal(&Error::Http(500)));
+    }
+
+    #[test]
+    fn the_catalogue_shape_names_structure_only() {
+        let root = json!({
+            "access_token": "SECRET-TOKEN",
+            "catalog": {"sections": [
+                {"id": "OPAQUE-SECTION-ID-1234", "title": "Миксы", "url": "https://vk.com/audios123456789?section=mixes", "blocks": []},
+            ]},
+            "blocks": [{"data_type": "music_audio_stream_mixes", "audio_stream_mixes": [{"mix_id": "daily", "title": "Личное для Иванова", "owner_id": 123456789}]}],
+        });
+        let mut sections = Vec::new();
+        collect_catalog_sections(&root, &mut sections);
+        unique_sections(&mut sections);
+        let shape = catalog_shape(&root, 1, 0, &sections);
+        for secret in ["SECRET-TOKEN", "OPAQUE-SECTION-ID", "123456789", "Иванова", "daily"] {
+            assert!(!shape.contains(secret), "{secret} leaked: {shape}");
+        }
+        for wanted in ["access_token", "catalog", "blocks=1", "sections=1", "\"Миксы\"", "music_audio_stream_mixes", "audio_stream_mixes", "mix-like 1"] {
+            assert!(shape.contains(wanted), "{wanted} missing: {shape}");
+        }
+    }
+
+    #[test]
+    fn logged_labels_are_short_and_carry_no_long_numbers() {
+        assert_eq!(shown("audios123456789?x=1"), "audios123?x=1");
+        assert!(shown(&"я".repeat(200)).chars().count() <= 49);
+        assert_eq!(shown("a\nb\u{7}c"), "abc");
+    }
+
+    #[test]
+    fn mix_markers_read_the_title_and_the_url_not_the_id() {
+        let section = |id: &str, title: &str, url: Option<&str>| CatalogSection { id: id.into(), title: title.into(), url: url.map(str::to_string) };
+        assert!(section("x", "Миксы для вас", None).looks_like_mix());
+        assert!(section("x", "", Some("https://vk.com/audios1?section=mixes")).looks_like_mix());
+        assert!(!section("mix_hidden_in_the_id", "Подкасты", None).looks_like_mix());
+        assert!(section("x", "Новые релизы", None).looks_like_releases());
     }
 
     #[test]

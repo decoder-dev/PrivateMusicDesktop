@@ -1359,12 +1359,15 @@ test("for you: new releases show as album cards that open the album page", async
   } finally { await app.close(); }
 });
 
-test("for you: an empty or failing new-releases shelf says so, and a failure can be retried", async () => {
+test("for you: an empty new-releases shelf is hidden, a failing one is a single line that can be retried", async () => {
   const empty = await openApp({ config: { signedIn: true, noReleases: true } });
   try {
     await empty.page.click(".nav button[data-view=forYou]");
-    await empty.page.waitForFunction(() => document.querySelector(".new-releases .status")?.textContent === "VK не вернул новых релизов.");
+    await empty.page.waitForFunction(() => window.__mock.count("new_releases") === 1);
+    await empty.page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .title")?.textContent === "Микс 1");
+    assert.equal(await empty.page.locator(".new-releases").isVisible(), false, "no empty panel, no heading");
     assert.equal(await empty.page.locator(".new-releases .card").count(), 0);
+    assert.equal(await empty.page.evaluate(() => document.querySelector(".new-releases").getBoundingClientRect().height), 0);
   } finally { await empty.close(); }
   const failing = await openApp({ config: { signedIn: true, releasesFail: true } });
   try {
@@ -1372,11 +1375,44 @@ test("for you: an empty or failing new-releases shelf says so, and a failure can
     await page.click(".nav button[data-view=forYou]");
     await page.waitForSelector(".new-releases .status.error");
     assert.match(await page.locator(".new-releases .status.error").innerText(), /Нет подключения/);
-    await page.click(".new-releases .status.error .btn");
+    assert.equal(await page.locator(".new-releases h2").isVisible(), false, "just the line");
+    const height = await page.evaluate(() => document.querySelector(".new-releases").getBoundingClientRect().height);
+    assert.ok(height > 0 && height < 80, `one line, not a panel: ${height}px`);
+    await page.click(".new-releases .status.error .retry-link");
     await page.waitForFunction(() => window.__mock.count("new_releases") === 2);
-    await page.waitForSelector(".new-releases .status.error");
+    await page.waitForSelector(".new-releases .status.error .retry-link:not([disabled])");
     // The mixes below it are not affected.
     await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .title")?.textContent === "Микс 1");
+  } finally { await failing.close(); }
+});
+
+test("for you: the mixes shelf always has the personal mix, hides when empty, and shows an error line with a retry", async () => {
+  const plain = await openApp({ config: { signedIn: true } });
+  try {
+    await plain.page.click(".nav button[data-view=forYou]");
+    await plain.page.waitForSelector(".mix-catalog:not(.new-releases) .mix-tile");
+    assert.deepEqual(await plain.page.locator(".mix-tile .mix-tile-title").allInnerTexts(), ["Мой микс"]);
+    await plain.page.click(".mix-tile");
+    await plain.page.waitForFunction(() => window.__mock.last("play_radio"));
+    assert.deepEqual(await plain.page.evaluate(() => window.__mock.last("play_radio").args.source), { kind: "personal", options: null });
+  } finally { await plain.close(); }
+  const none = await openApp({ config: { signedIn: true, noCatalog: true } });
+  try {
+    await none.page.click(".nav button[data-view=forYou]");
+    await none.page.waitForFunction(() => window.__mock.count("catalog_mixes") === 1);
+    await none.page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .title")?.textContent === "Микс 1");
+    assert.equal(await none.page.locator(".mix-catalog:not(.new-releases)").isVisible(), false);
+    assert.equal(await none.page.locator(".mix-catalog:not(.new-releases) .status").isVisible(), false);
+  } finally { await none.close(); }
+  const failing = await openApp({ config: { signedIn: true, catalogFails: true } });
+  try {
+    const { page } = failing;
+    await page.click(".nav button[data-view=forYou]");
+    await page.waitForSelector(".mix-catalog:not(.new-releases) .status.error");
+    const height = await page.evaluate(() => document.querySelector(".mix-catalog:not(.new-releases)").getBoundingClientRect().height);
+    assert.ok(height > 0 && height < 80, `one line, not a panel: ${height}px`);
+    await page.click(".mix-catalog:not(.new-releases) .retry-link");
+    await page.waitForFunction(() => window.__mock.count("catalog_mixes") === 2);
   } finally { await failing.close(); }
 });
 
@@ -1401,7 +1437,8 @@ test("a mix plays as an endless radio: the source travels with the queue and the
     // A catalogue mix tile: the mix id and its tuning are what the radio refills with.
     await page.click(".nav button[data-view=forYou]");
     await page.waitForSelector(".mix-tile");
-    await page.click(".mix-tile");
+    assert.deepEqual(await page.locator(".mix-tile .mix-tile-title").allInnerTexts(), ["Мой микс", "Спокойный вечер"], "the personal mix leads the shelf");
+    await page.locator(".mix-tile", { hasText: "Спокойный вечер" }).click();
     await page.waitForFunction(() => window.__mock.last("play_radio").args.source.kind === "catalog");
     call = await page.evaluate(() => window.__mock.last("play_radio").args);
     assert.deepEqual(call.source, { kind: "catalog", mix_id: "m7", options: "{\"mood\":[\"calm\"]}" });
