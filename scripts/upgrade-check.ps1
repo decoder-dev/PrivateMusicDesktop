@@ -38,6 +38,9 @@ function Get-Installed {
   return $null
 }
 
+# The installer writes the folder with quotes around it.
+function Folder-Of($entry) { return ([string]$entry.InstallLocation).Trim('"') }
+
 function Install($setup) {
   Say "installing $(Split-Path $setup -Leaf)"
   $process = Start-Process -FilePath $setup -ArgumentList '/S' -PassThru -Wait
@@ -64,7 +67,7 @@ if (Get-Installed) { Fail "$AppName is already installed here; run this on a cle
 Install $Old
 $before = Get-Installed
 if (-not $before) { Fail 'the old version did not install.' }
-Say "installed version $($before.DisplayVersion) at $($before.InstallLocation)"
+Say "installed version $($before.DisplayVersion) at $(Folder-Of $before)"
 
 Say 'planting markers: the saved sign-in and the app data folders'
 & cmdkey /generic:$Target /user:vk-session /pass:upgrade-marker | Out-Null
@@ -77,13 +80,13 @@ foreach ($folder in $folders) {
 Install $New
 $after = Get-Installed
 if (-not $after) { Fail 'nothing is installed after the upgrade.' }
-Say "installed version $($after.DisplayVersion) at $($after.InstallLocation)"
+Say "installed version $($after.DisplayVersion) at $(Folder-Of $after)"
 
 $problems = @()
 $expected = Version-Of $New
 if ($expected -and $after.DisplayVersion -ne $expected) { $problems += "version is $($after.DisplayVersion), expected $expected" }
-if ($after.InstallLocation -ne $before.InstallLocation) { $problems += "install folder moved from $($before.InstallLocation) to $($after.InstallLocation)" }
-if (-not (Test-Path (Join-Path $after.InstallLocation 'private-music-desktop.exe'))) { $problems += 'the program file is missing' }
+if ((Folder-Of $after) -ne (Folder-Of $before)) { $problems += "install folder moved from $(Folder-Of $before) to $(Folder-Of $after)" }
+if (-not (Test-Path (Join-Path (Folder-Of $after) 'private-music-desktop.exe'))) { $problems += 'the program file is missing' }
 if (-not (Credential-Exists)) { $problems += 'the saved sign-in was removed from Credential Manager' }
 foreach ($folder in $folders) {
   if (-not (Test-Path (Join-Path $folder $Marker))) { $problems += "app data was removed: $folder" }
