@@ -130,6 +130,34 @@ ones), the same radii and elevations. The tokens are in `ui/css/tokens.css`
   It turns into an opaque surface under *reduce transparency* and *increased
   contrast*, with the *Simplified look* switch in Settings, when the window has
   been in the background for a few seconds, and where `backdrop-filter` is missing.
+- **Heroes have atmosphere, not boxes**: artist, album and playlist headers
+  stand on two soft washes taken from the cover's palette (the engine already
+  extracts it), drawn as radial gradients, so there is no blur to repaint. If the
+  palette cannot be read the header stays plain. The full-screen player keeps its
+  single small blurred raster backdrop, and its cover steps back when paused.
+- **Rhythm and type**: a 4/8 pt scale, tabular numerals for times and counts,
+  `text-wrap: balance` on headings and `pretty` on notes, one weight per control
+  (selection never changes a width: see the theme picker), and header controls that
+  fold into tidy full-width rows in narrow windows instead of wrapping one by one.
+- **Depth**: layered soft shadows with a hairline top highlight, concentric radii,
+  accent-tinted selection, focus rings with a soft halo; glass only on chrome.
+- **Entrances are one-shot and capped**: shelves and cards rise one after another
+  (eight steps, about half a second in all), cards lift on hover (transform and
+  shadow only), the play/pause and heart glyphs pop when they change, slider
+  thumbs grow while pointed at, bars and share bars grow once in Statistics.
+  Skeletons sweep once while loading. All of it is finite, removed by
+  *reduce motion*, and the tests assert that an idle screen has no running animation.
+- **States**: empty and failed panels show a small theme- and accent-aware
+  illustration (inline SVG) near the top of the area, never a big blank panel; a
+  shelf that fails is one line with a retry.
+- **Components**: the theme picker previews the real UI (sidebar, rows, player bar)
+  in each theme, with "system" split along the true diagonal by a clipped layer
+  (anti-aliased), a constant label weight, a check badge, 44 px hit areas and
+  radio-group keyboard behaviour (arrows, one tab stop). Tooltips (`ui/js/tooltip.js`)
+  replace the native `title` bubble after a short rest of the mouse and show
+  shortcut hints (`data-kbd`). Buttons have primary, secondary, tertiary and
+  destructive forms, a small size and a loading state (`aria-busy`); scrollbars are
+  thin and appear only while the pointer is over the scroller.
 - **Fonts**: SF on macOS, Segoe UI (Variable) on Windows; Linux uses the bundled
   Inter (`ui/fonts`, SIL Open Font License, Latin and Cyrillic subsets).
 - Nothing inline: styles come from classes (and `style.setProperty` from code),
