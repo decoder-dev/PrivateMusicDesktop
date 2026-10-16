@@ -54,6 +54,7 @@
     session_state: () => state.session,
     profile: () => ({ id: 7, first_name: "Иван", last_name: "Петров", photo_url: null }),
     login_start: async () => {
+      if (config.loginPending) return;
       setTimeout(() => {
         state.session = { signed_in: true, profile: null, persistent: true };
         emit("pm-login", "success");

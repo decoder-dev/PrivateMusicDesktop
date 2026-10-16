@@ -1,5 +1,5 @@
 import { h } from "../dom.js";
-import { t } from "../i18n.js";
+import { t, errorText } from "../i18n.js";
 import { api } from "../api.js";
 
 /** The sign-in screen. VK's own page opens in a separate window. */
@@ -7,16 +7,22 @@ export function createLoginView({ onError }) {
   const message = h("p", { class: "message", role: "status" });
   const button = h("button", { class: "btn primary", type: "button", onclick: start }, t("login.button"));
   const note = h("p", { class: "note", hidden: true, text: t("login.notPersistent") });
+  let waiting = false;
 
   async function start() {
     button.disabled = true;
-    message.textContent = t("login.waiting");
+    if (!waiting) message.textContent = t("login.waiting");
     try {
       await api.loginStart();
+      waiting = true;
+      button.textContent = t("login.return");
     } catch (error) {
       button.disabled = false;
       message.textContent = "";
       onError(error);
+    } finally {
+      // Opening the window completed; keep a way to bring it back to front.
+      button.disabled = false;
     }
   }
 
@@ -31,11 +37,20 @@ export function createLoginView({ onError }) {
     /** Called with "success" | "cancelled" | "error:<kind>" from the backend. */
     loginResult(result) {
       button.disabled = false;
+      if (result.startsWith("pending:")) {
+        message.textContent = t("login.confirm");
+        return;
+      }
+      waiting = false;
+      button.textContent = t("login.button");
       if (result === "cancelled") message.textContent = t("login.cancelled");
-      else if (result.startsWith("error")) message.textContent = t("login.failed");
+      else if (result.startsWith("error:")) {
+        const kind = result.slice(6);
+        message.textContent = ["offline", "timeout"].includes(kind) ? errorText({ kind }) : t("login.failed");
+      }
       else message.textContent = "";
     },
     showPersistenceWarning(show) { note.hidden = !show; },
-    reset() { button.disabled = false; message.textContent = ""; },
+    reset() { waiting = false; button.disabled = false; button.textContent = t("login.button"); message.textContent = ""; },
   };
 }
