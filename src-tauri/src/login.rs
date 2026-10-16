@@ -232,14 +232,17 @@ fn poll(
 fn smoke_cookie_store(window: &tauri::WebviewWindow) -> bool {
     use tauri::webview::Cookie;
     let probes = [
-        Cookie::build(("pm_probe_root", "root")).domain(".vk.ru").path("/").secure(true).http_only(true).build(),
+        Cookie::build(("pm_probe_browser", "browser")).domain(".vk.ru").path("/").secure(true).build(),
         Cookie::build(("pm_probe_login", "login")).domain("login.vk.ru").path("/").secure(true).http_only(true).build(),
     ];
-    for cookie in &probes {
+    // One cookie comes from page JavaScript, the other from the native manager.
+    // A native-only round trip would miss a manager reading the wrong profile.
+    for cookie in &probes[1..] {
         if window.set_cookie(cookie.clone()).is_err() { return false; }
     }
     let mut verified = false;
     for _ in 0..10 {
+        let _ = window.eval("document.cookie = 'pm_probe_browser=browser; Domain=vk.ru; Path=/; Secure; SameSite=Lax'");
         if let Ok(cookies) = window.cookies() {
             let pairs = token_cookies(&cookies);
             verified = probes.iter().all(|probe| pairs.iter().any(|(name, value)| name == probe.name() && value == probe.value()));
