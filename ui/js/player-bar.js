@@ -129,7 +129,7 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
     repeatButton.classList.toggle("on", player.repeat !== "off");
     repeatButton.title = repeatLabel;
     repeatButton.setAttribute("aria-label", repeatLabel);
-    repeatButton.replaceChildren(icon("repeat", 18), ...(player.repeat === "one" ? [h("span", { text: "1" })] : []));
+    repeatButton.replaceChildren(icon("repeat", 18), ...(player.repeat === "one" ? [h("span", { class: "badge", text: "1" })] : []));
 
     const duration = Math.max(0, player.duration || 0);
     seek.max = String(Math.max(duration, 1));

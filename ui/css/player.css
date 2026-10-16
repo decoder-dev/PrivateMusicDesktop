@@ -32,7 +32,7 @@
 .controls .play:not(:disabled):active { background: var(--accent); }
 .controls .on { color: var(--accent); }
 .controls .icon-btn.on::after { content: ""; position: absolute; bottom: 3px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: currentColor; }
-.controls .icon-btn span { position: absolute; right: 5px; top: 5px; font: 700 9px/1 var(--font); }
+.controls .icon-btn .badge { position: absolute; right: 5px; top: 5px; font: 700 9px/1 var(--font); }
 .play .spin-over { position: absolute; inset: 0; display: grid; place-items: center; }
 .play .spin-over .spinner { width: 30px; height: 30px; border-width: 2px; }
 .play.is-buffering svg { opacity: 0.3; }

@@ -288,7 +288,9 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
 
     const playing = player.status === "playing" || player.status === "buffering";
     const showPause = playing || player.status === "loading";
-    playButton.replaceChildren(icon(showPause ? "pause" : "play", 28));
+    const spinning = player.status === "buffering" || player.status === "loading";
+    playButton.replaceChildren(icon(showPause ? "pause" : "play", 28), ...(spinning ? [h("span", { class: "spin-over", "aria-hidden": "true" }, h("span", { class: "spinner" }))] : []));
+    playButton.classList.toggle("is-buffering", spinning);
     const label = showPause ? t("pause") : t("play");
     playButton.title = label;
     playButton.setAttribute("aria-label", label);
