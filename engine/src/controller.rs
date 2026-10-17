@@ -494,7 +494,7 @@ impl Shared {
             events.push(UiEvent::SessionExpired);
         }
         events.push(UiEvent::Error { kind: error.kind().to_string(), message: error.to_string() });
-        let skippable = matches!(error, Error::Stream(_) | Error::Http(_) | Error::Format(_) | Error::Vk { .. });
+        let skippable = matches!(error, Error::Stream(_) | Error::Http(_) | Error::Format(_) | Error::Vk { .. } | Error::Unavailable);
         inner.failures += 1;
         if skippable && inner.failures < MAX_CONSECUTIVE_FAILURES && inner.queue.advance(false).is_some() {
             inner.refreshed.clear();

@@ -274,6 +274,7 @@ const dictionary = {
     "error.offline": "Нет подключения к интернету.",
     "error.timeout": "Сервер не отвечает.",
     "error.stream": "Не удалось воспроизвести трек.",
+    "error.unavailable": "Этот трек недоступен в VK: его закрыл правообладатель или регион.",
     "error.default": "Что-то пошло не так.",
     "field.clear": "Очистить",
     "np.nowPlaying": "Сейчас играет",
@@ -548,6 +549,7 @@ const dictionary = {
     "error.offline": "No internet connection.",
     "error.timeout": "The server is not responding.",
     "error.stream": "Could not play this track.",
+    "error.unavailable": "This track is not available from VK (blocked by the rights holder or in your region).",
     "error.default": "Something went wrong.",
     "field.clear": "Clear",
     "np.nowPlaying": "Now playing",
@@ -606,6 +608,7 @@ export function errorText(error) {
     case "offline": return t("error.offline");
     case "timeout": return t("error.timeout");
     case "network": return t("error.network");
+    case "unavailable": return t("error.unavailable");
     case "stream":
     case "http": return t("error.stream");
     default: return (error && error.message) || t("error.default");

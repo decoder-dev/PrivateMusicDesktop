@@ -35,9 +35,10 @@ pub const REFILL_REMAINING: usize = 6;
 pub const UPCOMING_LIMIT: usize = 80;
 /// Tracks asked for per stream-mix page (iOS `MixTrackRequestPolicy.pageSize`).
 pub const PAGE_SIZE: u32 = 100;
-/// Where the stream window continues after the two pages of 50 the window
-/// loads when it starts a mix.
-pub const FIRST_REFILL_OFFSET: u32 = 100;
+/// Pages the window loads when it starts a mix (iOS `pageCount`).
+pub const WINDOW_PAGES: u32 = 4;
+/// Where the stream window continues after the pages the window loaded.
+pub const FIRST_REFILL_OFFSET: u32 = WINDOW_PAGES * PAGE_SIZE;
 /// Requests per round when a page brings nothing new.
 pub const ATTEMPTS: u32 = 3;
 /// Pause between those requests (the iOS prefetch waits the same).
@@ -217,10 +218,10 @@ mod tests {
     fn the_stream_window_moves_on_only_after_an_answer() {
         let mut r = radio(RadioKind::Personal);
         let first = r.next_request().unwrap();
-        assert_eq!(first, RadioRequest::Page { offset: 100 });
+        assert_eq!(first, RadioRequest::Page { offset: FIRST_REFILL_OFFSET });
         assert_eq!(r.next_request().unwrap(), first, "a failed request is asked again");
         r.answered(&first);
-        assert_eq!(r.next_request().unwrap(), RadioRequest::Page { offset: 100 + PAGE_SIZE });
+        assert_eq!(r.next_request().unwrap(), RadioRequest::Page { offset: FIRST_REFILL_OFFSET + PAGE_SIZE });
     }
 
     #[test]
