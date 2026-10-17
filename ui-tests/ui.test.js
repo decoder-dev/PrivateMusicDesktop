@@ -2855,3 +2855,24 @@ test("product: fixed window presets and fullscreen work independently of the pla
   await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>window.__mock.last('set_fullscreen').args.on),false);assert.deepEqual(app.problems,[]);
  }finally{await app.close();}
 });
+
+
+test("product: refreshing a selected catalogue mix keeps its source and does not restart playback",async()=>{
+ const app=await openApp({config:{signedIn:true,catalogMixes:true}});
+ try{const {page}=app;await waitForLibrary(page);await page.click('.nav [data-view=forYou]');
+  await page.waitForSelector('.mix-card [data-mix-key]');
+  const card=page.locator('.mix-card [data-mix-key]').last();await card.click();
+  await page.waitForFunction(()=>window.__mock.count('play_radio')>0);
+  const source=await page.evaluate(()=>window.__mock.last('stream_mix').args);
+  const personalCalls=await page.evaluate(()=>window.__mock.count('mix'));
+  const plays=await page.evaluate(()=>window.__mock.count('play_radio'));
+  const key=await card.getAttribute('data-mix-key');
+  await page.locator('.discovery-view .view-header .btn').filter({hasText:'Обновить'}).click();
+  await page.waitForFunction(()=>window.__mock.count('stream_mix')>=2);
+  assert.deepEqual(await page.evaluate(()=>window.__mock.last('stream_mix').args),source);
+  assert.equal(await page.evaluate(()=>window.__mock.count('mix')),personalCalls);
+  assert.equal(await page.evaluate(()=>window.__mock.count('play_radio')),plays);
+  assert.equal(await page.locator(`[data-mix-key='${key}']`).first().getAttribute('aria-pressed'),'true');
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});

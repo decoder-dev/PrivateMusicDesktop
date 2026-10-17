@@ -53,7 +53,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
     Object.entries(SOURCES).map(([id, source]) =>
       h("button", { type: "button", role: "tab", "data-source": id, onclick: () => select(id), text: t(source.label) })));
   watchSegmented(tabs);
-  const refresh = h("button", { class: "btn", type: "button", onclick: () => { load(current, { force: true }); loadCatalog(true); loadReleases(true); } }, icon("refresh", 14), t("fy.refresh"));
+  const refresh = h("button", { class: "btn", type: "button", onclick: () => { refreshCurrent(); loadCatalog(true); loadReleases(true); } }, icon("refresh", 14), t("fy.refresh"));
   const tuningContent = h("div", { class: "mix-tuning-content glass strong" });
   const tuning = h("details", { class: "mix-tuning", ontoggle: (event) => {
     if (event.target.open) loadTuning();
@@ -134,7 +134,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
     const cacheKey = id === "mix" ? `mix:${options ?? "plain"}` : id;
     refresh.disabled = false;
     if (!force && cache.has(cacheKey)) {
-      if (id === "mix") { listOptions = options; listSource = { kind: "personal", options }; }
+      if (id === "mix") { listOptions = options; listSource = { kind: "personal", options }; activeMix=options?null:"common#"; paintActive(); }
       screen.clearStatus();
       screen.setTracks(cache.get(cacheKey));
       return;
@@ -147,7 +147,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
       const tracks = id === "mix" ? await api.mix(options) : await SOURCES[id].load();
       if (mine !== generation) return;
       cache.set(cacheKey, tracks);
-      if (id === "mix") { listOptions = options; listSource = { kind: "personal", options }; }
+      if (id === "mix") { listOptions = options; listSource = { kind: "personal", options }; activeMix=options?null:"common#"; paintActive(); }
       screen.clearStatus();
       screen.setTracks(tracks);
     } catch (error) {
@@ -157,6 +157,21 @@ export function createForYouView({ play, onTrackAction, toast }) {
     } finally {
       if (mine === generation) refresh.disabled = false;
     }
+  }
+
+  async function refreshCurrent() {
+    const mine=++generation;
+    const source={...listSource};
+    const id=current;
+    refresh.disabled=true;
+    try {
+      const tracks=id!=="mix" ? await SOURCES[id].load() : source.kind==="catalog" ? await api.streamMix(source.mix_id,source.options) : await api.mix(source.options);
+      if(mine!==generation)return;
+      if(id!=="mix")cache.set(id,tracks);
+      else if(source.kind==="personal")cache.set(`mix:${source.options??"plain"}`,tracks);
+      screen.clearStatus();screen.setTracks(tracks);
+    }catch(error){if(mine===generation)toast(errorText(error),{error:true});}
+    finally{if(mine===generation)refresh.disabled=false;}
   }
 
   function select(id) {
