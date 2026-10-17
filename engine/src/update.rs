@@ -104,7 +104,7 @@ impl Updater {
         if let Err(code) = result {
             self.change(|i| {
                 i.snapshot.phase = if code == "cancelled" { "cancelled" } else { "error" }.into();
-                i.snapshot.error = code.into();
+                i.snapshot.error = if code == "cancelled" { String::new() } else { code.into() };
             });
         }
         let snapshot = self.snapshot();
@@ -410,6 +410,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(result.phase, "cancelled");
+        assert!(result.error.is_empty(), "user cancellation is not an update failure");
         assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);
         assert!(updater.verified_file().is_err());
     }
