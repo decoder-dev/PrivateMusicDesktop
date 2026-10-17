@@ -96,6 +96,12 @@ fn a_lost_file_falls_back_to_streaming_and_removal_forgets_it() {
     wait_for("playing from VK", || app.controller().state().status == Status::Playing);
     assert!(!events.lock().unwrap().iter().any(|e| matches!(e, UiEvent::Error { .. })), "the fallback is silent");
 
+    let restored = app.download(&track()).unwrap();
+    assert_eq!(std::fs::metadata(downloads.path().join(&restored.file)).unwrap().len(), restored.bytes);
+    std::fs::write(downloads.path().join(&restored.file), b"truncated").unwrap();
+    let repaired = app.download(&track()).unwrap();
+    assert_eq!(std::fs::metadata(downloads.path().join(&repaired.file)).unwrap().len(), repaired.bytes);
+
     assert!(app.remove_download(&track().id()).unwrap());
     assert!(app.downloads().is_empty());
 }

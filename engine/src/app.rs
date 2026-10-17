@@ -516,7 +516,13 @@ impl Core {
     pub fn download(&self, track: &Track) -> Result<OfflineTrack> {
         let store = self.offline()?;
         if let Some(existing) = store.list().into_iter().find(|e| e.track.id() == track.id()) {
-            return Ok(existing);
+            if std::fs::metadata(store.dir().join(&existing.file)).is_ok_and(|file| file.is_file() && file.len() == existing.bytes && file.len() > 0) {
+                return Ok(existing);
+            }
+            // A cache entry can outlive a file deleted or truncated outside
+            // the app. Download/export must restore it instead of returning
+            // a successful result that points at missing audio.
+            store.remove(&track.id())?;
         }
         for attempt in 0..3 {
             let result = (|| {
