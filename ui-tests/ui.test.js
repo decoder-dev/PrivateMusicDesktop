@@ -1309,7 +1309,6 @@ test("settings: output device, tray, full screen defaults, all applied and remem
     assert.deepEqual([saved.outputDevice, saved.closeToTray, saved.visualizer, saved.lyrics], ["Наушники", false, "radial", false]);
 
     // The full-screen view follows the new defaults.
-    await rows(page).first().dblclick().catch(() => {});
     await page.click(".nav button[data-view=library]");
     await rows(page).first().dblclick();
     await page.keyboard.press("f");
@@ -2455,7 +2454,6 @@ test("motion: the new animations are finite, stop under reduced motion, and the 
       await frames(page);
       seen.push([id, await page.evaluate(() => document.getAnimations().map((a) => ({ name: a.animationName ?? a.transitionProperty, state: a.playState, infinite: a.effect?.getComputedTiming().iterations === Infinity })))]);
     }
-    await rows(page).first().dblclick().catch(() => {});
     assert.deepEqual(app.problems, []);
     await app.close();
     return seen;
