@@ -16,6 +16,9 @@ pub enum Error {
     Transport(String),
     /// A stream could not be fetched, decrypted or decoded.
     Stream(String),
+    /// VK knows the track but gives no stream for it (blocked by the rights
+    /// holder or in this region, or only for subscribers).
+    Unavailable,
     Cancelled,
     InvalidRequest,
 }
@@ -31,6 +34,7 @@ impl fmt::Display for Error {
             Error::Format(what) => write!(f, "Unexpected response: {what}"),
             Error::Transport(what) => write!(f, "Network error: {what}"),
             Error::Stream(what) => write!(f, "Stream error: {what}"),
+            Error::Unavailable => write!(f, "This track is not available from VK."),
             Error::Cancelled => write!(f, "Cancelled."),
             Error::InvalidRequest => write!(f, "Invalid request."),
         }
@@ -67,6 +71,7 @@ impl Error {
             Error::Format(_) => "format",
             Error::Transport(_) => "network",
             Error::Stream(_) => "stream",
+            Error::Unavailable => "unavailable",
             Error::Cancelled => "cancelled",
             Error::InvalidRequest => "invalid",
         }

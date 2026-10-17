@@ -805,6 +805,18 @@ test("backend errors are shown in plain words", async () => {
   } finally { await app.close(); }
 });
 
+test("a track VK will not stream is explained in plain words, never as a protocol error", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await waitForLibrary(page);
+    await page.evaluate(() => window.__mock.emit("pm-event", { type: "error", kind: "unavailable", message: "This track is not available from VK." }));
+    await page.waitForFunction(() => /недоступен в VK.*правообладатель/.test(document.querySelector(".toast")?.textContent ?? ""));
+    assert.doesNotMatch(await page.locator(".toast").first().innerText(), /Unexpected response|getById/);
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
 test("the saved queue comes back after a restart without starting to play", async () => {
   const app = await openApp({ config: { signedIn: true } });
   try {

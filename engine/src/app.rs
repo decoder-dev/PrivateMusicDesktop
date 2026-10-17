@@ -529,21 +529,14 @@ impl Core {
         self.offline()?.remove(track_id)
     }
 
-    /// The personal mix: two pages, so a session lasts a while.
+    /// The personal mix: several pages at once (see `VkClient::mix_window`).
     pub fn mix(&self) -> Result<Vec<Track>> {
         self.mix_with_options(None)
     }
 
     pub fn mix_with_options(&self, options: Option<&str>) -> Result<Vec<Track>> {
         let options = checked_mix_options(options)?;
-        self.api(|client, session| {
-            let mut tracks = client.mix_with_options(session, 0, 50, options.as_deref())?;
-            if let Ok(more) = client.mix_with_options(session, 50, 50, options.as_deref()) {
-                let known: std::collections::HashSet<String> = tracks.iter().map(Track::id).collect();
-                tracks.extend(more.into_iter().filter(|t| !known.contains(&t.id())));
-            }
-            Ok(tracks)
-        })
+        self.api(|client, session| client.mix_window(session, "common", options.as_deref()))
     }
 
     pub fn mix_settings(&self) -> Result<Value> {
@@ -557,14 +550,7 @@ impl Core {
     pub fn stream_mix(&self, mix_id: &str, options: Option<&str>) -> Result<Vec<Track>> {
         let mix_id = checked_mix_id(mix_id)?.to_string();
         let options = checked_mix_options(options)?;
-        self.api(|client, session| {
-            let mut tracks = client.stream_mix(session, &mix_id, 0, 50, options.as_deref())?;
-            if let Ok(more) = client.stream_mix(session, &mix_id, 50, 50, options.as_deref()) {
-                let mut seen: std::collections::HashSet<String> = tracks.iter().map(Track::id).collect();
-                tracks.extend(more.into_iter().filter(|track| seen.insert(track.id())));
-            }
-            Ok(tracks)
-        })
+        self.api(|client, session| client.mix_window(session, &mix_id, options.as_deref()))
     }
 
     /// The "New releases" shelf of VK's catalogue.

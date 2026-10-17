@@ -160,10 +160,10 @@ fn a_mix_radio_refills_from_the_same_mix_and_plays_every_track_once() {
         assert!(body.contains("mix_options"), "the tuning travels with every page: {body}");
         match param(body, "offset") {
             Some("0") => (200, tracks_json(&base, &[1, 2])),
-            Some("50") => (200, tracks_json(&base, &[3, 4])),
+            Some("100") => (200, tracks_json(&base, &[3, 4])),
             // The first refill repeats two tracks the queue already holds.
-            Some("100") => (200, tracks_json(&base, &[3, 4, 5, 6, 7, 8, 9, 10])),
-            Some("200") => (200, tracks_json(&base, &[10, 11, 12, 13, 14])),
+            Some("400") => (200, tracks_json(&base, &[3, 4, 5, 6, 7, 8, 9, 10])),
+            Some("500") => (200, tracks_json(&base, &[10, 11, 12, 13, 14])),
             _ => (200, r#"{"response":{"items":[]}}"#.into()),
         }
     });
@@ -200,10 +200,13 @@ fn a_mix_radio_refills_from_the_same_mix_and_plays_every_track_once() {
         .iter()
         .filter_map(|(_, body)| param(body, "offset").map(str::to_string))
         .collect();
-    assert_eq!(&offsets[..2], ["0", "50"]);
-    let refills: Vec<u32> = offsets[2..].iter().map(|o| o.parse().unwrap()).collect();
+    // The four start-up pages go out together, so their order is not fixed.
+    let mut window: Vec<&str> = offsets[..4].iter().map(String::as_str).collect();
+    window.sort();
+    assert_eq!(window, ["0", "100", "200", "300"]);
+    let refills: Vec<u32> = offsets[4..].iter().map(|o| o.parse().unwrap()).collect();
     assert!(refills.windows(2).all(|w| w[0] <= w[1]), "{refills:?}");
-    assert!(refills.contains(&100) && refills.contains(&200), "{refills:?}");
+    assert!(refills.contains(&400) && refills.contains(&500), "{refills:?}");
 }
 
 #[test]
@@ -215,7 +218,7 @@ fn the_personal_mix_radio_asks_for_the_common_stream_beyond_what_was_loaded() {
         assert_eq!(param(body, "mix_id"), Some("common"));
         assert_eq!(param(body, "count"), Some("100"));
         match param(body, "offset") {
-            Some("100") => (200, tracks_json(&base, &[3, 4, 5, 6, 7, 8, 9])),
+            Some("400") => (200, tracks_json(&base, &[3, 4, 5, 6, 7, 8, 9])),
             _ => (200, r#"{"response":{"items":[]}}"#.into()),
         }
     });
@@ -243,9 +246,9 @@ fn a_source_that_only_repeats_itself_is_given_up_on() {
     std::thread::sleep(Duration::from_millis(400));
     let state = app.controller().state();
     assert_eq!((state.status, state.queue_len), (Status::Idle, 4), "nothing new, so nothing was added");
-    // Two start-up pages, then at most three rounds of three requests.
+    // Four start-up pages, then at most three rounds of three requests.
     let total = api.call_count("getStreamMixAudios");
-    assert!(total <= 2 + 3 * 3, "the radio must not hammer a source with nothing new: {total} calls");
+    assert!(total <= 4 + 3 * 3, "the radio must not hammer a source with nothing new: {total} calls");
     std::thread::sleep(Duration::from_millis(300));
     assert_eq!(api.call_count("getStreamMixAudios"), total, "a finished radio stays quiet");
 }
@@ -257,7 +260,7 @@ fn errors_count_as_bad_rounds_and_stop_after_three() {
     let base = media.base.clone();
     let api = FakeApi::start(move |_, body, _| match param(body, "offset") {
         Some("0") => (200, tracks_json(&base, &[1, 2, 3, 4])),
-        Some("50") => (200, r#"{"response":{"items":[]}}"#.into()),
+        Some("100" | "200" | "300") => (200, r#"{"response":{"items":[]}}"#.into()),
         _ => (200, r#"{"error":{"error_code":100,"error_msg":"nope"}}"#.into()),
     });
     let app = app(&api.base);
@@ -273,10 +276,10 @@ fn errors_count_as_bad_rounds_and_stop_after_three() {
         .unwrap()
         .iter()
         .filter_map(|(_, b)| param(b, "offset"))
-        .filter(|o| *o != "0" && *o != "50")
+        .filter(|o| !matches!(*o, "0" | "100" | "200" | "300"))
         .map(str::to_string)
         .collect();
-    assert_eq!(failed, vec!["100", "100", "100"], "{failed:?}");
+    assert_eq!(failed, vec!["400", "400", "400"], "{failed:?}");
     assert_eq!(app.controller().state().queue_len, 4);
 }
 
@@ -321,7 +324,7 @@ fn a_radio_never_queues_more_than_eighty_upcoming_tracks() {
     let (_dir, media) = media_dir();
     let base = media.base.clone();
     let api = FakeApi::start(move |_, body, _| match param(body, "offset") {
-        Some("100") => (200, tracks_json(&base, &(2..=200).collect::<Vec<i64>>())),
+        Some("400") => (200, tracks_json(&base, &(2..=200).collect::<Vec<i64>>())),
         _ => (200, tracks_json(&base, &[1])),
     });
     let app = app(&api.base);

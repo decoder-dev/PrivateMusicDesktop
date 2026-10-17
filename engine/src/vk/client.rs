@@ -334,6 +334,41 @@ impl VkClient {
         Ok(dedupe(found))
     }
 
+    /// What a mix screen or a fresh queue starts with: several pages at once,
+    /// as the iOS app asks (`MixTrackRequestPolicy`: pages of 100 at offsets
+    /// 0, 100, 200, 300), because a stream mix often answers a page with only
+    /// a handful of tracks. Pages that fail are skipped while any other brings
+    /// something; a dead session is reported so the caller renews it.
+    pub fn mix_window(&self, session: &Session, mix_id: &str, options: Option<&str>) -> Result<Vec<Track>> {
+        use crate::radio::{PAGE_SIZE, UPCOMING_LIMIT, WINDOW_PAGES};
+        let pages: Vec<Result<Vec<Track>>> = std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..WINDOW_PAGES)
+                .map(|page| scope.spawn(move || self.stream_mix(session, mix_id, page * PAGE_SIZE, PAGE_SIZE, options)))
+                .collect();
+            handles.into_iter().map(|h| h.join().unwrap_or(Err(Error::Cancelled))).collect()
+        });
+        if pages.iter().any(|page| matches!(page, Err(Error::Unauthorized))) {
+            return Err(Error::Unauthorized);
+        }
+        let mut known = std::collections::HashSet::new();
+        let mut tracks = Vec::new();
+        let mut first_error = None;
+        for page in pages {
+            match page {
+                Ok(page) => tracks.extend(page.into_iter().filter(|t| known.insert(t.id()))),
+                Err(error) => first_error = first_error.or(Some(error)),
+            }
+        }
+        if tracks.is_empty() {
+            return match first_error {
+                Some(error) => Err(error),
+                None => Ok(tracks),
+            };
+        }
+        tracks.truncate(UPCOMING_LIMIT);
+        Ok(tracks)
+    }
+
     /// VK's mood, activity and genre choices for the personal stream mix.
     pub fn mix_settings(&self, session: &Session) -> Result<Value> {
         self.call(session, "audio.getStreamMixSettings", &[("mix_id", "common".into())])
@@ -1013,7 +1048,7 @@ impl VkClient {
             .and_then(|o| model::parse_track(o, user))
             .ok_or_else(|| Error::Format("audio.getById: empty".into()))?;
         if fresh.stream_url.is_none() {
-            return Err(Error::Format("audio.getById: no stream url".into()));
+            return Err(Error::Unavailable);
         }
         Ok(fresh)
     }
