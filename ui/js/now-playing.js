@@ -1,3 +1,4 @@
+import { toggleWindowFullscreen as changeWindowFullscreen, isWindowFullscreen } from "./window-mode.js";
 import { h, formatTime } from "./dom.js";
 import { icon } from "./icons.js";
 import { t } from "./i18n.js";
@@ -140,7 +141,13 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   visualizer.setAnchor(() => {
     const cover = coverBox.getBoundingClientRect();
     const frame = canvas.getBoundingClientRect();
-    return { x: cover.left + cover.width / 2 - frame.left, y: cover.top + cover.height / 2 - frame.top, radius: cover.width / 2 };
+    const stage=element.querySelector(".np-stage").getBoundingClientRect();
+    const main=element.querySelector(".np-main").getBoundingClientRect();
+    const info=element.querySelector(".np-info").getBoundingClientRect();
+    const bounds={left:Math.max(stage.left+12,main.left)-frame.left,top:stage.top+8-frame.top,right:Math.min(stage.right-12,main.right)-frame.left,bottom:stage.bottom-8-frame.top};
+    if (info.left >= cover.right-1) bounds.right=Math.min(bounds.right,info.left-frame.left-20);
+    else if (info.top >= cover.bottom-1) bounds.bottom=Math.min(bounds.bottom,info.top-frame.top-16);
+    return { x:cover.left+cover.width/2-frame.left,y:cover.top+cover.height/2-frame.top,radius:cover.width/2,bounds };
   });
 
   // ---------------------------------------------------------------- modes
@@ -348,9 +355,9 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   });
 
   async function toggleWindowFullscreen(force) {
-    const next = force ?? !windowFullscreen;
+    const next = force ?? !isWindowFullscreen();
     try {
-      await api.setFullscreen(next);
+      await changeWindowFullscreen(next);
       windowFullscreen = next;
     } catch {
       windowFullscreen = false;
@@ -417,7 +424,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     visualizer.stop();
     lyrics.forget();
     syncEngine();
-    if (windowFullscreen) toggleWindowFullscreen(false);
+    if (isWindowFullscreen()) toggleWindowFullscreen(false);
     // The sheet settles away; with motion off this runs at once.
     element.classList.add("closing");
     afterAnimation(element, () => {
@@ -427,6 +434,13 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     }, 450);
   }
 
+  const redrawLayout = new ResizeObserver(() => { if (open) visualizer.redraw(); });
+  redrawLayout.observe(coverBox);
+  redrawLayout.observe(element.querySelector(".np-stage"));
+  own(() => redrawLayout.disconnect());
+  const onWindowMode = () => { windowFullscreen=isWindowFullscreen();windowButton.setAttribute("aria-pressed",String(windowFullscreen));windowButton.replaceChildren(icon(windowFullscreen?"collapse":"expand",20)); };
+  window.addEventListener("pm-window-mode",onWindowMode);
+  own(()=>window.removeEventListener("pm-window-mode",onWindowMode));
   const onResize = () => { if (open) layoutBackdrop(); };
   window.addEventListener("resize", onResize);
   // Reduce motion can be switched on while the app runs: stop the spectrum then.

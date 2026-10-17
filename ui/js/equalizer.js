@@ -1,3 +1,4 @@
+import { own } from "./store.js";
 import { h } from "./dom.js";
 import { t } from "./i18n.js";
 import { api } from "./api.js";
@@ -72,6 +73,7 @@ export function createEqualizerPanel({ settings, onSettingsChange }) {
     timer = setTimeout(send, 60);
   }
 
+  own(() => clearTimeout(timer));
   render();
   return { element, render };
 }

@@ -330,3 +330,26 @@ fn nonsense_from_the_window_never_reaches_vk() {
     }
     assert_eq!(app.album_tracks(&release(-2), 100_001, 100).unwrap_err(), Error::InvalidRequest);
 }
+
+#[test]
+fn a_shared_playlist_is_resolved_by_its_exact_locator_without_title_search() {
+    let api = FakeApi::start(|url, body, _| {
+        assert_eq!(method(url), "audio.getPlaylistById");
+        assert!(
+            body.contains("owner_id=-123") && body.contains("playlist_id=456") && body.contains("access_key=sharekey")
+        );
+        (200, r#"{"response":{"id":456,"owner_id":-123,"title":"Shared","count":12,"access_key":"sharekey"}}"#.into())
+    });
+    let app = app(&api.base);
+    let mut album = release(-123);
+    album.album_id = 456;
+    album.title = String::new();
+    album.access_key = Some("sharekey".into());
+    let result = app.playlist_by_id(&album).unwrap();
+    assert_eq!(result.title, "Shared");
+    assert_eq!(result.album_id, 456);
+    assert_eq!(result.owner_id, -123);
+    album.album_id = 0;
+    assert!(matches!(app.playlist_by_id(&album), Err(Error::InvalidRequest)));
+    assert_eq!(api.call_count("audio.getPlaylistById"), 1);
+}

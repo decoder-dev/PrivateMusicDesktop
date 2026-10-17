@@ -4,6 +4,9 @@ import { api, trackKey } from "./api.js";
 import { publish } from "./store.js";
 import { t } from "./i18n.js";
 
+let job = null;
+export const downloadJob = () => job;
+export function cancelDownloads() { if (job) { job.cancelled = true; publish("downloadJob"); } }
 let tracks = [];
 let bytes = 0;
 const keys = new Set();
@@ -53,19 +56,31 @@ export function formatSize(value) {
 
 /** Downloads one item at a time; cancellation stops scheduling new requests. */
 export async function downloadAll(items, { isCancelled = () => false, onProgress = () => {} } = {}) {
-  const unique = [...new Map(items.map((track) => [trackKey(track), track])).values()].slice(0, 20000);
-  let completed = 0, failed = 0;
-  for (const track of unique) {
-    if (isCancelled()) break;
-    const key = trackKey(track);
-    if (!keys.has(key) && !pending.has(key)) {
-      pending.add(key); publish("downloads");
-      try { await api.download(track); } catch { failed++; }
-      finally { pending.delete(key); }
+  if (job?.running) return null;
+  const unique = [...new Map(items.map(track => [trackKey(track),track])).values()].slice(0,20000);
+  const state = { running:true,cancelled:false,completed:0,total:unique.length,failed:0,current:null,errors:[] };
+  job=state;
+  publish("downloadJob");
+  try {
+    for (const track of unique) {
+      if (state.cancelled || isCancelled()) { state.cancelled=true; break; }
+      const key=trackKey(track);
+      state.current=track;
+      publish("downloadJob");
+      if (!keys.has(key) && !pending.has(key)) {
+        pending.add(key); publish("downloads");
+        try { await api.download(track); keys.add(key); }
+        catch (error) { state.failed++; state.errors.push({track,error}); }
+        finally { pending.delete(key); publish("downloads"); }
+      }
+      state.completed++;
+      onProgress(state.completed,state.total,state.failed);
+      publish("downloadJob");
     }
-    completed++;
-    onProgress(completed, unique.length, failed);
+    return {completed:state.completed,failed:state.failed,cancelled:state.cancelled};
+  } finally {
+    state.running=false; state.current=null;
+    await refreshDownloads();
+    publish("downloadJob");
   }
-  await refreshDownloads();
-  return { completed, failed, cancelled: isCancelled() };
 }

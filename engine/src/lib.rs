@@ -20,6 +20,7 @@ pub mod radio;
 pub mod store;
 pub mod stream;
 pub mod unmask;
+pub mod update;
 pub mod vk;
 
 pub use error::{Error, Result};

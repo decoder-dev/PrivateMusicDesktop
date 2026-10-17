@@ -71,12 +71,14 @@ function trim(track) {
     lyrics_id: track.lyrics_id ?? null,
     is_hq: !!track.is_hq,
     track_code: track.track_code ?? null,
+    artists: Array.isArray(track.artists) ? track.artists : [],
+    album: track.album ?? null,
   };
 }
 
 export function saveQueue(tracks, index, position) {
   if (!tracks.length || index == null || index < 0 || index >= tracks.length) {
-    localStorage.removeItem(QUEUE);
+    try { localStorage.removeItem(QUEUE); } catch { /* storage may be unavailable */ }
     return;
   }
   let start = 0;
@@ -97,5 +99,5 @@ export function loadQueue() {
 }
 
 export function clearQueue() {
-  localStorage.removeItem(QUEUE);
+  try { localStorage.removeItem(QUEUE); } catch { /* storage may be unavailable */ }
 }

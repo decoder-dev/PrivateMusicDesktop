@@ -7,7 +7,8 @@ import { publish, own } from "./store.js";
 
 const inLibrary = new Map(); // key of a library track -> the track
 const copies = new Map(); // key of the source track -> its library copy
-const pending = new Set();
+const pending = new Map();
+let epoch = 0;
 const listeners = new Set();
 /** Until the library is loaded a heart cannot know whether a click adds a duplicate. */
 let known = false;
@@ -22,6 +23,8 @@ export function setLibrary(tracks) {
 }
 
 export function forgetLibrary() {
+  epoch++;
+  pending.clear();
   known = false;
   inLibrary.clear();
   copies.clear();
@@ -46,24 +49,27 @@ export function onLibraryChange(listener) {
 export async function toggleLike(track) {
   const key = trackKey(track);
   if (!known || pending.has(key)) return null;
-  pending.add(key);
+  const mine = epoch;
+  pending.set(key,mine);
   publish("likes");
   try {
     const copy = libraryCopy(track);
     if (copy) {
       await api.removeFromLibrary(copy);
+      if (mine !== epoch) return null;
       inLibrary.delete(trackKey(copy));
       for (const [source, value] of copies) if (trackKey(value) === trackKey(copy)) copies.delete(source);
       listeners.forEach((fn) => fn({ removed: copy }));
       return "removed";
     }
     const added = await api.addToLibrary(track);
+    if (mine !== epoch) return null;
     inLibrary.set(trackKey(added), added);
     if (trackKey(added) !== key) copies.set(key, added);
     listeners.forEach((fn) => fn({ added }));
     return "added";
   } finally {
-    pending.delete(key);
-    publish("likes");
+    if (pending.get(key) === mine) pending.delete(key);
+    if (mine === epoch) publish("likes");
   }
 }

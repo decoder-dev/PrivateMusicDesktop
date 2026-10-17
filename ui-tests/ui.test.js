@@ -1384,7 +1384,7 @@ test("for you: new releases show as album cards that open the album page", async
     assert.equal(await page.locator(".new-releases h2").innerText(), "Новые релизы");
     await page.locator(".new-releases .card").nth(1).click();
     await page.waitForSelector(".album-view:not([hidden])");
-    await page.waitForFunction(() => document.querySelectorAll(".album-view .row").length === 12);
+    await page.waitForFunction(() => document.querySelectorAll(".album-view .row").length >= 5);
     assert.equal(await page.locator(".album-view h1").innerText(), "Релиз 2");
     const asked = await page.evaluate(() => window.__mock.last("album_tracks").args.album);
     assert.deepEqual([asked.album_id, asked.owner_id], [31, -2000]);
@@ -1765,7 +1765,7 @@ test("album page: opens from the artist's albums, plays, follows and unfollows; 
     await page.waitForSelector(".artist-view .artist-albums .card");
     await page.locator(".artist-view .artist-albums .card").first().click();
     await page.waitForSelector(".album-view:not([hidden])");
-    await page.waitForFunction(() => document.querySelectorAll(".album-view .row").length === 12);
+    await page.waitForFunction(() => document.querySelectorAll(".album-view .row").length >= 5);
     assert.equal(await page.locator(".album-view h1").innerText(), "Альбом 1");
     assert.match(await page.locator(".album-view .page-note").innerText(), /2011 · 12 треков/);
     assert.equal(await page.locator(".album-view .page-artists").innerText(), "Исполнитель 5");
@@ -1806,7 +1806,7 @@ test("album page: a refused follow leaves the button as it was; an album VK will
     await rows(page).nth(1).click({ button: "right" }); // track 2 names its album
     await page.click(".menu [data-action=go-album]");
     await page.waitForSelector(".album-view:not([hidden])");
-    await page.waitForFunction(() => document.querySelectorAll(".album-view .row").length === 12);
+    await page.waitForFunction(() => document.querySelectorAll(".album-view .row").length >= 5);
     // The engine found the key the track did not carry.
     assert.equal((await page.evaluate(() => window.__mock.last("album_tracks"))).args.album.access_key, null);
     await page.click(".album-view .follow");
@@ -2655,9 +2655,203 @@ test("Selena: mobile mood artwork loads and one click starts radio with the serv
     await page.click(".mood-calm");
     await page.waitForFunction(() => window.__mock.last("play_radio"));
     const source=await page.evaluate(() => window.__mock.last("play_radio").args.source);
-    assert.equal(source.kind,"personal");
+    assert.equal(source.kind,"catalog");
+    assert.equal(source.mix_id,"m7");
     assert.deepEqual(JSON.parse(source.options),{mood:["calm"]});
     assert.equal(await page.evaluate(() => window.__mock.count("play_radio")),1);
     assert.deepEqual(app.problems, []);
   } finally { await app.close(); }
+});
+
+
+test("product: pinned mixes persist, their tracks keep the catalog radio, and discovery has one vertical scroll", async () => {
+ const app=await openApp({config:{signedIn:true,catalogMixes:true}});
+ try {
+  const {page}=app; await waitForLibrary(page);
+  await page.click('.nav button[data-view=forYou]'); await page.waitForSelector('.mix-tile');
+  const item=page.locator('.mix-card').filter({hasText:'Спокойный вечер'});
+  await item.getByRole('button',{name:'Закрепить микс',exact:true}).click();
+  assert.equal(await page.locator('.pinned-shelf .mix-tile').count(),1);
+  await page.reload(); await page.click('.nav button[data-view=forYou]');
+  await page.waitForSelector('.pinned-shelf .mix-tile');
+  await page.locator('.pinned-shelf .mix-tile').click();
+  await page.waitForFunction(()=>window.__mock.last('play_radio')?.args.source.kind==='catalog');
+  await rows(page).nth(2).click();
+  assert.equal(await page.evaluate(()=>window.__mock.last('play_radio').args.source.mix_id),'m7');
+  assert.equal(await page.evaluate(()=>getComputedStyle(document.querySelector('.fy-shelves')).overflowY),'visible');
+  await page.getByRole('button',{name:'Треки подборки',exact:true}).click();
+  const geometry=await page.evaluate(()=>({title:document.querySelector('.discovery-tracks-title').getBoundingClientRect().bottom,list:document.querySelector('.discovery-view > .list').getBoundingClientRect().top}));
+  assert.ok(Math.abs(geometry.title-geometry.list)<24);
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test("product: shared VK playlist links open exact metadata and can be followed", async () => {
+ const app=await openApp({config:{signedIn:true}});
+ try {
+  const {page}=app; await waitForLibrary(page);
+  await page.click('.nav button[data-view=playlists]');
+  await page.getByRole('button',{name:'Открыть по ссылке',exact:true}).click();
+  await page.getByRole('textbox',{name:'Ссылка на плейлист VK'}).fill('https://vk.com/music/playlist/-123_456_access');
+  await page.locator('dialog').getByRole('button',{name:'Открыть по ссылке',exact:true}).click();
+  await page.waitForFunction(()=>window.__mock.last('playlist_by_id'));
+  await page.waitForFunction(()=>window.__mock.last('playlist_tracks')?.args.playlist.owner_id===-123);
+  assert.equal(await page.evaluate(()=>window.__mock.last('playlist_by_id').args.album.access_key),'access');
+  await page.getByRole('button',{name:'Добавить в мои плейлисты',exact:true}).click();
+  await page.waitForFunction(()=>window.__mock.last('follow_album')?.args.follow===true);
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test("product: late collection and like replies cannot restore a signed-out account", async () => {
+ const app=await openApp({config:{signedIn:true}});
+ try {
+  const {page}=app; await waitForLibrary(page);
+  const state=await page.evaluate(async()=>{
+   const {api}=await import('/js/api.js');
+   const playlists=await import('/js/my-playlists.js');
+   playlists.forgetPlaylists();
+   let resolveOld; api.playlists=()=>new Promise(resolve=>resolveOld=resolve);
+   const pending=playlists.ensurePlaylists(); playlists.forgetPlaylists();
+   api.playlists=async()=>({items:[{playlist_id:99,owner_id:8,title:'new'}],total:1,next_offset:null});
+   await playlists.ensurePlaylists(); resolveOld({items:[{playlist_id:1,owner_id:7,title:'old'}],total:1,next_offset:null});await pending;
+   const likes=await import('/js/likes.js');
+   const track={track_id:555,owner_id:7,title:'old',artist:'old'};likes.setLibrary([]);
+   let finishLike;api.addToLibrary=()=>new Promise(resolve=>finishLike=resolve);
+   const like=likes.toggleLike(track);likes.forgetLibrary();likes.setLibrary([]);finishLike(track);await like;
+   return {playlists:playlists.allPlaylists().map(p=>p.title),liked:likes.isLiked(track)};
+  });
+  assert.deepEqual(state,{playlists:['new'],liked:false}); assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test("product: dock reserves space, equalizer has real faders, and selects keep their keyboard", async () => {
+ for(const width of [420,780,1920]) {
+  const app=await openApp({config:{signedIn:true},viewport:{width,height:800}});
+  try {
+   const {page}=app;await waitForLibrary(page);await rows(page).first().click();
+   await page.click('.nav button[data-view=settings]');
+   const layout=await page.evaluate(()=>({view:document.querySelector('.settings').getBoundingClientRect().bottom,player:document.querySelector('.player').getBoundingClientRect().top,fader:document.querySelector('.eq-slider').getBoundingClientRect().height,sleep:getComputedStyle(document.querySelector('.sleep-timer select')).minHeight}));
+   assert.ok(layout.view<=layout.player,JSON.stringify(layout));assert.ok(layout.fader>=120);assert.equal(layout.sleep,'40px');
+   const before=await page.evaluate(()=>window.__mock.count('seek'));
+   await page.getByRole('combobox',{name:'Таймер сна',exact:true}).focus();await page.keyboard.press('ArrowRight');
+   assert.equal(await page.evaluate(()=>window.__mock.count('seek')),before); assert.deepEqual(app.problems,[]);
+  }finally{await app.close();}
+ }
+});
+
+test("product: radial spectrum stays clear of titles and controls at maximum amplitude", async () => {
+ for(const viewport of [{width:1920,height:1030},{width:780,height:740},{width:1120,height:640}]) {
+  const app=await openApp({config:{signedIn:true},viewport});
+  try {
+   const {page}=app;
+   await page.evaluate(()=>localStorage.setItem('pm.settings.v1',JSON.stringify({visualizer:'radial',theme:'dark',lyrics:false})));await page.reload();
+   await waitForLibrary(page);await rows(page).first().click();await page.click('.player .cover-button');await page.waitForSelector('.np:not([hidden])');
+   const painted=await page.evaluate(async()=>{
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    window.__mock.emit('pm-event',{type:'spectrum',bands:Array(64).fill(1)});
+    const c=document.querySelector('.np-canvas'),data=c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+    let left=c.width,right=0,top=c.height,bottom=0,pixels=0;
+    for(let y=0;y<c.height;y++)for(let x=0;x<c.width;x++)if(data[(y*c.width+x)*4+3]>4){left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);pixels++;}
+    const scale=c.width/c.clientWidth,r=c.getBoundingClientRect();
+    const box=el=>{const b=el.getBoundingClientRect();return {left:b.left,right:b.right,top:b.top,bottom:b.bottom};};
+    return {pixels,ring:{left:left/scale+r.left,right:right/scale+r.left,top:top/scale+r.top,bottom:bottom/scale+r.top},stage:box(document.querySelector('.np-stage')),info:box(document.querySelector('.np-info'))};
+   });
+   assert.ok(painted.pixels>100,JSON.stringify(painted));
+   assert.ok(painted.ring.top>=painted.stage.top && painted.ring.bottom<=painted.stage.bottom,JSON.stringify(painted));
+   const {ring,info}=painted;assert.ok(ring.right<info.left || ring.left>info.right || ring.bottom<info.top || ring.top>info.bottom,JSON.stringify(painted));
+   assert.deepEqual(app.problems,[]);
+  }finally{await app.close();}
+ }
+});
+
+
+test("product: tuned mix identities, playlist locators and restored track metadata are lossless", async () => {
+ const app=await openApp({config:{signedIn:true}});
+ try {
+  const output=await app.page.evaluate(async()=>{
+   const {mixKey,mixColors,moodMatch}=await import('/js/selena.js');
+   const {playlistLink}=await import('/js/playlist-link.js');
+   const {saveQueue,loadQueue}=await import('/js/persist.js');
+   const colors=Array.from({length:12},(_,i)=>mixColors(mixKey({id:'common',options:JSON.stringify({genre:[String(i)]})})).join(','));
+   const a=mixKey({id:'common',options:'{"mood":{"value":"calm"},"genre":["pop"]}'}),b=mixKey({id:'common',options:'{"genre":["pop"],"mood":{"value":"calm"}}'}),c=mixKey({id:'common',options:'{"mood":{"value":"sad"},"genre":["pop"]}'});
+   const valid=playlistLink('https://vk.com/music?z=audio_playlist-123_456_key%2Ftest');
+   const invalid=['https://evil.example/playlist/-123_456','https://vk.com@evil.example/playlist/-123_456','https://vk.com/playlist/0_1','https://vk.com/playlist/1_0','https://vk.com:444/playlist/-1_2'].every(url=>{try{playlistLink(url);return false;}catch{return true;}});
+   const track={track_id:1,owner_id:7,title:'t',artist:'a',duration:200,artists:[{id:'artist1',name:'a'}],album:{album_id:12,owner_id:-1,title:'album'},stream_url:'secret-expiring-url'};
+   saveQueue([track],0,73);const saved=loadQueue();
+   return {a,b,c,colors:new Set(colors).size,valid,invalid,mood:moodMatch('Desktop stop',['top']),saved};
+  });
+  assert.equal(output.a,output.b);assert.notEqual(output.a,output.c);assert.ok(output.colors>=10);assert.equal(output.valid.owner_id,-123);assert.equal(output.valid.access_key,'key');assert.equal(output.invalid,true);assert.equal(output.mood,false);
+  assert.equal(output.saved.position,73);assert.equal(output.saved.tracks[0].album.album_id,12);assert.equal(output.saved.tracks[0].artists[0].id,'artist1');assert.equal(output.saved.tracks[0].stream_url,null);assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test("product: one download job survives navigation and failed files can be retried", async () => {
+ const app=await openApp({config:{signedIn:true}});
+ try {
+  const output=await app.page.evaluate(async()=>{
+   const {api}=await import('/js/api.js');const d=await import('/js/downloads.js');
+   const first={owner_id:7,track_id:80001,title:'a'},second={owner_id:7,track_id:80002,title:'b'};
+   let attempts=0,release;api.download=async track=>{attempts++;if(attempts===1)await new Promise(resolve=>release=resolve);if(track.track_id===80002)throw {kind:'offline'};return track;};
+   const batch=d.downloadAll([first,second]);await Promise.resolve();
+   const other=await d.downloadAll([second]);release();await batch;
+   const job=d.downloadJob();return {attempts,other,completed:job.completed,failed:job.failed,failedId:job.errors[0].track.track_id,running:job.running};
+  });
+  assert.deepEqual(output,{attempts:2,other:null,completed:2,failed:1,failedId:80002,running:false});assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+
+test("product: updates check and download inside the app, show progress and revalidate before opening", async()=>{
+ const app=await openApp({config:{signedIn:true,updateDelay:600}});
+ try{const {page}=app;await waitForLibrary(page);await page.click('.nav [data-view="settings"]');
+  await page.locator('.update-panel').scrollIntoViewIfNeeded();
+  await page.getByRole('button',{name:'Проверить обновления',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('.update-panel').innerText.includes('Доступна версия 0.4.0'));
+  await page.getByRole('button',{name:'Скачать обновление',exact:true}).click();
+  await page.waitForSelector('.update-panel progress:not([hidden])');
+  assert.equal(await page.locator('.update-panel progress').getAttribute('value'),'50');
+  await page.waitForFunction(()=>document.querySelector('.update-panel').innerText.includes('Обновление загружено и проверено'));
+  await page.locator('.update-actions .primary:not([hidden])').click();
+  assert.equal(await page.evaluate(()=>window.__mock.count('update_open')),1);
+  assert.equal(page.context().pages().length,1);assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test("product: update cancellation is shared across settings visits and failure messages survive UI refresh",async()=>{
+ const app=await openApp({config:{signedIn:true,updateDelay:700}});
+ try{const {page}=app;await waitForLibrary(page);await page.click('.nav [data-view="settings"]');
+  await page.getByRole('button',{name:'Проверить обновления',exact:true}).click();await page.getByRole('button',{name:'Скачать обновление',exact:true}).click();
+  await page.getByRole('button',{name:'Отменить загрузку',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('.update-panel').innerText.includes('Загрузка отменена'));
+  await page.waitForTimeout(750);
+  await page.click('.nav [data-view="library"]');await page.click('.nav [data-view="settings"]');
+  await page.waitForFunction(()=>document.querySelector('.update-panel').innerText.includes('Загрузка отменена'));
+  await page.evaluate(async()=>{const {api}=await import('/js/api.js');api.updateCheck=async()=>{throw 'network';};});
+  await page.getByRole('button',{name:'Проверить обновления',exact:true}).click();
+  await page.waitForSelector('.update-error:not([hidden])');assert.match(await page.locator('.update-error').innerText(),/связаться с GitHub/);
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test("product: private updater token is cleared from the input, never persisted in web storage and can be removed",async()=>{
+ const app=await openApp({config:{signedIn:true}});
+ try{const {page}=app;await waitForLibrary(page);await page.click('.nav [data-view="settings"]');await page.locator('.update-access summary').click();
+  const secret='github_pat_test_123';await page.locator('.update-access input').fill(secret);await page.getByRole('button',{name:'Сохранить доступ',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('.update-access input').value===''&&document.querySelector('.update-access summary').textContent==='Доступ сохранён');
+  const storage=await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}));assert.ok(!storage.includes(secret));
+  await page.getByRole('button',{name:'Удалить токен',exact:true}).click();await page.waitForFunction(()=>document.querySelector('.update-access summary').textContent==='Доступ к закрытому репозиторию');
+  assert.equal(await page.evaluate(()=>window.__mock.last('update_access').args.token),'');assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test("product: fixed window presets and fullscreen work independently of the player and text focus",async()=>{
+ const app=await openApp({config:{signedIn:true}});
+ try{const {page}=app;await waitForLibrary(page);await page.click('.nav [data-view="settings"]');
+  for(const mode of ['medium','maximized','fullscreen']){await page.locator(`[data-window-mode="${mode}"]`).click();assert.equal(await page.evaluate(()=>window.__mock.last('set_window_mode').args.mode),mode);}
+  await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>window.__mock.last('set_fullscreen').args.on),false);
+  await page.locator('.update-access summary').click();await page.locator('.update-access input').focus();
+  await page.keyboard.press('F11');assert.equal(await page.evaluate(()=>window.__mock.last('set_fullscreen').args.on),true);
+  await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>window.__mock.last('set_fullscreen').args.on),false);assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
 });

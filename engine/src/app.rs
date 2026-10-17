@@ -774,6 +774,11 @@ impl Core {
         self.api(|client, session| client.followed_albums(session, offset, count.clamp(1, 100)))
     }
 
+    pub fn playlist_by_id(&self, album: &Album) -> Result<Album> {
+        checked_album(album)?;
+        self.api(|client, session| client.playlist_by_id(session, album))
+    }
+
     pub fn album_tracks(&self, album: &Album, offset: u32, count: u32) -> Result<AlbumTracks> {
         checked_album(album)?;
         let offset = checked_offset(offset)?;

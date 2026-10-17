@@ -1,3 +1,4 @@
+import { own } from "./store.js";
 import { h } from "./dom.js";
 
 /**
@@ -14,6 +15,7 @@ export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
   const root = h("div", { class: "list", role: "listbox", tabindex: "-1" }, spacer);
   let items = [];
   let scheduled = false;
+  let header = null;
 
   function render() {
     scheduled = false;
@@ -21,8 +23,10 @@ export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
     // ResizeObserver below redraws it the moment it becomes visible.
     if (!root.offsetParent) return;
     const viewport = root.clientHeight || 600;
-    const first = Math.max(0, Math.floor(root.scrollTop / rowHeight) - 4);
-    const last = Math.min(items.length, Math.ceil((root.scrollTop + viewport) / rowHeight) + 4);
+    const offset = header?.offsetHeight ?? 0;
+    const top = Math.max(0, root.scrollTop - offset);
+    const first = Math.max(0, Math.floor(top / rowHeight) - 4);
+    const last = Math.min(items.length, Math.max(4, Math.ceil((root.scrollTop + viewport - offset) / rowHeight) + 4));
     spacer.style.height = `${items.length * rowHeight}px`;
     windowEl.style.top = `${first * rowHeight}px`;
     const rows = [];
@@ -41,7 +45,9 @@ export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
   }
 
   root.addEventListener("scroll", schedule, { passive: true });
-  new ResizeObserver(schedule).observe(root);
+  const observer = new ResizeObserver(schedule);
+  observer.observe(root);
+  own(() => observer.disconnect());
 
   for (const type of ["click", "dblclick", "keydown", "contextmenu"]) {
     root.addEventListener(type, (event) => {
@@ -54,6 +60,15 @@ export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
 
   return {
     element: root,
+    setHeader(node) {
+      if (header) { observer.unobserve(header); header.remove(); }
+      header = node;
+      if (header) { root.prepend(header); observer.observe(header); }
+      root.setAttribute("role", header ? "region" : "listbox");
+      spacer.setAttribute("role", header ? "listbox" : "presentation");
+      schedule();
+    },
+    scrollToRows() { root.scrollTop = header?.offsetHeight ?? 0; },
     setItems(next) {
       items = next;
       render();

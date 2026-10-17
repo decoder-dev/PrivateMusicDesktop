@@ -5,6 +5,8 @@ mod commands;
 mod login;
 mod media;
 mod tray;
+mod updater;
+mod window_smoke;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -85,15 +87,18 @@ fn main() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| tray::show_main(app)))
         .plugin(
             tauri_plugin_window_state::Builder::default()
-                .with_state_flags(
-                    tauri_plugin_window_state::StateFlags::all() - tauri_plugin_window_state::StateFlags::VISIBLE,
-                )
+                // Restore placement and desktop maximization, keeping the fixed preset and native frame.
+                .with_state_flags(tauri_plugin_window_state::StateFlags::POSITION | tauri_plugin_window_state::StateFlags::MAXIMIZED)
                 .with_denylist(&["login"])
                 .build(),
         )
         .setup(|tauri_app| {
             let handle = tauri_app.handle().clone();
             init_logging(&handle);
+            tauri_app.manage(updater::UpdateState(Arc::new(pm_engine::update::Updater::new(
+                handle.path().app_cache_dir()?.join("updates"),
+                &handle.package_info().version.to_string(),
+            ))));
             log::info!("Private Music {} starting", handle.package_info().version);
 
             let store: Box<dyn SecretStore> = Box::new(KeyringStore::new(KEYRING_SERVICE));
@@ -121,7 +126,9 @@ fn main() {
                     tray::set_tooltip(&tray_handle, text.as_deref());
                     last_tooltip = text;
                 }
-            }).map_err(|error| log::warn!("system media worker unavailable: {error}")).ok();
+            })
+            .map_err(|error| log::warn!("system media worker unavailable: {error}"))
+            .ok();
             let output_device: Arc<std::sync::Mutex<Option<String>>> = Arc::default();
             let device_for_sink = output_device.clone();
             let app = App::new(
@@ -158,10 +165,13 @@ fn main() {
 
             WebviewWindowBuilder::new(&handle, "main", WebviewUrl::App("index.html".into()))
                 .devtools(false)
+                .initialization_script("document.addEventListener('contextmenu', e => e.preventDefault(), true);")
                 .title("Private Music")
                 .inner_size(1120.0, 740.0)
                 .min_inner_size(780.0, 540.0)
                 .on_navigation(is_app_url)
+                .resizable(false)
+                .maximizable(true)
                 .build()?
                 .on_window_event({
                     let window_handle = handle.clone();
@@ -185,12 +195,22 @@ fn main() {
             has_tray.store(tray::create(&handle), Ordering::Relaxed);
             // After the window exists: Windows needs its handle.
             let _ = media.set(media::Media::new(&handle));
+            if let Some(report) = std::env::var_os("PM_SMOKE_WINDOW") {
+                window_smoke::start(&handle, report.into());
+            }
             if let Some(report) = std::env::var_os("PM_SMOKE_LOGIN") {
                 start_login_smoke_test(&handle, report.into());
             }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            updater::update_state,
+            updater::update_check,
+            updater::update_download,
+            updater::update_cancel,
+            updater::update_access,
+            updater::update_open,
+            commands::set_window_mode,
             commands::session_state,
             commands::profile,
             commands::login_start,
@@ -258,6 +278,7 @@ fn main() {
             commands::search_albums,
             commands::followed_albums,
             commands::album_tracks,
+            commands::playlist_by_id,
             commands::follow_album,
             commands::friends,
             commands::friend_tracks,

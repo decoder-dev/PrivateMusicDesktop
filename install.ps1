@@ -7,8 +7,8 @@
   .\install.ps1 -Silent      install without any window
   .\install.ps1 -Uninstall   remove it
 
-  The repository is private, so a token is needed: set $env:GITHUB_TOKEN, or log
-  in with the GitHub CLI (gh auth login) and it is picked up from there.
+  Public releases need no token. For private releases, set $env:GITHUB_TOKEN,
+  or sign in with the GitHub CLI (gh auth login).
   Optional: $env:PM_REPO, $env:PM_VERSION (for example v0.2.0), $env:PM_API (for tests).
 
   A file downloaded by this script is not marked as "from the internet", so

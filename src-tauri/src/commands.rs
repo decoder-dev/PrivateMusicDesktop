@@ -576,3 +576,35 @@ pub async fn export_track(handle: AppHandle, state: TauriState<'_, AppState>, tr
         Ok(true)
     }).await
 }
+
+#[tauri::command]
+pub async fn playlist_by_id(state: TauriState<'_, AppState>, album: Album) -> CommandResult<Album> {
+    let app = state.app.clone();
+    blocking(move || app.playlist_by_id(&album)).await
+}
+
+/// Fixed normal preset, desktop maximization, or borderless fullscreen.
+#[tauri::command]
+pub fn set_window_mode(window: tauri::WebviewWindow, mode: String) -> CommandResult<()> {
+    let apply = || -> tauri::Result<()> {
+        window.set_fullscreen(false)?;
+        if mode == "fullscreen" {
+            return window.set_fullscreen(true);
+        }
+        if mode == "maximized" {
+            return window.maximize();
+        }
+        window.unmaximize()?;
+        let (mut width, mut height) = (1120.0f64, 740.0f64);
+        if let Some(monitor) = window.current_monitor()? {
+            width = width.min(f64::from(monitor.size().width) / monitor.scale_factor() * 0.85);
+            height = height.min(f64::from(monitor.size().height) / monitor.scale_factor() * 0.85);
+        }
+        window.set_size(tauri::LogicalSize::new(width, height))?;
+        window.center()
+    };
+    if !matches!(mode.as_str(), "medium" | "maximized" | "fullscreen") {
+        return Err(CommandError { kind: "window".into(), message: "unknown window mode".into() });
+    }
+    apply().map_err(|e| CommandError { kind: "window".into(), message: e.to_string() })
+}

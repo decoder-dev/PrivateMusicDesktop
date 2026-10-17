@@ -1,17 +1,20 @@
+import { playlistLink } from "../playlist-link.js";
 import { api } from "../api.js";
 import { createTracksScreen } from "../tracks-screen.js";
-import { errorText, t, tn } from "../i18n.js";
+import { errorText, t, tn, addStrings } from "../i18n.js";
 import { h } from "../dom.js";
 import { icon } from "../icons.js";
 import { subscribe } from "../store.js";
 import { formDialog, confirmDialog } from "../dialog.js";
 import { loadAllPages } from "../api.js";
-import { allPlaylists, ensurePlaylists, isOwn, replacePlaylist, dropPlaylist, changeCount, same, forgetPlaylists } from "../my-playlists.js";
+import { allPlaylists, ensurePlaylists, isOwn, replacePlaylist, dropPlaylist, changeCount, same, forgetPlaylists, addPlaylist } from "../my-playlists.js";
 import { ensureAlbums, followedAlbums } from "../my-albums.js";
 import { albumCard } from "../album-card.js";
 import { openAlbum } from "../navigation.js";
 import { artBox, paintStatus, backButton, headerOnScroll } from "../ui-parts.js";
 import { enter } from "../motion.js";
+
+addStrings({ ru: { "pl.openLink": "Открыть по ссылке", "pl.link": "Ссылка на плейлист VK", "pl.linkInvalid": "Вставьте ссылку VK вида vk.com/music/playlist/-123_456 или vk.com/audio_playlist-123_456.", "pl.shared": "Плейлист по ссылке", "pl.follow": "Добавить в мои плейлисты", "pl.followed": "Плейлист добавлен" }, en: { "pl.openLink": "Open link", "pl.link": "VK playlist link", "pl.linkInvalid": "Paste a VK playlist link, such as vk.com/music/playlist/-123_456.", "pl.shared": "Shared playlist", "pl.follow": "Add to my playlists", "pl.followed": "Playlist added" } });
 
 export function playlistCard(playlist, open) {
   const art = h("span", { class: "card-art art" }, artBox(playlist.artwork_url, { glyph: "playlist", size: 36, className: "fill" }), h("span", { class: "play-chip" }, icon("play", 12)));
@@ -27,10 +30,12 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
   let detailGeneration = 0;
   let current = null; // the open playlist
   let tracks = [];
+  let sharedAlbum = null;
 
   const status = h("div", { class: "status", role: "status", hidden: true });
   const grid = h("div", { class: "grid" });
   const header = h("header", { class: "view-header" }, h("div", { class: "vh-text" }, h("h1", { text: t("playlists.title") })),
+    h("button", { class: "btn", type: "button", onclick: openLink, text: t("pl.openLink") }),
     h("button", { class: "btn primary", type: "button", onclick: () => newPlaylist() }, icon("plus", 14), t("pl.new")));
   // Followed releases, below the playlists.
   const albumsStatus = h("div", { class: "status", role: "status", hidden: true });
@@ -42,6 +47,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
 
   const editButton = h("button", { class: "btn", type: "button", onclick: () => edit(), text: t("pl.edit") });
   const deleteButton = h("button", { class: "btn danger-text", type: "button", onclick: () => remove(), text: t("pl.delete") });
+  const followButton = h("button", { class:"btn",type:"button",text:t("pl.follow"),hidden:true,onclick:followShared });
   const detail = createTracksScreen({
     title: "",
     hero: true,
@@ -54,7 +60,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
         ? [{ label: t("menu.removeFrom"), action: "remove-from-playlist", icon: "trash", destructive: true, run: () => removeTrack(track, index) }]
         : []),
       back: backButton(t("playlists.back"), () => showList()),
-      headerExtra: h("div", { class: "set-inline pl-owner" }, editButton, deleteButton),
+      headerExtra: h("div", { class: "set-inline pl-owner" }, editButton, deleteButton, followButton),
     },
   });
   detail.element.hidden = true;
@@ -72,6 +78,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
   function renderOwner() {
     const own = current && isOwn(current);
     editButton.hidden = deleteButton.hidden = !own;
+    followButton.hidden = !sharedAlbum || own || sharedAlbum.is_followed;
   }
 
   subscribe("playlists", () => {
@@ -109,12 +116,14 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
   function showList() {
     detailGeneration++;
     current = null;
+    sharedAlbum = null;
     detail.element.hidden = true;
     listScreen.hidden = false;
     enter(listScreen);
   }
 
-  async function open(playlist) {
+  async function open(playlist, shared = null) {
+    sharedAlbum = shared;
     current = playlist;
     renderOwner();
     listScreen.hidden = true;
@@ -127,7 +136,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
     detail.setStatus(t("loading"));
     const mine = ++detailGeneration;
     try {
-      const all = await loadAllPages((offset, count) => api.playlistTracks(playlist, offset, count), {
+      const all = await loadAllPages((offset,count) => api.playlistTracks(playlist,offset,count), {
         isCancelled: () => mine !== detailGeneration,
         onProgress: (n, total, items) => {
           if (mine === detailGeneration) detail.setProgress(items.slice(), total);
@@ -141,6 +150,35 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
       if (mine === detailGeneration) detail.setStatus(errorText(error), { error: true });
       toast(errorText(error), { error: true });
     }
+  }
+
+  async function openLink() {
+    const mine = generation;
+    const values = await formDialog({ title:t("pl.openLink"),confirm:t("pl.openLink"),fields:[{name:"url",label:t("pl.link"),required:true,max:2048}] });
+    if (!values || mine !== generation) return;
+    let album;
+    try { album=playlistLink(values.url); } catch { toast(t("pl.linkInvalid"),{error:true}); return; }
+    album.title=t("pl.shared");
+    try {
+      const resolved=await api.playlistById(album);
+      if (mine !== generation) return;
+      open({playlist_id:resolved.album_id,owner_id:resolved.owner_id,title:resolved.title,count:resolved.count,access_key:resolved.access_key,artwork_url:resolved.artwork_url,description:resolved.description},resolved);
+    } catch(error) { if (mine === generation) toast(errorText(error),{error:true}); }
+  }
+
+  async function followShared() {
+    if (!sharedAlbum || !current) return;
+    const album=sharedAlbum, playlist=current, mine=detailGeneration;
+    followButton.disabled=true;
+    try {
+      await api.followAlbum(album,true);
+      if (mine !== detailGeneration) return;
+      sharedAlbum={...album,is_followed:true};
+      addPlaylist(playlist);
+      renderOwner();
+      toast(t("pl.followed"));
+    } catch(error) { if (mine === detailGeneration) toast(errorText(error),{error:true}); }
+    finally { followButton.disabled=false; }
   }
 
   async function edit() {

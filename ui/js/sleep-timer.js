@@ -4,12 +4,12 @@ import { t, addStrings, errorText } from "./i18n.js";
 import { subscribe, own } from "./store.js";
 import { toast } from "./toast.js";
 
-addStrings({ ru: { "sleep.title": "Таймер сна", "sleep.off": "Выключен", "sleep.minutes": "{n} мин", "sleep.end": "В конце трека", "sleep.left": "До паузы: {time}" }, en: { "sleep.title": "Sleep timer", "sleep.off": "Off", "sleep.minutes": "{n} min", "sleep.end": "End of track", "sleep.left": "Pause in {time}" } });
+addStrings({ ru: { "sleep.title": "Таймер сна", "sleep.action":"Поставить музыку на паузу", "sleep.note":"Таймер работает и при свёрнутом приложении.", "sleep.off": "Выключен", "sleep.minutes": "{n} мин", "sleep.end": "В конце трека", "sleep.left": "До паузы: {time}" }, en: { "sleep.title": "Sleep timer", "sleep.action":"Pause playback", "sleep.note":"The timer also works while the app is minimized.", "sleep.off": "Off", "sleep.minutes": "{n} min", "sleep.end": "End of track", "sleep.left": "Pause in {time}" } });
 
 export function createSleepTimer() {
   let deadline = null;
   let ticker = null;
-  const select = h("select", { "aria-label": t("sleep.title"), onchange: async () => {
+  const select = h("select", { class:"field", "aria-label": t("sleep.title"), onchange: async () => {
     select.disabled = true;
     try { await api.setSleepTimer(select.value === "end" || select.value === "0" ? null : Number(select.value), select.value === "end"); }
     catch (error) { toast(errorText(error), { error: true }); }
@@ -29,5 +29,5 @@ export function createSleepTimer() {
   subscribe("sleep", update);
   own(() => clearInterval(ticker));
   api.sleepTimer().then(([remaining,end_of_track]) => update({remaining,end_of_track})).catch(() => {});
-  return h("div", {}, select, note);
+  return h("div", { class:"sleep-timer" }, select, note);
 }

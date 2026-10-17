@@ -12,6 +12,18 @@ function channels(hex) {
   return [1, 3, 5].map((i) => parseInt(value.slice(i, i + 2), 16));
 }
 
+/** Fit every radial stroke inside the cover's reserved stage, including its cap. */
+export function radialGeometry(spot, width, height, count) {
+  if (!spot || !Number.isFinite(spot.radius) || spot.radius <= 0 || count <= 0) return null;
+  const b=spot.bounds ?? {left:0,top:0,right:width,bottom:height};
+  const outer=Math.min(spot.x-b.left,b.right-spot.x,spot.y-b.top,b.bottom-spot.y)-4;
+  const line=Math.max(1.5,Math.min(3,spot.radius*0.012));
+  const inner=spot.radius+Math.max(7,spot.radius*0.045);
+  const reach=Math.min(48,spot.radius*0.24,outer-inner-line/2);
+  if (reach < 3) return null;
+  return {inner,reach,line,outer};
+}
+
 export function createVisualizer(canvas) {
   const context = canvas.getContext("2d");
   let mode = "bars";
@@ -93,17 +105,19 @@ export function createVisualizer(canvas) {
     } else if (mode === "radial") {
       const spot = anchor() ?? { x: width / 2, y: height / 2, radius: Math.min(width, height) * 0.2 };
       const total = count * 2; // mirrored left/right so the ring is symmetric
-      const inner = spot.radius * 1.12;
-      const reach = Math.min(spot.radius * 0.9, Math.min(width, height) * 0.2);
+      const geometry=radialGeometry(spot,width,height,count);
+      if (!geometry) return;
+      const {inner,reach,line}=geometry;
       context.save();
       context.translate(spot.x, spot.y);
       context.lineCap = "round";
-      context.lineWidth = Math.max(2, (Math.PI * 2 * inner) / total * 0.55);
+      context.lineWidth = line;
+      context.globalAlpha = 0.55;
       context.strokeStyle = fill(-inner - reach, -inner - reach, inner + reach, inner + reach);
       for (let i = 0; i < total; i += 1) {
         const index = i < count ? i : total - 1 - i;
         const angle = (i / total) * Math.PI * 2 - Math.PI / 2;
-        const length = floor + bands[index] ** 1.4 * reach;
+        const length = 2 + bands[index] ** 1.4 * Math.max(0,reach-2);
         context.beginPath();
         context.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
         context.lineTo(Math.cos(angle) * (inner + length), Math.sin(angle) * (inner + length));
@@ -133,14 +147,15 @@ export function createVisualizer(canvas) {
   observer.observe(canvas);
 
   return {
+    redraw() { paint(); },
     get mode() { return mode; },
     setMode(next) { mode = MODES.includes(next) ? next : "bars"; paint(); },
     setColors(primary, secondary) { colors = [primary, secondary]; paint(); },
     setAnchor(fn) { anchor = fn; },
     /** A fresh picture from the engine: drawn right away. */
     feed(levels) {
-      target = levels;
-      bands = levels.slice();
+      target = levels.slice(0,128).map(value => Number.isFinite(value) ? Math.max(0,Math.min(1,value)) : 0);
+      bands = target.slice();
       paint();
     },
     /** Playback stopped: let the bars sink instead of freezing. */

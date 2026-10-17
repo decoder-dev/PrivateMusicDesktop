@@ -1,8 +1,9 @@
+import { toggleWindowFullscreen, isWindowFullscreen } from "./window-mode.js";
 import { applyPalette } from "./themes.js";
 import { h, clear } from "./dom.js";
 import { icon } from "./icons.js";
 import { t, errorText, addStrings } from "./i18n.js";
-import { api } from "./api.js";
+import { api, trackKey } from "./api.js";
 import { listen } from "./bridge.js";
 import { store, set, publish, subscribe, withScope } from "./store.js";
 import { toast } from "./toast.js";
@@ -275,7 +276,7 @@ function buildShellParts() {
         h("span", { class: "ico" }, icon("logout", 16)), h("span", { class: "txt", text: t("account.signOut") }))));
   nowPlaying = createNowPlaying({ settings, onSettingsChange: persistSettings, onLike: like, onMenu: (track, at) => openTrackMenu(track, at) });
   const bar = createPlayerBar({ onSettingsChange: persistSettings, onExpand: () => nowPlaying.show(), onLike: like });
-  const main = h("main", { class: "main" }, ...Object.values(views).map((v) => v.element), bar.element);
+  const main = h("main", { class: "main" }, ...Object.values(views).map((v) => v.element), h("div", { class:"player-dock" },bar.element));
 
   const element = h("div", { class: "shell" },
     h("aside", { class: "sidebar" },
@@ -357,7 +358,9 @@ async function showApp() {
   setReloader(() => shell?.views[store.view]?.show?.());
   root.append(shell.element);
   shell.show("library");
+  const activeShell = shell;
   api.profile().then((profile) => {
+    if (shell !== activeShell || !store.session.signed_in) return;
     store.session = { ...store.session, profile };
     publish("session");
     shell?.setProfile(profile);
@@ -379,6 +382,7 @@ window.addEventListener("focus", () => { if (shell) syncTimeZone(); });
 
 /** Pushes saved settings to the engine, and brings back the last queue. */
 async function applyStartupState() {
+  const activeShell = shell;
   try {
     api.setCloseToTray(settings.closeToTray).catch(() => {});
     syncTimeZone();
@@ -387,7 +391,9 @@ async function applyStartupState() {
     await api.setVolume(settings.volume);
     await api.setShuffle(settings.shuffle);
     await api.setRepeat(settings.repeat);
+    if (!store.session.signed_in) return;
     const state = await api.playerState();
+    if (shell !== activeShell || !store.session.signed_in) return;
     set("player", state);
     if (state.queue_len === 0) {
       const saved = loadQueue();
@@ -408,7 +414,7 @@ function signedOut() {
 }
 
 async function signOut() {
-  await api.logout();
+  try { await api.logout(); } catch (error) { toast(errorText(error), { error: true }); return; }
   const session = await api.sessionState();
   set("session", session);
   signedOut();
@@ -460,14 +466,15 @@ function scheduleQueueSave(state) {
 
 subscribe("queue", ({ tracks, current }) => {
   lastQueueSave = Date.now();
-  saveQueue(tracks, current, 0);
+  const sameTrack = tracks[current] && store.player.track && trackKey(tracks[current]) === trackKey(store.player.track);
+  saveQueue(tracks, current, sameTrack ? store.player.position : 0);
 });
 
 // ----------------------------------------------------------------- shortcuts
 
 function typing(event) {
   const el = event.target;
-  return el instanceof HTMLInputElement && el.type !== "range" || el instanceof HTMLTextAreaElement;
+  return el instanceof HTMLInputElement && el.type !== "range" || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement || el?.isContentEditable;
 }
 
 document.addEventListener("keydown", (event) => {
@@ -549,3 +556,10 @@ installTooltips();
 initNetwork();
 start();
 window.addEventListener("beforeunload", () => unlisten.forEach((fn) => fn()));
+
+// Window shortcuts also work outside the now-playing view and inside form controls.
+document.addEventListener("keydown",event=>{
+ if(event.key!=="F11" && !(event.key==="Escape" && isWindowFullscreen()))return;
+ event.preventDefault();event.stopImmediatePropagation();
+ toggleWindowFullscreen(event.key==="Escape"?false:undefined).catch(error=>toast(errorText(error),{error:true}));
+},true);

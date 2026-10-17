@@ -1,13 +1,13 @@
 import { toast } from "./toast.js";
 import { h, clear, fold } from "./dom.js";
 import { icon } from "./icons.js";
-import { t, tn, addStrings } from "./i18n.js";
+import { t, tn, addStrings, errorText } from "./i18n.js";
 import { createVirtualList } from "./virtual-list.js";
 import { trackRow, ROW_HEIGHT } from "./track-row.js";
 import { store, subscribe } from "./store.js";
 import { trackKey } from "./api.js";
 import { isLiked, isBusy } from "./likes.js";
-import { isDownloaded, isDownloading, downloadAll } from "./downloads.js";
+import { isDownloaded, isDownloading, downloadAll, downloadJob, cancelDownloads } from "./downloads.js";
 import { openArtistOf } from "./navigation.js";
 import { artBox, paintStatus, pageHero, searchField, headerOnScroll, setAmbience, fillPanel } from "./ui-parts.js";
 
@@ -53,17 +53,21 @@ export function createTracksScreen({ title, filterable = false, playable = true,
     ? h("button", { class: "icon-btn circle-btn", type: "button", hidden: true, title: t("shuffle"), "aria-label": t("shuffle"),
         onclick: () => visible.length && hooks.onPlay(visible, Math.floor(Math.random() * visible.length), { shuffle: true }) }, icon("shuffle", 16))
     : null;
-  let batch = null;
-  const batchButton = playable ? h("button", { class: "btn", type: "button", text: t("batch.download"), hidden: true, onclick: async () => {
-    if (batch) { batch.cancelled = true; return; }
-    const job = { cancelled: false }; batch = job;
+  const batchButton = playable ? h("button", { class:"btn",type:"button",text:t("batch.download"),hidden:true,onclick:async () => {
+    if (downloadJob()?.running) { cancelDownloads(); return; }
     try {
-      const result = await downloadAll(visible.slice(), { isCancelled: () => job.cancelled,
-        onProgress: (done,total) => { batchButton.textContent = t("batch.cancel", { done,total }); } });
-      toast(t("batch.done", { done: result.completed, failed: result.failed }), { error: result.failed > 0 });
-    } finally { batch = null; batchButton.textContent = t("batch.download"); }
+      const result=await downloadAll(visible.slice());
+      if (result) toast(t("batch.done",{done:result.completed,failed:result.failed}),{error:result.failed>0});
+    } catch(error) { toast(errorText(error),{error:true}); }
   } }) : null;
-  subscribe("session", (session) => { if (!session.signed_in && batch) batch.cancelled = true; });
+  subscribe("downloadJob", () => {
+    const job=downloadJob();
+    if (batchButton) {
+      batchButton.textContent=job?.running ? t("batch.cancel",{done:job.completed,total:job.total}) : t("batch.download");
+      batchButton.disabled=!!(job?.running && job.cancelled);
+    }
+  });
+  subscribe("session",session => { if (!session.signed_in) cancelDownloads(); });
   const status = h("div", { class: "status", role: "status", hidden: true });
   const empty = h("div", { class: "empty-state", hidden: true });
   const retry = hooks.onRetry ? h("button", { class: "btn retry", type: "button", onclick: () => hooks.onRetry(), text: t("fy.retryTune") }) : null;

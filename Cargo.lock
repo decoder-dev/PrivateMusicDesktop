@@ -3509,7 +3509,7 @@ dependencies = [
 
 [[package]]
 name = "pm_engine"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "cpal",
  "crossbeam-channel",
@@ -3522,8 +3522,10 @@ dependencies = [
  "reqwest 0.12.28",
  "ringbuf",
  "rubato",
+ "semver",
  "serde",
  "serde_json",
+ "sha2",
  "symphonia",
  "tempfile",
  "thiserror 2.0.21",
@@ -3653,7 +3655,7 @@ dependencies = [
 
 [[package]]
 name = "private-music-desktop"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "env_logger",
  "log",

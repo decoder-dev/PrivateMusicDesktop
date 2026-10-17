@@ -946,7 +946,7 @@ impl VkClient {
         Ok(preferred_album_match(&candidates, album).map(|found| album.merging_access_metadata(found)))
     }
 
-    fn playlist_by_id(&self, session: &Session, album: &Album) -> Result<Album> {
+    pub fn playlist_by_id(&self, session: &Session, album: &Album) -> Result<Album> {
         let mut params = vec![("owner_id", album.owner_id.to_string()), ("playlist_id", album.album_id.to_string())];
         if let Some(key) = album.usable_access_key() {
             params.push(("access_key", key.to_string()));

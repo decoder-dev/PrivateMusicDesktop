@@ -7,6 +7,7 @@ import { store, publish } from "./store.js";
 let all = [];
 let loaded = false;
 let loading = null;
+let epoch = 0;
 
 const userId = () => store.session.profile?.id ?? null;
 /** Playlists the user may edit: their own (positive owner = a person, never a community). */
@@ -27,13 +28,18 @@ export function ownPlaylists() {
 /** Loads once; later calls reuse it. */
 export function ensurePlaylists() {
   if (loaded) return Promise.resolve(all);
-  loading ??= loadAllPages((offset, count) => api.playlists(offset, count), { pageSize: 100 })
-    .then((list) => { setPlaylists(list ?? []); return all; })
-    .finally(() => { loading = null; });
-  return loading;
+  if (loading) return loading;
+  const mine = epoch;
+  const request = loadAllPages((offset,count) => api.playlists(offset,count), { pageSize:100, isCancelled: () => mine !== epoch })
+    .then(list => { if (mine !== epoch) return []; setPlaylists(list ?? []); return all; })
+    .finally(() => { if (loading === request) loading = null; });
+  loading = request;
+  return request;
 }
 
 export function forgetPlaylists() {
+  epoch++;
+  loading = null;
   all = [];
   loaded = false;
   publish("playlists");

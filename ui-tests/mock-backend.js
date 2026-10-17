@@ -282,6 +282,13 @@
     network_focus: ({ focused }) => { state.focused = focused; },
     network_check: () => {},
     retry_playback: () => {},
+    update_state: () => state.update ?? {phase:"idle",current:"0.3.0",access_saved:false},
+    update_check: () => state.update = {phase:"available",current:"0.3.0",version:"0.4.0",name:"PrivateMusic_0.4.0_windows-x64-setup.exe",notes:"Новая версия",total:10485760,downloaded:0},
+    update_download: async () => { state.update={...state.update,phase:"downloading",downloaded:5242880};emit("pm-update",state.update);await delay(config.updateDelay??150);if(state.update.phase!=="cancelled"){state.update={...state.update,phase:"ready",downloaded:10485760};emit("pm-update",state.update);}return state.update;},
+    update_cancel: () => {state.update={...state.update,phase:"cancelled"};emit("pm-update",state.update);},
+    update_access: ({token}) => state.update={...(state.update??{phase:"idle",current:"0.3.0"}),access_saved:!!token},
+    update_open: () => null,
+    set_window_mode: () => null,
     app_info: () => ({ version: "0.1.0", has_tray: config.noTray ? false : true }),
     set_equalizer: ({ gains }) => { state.eq = gains; },
     set_visualizer: ({ on }) => { state.visualizer = on; },
@@ -320,6 +327,7 @@
       return page(query === "empty" ? [] : Array.from({ length: 5 }, (_, i) => makeAlbum(20 + i, { title: `${query} альбом ${i + 1}` })), offset, count);
     },
     followed_albums: async ({ offset, count }) => page(state.followedAlbums, offset, count),
+    playlist_by_id: async ({ album }) => ({ ...album,title:"Плейлист по ссылке",count:12,access_key:album.access_key ?? "resolved",follow_hash:"follow-token" }),
     album_tracks: async ({ album, offset, count }) => {
       await delay(10);
       if (config.albumDenied) throw { kind: "vk", message: "VK error 15: Could not load this album's tracks." };

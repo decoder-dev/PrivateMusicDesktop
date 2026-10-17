@@ -23,7 +23,7 @@ way. `native/` is a copy of the one in decoder-dev/PrivateMusic2: keep them in s
   albums are listed under Playlists. Community albums whose access key VK
   withholds are resolved the way the iOS app does it (search for the key, and
   failing that, rebuild the album from public search results).
-- For you: Selena personal and catalogue mixes, mobile mood cards with the original
+- For you: a single scroll surface, per-account pinned mixes, distinct genre cards, and Selena personal and catalogue mixes; mobile mood cards with the original
   artwork and server-provided mood filters, plus recommendations; "similar tracks" on any row
   plays VK's radio seeded with that track; the personal mix can be tuned by
   mood, activity or genre. A "New releases" shelf shows VK's fresh albums as
@@ -36,7 +36,18 @@ way. `native/` is a copy of the one in decoder-dev/PrivateMusic2: keep them in s
   one. A source that fails or has nothing new is given up on after three
   attempts in a row, and the queue then simply ends. The Queue view says when it
   is a mix. Playing anything else turns the radio off.
+- Open a VK playlist URL directly, including community playlists and access keys;
+  follow a shared playlist into your collection.
 - Search remembers recent queries, which can be reused, removed or cleared.
+- One shared batch-download job with cancellation, progress, failed-file retry and
+  offline cache cleanup; changing screens keeps the same job.
+- Settings → Updates checks the latest GitHub release and downloads its installer
+  in the app, with progress, cancellation and SHA-256 verification. Partial or
+  mismatched files cannot be opened; the checksum is checked again before opening.
+  Public releases require no token. Optional private-release access uses a GitHub
+  token with repository Contents: Read stored in the OS keyring separately from VK.
+- Fixed medium and maximized window presets, plus borderless fullscreen (F11,
+  Escape to leave). Window edges cannot be freely resized.
 - Friends' music: the friends list with photos; open a friend to see their tracks and
   playlists (a playlist opens into its tracks), play from there, and use the hearts and
   the track menu as anywhere else. A friend who keeps their audio private gets a plain
@@ -69,8 +80,7 @@ way. `native/` is a copy of the one in decoder-dev/PrivateMusic2: keep them in s
 The desktop uses the mobile PM icon, palette values and mood artwork. Selena is
 product branding for VK mix sources. Mood cards use IDs returned by VK's mix
 settings; when a mood is unavailable, a notice accompanies the personal mix.
-Apple-only system integrations remain platform-specific. Mobile playlist import,
-audio upload, recommendation bans, crossfade and playback speed are not ported.
+Apple-only system integrations remain platform-specific. Bulk file import, audio upload, recommendation bans, crossfade and playback speed are not ported.
 
 Playback, queue, retries and UI are tested with simulated audio, local HTTP
 fixtures and a mock UI backend. These checks do not certify a real VK account,
@@ -85,8 +95,9 @@ SHA-256, installs it and (on macOS) clears the quarantine flag, so the unsigned
 build opens without warnings. Windows' SmartScreen does not stop a file that a
 script downloaded either.
 
-The repository is private, so the scripts need a token: set `GITHUB_TOKEN`, or
-run `gh auth login` once and they pick it up.
+The repository is public. If it is made private, set `GITHUB_TOKEN` or sign in
+with `gh auth login` for the install scripts. The in-app updater has its own
+optional access field and never reads tokens from the browser or GitHub CLI.
 
 | System | Command |
 | --- | --- |
@@ -267,3 +278,12 @@ connections and stream addresses behind. The app heals itself, as far as it can:
   Signing in to a real account and OS media controls still need manual verification.
 - CMAF streams with encryption are untested against real VK data.
 - `install.ps1` has not been run on a real Windows machine yet.
+
+## Desktop design
+
+The desktop layout uses the mobile palettes, mood artwork and PM identity, with
+Selena's orbital motif, a dedicated playback dock, keyboard-accessible carousel
+controls, a full mix grid and per-account pinning. Broad layout references were
+[Feishin](https://github.com/jeffvli/feishin),
+[Tauon](https://github.com/Taiko2k/Tauon) and
+[Harmonoid](https://github.com/harmonoid/harmonoid); their code and artwork were not copied.

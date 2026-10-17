@@ -98,6 +98,19 @@ fn keyring_entry(service: &str, name: &str) -> Result<keyring::Entry> {
     keyring::Entry::new(service, name).map_err(secret_error)
 }
 
+/// A separate credential, never mixed with the VK account or written to disk.
+pub fn update_token(token: Option<&str>) -> Result<()> {
+    let store = KeyringStore::new("com.dec.privatemusic2.desktop.updater");
+    match token.filter(|s| !s.is_empty()) {
+        Some(value) => store.set("github-read", value),
+        None => store.delete("github-read"),
+    }
+}
+
+pub fn load_update_token() -> Result<Option<String>> {
+    KeyringStore::new("com.dec.privatemusic2.desktop.updater").get("github-read")
+}
+
 fn secret_error(e: keyring::Error) -> Error {
     Error::Transport(format!("secret store: {e}"))
 }
@@ -112,7 +125,9 @@ fn part_count(head: &str) -> usize {
 }
 
 fn load_text(slots: &impl Slots) -> Result<Option<String>> {
-    let Some(head) = slots.get(ACCOUNT)? else { return Ok(None) };
+    let Some(head) = slots.get(ACCOUNT)? else {
+        return Ok(None);
+    };
     let count = part_count(&head);
     if count == 0 {
         return Ok(Some(head));

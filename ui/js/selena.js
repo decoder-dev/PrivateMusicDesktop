@@ -15,3 +15,26 @@ export function mixColors(id) {
   const base=(seed%360)/360;
   return [[0,0.98],[0.14,0.78],[0.5,0.92],[0.64,0.62]].map(([shift,brightness])=>hsb(base+shift,brightness));
 }
+
+
+/** A tuned stream has the same VK id as its siblings; options form its identity. */
+export function mixKey(mix) {
+  let options = mix.options ?? "";
+  try {
+    const parsed=JSON.parse(options);
+    const stable = (value, depth=0) => {
+      if (depth > 16 || value == null || typeof value !== "object") return value;
+      if (Array.isArray(value)) return value.map(item => stable(item,depth+1));
+      return Object.fromEntries(Object.keys(value).sort().map(key => [key,stable(value[key],depth+1)]));
+    };
+    options=JSON.stringify(stable(parsed));
+  } catch { /* opaque VK options remain part of the key */ }
+  return `${mix.id}#${options}`;
+}
+
+export function moodMatch(text, aliases) {
+  const normalized=String(text).normalize("NFKC").toLowerCase().replaceAll("ё","е");
+  return aliases.some(word => /^[a-z ]+$/.test(word)
+    ? new RegExp(`(?:^|[^a-z])${word}`).test(normalized)
+    : normalized.includes(word));
+}

@@ -158,8 +158,10 @@ export function createSearchView({ play, onTrackAction, toast }) {
       const items = id === "artists"
         ? await api.searchArtists(text, 0, SHELF)
         : (await api.searchAlbums(text, 0, SHELF)).items;
+      if (mine !== sequence) return;
       shelves[id].set(text, items);
-      if (mine !== sequence || tab !== id) return;
+      if (shelves[id].size > 20) shelves[id].delete(shelves[id].keys().next().value);
+      if (tab !== id) return;
       renderShelf(id, items);
     } catch (error) {
       if (mine !== sequence || tab !== id) return;
@@ -172,6 +174,7 @@ export function createSearchView({ play, onTrackAction, toast }) {
     const text = raw.trim();
     const mine = ++sequence;
     query = text;
+    loadingMore = false;
     nextOffset = null;
     renderRecent();
     if (tab !== "tracks") loadShelf(tab);
@@ -209,9 +212,9 @@ export function createSearchView({ play, onTrackAction, toast }) {
       nextOffset = page.next_offset;
       screen.setTracks(results);
     } catch (error) {
-      toast(errorText(error), { error: true });
+      if (mine === sequence) toast(errorText(error), { error: true });
     } finally {
-      loadingMore = false;
+      if (mine === sequence) loadingMore = false;
     }
   }
 
@@ -221,6 +224,8 @@ export function createSearchView({ play, onTrackAction, toast }) {
     show() { input.focus(); },
     focus() { input.focus(); input.select(); },
     reset() {
+      clearTimeout(debounce);
+      loadingMore = false;
       sequence++;
       results = [];
       nextOffset = null;

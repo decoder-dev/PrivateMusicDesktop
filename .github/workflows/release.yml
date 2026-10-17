@@ -99,6 +99,11 @@ jobs:
           if (Test-Path $log) { Write-Host "--- $log"; Get-Content $log }
           if (-not ((Test-Path $report) -and (Select-String -Path $report -Pattern '^loaded ' -Quiet))) { exit 1 }
 
+      - name: Fixed window presets and fullscreen (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: scripts\smoke-window.ps1 -Binary 'target\release\private-music-desktop.exe'
+
       # An update installs over the old version and must keep the sign-in and data.
       - name: Installing over the last release keeps the sign-in (Windows)
         if: runner.os == 'Windows'

@@ -7,6 +7,8 @@ import { store, subscribe } from "../store.js";
 import { MODES } from "../visualizer.js";
 import { createEqualizerPanel } from "../equalizer.js";
 import { icon } from "../icons.js";
+import { setWindowMode } from "../window-mode.js";
+import { createUpdater } from "../updater.js";
 import { ACCENTS } from "../persist.js";
 
 const IS_MAC = /Mac/i.test(navigator.platform || navigator.userAgent);
@@ -81,6 +83,8 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
 
   const accountName = h("div", { class: "set-account" });
   const persistNote = h("div", { class: "set-note warn", hidden: true, text: t("set.persist.off") });
+  const updater = createUpdater();
+  const windowModes = h("div", {class:"window-modes set-inline"}, ["medium","maximized","fullscreen"].map(mode => h("button",{class:"btn",type:"button","data-window-mode":mode,text:t(`window.${mode}`),onclick:async()=>{try{await setWindowMode(mode);}catch(error){toast(errorText(error),{error:true});}}})));
   const version = h("div", { class: "set-note" });
 
   const keys = [
@@ -101,8 +105,9 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
         h("div", { class: "set-row" },
           h("label", { class: "set-check", for: "set-flat" }, h("span", { class: "set-label" }, tile("settings"), h("span", { class: "set-text" }, t("set.flat"), h("div", { class: "set-note", text: t("set.flat.note") }))), flatBox))),
       section(t("eq.title"), equalizer.element),
-      section(t("sleep.title"), createSleepTimer()),
+      section(t("sleep.title"), row(t("sleep.action"),createSleepTimer(),t("sleep.note"),"moon")),
       section(t("set.window"),
+        row(t("window.mode"),windowModes,t("window.note"),"expand"),
         h("div", { class: "set-row" },
           h("label", { class: "set-check", for: "set-tray" }, h("span", { class: "set-label" }, tile("collapse"), h("span", { class: "set-text", text: t("set.tray") })), trayBox),
           trayNote)),
@@ -115,6 +120,7 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
       section(t("set.account"),
         h("div", { class: "set-row" }, accountName, h("button", { class: "btn", type: "button", onclick: () => onSignOut(), text: t("account.signOut") })),
         persistNote),
+      section(t("update.title"), updater.element),
       section(t("set.about"),
         h("div", { class: "set-row" }, h("div", {}, h("strong", { text: "Private Music" }), version,
           h("div", { class: "set-note", text: t("set.disclaimer") }))))));
@@ -183,6 +189,7 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
     async show() {
       render();
       loadDevices();
+      updater.show();
       try {
         const info = await api.appInfo();
         version.textContent = t("set.version", { version: info.version });

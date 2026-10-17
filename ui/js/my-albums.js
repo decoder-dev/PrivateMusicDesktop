@@ -7,6 +7,7 @@ import { publish } from "./store.js";
 let all = [];
 let loaded = false;
 let loading = null;
+let epoch = 0;
 // Changes made here since the list was loaded: album key -> followed.
 const decided = new Map();
 
@@ -17,10 +18,13 @@ export function followedAlbums() { return all; }
 /** Loads once; later calls reuse it. */
 export function ensureAlbums() {
   if (loaded) return Promise.resolve(all);
-  loading ??= loadAllPages((offset, count) => api.followedAlbums(offset, count), { pageSize: 100 })
-    .then((list) => { all = list ?? []; loaded = true; publish("albums"); return all; })
-    .finally(() => { loading = null; });
-  return loading;
+  if (loading) return loading;
+  const mine = epoch;
+  const request = loadAllPages((offset,count) => api.followedAlbums(offset,count), { pageSize:100, isCancelled: () => mine !== epoch })
+    .then(list => { if (mine !== epoch) return []; all = list ?? []; loaded = true; publish("albums"); return all; })
+    .finally(() => { if (loading === request) loading = null; });
+  loading = request;
+  return request;
 }
 
 export function isFollowed(album) {
@@ -31,8 +35,10 @@ export function isFollowed(album) {
 
 /** Follows or unfollows; resolves to the new state, rejects as the API does. */
 export async function toggleFollow(album) {
+  const mine = epoch;
   const follow = !isFollowed(album);
   await api.followAlbum(album, follow);
+  if (mine !== epoch) return follow;
   const key = albumKey(album);
   decided.set(key, follow);
   all = all.filter((a) => albumKey(a) !== key);
@@ -42,6 +48,8 @@ export async function toggleFollow(album) {
 }
 
 export function forgetAlbums() {
+  epoch++;
+  loading = null;
   all = [];
   loaded = false;
   decided.clear();
