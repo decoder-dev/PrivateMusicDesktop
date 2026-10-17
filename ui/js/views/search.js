@@ -1,12 +1,16 @@
 import { api } from "../api.js";
 import { createTracksScreen } from "../tracks-screen.js";
-import { errorText, t } from "../i18n.js";
+import { errorText, t, addStrings } from "../i18n.js";
 import { h } from "../dom.js";
 import { icon } from "../icons.js";
 import { searchField, paintStatus, fillPanel, watchSegmented } from "../ui-parts.js";
 import { albumCard, artistCard } from "../album-card.js";
 import { openAlbum, openArtist } from "../navigation.js";
 
+addStrings({ru:{"search.more":"Показать ещё", "search.found":"Найдено треков: {count}"},en:{"search.more":"Show more", "search.found":"Tracks found: {count}"}});
+const normalize = raw => raw.trim().replace(/\s+/gu," ");
+const uniqueTracks = items => [...new Map(items.map(item => [`${item.owner_id}_${item.track_id}`,item])).values()];
+const advancingOffset = (next, current) => Number.isInteger(next) && next > current ? next : null;
 const PAGE = 50;
 const SHELF = 30;
 const TABS = ["tracks", "artists", "albums"];
@@ -28,9 +32,13 @@ export function createSearchView({ play, onTrackAction, toast }) {
 
   const field = searchField({
     placeholder: t("search.placeholder"), label: t("search.placeholder"),
-    autocomplete: "off", spellcheck: "false",
+    autocomplete: "off", spellcheck: "false", maxlength: "120",
     oninput: () => {
       clearTimeout(debounce);
+      sequence++; // Invalidate responses immediately, including during debounce.
+      nextOffset = null;
+      loadingMore = false;
+      if (!normalize(input.value)) { run(""); return; }
       debounce = setTimeout(() => run(input.value), 350);
     },
     onkeydown: (event) => {
@@ -65,10 +73,13 @@ export function createSearchView({ play, onTrackAction, toast }) {
   for (const id of ["artists", "albums"]) {
     const status = h("div", { class: "empty-state", role: "status", hidden: true });
     const grid = h("div", { class: `grid ${id === "artists" ? "artist-grid" : ""}` });
-    shelfParts[id] = { status, grid };
-    panes[id] = h("div", { class: "tab-pane", hidden: true }, status, grid);
+    const more = h("button",{class:"btn search-more",type:"button",hidden:true,text:t("search.more"),onclick:()=>loadShelf(id,true)});
+    shelfParts[id] = { status, grid, more };
+    panes[id] = h("div", { class: "tab-pane", hidden: true }, status, grid, more);
   }
   screen.element.append(h("div", { class: "tab-bar" }, tabs), recentHeading, recentList, tracksPane, panes.artists, panes.albums);
+  const summary=h("div",{class:"search-summary",role:"status",hidden:true});
+  tracksPane.prepend(summary);
   renderRecent();
 
   screen.list.element.addEventListener("scroll", () => {
@@ -143,36 +154,47 @@ export function createSearchView({ play, onTrackAction, toast }) {
     setShelfStatus(id, items.length ? "" : t(id === "artists" ? "search.noArtists" : "search.noAlbums"));
   }
 
-  async function loadShelf(id) {
+  async function loadShelf(id, append = false) {
     const text = query;
     if (!text) {
       shelfParts[id].grid.replaceChildren();
+      shelfParts[id].more.hidden=true;
       setShelfStatus(id, t("search.empty"));
       return;
     }
-    if (shelves[id].has(text)) return renderShelf(id, shelves[id].get(text));
+    const cached = shelves[id].get(text);
+    if (!append && cached) { shelfParts[id].more.disabled=false; renderShelf(id,cached.items); shelfParts[id].more.hidden=cached.next == null; return; }
+    if (append && (shelfParts[id].more.disabled || cached?.next == null)) return;
+    const offset=append?cached.next:0;
+    shelfParts[id].more.disabled=true;
+    shelfParts[id].more.hidden=!append;
     const mine = sequence;
-    shelfParts[id].grid.replaceChildren();
-    setShelfStatus(id, t("loading"));
+    if (!append) { shelfParts[id].grid.replaceChildren(); setShelfStatus(id, t("loading")); }
     try {
-      const items = id === "artists"
-        ? await api.searchArtists(text, 0, SHELF)
-        : (await api.searchAlbums(text, 0, SHELF)).items;
+      const page = id === "artists" ? await api.searchArtists(text, offset, SHELF) : await api.searchAlbums(text, offset, SHELF);
       if (mine !== sequence) return;
-      shelves[id].set(text, items);
+      const fresh=id==="artists"?page:page.items;
+      const key=item=>id==="artists"?String(item.id ?? item.name):`${item.owner_id}_${item.album_id}`;
+      const items=[...new Map([...(append?cached.items:[]),...fresh].map(item=>[key(item),item])).values()];
+      const next=id==="artists"?(fresh.length===SHELF?offset+SHELF:null):advancingOffset(page.next_offset,offset);
+      shelves[id].set(text, {items,next:append && items.length===cached.items.length?null:next});
       if (shelves[id].size > 20) shelves[id].delete(shelves[id].keys().next().value);
       if (tab !== id) return;
       renderShelf(id, items);
+      shelfParts[id].more.hidden=shelves[id].get(text).next==null;
+      saveRecent(text);
     } catch (error) {
       if (mine !== sequence || tab !== id) return;
-      setShelfStatus(id, errorText(error), { error: true });
+      if (!append) setShelfStatus(id, errorText(error), { error: true });
       toast(errorText(error), { error: true });
-    }
+    } finally { if (mine===sequence) shelfParts[id].more.disabled=false; }
   }
 
   async function run(raw) {
-    const text = raw.trim();
+    const text = normalize(raw);
     const mine = ++sequence;
+    summary.hidden=true;
+    if (text !== query) { results=[]; screen.setTracks([]); }
     query = text;
     loadingMore = false;
     nextOffset = null;
@@ -188,9 +210,11 @@ export function createSearchView({ play, onTrackAction, toast }) {
     try {
       const page = await api.search(text, 0, PAGE);
       if (mine !== sequence) return; // a newer query replaced this one
-      results = page.items;
+      results = uniqueTracks(page.items);
+      summary.textContent=t("search.found",{count:Number.isFinite(page.total)?page.total:results.length});
+      summary.hidden=false;
       saveRecent(text);
-      nextOffset = page.next_offset;
+      nextOffset = advancingOffset(page.next_offset,0);
       screen.clearStatus();
       screen.setTracks(results);
       if (!results.length) screen.setStatus(t("search.none"));
@@ -205,11 +229,13 @@ export function createSearchView({ play, onTrackAction, toast }) {
     if (loadingMore || nextOffset == null || !query) return;
     loadingMore = true;
     const mine = sequence;
+    const offset=nextOffset;
     try {
-      const page = await api.search(query, nextOffset, PAGE);
+      const page = await api.search(query, offset, PAGE);
       if (mine !== sequence) return;
-      results = results.concat(page.items);
-      nextOffset = page.next_offset;
+      const merged=uniqueTracks(results.concat(page.items));
+      nextOffset = merged.length>results.length?advancingOffset(page.next_offset,offset):null;
+      results=merged;
       screen.setTracks(results);
     } catch (error) {
       if (mine === sequence) toast(errorText(error), { error: true });
@@ -228,6 +254,7 @@ export function createSearchView({ play, onTrackAction, toast }) {
       loadingMore = false;
       sequence++;
       results = [];
+      summary.hidden=true;
       nextOffset = null;
       query = "";
       renderRecent();
@@ -246,7 +273,7 @@ function readRecent() {
   try {
     const value = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "[]");
     if (!Array.isArray(value)) return [];
-    return [...new Set(value.filter((item) => typeof item === "string").map((item) => item.trim()).filter(Boolean))].slice(0, HISTORY_LIMIT);
+    return [...new Set(value.filter((item) => typeof item === "string").map((item) => normalize(item).slice(0,120)).filter(Boolean))].slice(0, HISTORY_LIMIT);
   } catch {
     return [];
   }

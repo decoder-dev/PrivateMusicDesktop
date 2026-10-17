@@ -274,3 +274,60 @@ fn the_app_says_when_the_sign_in_will_not_survive_a_restart() {
     assert!(app.session_state().signed_in);
     assert!(!app.session_state().persistent);
 }
+
+#[test]
+fn transient_credential_failure_can_recover_without_restarting_or_losing_the_session() {
+    use std::sync::atomic::AtomicBool;
+    struct Flaky { data: Arc<MemoryStore>, fail: Arc<AtomicBool> }
+    impl SecretStore for Flaky {
+        fn load(&self)->pm_engine::Result<Option<Session>> { if self.fail.load(Ordering::SeqCst) { Err(Error::Transport("locked".into())) } else { self.data.load() } }
+        fn save(&self,s:&Session)->pm_engine::Result<()> { if self.fail.load(Ordering::SeqCst) { Err(Error::Transport("locked".into())) } else { self.data.save(s) } }
+        fn clear(&self)->pm_engine::Result<()> { self.data.clear() }
+    }
+    let api=FakeApi::start(|_,_,_|(200,page_json(&[1],1)));
+    let data=Arc::new(MemoryStore::default());data.save(&session("remembered-token-1234")).unwrap();
+    let fail=Arc::new(AtomicBool::new(true));
+    let app=App::new(VkClient::with_base(&api.base).unwrap(),||Ok(Box::new(SimulatedSink::new(44100,2,1.0)) as Box<dyn Sink>),Box::new(Flaky{data:data.clone(),fail:fail.clone()}), |_|{},AppOptions{watch_network:false,..AppOptions::default()});
+    fail.store(false,Ordering::SeqCst);
+    assert!(app.session_state().signed_in);
+    fail.store(true,Ordering::SeqCst);app.sign_in(session("new-token-123456789"));
+    assert!(!app.session_state().persistent);
+    fail.store(false,Ordering::SeqCst);
+    assert!(app.session_state().persistent);
+    assert_eq!(data.load().unwrap().unwrap().access_token,"new-token-123456789");
+}
+
+#[test]
+fn late_refresh_cannot_replace_or_sign_out_a_new_account() {
+    use std::sync::atomic::AtomicBool;
+    for refused in [false,true] {
+        let api=FakeApi::start(|_,_,_|(200,page_json(&[1],1)));
+        let entered=Arc::new(AtomicBool::new(false));let release=Arc::new(AtomicBool::new(false));
+        let (entered_worker,release_worker)=(entered.clone(),release.clone());
+        let token=FakeApi::start(move |_,_,_| {
+            entered_worker.store(true,Ordering::SeqCst);
+            let until=std::time::Instant::now()+std::time::Duration::from_secs(5);
+            while !release_worker.load(Ordering::SeqCst) && std::time::Instant::now()<until { std::thread::sleep(std::time::Duration::from_millis(1)); }
+            (200,if refused { r#"{"type":"error"}"#.into() } else { token_ok("late-token-123456789") })
+        });
+        let store=Arc::new(MemoryStore::default());let (app,events)=app(&api.base,format!("{}/?act=web_token",token.base),store.clone());
+        let app=Arc::new(app);let mut old=session("old-token-123456789");old.expires_at=Some(1);app.sign_in(old);
+        let worker=app.clone();let call=std::thread::spawn(move||worker.library(0,10));
+        let until=std::time::Instant::now()+std::time::Duration::from_secs(3);
+        while !entered.load(Ordering::SeqCst) && std::time::Instant::now()<until {std::thread::sleep(std::time::Duration::from_millis(1));}
+        assert!(entered.load(Ordering::SeqCst));
+        let mut fresh=session("new-account-token-123456789");fresh.user_id=Some(99);app.sign_in(fresh);
+        release.store(true,Ordering::SeqCst);assert_eq!(call.join().unwrap().unwrap_err(),Error::Unauthorized);
+        assert!(app.session_state().signed_in);assert_eq!(store.load().unwrap().unwrap().user_id,Some(99));
+        assert!(!events.lock().unwrap().iter().any(|e|matches!(e,UiEvent::SessionExpired)));
+    }
+}
+
+#[test]
+fn token_renewal_preserves_account_when_vk_omits_its_id() {
+    let api=FakeApi::start(|_,_,_|(200,page_json(&[1],1)));
+    let token=FakeApi::start(|_,_,_|(200,r#"{"type":"okay","data":{"access_token":"new-token-123456789","expires":0}}"#.into()));
+    let store=Arc::new(MemoryStore::default());let (app,_)=app(&api.base,format!("{}/?act=web_token",token.base),store.clone());
+    let mut old=session("old-token-123456789");old.expires_at=Some(1);app.sign_in(old);
+    app.library(0,10).unwrap();assert_eq!(store.load().unwrap().unwrap().user_id,Some(7));
+}

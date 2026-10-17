@@ -353,7 +353,9 @@ impl Core {
 
     /// Adopts a fresh session (just signed in, or just refreshed).
     pub fn sign_in(&self, session: Session) {
-        let _generation = Self::lock(&self.generation);
+        let mut generation = Self::lock(&self.generation);
+        *generation += 1;
+        if let Err(error) = self.store.begin_login() { log::warn!("could not guard account replacement: {error}"); }
         self.adopt(session);
     }
 
@@ -377,6 +379,10 @@ impl Core {
     pub fn sign_out(&self) {
         let mut generation = Self::lock(&self.generation);
         *generation += 1;
+        self.clear_session();
+    }
+
+    fn clear_session(&self) {
         if let Err(error) = self.store.clear() {
             log::warn!("could not clear the session: {error}");
         }
@@ -385,7 +391,26 @@ impl Core {
         self.controller.set_session(None);
     }
 
+    /// Retry a transient OS credential failure without replacing the provider.
+    pub fn retry_session_storage(&self) {
+        let _generation = Self::lock(&self.generation);
+        if !self.store.is_durable() { return; }
+        if let Some(session) = self.controller.session() {
+            *Self::lock(&self.persistent) = self.store.save(&session).is_ok();
+        } else if !*Self::lock(&self.persistent) {
+            if let Ok(session) = self.store.load() {
+                if let Some(session) = session {
+                    self.history.set_account(session.user_id);
+                    self.controller.set_session(Some(session));
+                }
+                *Self::lock(&self.persistent) = true;
+            }
+        }
+    }
+
     pub fn session_state(&self) -> SessionState {
+        let retry = !*Self::lock(&self.persistent);
+        if retry { self.retry_session_storage(); }
         SessionState {
             signed_in: self.controller.session().is_some(),
             profile: Self::lock(&self.profile).clone(),
@@ -398,13 +423,15 @@ impl Core {
         let _one_at_a_time = Self::lock(&self.refresh_lock);
         let started = *Self::lock(&self.generation);
         // Someone else may have refreshed while we waited for the lock.
-        if let Some(current) = self.controller.session() {
-            if current.access_token != stale.access_token {
-                return Ok(current);
-            }
+        let current = self.controller.session().ok_or(Error::Unauthorized)?;
+        if current.access_token != stale.access_token {
+            // A refresh may be reused, but an API call cannot cross accounts.
+            if current.user_id != stale.user_id { return Err(Error::Unauthorized); }
+            return Ok(current);
         }
         match exchange_at(&self.token_url, &stale.refresh_cookie, &stale.web_user_agent, now_unix()) {
-            Ok(fresh) => {
+            Ok(mut fresh) => {
+                fresh.user_id = fresh.user_id.or(stale.user_id);
                 let generation = Self::lock(&self.generation);
                 if *generation != started || self.controller.session().is_none() {
                     // Signed out while VK was answering: stay signed out.
@@ -415,10 +442,13 @@ impl Core {
                 Ok(fresh)
             }
             Err(Error::Unauthorized) => {
-                if *Self::lock(&self.generation) != started {
+                let mut generation = Self::lock(&self.generation);
+                if *generation != started {
                     return Err(Error::Unauthorized);
                 }
-                self.sign_out();
+                *generation += 1;
+                self.clear_session();
+                drop(generation);
                 (self.emit)(UiEvent::SessionExpired);
                 Err(Error::Unauthorized)
             }
@@ -429,11 +459,23 @@ impl Core {
     /// Runs a VK call with a valid token: refreshed ahead of expiry, and once
     /// more if VK answers 401 anyway.
     pub fn api<T>(&self, call: impl Fn(&VkClient, &Session) -> Result<T>) -> Result<T> {
-        let mut session = self.controller.session().ok_or(Error::Unauthorized)?;
+        let retry = !*Self::lock(&self.persistent);
+        if retry { self.retry_session_storage(); }
+        let (started, mut session) = {
+            let generation = Self::lock(&self.generation);
+            (*generation, self.controller.session().ok_or(Error::Unauthorized)?)
+        };
         if session.needs_refresh(now_unix()) {
-            session = self.refresh(&session).unwrap_or(session);
+            session = match self.refresh(&session) {
+                Ok(fresh) => fresh,
+                Err(Error::Unauthorized) => return Err(Error::Unauthorized),
+                Err(_) => session, // a temporary network failure must keep the cookie
+            };
         }
-        match call(self.controller.client(), &session) {
+        if *Self::lock(&self.generation) != started { return Err(Error::Unauthorized); }
+        let answer = call(self.controller.client(), &session);
+        if *Self::lock(&self.generation) != started { return Err(Error::Unauthorized); }
+        match answer {
             // A session VK stopped accepting, which is also how a changed IP
             // shows (the token was minted on the other network): renew it from
             // the cookie once and ask again once. Never a loop.
@@ -446,7 +488,9 @@ impl Core {
                     Err(renewal) if error == Error::Unauthorized => return Err(renewal),
                     Err(_) => return Err(error),
                 };
-                call(self.controller.client(), &fresh)
+                let answer = call(self.controller.client(), &fresh);
+                if *Self::lock(&self.generation) != started { return Err(Error::Unauthorized); }
+                answer
             }
             other => other,
         }
@@ -478,7 +522,17 @@ impl Core {
         if let Some(profile) = Self::lock(&self.profile).clone() {
             return Ok(profile);
         }
+        let started = *Self::lock(&self.generation);
         let profile = self.api(|client, session| client.profile(session))?;
+        let generation = Self::lock(&self.generation);
+        if *generation != started { return Err(Error::Unauthorized); }
+        if let Some(mut session) = self.controller.session() {
+            if session.user_id.is_none() {
+                session.user_id = Some(profile.id);
+                *Self::lock(&self.persistent) = self.store.save(&session).is_ok() && self.store.is_durable();
+                self.controller.set_session(Some(session));
+            }
+        }
         // A session that did not name its user: the history starts now.
         if self.history.account().is_none() && self.controller.session().is_some() {
             self.history.set_account(Some(profile.id));

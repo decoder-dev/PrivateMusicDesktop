@@ -26,7 +26,8 @@ function readEq(saved) {
   const gains = Array.isArray(saved?.gains) && saved.gains.length === 10 && saved.gains.every(Number.isFinite)
     ? saved.gains.map((g) => Math.min(12, Math.max(-12, g)))
     : Array(10).fill(0);
-  return { on: saved?.on === true, gains, preset: typeof saved?.preset === "string" ? saved.preset : "flat" };
+  const custom=Array.isArray(saved?.custom) && saved.custom.length===10 && saved.custom.every(Number.isFinite) ? saved.custom.map(g=>Math.min(12,Math.max(-12,g))) : gains.slice();
+  return { on: saved?.on === true, gains, custom, preset: typeof saved?.preset === "string" ? saved.preset : "flat" };
 }
 
 export const ACCENTS = ["blue", "indigo", "violet", "pink", "red", "orange", "green", "teal", "banana"];

@@ -2,7 +2,8 @@
 //!
 //! Peaking biquads (RBJ cookbook) at the usual octave centres. A boost would
 //! clip loud music, so the whole signal is lowered by the largest boost
-//! (preamp): with every band at +6 dB nothing changes but the spectrum shape.
+//! (preamp). A linked stereo peak guard handles transients; retuning crossfades
+//! complete filter banks instead of abruptly resetting their coefficients.
 
 pub const BANDS: [f32; 10] = [31.0, 62.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0];
 pub const MAX_GAIN_DB: f32 = 12.0;
@@ -59,12 +60,19 @@ pub struct Equalizer {
     states: Vec<State>,
     channels: usize,
     preamp: f32,
+    rate: u32,
+    previous: Option<Box<Equalizer>>,
+    fade_remaining: usize,
+    fade_frames: usize,
+    limiter_gain: f32,
+    release: f32,
 }
 
 impl Equalizer {
     /// `None` when every gain is (about) zero: nothing to do.
     pub fn new(gains_db: &[f32; 10], rate: u32, channels: usize) -> Option<Self> {
-        let gains: Vec<f32> = gains_db.iter().map(|g| if g.is_finite() { g.clamp(-MAX_GAIN_DB, MAX_GAIN_DB) } else { 0.0 }).collect();
+        let gains: Vec<f32> =
+            gains_db.iter().map(|g| if g.is_finite() { g.clamp(-MAX_GAIN_DB, MAX_GAIN_DB) } else { 0.0 }).collect();
         if gains.iter().all(|g| g.abs() < 0.05) || channels == 0 || rate == 0 {
             return None;
         }
@@ -92,38 +100,112 @@ impl Equalizer {
         }
         let filters = build(&applied);
         // Lower everything by the loudest point of the curve, so no boost clips.
-        let peak = (0..200)
-            .map(|i| 20.0 * (1000.0f64).powf(f64::from(i) / 200.0)) // 20 Hz … 20 kHz
+        let peak = (0..1025)
+            .map(|i| 10.0 * (rate_f * 0.049).powf(f64::from(i) / 1024.0)) // 10 Hz … 98% of Nyquist
             .filter(|hz| *hz < rate_f / 2.0)
             .map(|hz| total(&filters, hz))
             .fold(0.0f64, f64::max);
-        // Ripple of the band fitting (well under 1 dB) is not worth turning
-        // the whole song down for.
-        let peak = if peak < 1.0 { 0.0 } else { peak };
+        let peak = if peak < 1.0 { 0.0 } else { peak + 0.25 };
         Some(Self {
             states: vec![State::default(); filters.len() * channels],
             filters,
             channels,
             preamp: 10f64.powf(-peak / 20.0) as f32,
+            rate,
+            previous: None,
+            fade_remaining: 0,
+            fade_frames: 1,
+            limiter_gain: 1.0,
+            release: (-1.0 / (0.08 * rate as f32)).exp(),
         })
     }
 
-    /// Filters interleaved samples in place.
+    /// Crossfade over 30 ms, including enabling and bypassing the equalizer.
+    pub fn transition(previous: Option<Self>, gains: Option<&[f32; 10]>, rate: u32, channels: usize) -> Option<Self> {
+        if rate == 0 || channels == 0 {
+            return None;
+        }
+        let previous = previous.filter(|old| old.channels == channels && old.rate == rate);
+        let next = gains.and_then(|g| Self::new(g, rate, channels));
+        if previous.is_none() && next.is_none() {
+            return None;
+        }
+        let identity = || Self {
+            filters: Vec::new(),
+            states: Vec::new(),
+            channels,
+            preamp: 1.0,
+            rate,
+            previous: None,
+            fade_remaining: 0,
+            fade_frames: 1,
+            limiter_gain: 1.0,
+            release: (-1.0 / (0.08 * rate as f32)).exp(),
+        };
+        let mut next = next.unwrap_or_else(identity);
+        let mut old = previous.unwrap_or_else(identity);
+        next.limiter_gain = old.limiter_gain;
+        old.previous = None; // rapid retunes cannot accumulate filter banks
+        next.fade_frames = (rate as usize * 30 / 1000).max(1);
+        next.fade_remaining = next.fade_frames;
+        next.previous = Some(Box::new(old));
+        Some(next)
+    }
+
+    pub fn reset(&mut self) {
+        self.states.fill(State::default());
+        self.previous = None;
+        self.fade_remaining = 0;
+        self.limiter_gain = 1.0;
+    }
+
+    fn sample(&mut self, channel: usize, input: f32) -> f32 {
+        let mut x = f64::from(input * self.preamp);
+        for (band, c) in self.filters.iter().enumerate() {
+            let s = &mut self.states[band * self.channels + channel];
+            let y = c.b0 * x + c.b1 * s.x1 + c.b2 * s.x2 - c.a1 * s.y1 - c.a2 * s.y2;
+            s.x2 = s.x1;
+            s.x1 = x;
+            s.y2 = s.y1;
+            s.y1 = y;
+            x = y;
+        }
+        if x.is_finite() {
+            x as f32
+        } else {
+            self.reset();
+            0.0
+        }
+    }
+
+    /// Filters interleaved samples without allocation in the audio path.
     pub fn process(&mut self, samples: &mut [f32]) {
-        let channels = self.channels;
-        for frame in samples.chunks_exact_mut(channels) {
+        for frame in samples.chunks_exact_mut(self.channels) {
+            let mix = 1.0 - self.fade_remaining as f32 / self.fade_frames as f32;
             for (channel, sample) in frame.iter_mut().enumerate() {
-                let mut x = f64::from(*sample * self.preamp);
-                for (band, c) in self.filters.iter().enumerate() {
-                    let s = &mut self.states[band * channels + channel];
-                    let y = c.b0 * x + c.b1 * s.x1 + c.b2 * s.x2 - c.a1 * s.y1 - c.a2 * s.y2;
-                    s.x2 = s.x1;
-                    s.x1 = x;
-                    s.y2 = s.y1;
-                    s.y1 = y;
-                    x = y;
+                let dry = if sample.is_finite() { *sample } else { 0.0 };
+                let wet = self.sample(channel, dry);
+                *sample = if let Some(old) = self.previous.as_mut() {
+                    old.sample(channel, dry) * (1.0 - mix) + wet * mix
+                } else {
+                    wet
+                };
+            }
+            let peak = frame.iter().map(|v| v.abs()).fold(0.0f32, f32::max);
+            let target = if peak > 1.0 { 1.0 / peak } else { 1.0 };
+            self.limiter_gain = if target < self.limiter_gain {
+                target
+            } else {
+                self.release * self.limiter_gain + (1.0 - self.release) * target
+            };
+            for sample in frame {
+                *sample = (*sample * self.limiter_gain).clamp(-1.0, 1.0);
+            }
+            if self.fade_remaining > 0 {
+                self.fade_remaining -= 1;
+                if self.fade_remaining == 0 {
+                    self.previous = None;
                 }
-                *sample = x as f32;
             }
         }
     }
@@ -209,5 +291,45 @@ mod tests {
         let mut samples = vec![0.1f32; 1000];
         eq.process(&mut samples);
         assert!(samples.iter().all(|v| v.is_finite()));
+    }
+}
+
+#[cfg(test)]
+mod transition_tests {
+    use super::*;
+    #[test]
+    fn bypass_and_retune_start_at_the_previous_output() {
+        let mut eq = Equalizer::transition(None, Some(&[-12.0; 10]), 48_000, 2).unwrap();
+        let mut first = [0.5, -0.25];
+        eq.process(&mut first);
+        assert!((first[0] - 0.5).abs() < 0.00001 && (first[1] + 0.25).abs() < 0.00001);
+        eq.process(&mut vec![0.1; 4000]);
+        let mut bypass = Equalizer::transition(Some(eq), None, 48_000, 2).unwrap();
+        bypass.process(&mut vec![0.1; 4000]);
+        let mut frame = [0.5, -0.25];
+        bypass.process(&mut frame);
+        assert_eq!(frame, [0.5, -0.25]);
+        assert!(bypass.previous.is_none());
+    }
+    #[test]
+    fn transient_guard_is_finite_bounded_and_stereo_linked() {
+        let mut eq =
+            Equalizer::new(&[12.0, -12.0, 12.0, -12.0, 12.0, -12.0, 12.0, -12.0, 12.0, -12.0], 44_100, 2).unwrap();
+        let mut input: Vec<_> = (0..44100)
+            .flat_map(|i| {
+                let v = if i % 7 < 3 { 1.0 } else { -1.0 };
+                [v, v * 0.5]
+            })
+            .collect();
+        eq.process(&mut input);
+        for f in input.as_chunks::<2>().0 {
+            assert!(f.iter().all(|v| v.is_finite() && v.abs() <= 1.0));
+            assert!((f[0] * 0.5 - f[1]).abs() < 0.00001);
+        }
+        eq.process(&mut [f32::NAN, f32::INFINITY]);
+        let mut silence = [0.0; 128];
+        eq.reset();
+        eq.process(&mut silence);
+        assert!(silence.iter().all(|v| *v == 0.0));
     }
 }

@@ -69,3 +69,15 @@
  .discovery-view .shelf-heading { gap:8px; }
  .discovery-view .shelf-heading .shelf-title { font-size:18px; }
 }
+
+/* The card owns both controls, including hover movement and clipping. */
+.discovery-view .mix-card { isolation:isolate; overflow:hidden; border-radius:18px; transition:transform 160ms var(--ease-std); }
+.discovery-view .mix-card:hover { transform:translateY(-2px); }
+.discovery-view .mix-card .mix-tile { transform:none; }
+.discovery-view .mix-card .mix-pin { position:absolute; z-index:2; top:12px; right:12px; width:34px; height:34px; border:1px solid rgb(255 255 255 / 0.18); background:rgb(0 0 0 / 0.22); color:#fff; }
+.discovery-view .mix-card .mix-pin[aria-pressed="true"] { background:#fff; color:#15171b; }
+.discovery-view .mix-card .mix-pin:focus-visible { outline:2px solid #fff; outline-offset:-4px; }
+.discovery-view .mix-card .mix-play { top:auto; bottom:16px; right:16px; width:28px; height:28px; border-radius:50%; display:grid; place-items:center; background:rgb(255 255 255 / 0.16); }
+.discovery-view .mix-card .mix-text { padding-right:30px; }
+.discovery-view .mix-card .mix-tile:focus-visible { outline-offset:-3px; }
+@media(prefers-reduced-motion:reduce) { .discovery-view .mix-card:hover { transform:none; } }

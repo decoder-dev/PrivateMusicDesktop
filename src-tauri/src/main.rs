@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use pm_engine::app::{App, AppOptions};
 use pm_engine::audio::{CpalSink, Sink};
-use pm_engine::store::{KeyringStore, MemoryStore, SecretStore};
+use pm_engine::store::{KeyringStore, SecretStore};
 use pm_engine::vk::VkClient;
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
@@ -101,16 +101,8 @@ fn main() {
             ))));
             log::info!("Private Music {} starting", handle.package_info().version);
 
-            let store: Box<dyn SecretStore> = Box::new(KeyringStore::new(KEYRING_SERVICE));
-            // If the OS secret store cannot be used at all, keep the sign-in
-            // in memory for this run instead of writing credentials to disk.
-            let store: Box<dyn SecretStore> = match store.load() {
-                Ok(_) => store,
-                Err(error) => {
-                    log::warn!("secret store unavailable, sign-in will not persist: {error}");
-                    Box::new(MemoryStore::default())
-                }
-            };
+            let store: Box<dyn SecretStore> = Box::new(KeyringStore::new(KEYRING_SERVICE)
+                .with_logout_marker(handle.path().app_data_dir()?.join("session.signed-out")));
 
             let emitter = handle.clone();
             let tray_handle = handle.clone();
@@ -301,6 +293,7 @@ fn main() {
             if let tauri::RunEvent::Exit = event {
                 // Whatever was played since the last timed save goes to disk.
                 if let Some(state) = app.try_state::<AppState>() {
+                    state.app.retry_session_storage();
                     state.app.flush_history();
                 }
             }

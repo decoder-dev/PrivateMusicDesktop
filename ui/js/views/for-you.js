@@ -375,13 +375,27 @@ export function createForYouView({ play, onTrackAction, toast }) {
       h("span", { class: "mix-play", "aria-hidden": "true" }, icon("play",14)));
     mixColors(`${key}|${mixName(mix.title)}`).forEach((color,index) => button.style.setProperty(`--mix-c${index}`,color));
     const isPinned = pinned.some(item => mixKey(item) === key);
-    const pin = h("button", { class: "mix-pin icon-btn", type: "button", "aria-label": t(isPinned ? "fy.unpin" : "fy.pin"), "aria-pressed": String(isPinned), disabled: !pinStorage, onclick: () => {
-      pinned = isPinned ? pinned.filter(item => mixKey(item) !== key) : [...pinned,mix].slice(-32);
-      if (!pinStorage) return;
-      try { localStorage.setItem(pinStorage,JSON.stringify(pinned)); } catch { toast(t("fy.pinStorage"),{error:true}); }
-      renderPinned();
-      catalogGrid.replaceChildren(...catalog.map(renderMix));
-    } },icon("pin",14));
+    const pin = h("button", { class: "mix-pin icon-btn", type: "button", "data-pin-key":key,
+      title:t(isPinned?"fy.unpin":"fy.pin"), "aria-label": `${t(isPinned ? "fy.unpin" : "fy.pin")}: ${mixName(mix.title)}`,
+      "aria-pressed": String(isPinned), disabled: !pinStorage, onclick: () => {
+        if (!pinStorage) return;
+        const before=pinned;
+        const wasPinned=pinned.some(item=>mixKey(item)===key);
+        pinned = wasPinned ? pinned.filter(item => mixKey(item) !== key) : [...pinned,mix].slice(-32);
+        try { localStorage.setItem(pinStorage,JSON.stringify(pinned)); }
+        catch { pinned=before; toast(t("fy.pinStorage"),{error:true}); return; }
+        // Keep the original card and its keyboard focus in place.
+        const restoreFocus=pin.closest('.pinned-grid')!=null;
+        renderPinned();
+        for(const control of shelves.querySelectorAll('[data-pin-key]')) {
+          const on=pinned.some(item=>mixKey(item)===control.dataset.pinKey);
+          control.setAttribute('aria-pressed',String(on));
+          const label=t(on?'fy.unpin':'fy.pin'); control.title=label;
+          const title=control.closest('.mix-card').querySelector('.mix-tile-title').textContent;
+          control.setAttribute('aria-label',`${label}: ${title}`);
+        }
+        if(restoreFocus) [...catalogGrid.querySelectorAll('[data-pin-key]')].find(node=>node.dataset.pinKey===key)?.focus({preventScroll:true});
+      } },icon("pin",16));
     return h("article", { class: "mix-card" },button,pin);
   }
 

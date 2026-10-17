@@ -253,7 +253,13 @@ connections and stream addresses behind. The app heals itself, as far as it can:
 
 - **Tokens** live only in the OS keyring (Secret Service / Credential Manager /
   Keychain). If it is unavailable the sign-in is kept in memory for the run and
-  the UI says it will not persist; nothing is ever written to disk in clear.
+  the UI says it will not persist; no credentials are written to disk in clear.
+  Long sessions use two checksum-verified banks: the manifest changes only after
+  all new parts have been read back. Recovery copies are restricted to the same
+  known account. Legacy credentials migrate on the next save. Explicit logout
+  writes a nonsecret `session.signed-out` marker before clearing credentials;
+  temporary keyring failures retry on session checks, API use and normal exit.
+  Late token exchanges cannot overwrite or sign out a newly selected account.
 - **Sign-in** happens on vk.ru in a separate, incognito webview whose
   navigation is restricted to VK hosts over https; only the `web_token` exchange
   result leaves it. The main window cannot be navigated away from the bundled UI.
@@ -287,3 +293,10 @@ controls, a full mix grid and per-account pinning. Broad layout references were
 [Feishin](https://github.com/jeffvli/feishin),
 [Tauon](https://github.com/Taiko2k/Tauon) and
 [Harmonoid](https://github.com/harmonoid/harmonoid); their code and artwork were not copied.
+
+The ten-band equalizer includes a live control curve, ten presets, a remembered
+custom curve, per-band reset and keyboard adjustment. The audio engine fits the
+combined filter response to the selected band levels, adds automatic headroom,
+links transient peak protection across channels and crossfades retunes over 30 ms.
+Search invalidates stale answers as soon as typing changes, normalizes whitespace,
+paginates artists and albums, deduplicates results and stops nonadvancing pages.

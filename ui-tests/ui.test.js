@@ -134,7 +134,7 @@ test("transport: play/pause, next, previous, seek, volume, shuffle and repeat re
     await page.waitForFunction(() => document.querySelector("button[aria-label='Случайный порядок']").getAttribute("aria-pressed") === "true");
 
     for (const expected of ["all", "one", "off"]) {
-      await page.locator(".controls .icon-btn").last().click();
+      await page.locator(".player .controls .repeat").click();
       await page.waitForFunction((v) => window.__mock.state.player.repeat === v, expected);
     }
   } finally { await app.close(); }
@@ -2670,7 +2670,7 @@ test("product: pinned mixes persist, their tracks keep the catalog radio, and di
   const {page}=app; await waitForLibrary(page);
   await page.click('.nav button[data-view=forYou]'); await page.waitForSelector('.mix-tile');
   const item=page.locator('.mix-card').filter({hasText:'Спокойный вечер'});
-  await item.getByRole('button',{name:'Закрепить микс',exact:true}).click();
+  await item.getByRole('button',{name:/^Закрепить микс:/}).click();
   assert.equal(await page.locator('.pinned-shelf .mix-tile').count(),1);
   await page.reload(); await page.click('.nav button[data-view=forYou]');
   await page.waitForSelector('.pinned-shelf .mix-tile');
@@ -2873,6 +2873,80 @@ test("product: refreshing a selected catalogue mix keeps its source and does not
   assert.equal(await page.evaluate(()=>window.__mock.count('mix')),personalCalls);
   assert.equal(await page.evaluate(()=>window.__mock.count('play_radio')),plays);
   assert.equal(await page.locator(`[data-mix-key='${key}']`).first().getAttribute('aria-pressed'),'true');
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test("refinement: heart is last after repeat and Cyrillic text has vertical room", async () => {
+ const app=await openApp({config:{signedIn:true},viewport:{width:1120,height:740}});
+ try {
+  const {page}=app;await waitForLibrary(page);await rows(page).first().click();
+  const metrics=await page.evaluate(()=>{
+   const controls=document.querySelector('.player .controls');
+   const text=[...document.querySelectorAll('.nav .label,.account .name,.player .title,.player .artist')].filter(el=>el.getBoundingClientRect().width);
+   const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
+   return {last:controls.lastElementChild.className,previous:controls.lastElementChild.previousElementSibling.className,
+    text:text.map(el=>{const css=getComputedStyle(el);ctx.font=css.font;const m=ctx.measureText('ДЩЦЙЁруф');return {height:el.getBoundingClientRect().height,ink:m.actualBoundingBoxAscent+m.actualBoundingBoxDescent};})};
+  });
+  assert.match(metrics.last,/like/);assert.match(metrics.previous,/repeat/);
+  assert.ok(metrics.text.every(m=>m.height>=m.ink+2),JSON.stringify(metrics));
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test("refinement: search invalidates old answers during debounce, normalizes spaces and pages artists", async () => {
+ const app=await openApp({config:{signedIn:true}});
+ try {
+  const {page}=app;await waitForLibrary(page);
+  await page.evaluate(async()=>{
+   const {api}=await import('/js/api.js');
+   const track={track_id:1,owner_id:7,title:"t",artist:"a",duration:100,artists:[]};
+   api.search=async(query)=>{if(query==='old')await new Promise(resolve=>window.releaseOld=resolve);return {items:[{...track,title:query}],total:1,next_offset:null};};
+   api.searchArtists=async(query,offset)=>Array.from({length:offset===0?30:2},(_,i)=>({id:String(offset+i),name:`${query} ${offset+i}`,photo_url:null}));
+  });
+  await page.click('.nav button[data-view=search]');const input=page.locator('.main > .view:not([hidden]) input[type=search]');
+  await input.fill('old');await input.press('Enter');await page.waitForFunction(()=>window.releaseOld);
+  await input.fill('new');await page.evaluate(()=>window.releaseOld());await page.waitForTimeout(100);
+  assert.equal(await rows(page).filter({hasText:'old'}).count(),0);
+  await page.waitForFunction(()=>document.querySelector('.main > .view:not([hidden]) .row .title')?.textContent==='new');
+  await input.fill('  foo   bar  ');await input.press('Enter');await page.waitForFunction(()=>document.querySelector('.main > .view:not([hidden]) .row .title')?.textContent==='foo bar');
+  await page.click('[data-tab=artists]');await page.waitForFunction(()=>document.querySelectorAll('.artist-grid .artist-card').length===30);
+  await page.locator('.tab-pane:not([hidden]) .search-more').click();await page.waitForFunction(()=>document.querySelectorAll('.artist-grid .artist-card').length===32);
+  assert.equal(await page.locator('.tab-pane:not([hidden]) .search-more').isVisible(),false);
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test("refinement: equalizer remembers the custom curve, resets one band and survives restart", async () => {
+ const app=await openApp({config:{signedIn:true}});
+ try {
+  const {page}=app;await waitForLibrary(page);await page.click('.nav button[data-view=settings]');
+  await page.selectOption('.eq select','rock');
+  await page.locator('.eq-slider').nth(5).focus();await page.keyboard.press('ArrowUp');
+  await page.waitForFunction(()=>window.__mock.state.eq?.[5]===0);
+  await page.selectOption('.eq select','jazz');await page.selectOption('.eq select','custom');
+  await page.waitForFunction(()=>window.__mock.state.eq?.[0]===5 && window.__mock.state.eq?.[5]===0);
+  await page.locator('.eq-value').first().click();await page.waitForFunction(()=>window.__mock.state.eq?.[0]===0);
+  assert.match(await page.locator('.eq-curve').getAttribute('aria-label'),/1k Hz 0 дБ/);
+  await page.reload();await waitForLibrary(page);await page.click('.nav button[data-view=settings]');
+  await page.selectOption('.eq select','bass');await page.selectOption('.eq select','custom');
+  await page.waitForFunction(()=>window.__mock.state.eq?.[0]===0 && window.__mock.state.eq?.[1]===4);
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test("refinement: pin belongs to its moving card and does not trigger playback", async () => {
+ const app=await motionApp({config:{signedIn:true,catalogMixes:true}});
+ try {
+  const {page}=app;await waitForLibrary(page);await page.click('.nav button[data-view=forYou]');
+  const card=page.locator('.mix-catalog .mix-card').filter({hasText:'Спокойный вечер'});await card.waitFor();await card.scrollIntoViewIfNeeded();
+  await card.hover();await page.waitForTimeout(200);
+  const bounds=await card.evaluate(el=>{const c=el.getBoundingClientRect(),p=el.querySelector('.mix-pin').getBoundingClientRect();return {inside:p.left>=c.left && p.right<=c.right && p.top>=c.top && p.bottom<=c.bottom,parent:el.querySelector('.mix-pin').offsetParent===el};});
+  assert.equal(bounds.inside,true);assert.equal(bounds.parent,true);
+  const pin=card.locator('.mix-pin');await pin.click();assert.equal(await pin.getAttribute('aria-pressed'),'true');
+  assert.equal(await pin.evaluate(el=>el===document.activeElement),true);
+  assert.equal(await page.evaluate(()=>window.__mock.count('play_radio')),0);
+  await pin.click();assert.equal(await page.locator('.pinned-shelf').isVisible(),false);
   assert.deepEqual(app.problems,[]);
  }finally{await app.close();}
 });

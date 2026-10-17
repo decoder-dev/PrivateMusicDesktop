@@ -5,6 +5,9 @@
 //! nowhere else. If no secret store is available the app still works for the
 //! current run; it just cannot remember the sign-in.
 
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use crate::vk::Session;
@@ -14,6 +17,10 @@ pub trait SecretStore: Send + Sync {
     fn load(&self) -> Result<Option<Session>>;
     fn save(&self, session: &Session) -> Result<()>;
     fn clear(&self) -> Result<()>;
+    /// Records an explicit account replacement before attempting credential writes.
+    fn begin_login(&self) -> Result<()> {
+        Ok(())
+    }
     /// False for stores that forget everything at exit.
     fn is_durable(&self) -> bool {
         true
@@ -47,12 +54,12 @@ impl SecretStore for MemoryStore {
 
 /// The operating system's secret store.
 ///
-/// Windows Credential Manager holds at most 2560 bytes (1280 UTF-16
-/// characters) per entry and VK's cookies alone can be longer, so a long
-/// session is split: the main entry then holds `parts:N` and the text sits in
-/// `vk-session.1` … `vk-session.N`. A short one stays in the main entry as is.
+/// Windows entries are bounded UTF-16 chunks. Two banks allow a complete,
+/// checksum-verified write before the manifest commits; the previous snapshot
+/// is recoverable only for the same known account. Legacy entries remain readable.
 pub struct KeyringStore {
     service: String,
+    logout_marker: Option<PathBuf>,
 }
 
 const ACCOUNT: &str = "vk-session";
@@ -61,8 +68,23 @@ const PART_LEN: usize = 1000;
 const PARTS_PREFIX: &str = "parts:";
 
 impl KeyringStore {
+    pub fn with_logout_marker(mut self, path: PathBuf) -> Self {
+        self.logout_marker = Some(path);
+        self
+    }
+
+    fn mark_logout(&self) -> Result<()> {
+        if let Some(path) = &self.logout_marker {
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| Error::Transport(e.to_string()))?;
+            }
+            std::fs::write(path, b"signed-out").map_err(|e| Error::Transport(e.to_string()))?;
+        }
+        Ok(())
+    }
+
     pub fn new(service: impl Into<String>) -> Self {
-        Self { service: service.into() }
+        Self { service: service.into(), logout_marker: None }
     }
 }
 
@@ -124,38 +146,118 @@ fn part_count(head: &str) -> usize {
     head.strip_prefix(PARTS_PREFIX).and_then(|n| n.parse().ok()).unwrap_or(0)
 }
 
+const MAX_PARTS: usize = 64;
+const V2: &str = "session-v2:";
+const LOGGED_OUT: &str = "session-v2:logout";
+#[derive(Clone, Serialize, Deserialize)]
+struct Blob {
+    bank: u8,
+    parts: usize,
+    hash: String,
+}
+#[derive(Serialize, Deserialize)]
+struct Manifest {
+    active: Blob,
+    previous: Option<Blob>,
+}
+fn bank_part(blob: &Blob, index: usize) -> String {
+    format!("{ACCOUNT}.v2.{}.{}", blob.bank, index)
+}
+fn checksum(text: &str) -> String {
+    format!("{:x}", Sha256::digest(text.as_bytes()))
+}
+fn manifest(head: &str) -> Option<Manifest> {
+    serde_json::from_str(head.strip_prefix(V2)?).ok()
+}
+fn read_blob(slots: &impl Slots, blob: &Blob) -> Result<Option<String>> {
+    if blob.bank > 1 || blob.parts == 0 || blob.parts > MAX_PARTS {
+        return Ok(None);
+    }
+    let mut text = String::new();
+    for i in 0..blob.parts {
+        let Some(part) = slots.get(&bank_part(blob, i))? else {
+            return Ok(None);
+        };
+        if part.encode_utf16().count() > PART_LEN {
+            return Ok(None);
+        }
+        text.push_str(&part);
+    }
+    Ok((checksum(&text) == blob.hash).then_some(text))
+}
 fn load_text(slots: &impl Slots) -> Result<Option<String>> {
     let Some(head) = slots.get(ACCOUNT)? else {
         return Ok(None);
     };
+    if head == LOGGED_OUT {
+        return Ok(None);
+    }
+    if head.starts_with(V2) {
+        let Some(m) = manifest(&head) else {
+            return Ok(None);
+        };
+        if let Some(text) = read_blob(slots, &m.active)? {
+            return Ok(Some(text));
+        }
+        return match m.previous {
+            Some(blob) => read_blob(slots, &blob),
+            None => Ok(None),
+        };
+    }
     let count = part_count(&head);
+    if count > MAX_PARTS {
+        return Ok(None);
+    }
     if count == 0 {
         return Ok(Some(head));
     }
     let mut text = String::new();
     for index in 1..=count {
         match slots.get(&part_name(index))? {
-            Some(part) => text.push_str(&part),
-            None => return Ok(None), // a part went missing: treat as signed out
+            Some(part) if part.encode_utf16().count() <= PART_LEN => text.push_str(&part),
+            _ => return Ok(None),
         }
     }
     Ok(Some(text))
 }
-
 fn save_text(slots: &impl Slots, text: &str) -> Result<()> {
-    let old = slots.get(ACCOUNT).ok().flatten().map_or(0, |head| part_count(&head));
-    let parts = split_utf16(text, PART_LEN);
-    let count = if parts.len() > 1 { parts.len() } else { 0 };
-    if count == 0 {
-        slots.set(ACCOUNT, text)?;
-    } else {
-        // Parts first, so the main entry never points at parts not yet written.
-        for (index, part) in parts.iter().enumerate() {
-            slots.set(&part_name(index + 1), part)?;
+    let head = slots.get(ACCOUNT)?;
+    let old_manifest = head.as_deref().and_then(manifest);
+    let mut previous = None;
+    if let Some(m) = old_manifest {
+        for blob in std::iter::once(m.active).chain(m.previous) {
+            if read_blob(slots, &blob)?.is_some() {
+                previous = Some(blob);
+                break;
+            }
         }
-        slots.set(ACCOUNT, &format!("{PARTS_PREFIX}{count}"))?;
     }
-    for index in count + 1..=old {
+    let parts = split_utf16(text, PART_LEN);
+    if parts.len() > MAX_PARTS {
+        return Err(Error::Format("session exceeds credential store limit".into()));
+    }
+    let active = Blob { bank: previous.as_ref().map_or(0, |b| 1 - b.bank), parts: parts.len(), hash: checksum(text) };
+    for (i, part) in parts.iter().enumerate() {
+        slots.set(&bank_part(&active, i), part)?;
+    }
+    if read_blob(slots, &active)?.as_deref() != Some(text) {
+        return Err(Error::Format("credential verification failed".into()));
+    }
+    // Recovery must never silently restore a different account.
+    if let Some(blob) = &previous {
+        let old = read_blob(slots, blob)?.and_then(|s| serde_json::from_str::<Session>(&s).ok());
+        let new = serde_json::from_str::<Session>(text).ok();
+        if old.as_ref().and_then(|s| s.user_id).is_none() || old.and_then(|s| s.user_id) != new.and_then(|s| s.user_id)
+        {
+            previous = None;
+        }
+    }
+    let m = Manifest { active, previous };
+    let json = serde_json::to_string(&m).map_err(|e| Error::Format(e.to_string()))?;
+    // The only commit point: existing live parts stay untouched until here.
+    slots.set(ACCOUNT, &format!("{V2}{json}"))?;
+    let old = head.as_deref().map_or(0, part_count).min(MAX_PARTS);
+    for index in 1..=old {
         let _ = slots.delete(&part_name(index));
     }
     Ok(())
@@ -177,26 +279,51 @@ fn split_utf16(text: &str, max: usize) -> Vec<&str> {
 }
 
 fn clear_text(slots: &impl Slots) -> Result<()> {
-    let old = slots.get(ACCOUNT).ok().flatten().map_or(0, |head| part_count(&head));
-    slots.delete(ACCOUNT)?;
-    for index in 1..=old {
-        let _ = slots.delete(&part_name(index));
+    // A durable tombstone is committed before removing any recovery copy.
+    slots.set(ACCOUNT, LOGGED_OUT)?;
+    for i in 0..MAX_PARTS {
+        for bank in 0..=1 {
+            let _ = slots.delete(&format!("{ACCOUNT}.v2.{bank}.{i}"));
+        }
+        let _ = slots.delete(&part_name(i + 1));
     }
     Ok(())
 }
 
 impl SecretStore for KeyringStore {
     fn load(&self) -> Result<Option<Session>> {
+        if let Some(path) = &self.logout_marker {
+            match std::fs::metadata(path) {
+                Ok(_) => return Ok(None),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(Error::Transport(e.to_string())),
+            }
+        }
         Ok(load_text(self)?.and_then(|json| serde_json::from_str(&json).ok()))
     }
 
     fn save(&self, session: &Session) -> Result<()> {
         let json = serde_json::to_string(session).map_err(|e| Error::Format(e.to_string()))?;
-        save_text(self, &json)
+        save_text(self, &json)?;
+        if let Some(path) = &self.logout_marker {
+            match std::fs::remove_file(path) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(Error::Transport(e.to_string())),
+            }
+        }
+        Ok(())
+    }
+
+    fn begin_login(&self) -> Result<()> {
+        self.mark_logout()
     }
 
     fn clear(&self) -> Result<()> {
-        clear_text(self)
+        let guard = self.mark_logout();
+        // Still clear the OS entries if writing the nonsecret marker failed.
+        let cleared = clear_text(self);
+        cleared.and(guard)
     }
 }
 
@@ -266,25 +393,73 @@ mod tests {
     }
 
     #[test]
-    fn a_short_session_stays_in_one_entry_and_old_parts_are_removed() {
+    fn migration_and_logout_do_not_revive_old_parts() {
         let slots = MapSlots::default();
-        save_text(&slots, &"x".repeat(3500)).unwrap();
-        assert_eq!(slots.0.lock().unwrap().len(), 5); // main entry + 4 parts
-        save_text(&slots, "short").unwrap();
-        assert_eq!(slots.0.lock().unwrap().keys().collect::<Vec<_>>(), [ACCOUNT]);
-        assert_eq!(load_text(&slots).unwrap().as_deref(), Some("short"));
-        save_text(&slots, &"y".repeat(2500)).unwrap();
+        slots.set(ACCOUNT, "parts:2").unwrap();
+        slots.set(&part_name(1), "legacy").unwrap();
+        slots.set(&part_name(2), " session").unwrap();
+        assert_eq!(load_text(&slots).unwrap().as_deref(), Some("legacy session"));
+        save_text(&slots, "new").unwrap();
+        assert_eq!(load_text(&slots).unwrap().as_deref(), Some("new"));
+        assert!(slots.get(&part_name(1)).unwrap().is_none());
         clear_text(&slots).unwrap();
-        assert!(slots.0.lock().unwrap().is_empty());
         assert_eq!(load_text(&slots).unwrap(), None);
+    }
+    #[test]
+    fn corrupt_active_snapshot_recovers_only_the_same_account() {
+        let slots = MapSlots::default();
+        let mut session = sample();
+        let old = serde_json::to_string(&session).unwrap();
+        save_text(&slots, &old).unwrap();
+        session.access_token = "renewed".into();
+        save_text(&slots, &serde_json::to_string(&session).unwrap()).unwrap();
+        let m = manifest(&slots.get(ACCOUNT).unwrap().unwrap()).unwrap();
+        slots.set(&bank_part(&m.active, 0), "damaged").unwrap();
+        assert_eq!(load_text(&slots).unwrap().as_deref(), Some(old.as_str()));
+        session.user_id = Some(99);
+        save_text(&slots, &serde_json::to_string(&session).unwrap()).unwrap();
+        let m = manifest(&slots.get(ACCOUNT).unwrap().unwrap()).unwrap();
+        assert!(m.previous.is_none());
+    }
+    #[test]
+    fn failed_staging_or_commit_keeps_the_previous_session() {
+        struct Failing {
+            slots: MapSlots,
+            remaining: Mutex<usize>,
+        }
+        impl Slots for Failing {
+            fn get(&self, n: &str) -> Result<Option<String>> {
+                self.slots.get(n)
+            }
+            fn delete(&self, n: &str) -> Result<()> {
+                self.slots.delete(n)
+            }
+            fn set(&self, n: &str, v: &str) -> Result<()> {
+                let mut left = self.remaining.lock().unwrap();
+                if *left == 0 {
+                    return Err(Error::Transport("unavailable".into()));
+                }
+                *left -= 1;
+                self.slots.set(n, v)
+            }
+        }
+        for writes in [0, 1, 2, 3] {
+            let slots = Failing { slots: MapSlots::default(), remaining: Mutex::new(100) };
+            save_text(&slots, &"old".repeat(900)).unwrap();
+            *slots.remaining.lock().unwrap() = writes;
+            assert!(save_text(&slots, &"new".repeat(900)).is_err());
+            assert_eq!(load_text(&slots).unwrap().unwrap(), "old".repeat(900));
+        }
     }
 
     #[test]
-    fn a_missing_part_reads_as_signed_out() {
-        let slots = MapSlots::default();
-        save_text(&slots, &"z".repeat(2500)).unwrap();
-        slots.delete(&part_name(2)).unwrap();
-        assert_eq!(load_text(&slots).unwrap(), None);
+    fn explicit_login_and_logout_markers_contain_no_credentials_and_block_restore() {
+        let path = std::env::temp_dir().join(format!("pm-session-marker-{}", std::process::id()));
+        let store = KeyringStore::new("pm-test-guard").with_logout_marker(path.clone());
+        store.begin_login().unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"signed-out");
+        assert!(store.load().unwrap().is_none());
+        std::fs::remove_file(path).unwrap();
     }
 
     /// The real Credential Manager, which is what refused long sessions.

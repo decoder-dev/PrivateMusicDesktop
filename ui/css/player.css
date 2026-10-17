@@ -56,7 +56,7 @@
   .controls { grid-area: controls; gap: 0; }
   .controls .icon-btn { width: 34px; height: 34px; }
   .controls .play { width: 38px; height: 38px; }
-  .controls .icon-btn:first-child { display: none; }
+  .controls .shuffle { display: none; }
   .seek { grid-area: seek; grid-template-columns: 34px minmax(0, 1fr) 38px; gap: 6px; }
   .volume { display: none; }
   .cover-button .art-box { --art-size: 40px; }

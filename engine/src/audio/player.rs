@@ -298,6 +298,7 @@ where
                 Command::Seek(seconds) => {
                     if let (Some(s), Some(sink)) = (session.as_mut(), sink.as_mut()) {
                         seek(s, sink.as_mut(), seconds);
+                        if let Some(eq) = eq.as_mut() { eq.reset(); }
                         s.tap.reset();
                         events(position_event(s, sink.as_ref()));
                         last_position = Instant::now();
@@ -305,6 +306,7 @@ where
                 }
                 Command::Play { track_id, url, duration, start, fetch } => {
                     session = None;
+                    if let Some(eq) = eq.as_mut() { eq.reset(); }
                     // A device that vanished (or never opened) is retried here.
                     if sink.as_ref().map(|s| !s.is_healthy()).unwrap_or(true) {
                         sink = None;
@@ -348,7 +350,7 @@ where
 
         let format = (output.sample_rate(), output.channels());
         if eq_for != Some(format) {
-            eq = eq_gains.as_ref().and_then(|g| Equalizer::new(g, format.0, format.1));
+            eq = Equalizer::transition(eq.take(), eq_gains.as_ref(), format.0, format.1);
             eq_for = Some(format);
         }
         if !paused {

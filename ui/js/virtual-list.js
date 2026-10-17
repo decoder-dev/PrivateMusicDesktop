@@ -72,6 +72,9 @@ export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
     setItems(next) {
       items = next;
       render();
+      // Empty/loading panels can hide and reveal the list in the same frame.
+      // ResizeObserver coalesces that change, so it may never report it.
+      if (!root.offsetParent) schedule();
     },
     /** Re-renders visible rows (selection or data changed). */
     refresh: render,

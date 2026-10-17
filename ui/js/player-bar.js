@@ -20,12 +20,12 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
   const artist = h("button", { class: "artist link-text", type: "button", title: t("artist.open"), disabled: true,
     onclick: () => openArtistOf(store.player.track) });
 
-  const shuffleButton = h("button", { class: "icon-btn", type: "button", title: t("shuffle.toggle"), "aria-label": t("shuffle.toggle"), "aria-pressed": "false",
+  const shuffleButton = h("button", { class: "icon-btn shuffle", type: "button", title: t("shuffle.toggle"), "aria-label": t("shuffle.toggle"), "aria-pressed": "false",
     onclick: () => { api.setShuffle(!store.player.shuffle); } }, icon("shuffle", 18));
   const previousButton = h("button", { class: "icon-btn", type: "button", title: t("previous"), "data-kbd": "Ctrl+Left", "aria-label": t("previous"), onclick: () => api.previous() }, icon("prev", 20));
   const playButton = h("button", { class: "icon-btn play", type: "button", title: t("play"), "data-kbd": "Space", "aria-label": t("play"), onclick: () => api.toggle() }, icon("play", 20));
   const nextButton = h("button", { class: "icon-btn", type: "button", title: t("next"), "data-kbd": "Ctrl+Right", "aria-label": t("next"), onclick: () => api.next() }, icon("next", 20));
-  const repeatButton = h("button", { class: "icon-btn", type: "button", title: t("repeat.off"), "aria-label": t("repeat.off"),
+  const repeatButton = h("button", { class: "icon-btn repeat", type: "button", title: t("repeat.off"), "aria-label": t("repeat.off"),
     onclick: () => { api.setRepeat({ off: "all", all: "one", one: "off" }[store.player.repeat] ?? "off"); } }, icon("repeat", 18));
 
   const elapsed = h("span", { text: "0:00" });
@@ -83,9 +83,9 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
 
   const element = h("footer", { class: "player glass no-tint is-empty" },
     h("div", { class: "player-inner" },
-      h("div", { class: "now" }, coverButton, h("div", { class: "titles" }, title, artist), likeButton),
+      h("div", { class: "now" }, coverButton, h("div", { class: "titles" }, title, artist)),
       h("div", { class: "transport" },
-        h("div", { class: "controls" }, shuffleButton, previousButton, playButton, nextButton, repeatButton),
+        h("div", { class: "controls" }, shuffleButton, previousButton, playButton, nextButton, repeatButton, likeButton),
         h("div", { class: "seek" }, elapsed, seek, total),
         buffering),
       h("div", { class: "volume" }, muteButton, volume, expandButton)));
