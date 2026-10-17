@@ -3,6 +3,7 @@
 
 pub mod convert;
 pub mod eq;
+mod health;
 pub mod player;
 pub mod sink;
 pub mod spectrum;

@@ -9,6 +9,38 @@
 
 use crate::controller::{Controller, State, Status};
 
+/// OS media/notification APIs may block. Never call them on the audio thread:
+/// it must keep processing Pause/Stop even when the desktop stops answering.
+/// One pending state is enough; slow consumers must not accumulate positions.
+pub struct StatePublisher {
+    latest: std::sync::Arc<std::sync::Mutex<Option<State>>>,
+    wake: std::sync::mpsc::SyncSender<()>,
+}
+
+impl StatePublisher {
+    pub fn spawn(mut update: impl FnMut(State) + Send + 'static) -> std::io::Result<Self> {
+        let latest = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let pending = latest.clone();
+        let (wake, receiver) = std::sync::mpsc::sync_channel(1);
+        std::thread::Builder::new().name("pm-system-media".into()).spawn(move || {
+            while receiver.recv().is_ok() {
+                let state = pending.lock().unwrap_or_else(|p| p.into_inner()).take();
+                if let Some(state) = state {
+                    update(state);
+                }
+            }
+        })?;
+        Ok(Self { latest, wake })
+    }
+
+    pub fn publish(&self, state: State) {
+        *self.latest.lock().unwrap_or_else(|p| p.into_inner()) = Some(state);
+        // Full means a wake is already queued. Disconnected means the OS
+        // integration stopped; neither case may stop playback.
+        let _ = self.wake.try_send(());
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Metadata {
     pub title: String,
@@ -153,6 +185,41 @@ mod tests {
             status, track, position, duration: 200.0, volume: 1.0, shuffle: false, repeat: Repeat::Off,
             queue_index: Some(0), queue_len: 1, radio: None,
         }
+    }
+
+    #[test]
+    fn blocked_system_media_cannot_block_publishers_or_accumulate_old_states() {
+        use std::sync::mpsc::sync_channel;
+        use std::time::Duration;
+        let (entered, entry) = sync_channel(1);
+        let (release, gate) = sync_channel(1);
+        let (sent, received) = sync_channel(2);
+        let mut first = true;
+        let publisher = StatePublisher::spawn(move |state| {
+            if first {
+                first = false;
+                entered.send(()).unwrap();
+                gate.recv().unwrap();
+            }
+            sent.send(state.position).unwrap();
+        }).unwrap();
+        publisher.publish(state(Status::Playing, Some(track(1)), 0.0));
+        entry.recv_timeout(Duration::from_secs(2)).unwrap();
+        // The OS handler is blocked, as a stuck SMTC call would be. Publishing
+        // Pause and many subsequent positions must still return immediately.
+        let (finished, completion) = sync_channel(1);
+        std::thread::spawn(move || {
+            for n in 1..=1000 {
+                publisher.publish(state(Status::Paused, Some(track(1)), f64::from(n)));
+            }
+            finished.send(()).unwrap();
+        });
+        let published = completion.recv_timeout(Duration::from_secs(2));
+        release.send(()).unwrap();
+        published.expect("a blocked OS handler must not block the audio publisher");
+        assert_eq!(received.recv_timeout(Duration::from_secs(2)).unwrap(), 0.0);
+        assert_eq!(received.recv_timeout(Duration::from_secs(2)).unwrap(), 1000.0);
+        assert!(received.try_recv().is_err());
     }
 
     #[test]

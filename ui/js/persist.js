@@ -1,3 +1,4 @@
+import { PALETTES } from "./themes.js";
 // What survives a restart: volume, shuffle, repeat and the last queue.
 // Stored in the window's own localStorage; no credentials are ever kept here.
 
@@ -44,6 +45,7 @@ export function loadSettings() {
     eq: readEq(saved.eq),
     outputDevice: typeof saved.outputDevice === "string" && saved.outputDevice ? saved.outputDevice : null,
     visualizer: ["bars", "mirror", "wave", "radial", "off"].includes(saved.visualizer) ? saved.visualizer : null,
+    palette: PALETTES.includes(saved.palette) ? saved.palette : "classic",
     theme: ["system", "light", "dark"].includes(saved.theme) ? saved.theme : "system",
     accent: ACCENTS.includes(RENAMED[saved.accent] ?? saved.accent) ? (RENAMED[saved.accent] ?? saved.accent) : "blue",
     flatChrome: saved.flatChrome === true,

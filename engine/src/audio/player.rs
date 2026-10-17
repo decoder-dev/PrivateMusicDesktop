@@ -278,6 +278,7 @@ where
                         if !paused {
                             paused = true;
                             sink.set_paused(true);
+                            log::info!("pause applied to audio output at {:.2} s", position_seconds(s, sink.as_ref()));
                             events(PlayerEvent::Paused { track_id: s.track_id.clone() });
                         }
                     }
@@ -287,6 +288,7 @@ where
                         if paused {
                             paused = false;
                             sink.set_paused(false);
+                            log::info!("resume applied to audio output at {:.2} s", position_seconds(s, sink.as_ref()));
                             if s.started {
                                 events(PlayerEvent::Playing { track_id: s.track_id.clone() });
                             }
@@ -319,6 +321,10 @@ where
                     }
                     let sink = sink.as_mut().expect("opened above");
                     sink.flush();
+                    if !sink.is_healthy() {
+                        events(PlayerEvent::Failed { track_id, error: Error::Stream("audio output did not acknowledge a flush".into()) });
+                        continue;
+                    }
                     sink.set_paused(false);
                     paused = false;
                     events(PlayerEvent::Loading { track_id: track_id.clone() });
@@ -335,7 +341,8 @@ where
             // Device gone mid-track: report and let the app decide.
             let id = active.track_id.clone();
             session = None;
-            events(PlayerEvent::Failed { track_id: id, error: Error::Stream("audio device was disconnected".into()) });
+            log::warn!("audio output is unresponsive; stopping the current stream for recovery");
+            events(PlayerEvent::Failed { track_id: id, error: Error::Stream("audio device disconnected or stopped responding".into()) });
             continue;
         }
 

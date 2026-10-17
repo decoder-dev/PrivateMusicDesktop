@@ -122,14 +122,14 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
 
     const playing = player.status === "playing" || player.status === "buffering" || player.status === "loading";
     const spinning = player.status === "buffering" || player.status === "loading";
-    const glyph = playing && player.status !== "loading" ? "pause" : "play";
+    const glyph = playing ? "pause" : "play";
     const changed = playButton.dataset.glyph !== glyph;
     playButton.dataset.glyph = glyph;
     playButton.replaceChildren(icon(glyph, 20), ...(spinning ? [h("span", { class: "spin-over", "aria-hidden": "true" }, h("span", { class: "spinner" }))] : []));
     playButton.classList.toggle("is-buffering", spinning);
     if (changed && playButton.dataset.ready) morph(playButton.firstChild);
     playButton.dataset.ready = "1";
-    const label = playing && player.status !== "loading" ? t("pause") : t("play");
+    const label = playing ? t("pause") : t("play");
     playButton.title = label;
     playButton.setAttribute("aria-label", label);
 

@@ -22,3 +22,4 @@ log = "0.4"
 env_logger = { version = "0.11", default-features = false, features = ["auto-color", "humantime"] }
 url = "2"
 souvlaki = { version = "0.8", default-features = false, features = ["use_zbus"] }
+tauri-plugin-dialog = "2"

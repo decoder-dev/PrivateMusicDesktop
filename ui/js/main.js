@@ -1,6 +1,7 @@
+import { applyPalette } from "./themes.js";
 import { h, clear } from "./dom.js";
 import { icon } from "./icons.js";
-import { t, errorText } from "./i18n.js";
+import { t, errorText, addStrings } from "./i18n.js";
 import { api } from "./api.js";
 import { listen } from "./bridge.js";
 import { store, set, publish, subscribe, withScope } from "./store.js";
@@ -33,12 +34,22 @@ import { loadSettings, saveSettings, saveQueue, loadQueue, clearQueue } from "./
 import { handleBackendEvent as networkEvent, isNetworkError, setReloader, initNetwork } from "./network.js";
 
 
+addStrings({ ru: { "export.audio": "Сохранить аудиофайл…", "export.saved": "Аудиофайл сохранён" }, en: { "export.audio": "Save audio file…", "export.saved": "Audio file saved" } });
+
 const root = document.getElementById("app");
+// Keep the application's own track menus; suppress the webview's browser
+// commands (Save as, Print, Reload, developer tools) everywhere else.
+document.addEventListener("contextmenu", (event) => event.preventDefault(), { capture: true });
+document.addEventListener("keydown", (event) => {
+  const key = event.key.toLowerCase();
+  if (["F5", "F12"].includes(event.key) || ((event.ctrlKey || event.metaKey) && (["r", "p", "s", "u"].includes(key) || (event.shiftKey && ["i", "j", "c"].includes(key))))) event.preventDefault();
+}, { capture: true });
 const settings = loadSettings();
 function applyAppearance() {
   if (settings.theme === "system") delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = settings.theme;
   document.documentElement.dataset.accent = settings.accent;
+  applyPalette(settings);
   applyChrome();
 }
 
@@ -146,12 +157,9 @@ async function addToPlaylist(playlist, track) {
 
 /** The ⋯ / right-click menu of a track. `extra` adds screen-specific items. */
 async function openTrackMenu(track, at, extra = []) {
-  let playlists = [];
-  try {
-    playlists = (await ensurePlaylists(), ownPlaylists());
-  } catch {
-    // Without the list the menu still offers a new playlist.
-  }
+  // Opening a menu must not wait for VK or for an unavailable network.
+  const playlists = ownPlaylists();
+  ensurePlaylists().catch(() => {});
   const targets = [
     ...playlists.map((playlist) => ({ label: playlist.title, action: "add-to", run: () => addToPlaylist(playlist, track) })),
     ...(playlists.length ? ["-"] : []),
@@ -168,6 +176,7 @@ async function openTrackMenu(track, at, extra = []) {
   openMenu(at, [
     { label: t("playNext"), action: "play-next", icon: "play-next", run: () => onTrackAction("play-next", track) },
     { label: t("playLast"), action: "play-last", icon: "queue-add", run: () => onTrackAction("play-last", track) },
+    { label: t("export.audio"), action: "export", icon: "download", run: async () => { try { if (await api.exportTrack(track)) toast(t("export.saved")); await refreshDownloads(); } catch (error) { toast(errorText(error), { error: true }); } } },
     { label: t("radio"), action: "radio", icon: "radio", run: () => playSimilar(track) },
     ...(goTo.length ? ["-", ...goTo] : []),
     "-",
@@ -203,7 +212,7 @@ function persistSettings(patch) {
 /** From the settings screen: saved, and pushed to whatever shows them now. */
 function applySettings(patch) {
   persistSettings(patch);
-  if ("theme" in patch || "accent" in patch || "flatChrome" in patch) applyAppearance();
+  if ("theme" in patch || "accent" in patch || "flatChrome" in patch || "palette" in patch) applyAppearance();
   nowPlaying?.applySettings(patch);
 }
 
@@ -236,8 +245,8 @@ function buildShellParts() {
     album: createAlbumView(ctx),
   };
   const items = [
-    ["library", "nav.library", "note"],
-    ["forYou", "nav.forYou", "sparkles"],
+    ["library", "nav.library", "library"],
+    ["forYou", "nav.forYou", "home"],
     ["playlists", "nav.playlists", "playlist"],
     ["friends", "nav.friends", "friends"],
     ["search", "nav.search", "search"],
@@ -270,7 +279,7 @@ function buildShellParts() {
 
   const element = h("div", { class: "shell" },
     h("aside", { class: "sidebar" },
-      h("div", { class: "brand" }, h("span", { class: "brand-mark", "aria-hidden": "true" }, icon("note", 16)), h("span", { class: "brand-name", text: t("app.name") })),
+      h("div", { class: "brand" }, h("span", { class: "brand-mark", "aria-hidden": "true" }, h("img", { src: "assets/app-icon.png", alt: "", width: "32", height: "32" })), h("span", { class: "brand-name", text: t("app.name") })),
       nav, h("div", { class: "spacer" }), account),
     main,
     nowPlaying.element);
@@ -354,6 +363,7 @@ async function showApp() {
     shell?.setProfile(profile);
   }).catch(() => {});
   refreshDownloads();
+  ensurePlaylists().catch(() => {});
   await applyStartupState();
 }
 
@@ -409,6 +419,7 @@ async function signOut() {
 function onBackendEvent(event) {
   networkEvent(event);
   switch (event.type) {
+    case "sleep_timer": set("sleep", event); break;
     case "state": {
       const previousVolume = store.player.volume;
       set("player", event);

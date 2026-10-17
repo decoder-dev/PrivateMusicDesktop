@@ -50,3 +50,22 @@ export function formatSize(value) {
   if (value >= 1024 ** 2) return `${Math.round(value / 1024 ** 2)} ${t("unit.mb")}`;
   return `${Math.max(1, Math.round(value / 1024))} ${t("unit.kb")}`;
 }
+
+/** Downloads one item at a time; cancellation stops scheduling new requests. */
+export async function downloadAll(items, { isCancelled = () => false, onProgress = () => {} } = {}) {
+  const unique = [...new Map(items.map((track) => [trackKey(track), track])).values()].slice(0, 20000);
+  let completed = 0, failed = 0;
+  for (const track of unique) {
+    if (isCancelled()) break;
+    const key = trackKey(track);
+    if (!keys.has(key) && !pending.has(key)) {
+      pending.add(key); publish("downloads");
+      try { await api.download(track); } catch { failed++; }
+      finally { pending.delete(key); }
+    }
+    completed++;
+    onProgress(completed, unique.length, failed);
+  }
+  await refreshDownloads();
+  return { completed, failed, cancelled: isCancelled() };
+}

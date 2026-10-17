@@ -99,3 +99,27 @@ fn a_lost_file_falls_back_to_streaming_and_removal_forgets_it() {
     assert!(app.remove_download(&track().id()).unwrap());
     assert!(app.downloads().is_empty());
 }
+
+
+#[test]
+fn an_expired_download_url_is_refreshed_without_leaving_partial_audio() {
+    if !require_ffmpeg() { return; }
+    let media_dir = hls_dir();
+    let media = Server::start(media_dir.path().to_path_buf());
+    let base = media.base.clone();
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counter = calls.clone();
+    let vk = FakeApi::start(move |_, _, _| {
+        let first = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0;
+        let path = if first { "expired.m3u8" } else { "index.m3u8" };
+        let url = format!("{base}/{path}");
+        (200, format!(r#"{{"response":[{{"id":1,"owner_id":-3,"artist":"A","title":"Saved","duration":12,"url":"{url}"}}]}}"#))
+    });
+    let downloads = tempfile::tempdir().unwrap();
+    let (app, _) = app(&vk.base, downloads.path());
+    let saved = app.download(&track()).unwrap();
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+    assert!(saved.bytes > 50_000);
+    assert_eq!(app.downloads().len(), 1);
+    assert!(!std::fs::read_dir(downloads.path()).unwrap().any(|entry| entry.unwrap().path().extension().is_some_and(|v| v == "part")));
+}

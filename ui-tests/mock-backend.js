@@ -188,6 +188,11 @@
     set_volume: ({ volume }) => { state.player.volume = volume; emitState(); },
     set_shuffle: ({ on }) => { state.player.shuffle = on; emitState(); },
     set_repeat: ({ repeat }) => { state.player.repeat = repeat; emitState(); },
+    export_track: () => true,
+    sleep_timer: () => state.sleepTimer ?? [null, false],
+    set_sleep_timer: ({ seconds, endOfTrack }) => { state.sleepTimer = [seconds, endOfTrack]; emit("pm-event", { type: "sleep_timer", remaining: seconds, end_of_track: endOfTrack }); },
+    clear_upcoming: () => { state.queue = state.queue.slice(0, (state.player.queue_index ?? -1) + 1); state.player.radio = null; state.player.queue_len = state.queue.length; emitQueue(); emitState(); },
+    move_upcoming: ({ from, to }) => { if (from <= state.player.queue_index || to <= state.player.queue_index || to >= state.queue.length) return; const [track] = state.queue.splice(from, 1); state.queue.splice(to, 0, track); emitQueue(); emitState(); },
     jump: ({ index }) => { state.player.queue_index = index; startCurrent(); emitQueue(); emitState(); },
     play_next: ({ track }) => { state.queue.splice((state.player.queue_index ?? -1) + 1, 0, track); state.player.queue_len = state.queue.length; emitQueue(); emitState(); },
     play_last: ({ track }) => { state.queue.push(track); state.player.queue_len = state.queue.length; emitQueue(); emitState(); },
@@ -209,6 +214,10 @@
       const before = (state.downloads ?? []).length;
       state.downloads = (state.downloads ?? []).filter((t) => `${t.owner_id}_${t.track_id}` !== trackId);
       return state.downloads.length !== before;
+    },
+    mix_settings: async () => {
+      await delay(20);
+      return { categories: [{ type: "mood", title: "Настроение", options: config.noMoodSettings ? [] : [{ id: "calm", title: "Спокойствие" }, { id: "energy", title: "Энергия" }] }] };
     },
     mix: async () => {
       await delay(20);

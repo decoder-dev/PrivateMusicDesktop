@@ -1,3 +1,5 @@
+import { PALETTES, PALETTE_ACCENT } from "../themes.js";
+import { createSleepTimer } from "../sleep-timer.js";
 import { h } from "../dom.js";
 import { t, errorText } from "../i18n.js";
 import { api } from "../api.js";
@@ -58,8 +60,10 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
     h("button", { type: "button", role: "radio", class: "accent-opt", "data-v": value, title: t(`set.accent.${value}`), "aria-label": t(`set.accent.${value}`), "aria-checked": "false", tabindex: "-1",
       onclick: () => pick({ accent: value }) }, icon("check", 18)));
   const accentGrid = h("div", { class: "accent-grid", role: "radiogroup", "aria-label": t("set.accent") }, accentButtons);
+  const paletteButtons = PALETTES.map((value) => h("button", { type: "button", role: "radio", class: "palette-opt", "data-palette-choice": value, "aria-checked": "false", onclick: () => pick({ palette: value, accent: PALETTE_ACCENT[value] }) }, h("span", { class: `palette-swatch palette-${value}`, "aria-hidden": "true" }), t(`palette.${value}`)));
+  const paletteGrid = h("div", { class: "palette-grid", role: "radiogroup", "aria-label": t("palette.title") }, paletteButtons);
   /** Arrow keys move through a radio group like native radios do. */
-  for (const group of [themePicker, accentGrid]) {
+  for (const group of [themePicker, accentGrid, paletteGrid]) {
     group.addEventListener("keydown", (event) => {
       if (!["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"].includes(event.key)) return;
       const items = [...group.querySelectorAll("[role=radio]")];
@@ -92,10 +96,12 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
         row(t("set.output"), h("div", { class: "set-inline" }, deviceSelect, refreshButton), t("set.output.note"), "volume")),
       section(t("set.appearance"),
         row(t("set.theme"), themePicker, null, "sparkles"),
+        row(t("palette.title"), paletteGrid, null, "sparkles"),
         row(t("set.accent"), accentGrid, null, "album"),
         h("div", { class: "set-row" },
           h("label", { class: "set-check", for: "set-flat" }, h("span", { class: "set-label" }, tile("settings"), h("span", { class: "set-text" }, t("set.flat"), h("div", { class: "set-note", text: t("set.flat.note") }))), flatBox))),
       section(t("eq.title"), equalizer.element),
+      section(t("sleep.title"), createSleepTimer()),
       section(t("set.window"),
         h("div", { class: "set-row" },
           h("label", { class: "set-check", for: "set-tray" }, h("span", { class: "set-label" }, tile("collapse"), h("span", { class: "set-text", text: t("set.tray") })), trayBox),
@@ -156,6 +162,11 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
     }
     for (const button of accentButtons) {
       const on = button.dataset.v === (settings.accent ?? "blue");
+      button.setAttribute("aria-checked", String(on));
+      button.tabIndex = on ? 0 : -1;
+    }
+    for (const button of paletteButtons) {
+      const on = button.dataset.paletteChoice === (settings.palette ?? "classic");
       button.setAttribute("aria-checked", String(on));
       button.tabIndex = on ? 0 : -1;
     }

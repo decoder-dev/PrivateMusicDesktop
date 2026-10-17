@@ -250,7 +250,8 @@ fn a_nan_volume_never_reaches_the_device() {
     rig.player.set_volume(f32::INFINITY);
     std::thread::sleep(Duration::from_millis(100));
     // The sink is created lazily at the first Play, so ask the thread to open it.
-    rig.player.play("1_1", "http://127.0.0.1:9/nothing.m3u8", 1.0, 0.0, lab_config());
+    let cut = CutServer::start();
+    rig.player.play("1_1", &format!("{}/nothing.m3u8", cut.base), 1.0, 0.0, lab_config());
     let start = Instant::now();
     while !rig.has(|e| matches!(e, PlayerEvent::Failed { .. })) {
         assert!(start.elapsed() < Duration::from_secs(40), "no failure event: the fetcher retries a dead address before giving up, and Windows takes about 2 s per refused connection");

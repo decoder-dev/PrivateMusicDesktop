@@ -1,12 +1,17 @@
+import { mixName, mixColors } from "../selena.js";
 import { h } from "../dom.js";
 import { api } from "../api.js";
 import { createTracksScreen } from "../tracks-screen.js";
 import { albumCard } from "../album-card.js";
 import { icon } from "../icons.js";
 import { openAlbum } from "../navigation.js";
-import { errorText, t } from "../i18n.js";
+import { errorText, t, addStrings } from "../i18n.js";
 import { artBox, paintStatus, watchSegmented } from "../ui-parts.js";
 
+addStrings({ ru: { "fy.selena": "От Selena", "fy.personal": "Персональная подборка", "fy.personalNote": "По вашим прослушиваниям", "fy.energy": "Энергия", "fy.calm": "Спокойствие", "fy.rain": "Грусть", "fy.sun": "Радость", "fy.love": "Любовь", "fy.moodFallback": "Отдельный микс для этого настроения пока недоступен — играет Selena." }, en: { "fy.selena": "From Selena", "fy.personal": "Personal selection", "fy.personalNote": "Based on what you play", "fy.energy": "Energy", "fy.calm": "Calm", "fy.rain": "Melancholy", "fy.sun": "Joy", "fy.love": "Love", "fy.moodFallback": "There is no separate mix for this mood yet — playing Selena." } });
+const MOODS = [
+  ["energy",["энерг","бодр","energy","energetic"]], ["calm",["спокой","calm","relax"]], ["rain",["груст","печал","sad","melanch"]], ["sun",["радост","весел","joy","happy"]], ["love",["любов","романт","love","romance"]],
+];
 const SOURCES = {
   mix: { label: "fy.mix", load: () => api.mix() },
   recs: { label: "fy.recs", load: () => api.recommendations() },
@@ -54,6 +59,15 @@ export function createForYouView({ play, onTrackAction, toast }) {
   const releasesTitle = h("h2", { class: "shelf-title", text: t("fy.releases") });
   const releasesShelf = h("section", { class: "mix-catalog new-releases", hidden: true }, releasesTitle, releasesStatus, releasesRow);
 
+  const personalButton = h("button", { class: "selena-card selena-personal", type: "button", onclick: () => startMood(null, personalButton) },
+    h("span", { class: "selena-kicker", text: t("fy.personal") }), h("strong", { text: "Selena" }), h("span", { class: "selena-subtitle", text: t("fy.personalNote") }), h("span", { class: "selena-play", "aria-hidden": "true" }, icon("play",18)));
+  mixColors("common").forEach((color,index) => personalButton.style.setProperty(`--mix-c${index}`,color));
+  const moodButtons = MOODS.map(([id,aliases]) => {
+    const button = h("button", { class: `selena-card selena-mood mood-${id}`, type: "button", onclick: () => startMood(aliases,button) }, h("span", { class: "selena-kicker", text: t("fy.selena") }), h("strong", { text: t(`fy.${id}`) }), h("span", { class: "selena-play", "aria-hidden": "true" },icon("play",16)));
+    return button;
+  });
+  const selenaShelf = h("section", { class: "selena-shelf" }, h("h2", { class: "shelf-title", text: t("fy.selena") }), h("div", { class: "selena-row" }, personalButton,...moodButtons));
+
   const screen = createTracksScreen({
     title: t("fy.title"),
     hooks: {
@@ -65,7 +79,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
     },
   });
   // The shelves scroll on their own, so a long catalogue never pushes the list off the screen.
-  screen.element.insertBefore(h("div", { class: "fy-shelves" }, catalogShelf, releasesShelf), screen.list.element);
+  screen.element.insertBefore(h("div", { class: "fy-shelves" }, selenaShelf, catalogShelf, releasesShelf), screen.list.element);
 
   function renderTabs() {
     for (const button of tabs.querySelectorAll("button")) button.setAttribute("aria-selected", String(button.dataset.source === current));
@@ -76,6 +90,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
   // What each shelf holds, so showing and hiding stays in one place.
   const shelfState = { catalog: "empty", releases: "empty" };
   function paintShelves() {
+    selenaShelf.hidden = current !== "mix";
     catalogShelf.hidden = current !== "mix" || shelfState.catalog === "empty";
     releasesShelf.hidden = shelfState.releases === "empty";
   }
@@ -124,10 +139,13 @@ export function createForYouView({ play, onTrackAction, toast }) {
 
   async function loadTuning() {
     if (categories) return;
+    const mine = catalogGeneration;
     tuningContent.replaceChildren(h("div", { class: "status inline", text: t("loading") }));
     try {
       const settings = await api.mixSettings();
+      if (mine !== catalogGeneration) return;
       categories = findCategories(settings);
+      tuningContent.replaceChildren();
       if (!categories.length) {
         tuningContent.replaceChildren(h("div", { class: "status inline", text: t("fy.noTuning") }));
         return;
@@ -170,6 +188,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
         } }));
       tuningContent.append(actions);
     } catch (error) {
+      if (mine !== catalogGeneration) return;
       categories = null;
       tuningContent.replaceChildren(h("div", { class: "status inline error", text: errorText(error) }),
         h("button", { class: "btn", type: "button", text: t("fy.retryTune"), onclick: loadTuning }));
@@ -190,8 +209,13 @@ export function createForYouView({ play, onTrackAction, toast }) {
         const button = h("button", { class: `mix-tile hue-${mixHue(`${mix.section_title ?? ""}${mix.title}`)}`, type: "button", onclick: () => playCatalogMix(mix, button) },
           artBox(mix.artwork_url),
           h("span", { class: "mix-text" },
-            mix.section_title ? h("span", { class: "mix-tile-section", text: mix.section_title }) : null,
-            h("span", { class: "mix-tile-title", text: mix.title })));
+            mix.section_title ? h("span", { class: "mix-tile-section", text: mixName(mix.section_title) }) : null,
+            h("span", { class: "mix-tile-title", text: mixName(mix.title) })));
+        const colors = mixColors(mix.id);
+        colors.forEach((color,index)=>button.style.setProperty(`--mix-c${index}`,color));
+        button.classList.add("mobile-mix");
+        button.append(h("span", { class: "mix-play", "aria-hidden": "true" }, icon("play",14)));
+        if (mix.subtitle) button.querySelector(".mix-text").append(h("span", { class: "mix-tile-subtitle", text: mixName(mix.subtitle) }));
         return button;
       }));
       catalogLoaded = true;
@@ -230,17 +254,47 @@ export function createForYouView({ play, onTrackAction, toast }) {
     paintShelves();
   }
 
+  async function startMood(aliases,button) {
+    const mine = ++generation;
+    button.disabled = true;
+    try {
+      let options = null;
+      if (aliases) {
+        await loadTuning();
+        if (mine !== generation) return;
+        const category = (categories ?? []).find((item)=> /mood|настро/i.test(String(item.type ?? item.id ?? "")+String(item.title ?? "")));
+        const option = category?.options?.find((item)=>aliases.some((word)=>String(typeof item === "string" ? item : item.title ?? item.name ?? item.text ?? item.id ?? "").toLowerCase().includes(word)));
+        if (option != null) {
+          const value = typeof option === "string" ? option : String(option.id ?? option.option_id ?? option.value ?? option.key ?? option.title ?? option.name);
+          options = JSON.stringify({ ...selected, [category.type ?? category.id ?? category.title]: [value] });
+        } else toast(t("fy.moodFallback"));
+      }
+      const tracks = await api.mix(options);
+      if (mine !== generation) return;
+      if (!tracks.length) throw new Error(t("fy.empty"));
+      current = "mix";
+      renderTabs();
+      listOptions = options;
+      screen.clearStatus(); screen.setTracks(tracks);
+      await play(tracks,0,{ radio: { kind: "personal", options }, shuffle: false });
+    } catch (error) { if (mine === generation) toast(errorText(error), { error: true }); }
+    finally { button.disabled = false; }
+  }
+
   async function playCatalogMix(mix, button) {
+    const mine = ++generation;
     button.disabled = true;
     paintStatus(catalogStatus, t("fy.mixLoading", { title: mix.title }), { extra: "inline" });
     try {
       const tracks = await api.streamMix(mix.id, mix.options);
+      if (mine !== generation) return;
       if (!tracks.length) throw new Error(t("fy.noCatalog"));
       // The plain personal stream is the same radio as the "My mix" tab.
       const personal = mix.id === "common" && !mix.options;
-      play(tracks, 0, { shuffle: false, radio: personal ? { kind: "personal", options: null } : { kind: "catalog", mix_id: mix.id, options: mix.options ?? null } });
+      await play(tracks, 0, { shuffle: false, radio: personal ? { kind: "personal", options: null } : { kind: "catalog", mix_id: mix.id, options: mix.options ?? null } });
       paintStatus(catalogStatus, "");
     } catch (error) {
+      if (mine !== generation) return;
       paintStatus(catalogStatus, errorText(error), { error: true, extra: "inline" });
       toast(errorText(error), { error: true });
     } finally {
@@ -257,6 +311,11 @@ export function createForYouView({ play, onTrackAction, toast }) {
     if (values.size) selected[category] = [...values];
     else delete selected[category];
     saveSelection();
+  }
+
+  function saveSelection() {
+    try { localStorage.setItem("mix.filter-selection.v1", JSON.stringify(selected)); }
+    catch { /* storage can be disabled */ }
   }
 
   renderTabs();
@@ -308,11 +367,6 @@ function readSelection() {
       .map(([key, items]) => [key, [...new Set(items.filter((item) => typeof item === "string" && item.length <= 256))].slice(0, 32)])
       .filter(([, items]) => items.length));
   } catch { return {}; }
-}
-
-function saveSelection() {
-  try { localStorage.setItem("mix.filter-selection.v1", JSON.stringify(selected)); }
-  catch { /* storage can be disabled */ }
 }
 
 function findCategories(value, depth = 0) {

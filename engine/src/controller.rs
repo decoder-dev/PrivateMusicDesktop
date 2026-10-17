@@ -64,6 +64,7 @@ pub struct State {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[allow(clippy::large_enum_variant)] // events are short-lived and moved once
 pub enum UiEvent {
+    SleepTimer { remaining: Option<u64>, end_of_track: bool },
     State(State),
     Queue { tracks: Vec<Track>, current: Option<usize> },
     Error { kind: String, message: String },
@@ -185,6 +186,8 @@ fn what(error: &Error) -> String {
 }
 
 struct Inner {
+    sleep_end: bool,
+    user_paused: bool,
     queue: Queue,
     session: Option<Session>,
     status: Status,
@@ -231,7 +234,11 @@ struct Recovery {
     probation_from: Option<f64>,
 }
 
+type TimerCancel = Arc<(Mutex<bool>, std::sync::Condvar)>;
+
 struct Shared {
+    sleep_cancel: Mutex<Option<TimerCancel>>,
+    sleep_deadline: Mutex<Option<Instant>>,
     inner: Mutex<Inner>,
     client: VkClient,
     remote: OnceLock<Remote>,
@@ -249,6 +256,15 @@ pub type Refresher = Arc<dyn Fn(&Session) -> crate::Result<Session> + Send + Syn
 pub struct Controller {
     shared: Arc<Shared>,
     _player: PlayerHandle,
+}
+
+impl Drop for Controller {
+    fn drop(&mut self) {
+        if let Some(cancel) = self.shared.sleep_cancel.lock().unwrap_or_else(|p| p.into_inner()).take() {
+            *cancel.0.lock().unwrap_or_else(|p| p.into_inner()) = true;
+            cancel.1.notify_all();
+        }
+    }
 }
 
 impl Inner {
@@ -305,6 +321,7 @@ impl Shared {
 
     /// Starts the queue's current track, or stops when there is none.
     fn start_current(self: &Arc<Self>, inner: &mut Inner, events: &mut Vec<UiEvent>) {
+        inner.user_paused = false;
         // Whatever was being healed belongs to what was playing before.
         self.cancel_recovery(inner, events);
         if let Some(radio) = inner.radio.as_mut() {
@@ -342,6 +359,7 @@ impl Shared {
             return;
         }
         inner.source_offline = false;
+        self.watch_stall(inner, track.id());
         match track.stream_url.clone() {
             Some(url) if !self.is_stale(inner, &track) => {
                 let config = self.fetch_config(inner);
@@ -373,6 +391,8 @@ impl Shared {
             return;
         };
         inner.refreshed.insert(track.id());
+        let token = inner.recovery_token;
+        let epoch = inner.network_epoch;
         let shared = self.clone();
         std::thread::spawn(move || {
             let mut result = shared.client.refreshed_track_once(&session, &track);
@@ -383,8 +403,20 @@ impl Shared {
                     result = refresh(&session).and_then(|fresh| shared.client.refreshed_track_once(&fresh, &track));
                 }
             }
-            match result {
-                Ok(fresh) => shared.with(|inner, events| {
+            shared.with(|inner, events| {
+                // The same track can be restarted, paused or re-resolved while
+                // VK is answering. A late reply must never revive old playback
+                // or mark an address from the old network as fresh.
+                if inner.recovery_token != token || inner.session.is_none()
+                    || inner.queue.current().map(Track::id) != Some(track.id()) {
+                    return;
+                }
+                if inner.network_epoch != epoch {
+                    shared.refresh_then_play(inner, track);
+                    return;
+                }
+                match result {
+                Ok(fresh) => {
                     // The user may have moved on while VK was answering.
                     if inner.queue.current().map(Track::id) != Some(track.id()) {
                         return;
@@ -397,9 +429,13 @@ impl Shared {
                         shared.remote().play(&fresh.id(), url, f64::from(fresh.duration), start, config);
                     }
                     events.push(UiEvent::State(inner.state()));
-                }),
-                Err(error) => shared.stream_failed(track, error),
-            }
+                },
+                Err(error) => {
+                    let next = shared.clone();
+                    std::thread::spawn(move || next.stream_failed_at(track, error, Some(token)));
+                }
+                }
+            });
         });
     }
 
@@ -535,11 +571,26 @@ impl Shared {
     /// healing it (fresh URL, fresh connections, back-off), skipping a dead
     /// track, and pausing with a retry once the bound is reached.
     fn stream_failed(self: &Arc<Self>, track: Track, error: Error) {
+        self.stream_failed_at(track, error, None);
+    }
+
+    fn stream_failed_at(self: &Arc<Self>, track: Track, error: Error, token: Option<u64>) {
         let policy = self.policy();
         self.with(|inner, events| {
-            if inner.queue.current().map(Track::id) != Some(track.id()) {
+            if token.is_some_and(|token| inner.recovery_token != token)
+                || inner.queue.current().map(Track::id) != Some(track.id()) {
                 return;
             }
+            if inner.user_paused {
+                inner.pending_start = inner.position;
+                inner.status = Status::Idle;
+                self.remote().stop();
+                events.push(UiEvent::State(inner.state()));
+                return;
+            }
+            // Retire a stalled decoder/download before asking for another URL.
+            // Its late failure must not consume the new attempt's retry budget.
+            self.remote().stop();
             // A downloaded copy that cannot be read: fetch it from VK once.
             if std::mem::take(&mut inner.source_offline) {
                 if inner.session.is_some() && !inner.refreshed.contains(&track.id()) && matches!(error, Error::Stream(_) | Error::Http(_)) {
@@ -621,6 +672,7 @@ impl Shared {
                 inner.loading_since = Instant::now();
                 events.push(UiEvent::State(inner.state()));
                 shared.refresh_then_play(inner, track);
+                shared.watch_stall(inner, track_id.clone());
             });
         });
     }
@@ -635,13 +687,13 @@ impl Shared {
         std::thread::spawn(move || {
             std::thread::sleep(after);
             let stalled = shared.with(|inner, _| {
-                (inner.stall_token == token && inner.status == Status::Buffering && !inner.source_offline)
+                (inner.stall_token == token && matches!(inner.status, Status::Buffering | Status::Loading) && !inner.source_offline)
                     .then(|| inner.queue.current().cloned().filter(|t| t.id() == track_id))
-                    .flatten()
+                    .flatten().map(|track| (track, inner.recovery_token))
             });
-            if let Some(track) = stalled {
+            if let Some((track, recovery_token)) = stalled {
                 log::warn!("playback stalled for {:.0} s, treating it as a failed stream", after.as_secs_f64());
-                shared.stream_failed(track, Error::Timeout);
+                shared.stream_failed_at(track, Error::Timeout, Some(recovery_token));
             }
         });
     }
@@ -673,7 +725,7 @@ impl Shared {
         let policy = self.policy();
         self.with(|inner, events| {
             let Some(track) = inner.queue.current().cloned() else { return };
-            if inner.source_offline || inner.session.is_none() {
+            if inner.source_offline || inner.session.is_none() || inner.user_paused {
                 return;
             }
             let waiting = inner.recovery.is_some() || inner.gave_up;
@@ -695,6 +747,7 @@ impl Shared {
             }
             inner.gave_up = false;
             inner.pending_start = inner.position;
+            self.remote().stop();
             inner.status = Status::Loading;
             inner.loading_since = Instant::now();
             events.push(UiEvent::State(inner.state()));
@@ -765,6 +818,15 @@ impl Shared {
                 if inner.queue.current().map(Track::id).as_deref() != Some(track_id.as_str()) {
                     return;
                 }
+                if std::mem::take(&mut inner.sleep_end) {
+                    inner.status = Status::Idle;
+                    inner.pending_start = 0.0;
+                    self.cancel_recovery(inner, events);
+                    self.remote().stop();
+                    events.push(UiEvent::SleepTimer { remaining: None, end_of_track: false });
+                    events.push(UiEvent::State(inner.state()));
+                    return;
+                }
                 if inner.queue.advance(true).is_some() {
                     events.push(inner.queue_event());
                     self.start_current(inner, events);
@@ -826,6 +888,8 @@ impl Controller {
     {
         let shared = Arc::new(Shared {
             inner: Mutex::new(Inner {
+                sleep_end: false,
+                user_paused: false,
                 queue: Queue::default(),
                 session: None,
                 status: Status::Idle,
@@ -855,6 +919,8 @@ impl Controller {
             offline: OnceLock::new(),
             history: OnceLock::new(),
             policy: Mutex::new(RecoveryPolicy::default()),
+            sleep_cancel: Mutex::new(None),
+            sleep_deadline: Mutex::new(None),
         });
         let callback_shared = shared.clone();
         let player = PlayerHandle::spawn(make_sink, move |event| callback_shared.on_player_event(event));
@@ -864,6 +930,7 @@ impl Controller {
     }
 
     pub fn set_session(&self, session: Option<Session>) {
+        if session.is_none() { let _ = self.set_sleep_timer(None, false); }
         self.shared.with(|inner, events| {
             let signed_out = session.is_none();
             inner.session = session;
@@ -990,7 +1057,8 @@ impl Controller {
 
     pub fn pause(&self) {
         self.shared.with(|inner, events| {
-            if inner.recovery.is_some() && inner.status == Status::Loading {
+            inner.user_paused = true;
+            if inner.status == Status::Loading {
                 // Pausing while the stream is being healed stops the healing;
                 // Play starts again from here.
                 let position = inner.position;
@@ -1000,12 +1068,14 @@ impl Controller {
                 self.shared.remote().stop();
                 events.push(UiEvent::State(inner.state()));
             } else {
+                self.shared.cancel_recovery(inner, events);
                 self.shared.remote().pause();
             }
         });
     }
 
     pub fn resume(&self) {
+        self.shared.with(|inner, _| inner.user_paused = false);
         self.shared.remote().resume();
     }
 
@@ -1022,7 +1092,7 @@ impl Controller {
                     }
                 });
             }
-            Status::Loading => {}
+            Status::Loading => self.pause(),
         }
     }
 
@@ -1123,6 +1193,78 @@ impl Controller {
                 inner.refreshed.clear();
                 events.push(inner.queue_event());
                 self.shared.start_current(inner, events);
+            }
+        });
+    }
+
+    pub fn clear_upcoming(&self) {
+        self.shared.with(|inner, events| {
+            inner.radio = None;
+            inner.radio_generation += 1;
+            inner.queue.clear_upcoming();
+            events.push(inner.queue_event());
+            events.push(UiEvent::State(inner.state()));
+        });
+    }
+
+    /// A timer remains in the engine even if the player view is closed.
+    /// Replacing it wakes the old waiter immediately instead of leaking threads.
+    pub fn set_sleep_timer(&self, seconds: Option<u64>, end_of_track: bool) -> crate::Result<()> {
+        if seconds.is_some_and(|n| n == 0 || n > 86_400) || (seconds.is_some() && end_of_track) {
+            return Err(Error::InvalidRequest);
+        }
+        let mut cancel = self.shared.sleep_cancel.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(old) = cancel.take() {
+            *old.0.lock().unwrap_or_else(|p| p.into_inner()) = true;
+            old.1.notify_all();
+        }
+        *self.shared.sleep_deadline.lock().unwrap_or_else(|p| p.into_inner()) = seconds.map(|n| Instant::now() + Duration::from_secs(n));
+        self.shared.with(|inner, events| {
+            inner.sleep_end = end_of_track;
+            events.push(UiEvent::SleepTimer { remaining: seconds, end_of_track });
+        });
+        if let Some(seconds) = seconds {
+            let wake = Arc::new((Mutex::new(false), std::sync::Condvar::new()));
+            *cancel = Some(wake.clone());
+            let weak = Arc::downgrade(&self.shared);
+            std::thread::spawn(move || {
+                let cancelled = wake.0.lock().unwrap_or_else(|p| p.into_inner());
+                let (cancelled, _) = wake.1.wait_timeout_while(cancelled, Duration::from_secs(seconds), |v| !*v).unwrap_or_else(|p| p.into_inner());
+                if *cancelled { return; }
+                drop(cancelled);
+                let Some(shared) = weak.upgrade() else { return };
+                // Serialize expiry with cancellation/replacement of the timer.
+                let current = shared.sleep_cancel.lock().unwrap_or_else(|p| p.into_inner());
+                if !current.as_ref().is_some_and(|v| Arc::ptr_eq(v, &wake)) { return; }
+                *shared.sleep_deadline.lock().unwrap_or_else(|p| p.into_inner()) = None;
+                shared.with(|inner, events| {
+                    inner.user_paused = true;
+                    shared.cancel_recovery(inner, events);
+                    if inner.status == Status::Loading {
+                        inner.pending_start = inner.position;
+                        inner.status = Status::Idle;
+                        shared.remote().stop();
+                        events.push(UiEvent::State(inner.state()));
+                    } else {
+                        shared.remote().pause();
+                    }
+                    events.push(UiEvent::SleepTimer { remaining: None, end_of_track: false });
+                });
+            });
+        }
+        Ok(())
+    }
+
+    pub fn sleep_timer(&self) -> (Option<u64>, bool) {
+        let remaining = self.shared.sleep_deadline.lock().unwrap_or_else(|p| p.into_inner()).map(|v| v.saturating_duration_since(Instant::now()).as_secs());
+        (remaining, self.shared.lock().sleep_end)
+    }
+
+    pub fn move_upcoming(&self, from: usize, to: usize) {
+        self.shared.with(|inner, events| {
+            if inner.queue.move_upcoming(from, to) {
+                events.push(inner.queue_event());
+                events.push(UiEvent::State(inner.state()));
             }
         });
     }

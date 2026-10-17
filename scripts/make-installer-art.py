@@ -16,6 +16,10 @@ REGULAR = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
 
 def font(path, size):
+    if not Path(path).exists():
+        import os
+        windows = Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts"
+        path = str(windows / ("segoeuib.ttf" if "Bold" in path else "segoeui.ttf"))
     return ImageFont.truetype(path, size)
 
 

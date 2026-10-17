@@ -1,12 +1,13 @@
+import { toast } from "./toast.js";
 import { h, clear, fold } from "./dom.js";
 import { icon } from "./icons.js";
-import { t, tn } from "./i18n.js";
+import { t, tn, addStrings } from "./i18n.js";
 import { createVirtualList } from "./virtual-list.js";
 import { trackRow, ROW_HEIGHT } from "./track-row.js";
 import { store, subscribe } from "./store.js";
 import { trackKey } from "./api.js";
 import { isLiked, isBusy } from "./likes.js";
-import { isDownloaded, isDownloading } from "./downloads.js";
+import { isDownloaded, isDownloading, downloadAll } from "./downloads.js";
 import { openArtistOf } from "./navigation.js";
 import { artBox, paintStatus, pageHero, searchField, headerOnScroll, setAmbience, fillPanel } from "./ui-parts.js";
 
@@ -27,6 +28,7 @@ import { artBox, paintStatus, pageHero, searchField, headerOnScroll, setAmbience
  * `playable: false` leaves the Play and Shuffle buttons out.
  */
 // The track menu every list uses unless a screen brings its own (set by main).
+addStrings({ ru: { "batch.download": "Скачать все", "batch.cancel": "Остановить ({done}/{total})", "batch.done": "Обработано: {done}. Ошибок: {failed}" }, en: { "batch.download": "Download all", "batch.cancel": "Stop ({done}/{total})", "batch.done": "Processed: {done}. Failed: {failed}" } });
 let defaultMenu = null;
 export function setDefaultTrackMenu(fn) { defaultMenu = fn; }
 
@@ -34,6 +36,7 @@ export function createTracksScreen({ title, filterable = false, playable = true,
   let all = [];
   let visible = [];
   let query = "";
+  let lastActivation = { key: "", at: 0 };
 
   const heading = h(level, { text: title });
   const meta = h("span", { class: "meta" });
@@ -50,6 +53,17 @@ export function createTracksScreen({ title, filterable = false, playable = true,
     ? h("button", { class: "icon-btn circle-btn", type: "button", hidden: true, title: t("shuffle"), "aria-label": t("shuffle"),
         onclick: () => visible.length && hooks.onPlay(visible, Math.floor(Math.random() * visible.length), { shuffle: true }) }, icon("shuffle", 16))
     : null;
+  let batch = null;
+  const batchButton = playable ? h("button", { class: "btn", type: "button", text: t("batch.download"), hidden: true, onclick: async () => {
+    if (batch) { batch.cancelled = true; return; }
+    const job = { cancelled: false }; batch = job;
+    try {
+      const result = await downloadAll(visible.slice(), { isCancelled: () => job.cancelled,
+        onProgress: (done,total) => { batchButton.textContent = t("batch.cancel", { done,total }); } });
+      toast(t("batch.done", { done: result.completed, failed: result.failed }), { error: result.failed > 0 });
+    } finally { batch = null; batchButton.textContent = t("batch.download"); }
+  } }) : null;
+  subscribe("session", (session) => { if (!session.signed_in && batch) batch.cancelled = true; });
   const status = h("div", { class: "status", role: "status", hidden: true });
   const empty = h("div", { class: "empty-state", hidden: true });
   const retry = hooks.onRetry ? h("button", { class: "btn retry", type: "button", onclick: () => hooks.onRetry(), text: t("fy.retryTune") }) : null;
@@ -82,9 +96,14 @@ export function createTracksScreen({ title, filterable = false, playable = true,
       } else if (type === "click" && button) {
         event.stopPropagation();
         hooks.onAction?.(button.dataset.action, track, index);
-      } else if (type === "dblclick" && !button) {
+      } else if (type === "click" && !button && event.detail <= 1) {
+        const key = `${trackKey(track)}|${index}`;
+        const now = performance.now();
+        if (lastActivation.key === key && now - lastActivation.at < 350) return;
+        lastActivation = { key, at: now };
         hooks.onPlay?.(visible, index, { shuffle: false });
       } else if (type === "keydown" && event.key === "Enter" && !button) {
+        event.preventDefault();
         hooks.onPlay?.(visible, index, { shuffle: false });
       }
     },
@@ -96,11 +115,11 @@ export function createTracksScreen({ title, filterable = false, playable = true,
     ? pageHero({
         back: hooks.back, art: heroArt,
         body: [h("div", { class: "kicker", text: kicker }), heading, meta, note],
-        actions: [playButton, shuffleButton, hooks.headerExtra].filter(Boolean),
+        actions: [playButton, shuffleButton, batchButton, hooks.headerExtra].filter(Boolean),
       })
     : h("header", { class: "view-header" }, hooks.back ?? null,
         h("div", { class: "vh-text" }, heading, meta), hooks.headerExtra ?? null, filterPart?.element ?? null,
-        playable ? h("div", { class: "vh-actions" }, playButton, shuffleButton) : null);
+        playable ? h("div", { class: "vh-actions" }, playButton, shuffleButton, batchButton) : null);
   headerOnScroll(header, list.element);
 
   const element = h("section", { class: "view" }, header, status, empty, list.element);
@@ -125,7 +144,7 @@ export function createTracksScreen({ title, filterable = false, playable = true,
     empty.hidden = !show;
     if (show) fillPanel(empty, all.length === 0 ? (hooks.emptyText ?? "") : t("library.noMatches"), all.length === 0 ? hooks.art : "search");
     // No dead buttons: with nothing to play they are not shown at all.
-    for (const button of [playButton, shuffleButton]) if (button) button.hidden = visible.length === 0;
+    for (const button of [playButton, shuffleButton, batchButton]) if (button) button.hidden = visible.length === 0;
     renderState();
   }
 

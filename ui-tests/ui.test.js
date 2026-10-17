@@ -86,14 +86,14 @@ test("filtering ignores case and treats ё as е", async () => {
   } finally { await app.close(); }
 });
 
-test("double click plays from that row with the visible list as the queue", async () => {
+test("one click plays from that row with the visible list as the queue", async () => {
   const app = await openApp({ config: { signedIn: true } });
   try {
     const { page } = app;
     await waitForLibrary(page);
     await page.fill(".main > .view:not([hidden]) input[type=search]", "Исполнитель 5");
     await page.waitForFunction(() => document.querySelectorAll(".row").length > 3);
-    await rows(page).nth(2).dblclick();
+    await rows(page).nth(2).click();
     const call = await page.evaluate(() => window.__mock.last("play_tracks"));
     assert.equal(call.args.index, 2);
     assert.ok(call.args.tracks.length > 50 && call.args.tracks.every((t) => t.artist === "Исполнитель 5"));
@@ -450,10 +450,11 @@ test("design: every accent has the iOS value in light, in explicit dark and in s
       await page.waitForSelector(".login");
       const dark = theme ? theme === "dark" : scheme === "dark";
       for (const [accent, [light, night]] of Object.entries(ACCENTS)) {
-        const read = await page.evaluate(([t, a]) => {
+        const read = await page.evaluate(async ([t, a]) => {
           const root = document.documentElement;
           if (t) root.dataset.theme = t; else delete root.dataset.theme;
           root.dataset.accent = a;
+          (await import("/js/themes.js")).applyPalette({ palette: "classic", accent: a });
           const s = getComputedStyle(root);
           return { accent: s.getPropertyValue("--accent").trim(), on: s.getPropertyValue("--on-accent").trim() };
         }, [theme, accent]);
@@ -686,13 +687,13 @@ test("states: loading shows a skeleton, empty and failed lists a panel; dead but
     assert.ok((await page.locator(".status.loading .sk-row").count()) >= 5);
     assert.equal(await page.locator(".status.loading").getAttribute("aria-busy"), "true");
     assert.match(await page.locator(".status.loading .sr-only").innerText(), /Загрузка/);
-    assert.equal(await page.locator(".main > .view:not([hidden]) .vh-actions .btn").isHidden(), true, "no Play with nothing to play");
+    assert.equal(await page.locator(".main > .view:not([hidden]) .vh-actions .btn.primary").isHidden(), true, "no Play with nothing to play");
   } finally { await loading.close(); }
   const empty = await openApp({ config: { signedIn: true, libraryTotal: 0 } });
   try {
     const { page } = empty;
     await page.waitForSelector(".main > .view:not([hidden]) .empty-state:not([hidden])");
-    assert.equal(await page.locator(".main > .view:not([hidden]) .vh-actions .btn").isHidden(), true);
+    assert.equal(await page.locator(".main > .view:not([hidden]) .vh-actions .btn.primary").isHidden(), true);
     assert.equal(await page.locator(".main > .view:not([hidden]) .list").isHidden(), true, "the panel takes the list's place");
   } finally { await empty.close(); }
   const failing = await openApp({ config: { signedIn: true, failing: ["library"] } });
@@ -754,7 +755,7 @@ test("keyboard: Space toggles, arrows seek, Ctrl+arrows skip, M mutes, / opens s
     await waitForLibrary(page);
     await rows(page).first().dblclick();
     await page.waitForFunction(() => document.querySelector(".player .title")?.textContent === "Трек 1");
-    await page.locator("body").click({ position: { x: 600, y: 300 } });
+    await page.locator(".main > .view:not([hidden]) .vh-text h1").click();
     await page.keyboard.press("Space");
     assert.equal(await page.evaluate(() => window.__mock.count("toggle")), 1);
     await page.keyboard.press("ArrowRight");
@@ -1427,7 +1428,7 @@ test("for you: the mixes shelf always has the personal mix, hides when empty, an
   try {
     await plain.page.click(".nav button[data-view=forYou]");
     await plain.page.waitForSelector(".mix-catalog:not(.new-releases) .mix-tile");
-    assert.deepEqual(await plain.page.locator(".mix-tile .mix-tile-title").allInnerTexts(), ["Мой микс"]);
+    assert.deepEqual(await plain.page.locator(".mix-tile .mix-tile-title").allInnerTexts(), ["Selena"]);
     await plain.page.click(".mix-tile");
     await plain.page.waitForFunction(() => window.__mock.last("play_radio"));
     assert.deepEqual(await plain.page.evaluate(() => window.__mock.last("play_radio").args.source), { kind: "personal", options: null });
@@ -1473,7 +1474,7 @@ test("a mix plays as an endless radio: the source travels with the queue and the
     // A catalogue mix tile: the mix id and its tuning are what the radio refills with.
     await page.click(".nav button[data-view=forYou]");
     await page.waitForSelector(".mix-tile");
-    assert.deepEqual(await page.locator(".mix-tile .mix-tile-title").allInnerTexts(), ["Мой микс", "Спокойный вечер"], "the personal mix leads the shelf");
+    assert.deepEqual(await page.locator(".mix-tile .mix-tile-title").allInnerTexts(), ["Selena", "Спокойный вечер"], "the personal mix leads the shelf");
     await page.locator(".mix-tile", { hasText: "Спокойный вечер" }).click();
     await page.waitForFunction(() => window.__mock.last("play_radio").args.source.kind === "catalog");
     call = await page.evaluate(() => window.__mock.last("play_radio").args);
@@ -2416,7 +2417,7 @@ test("for you: mix cards are colourful gradients with readable white text, and t
     await page.waitForSelector(".mix-tile");
     for (const tile of await page.locator(".mix-tile").all()) {
       const bg = await tile.evaluate((el) => getComputedStyle(el).backgroundImage);
-      assert.match(bg, /linear-gradient/);
+      assert.match(bg, /radial-gradient/);
     }
     // Every colour family: both stops keep 4.5:1 against the white label.
     const stops = await page.evaluate(() => {
@@ -2557,5 +2558,108 @@ test("narrow windows: header controls tidy into rows at 420px, and nothing overf
     const tabs = await page.locator(`${view} .view-header .tabs`).boundingBox();
     const header = await page.locator(`${view} .view-header`).boundingBox();
     assert.ok(tabs.width > header.width - 60, "the tabs take the full row");
+  } finally { await app.close(); }
+});
+
+test("single click starts once, browser menus are suppressed and track menus survive", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app; await waitForLibrary(page);
+    await rows(page).first().click();
+    assert.equal(await page.evaluate(() => window.__mock.count("play_tracks")), 1);
+    const cancelled = await page.locator(".nav").evaluate((node) => !node.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })));
+    assert.equal(cancelled, true);
+    await rows(page).first().click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Сохранить аудиофайл…", exact: true }).click();
+    await page.waitForFunction(() => window.__mock.count("export_track") === 1);
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("upcoming queue can move and clear without stopping the current track", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app; await waitForLibrary(page); await rows(page).first().click();
+    await page.click(".nav button[data-view=queue]");
+    await rows(page).nth(1).hover(); await rows(page).nth(1).locator('[data-action="down"]').click();
+    await page.waitForFunction(() => window.__mock.count("move_upcoming") === 1);
+    assert.equal(await page.evaluate(() => window.__mock.state.queue[2].title), "Трек 2");
+    await page.getByRole("button", { name: "Очистить следующие", exact: true }).click();
+    await page.waitForFunction(() => window.__mock.state.queue.length === 1);
+    assert.equal(await page.evaluate(() => window.__mock.state.player.status), "playing");
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("sleep timer is configurable and filtered tracks download as a batch", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app; await waitForLibrary(page);
+    await page.fill('.main > .view:not([hidden]) input[type=search]', "Трек 1234");
+    await page.getByRole("button", { name: "Скачать все", exact: true }).click();
+    await page.waitForFunction(() => window.__mock.count("download") === 1);
+    await page.click('.nav button[data-view=settings]');
+    await page.getByRole("combobox", { name: "Таймер сна", exact: true }).selectOption("900");
+    await page.waitForFunction(() => window.__mock.last("set_sleep_timer")?.args.seconds === 900);
+    await page.getByRole("combobox", { name: "Таймер сна", exact: true }).selectOption("end");
+    await page.waitForFunction(() => window.__mock.last("set_sleep_timer")?.args.endOfTrack === true);
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+
+test("mobile palettes: all seven persist, support keyboard selection and keep every accent readable", async () => {
+  const app = await openApp({ config: { signedIn: true } });
+  try {
+    const { page } = app;
+    await page.click(".nav button[data-view=settings]");
+    assert.equal(await page.locator(".palette-opt").count(), 7);
+    for (const palette of ["classic", "banana", "midnight", "forest", "rose", "mocha", "halloween"]) {
+      await page.click(`[data-palette-choice=${palette}]`);
+      assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("pm.settings.v1")).palette), palette);
+      assert.equal(await page.locator("html").getAttribute("data-palette"), palette);
+    }
+    await page.reload();
+    await page.click(".nav button[data-view=settings]");
+    assert.equal(await page.locator("[data-palette-choice=halloween]").getAttribute("aria-checked"), "true");
+    await page.focus("[data-palette-choice=halloween]");
+    await page.keyboard.press("ArrowRight");
+    assert.equal(await page.locator("[data-palette-choice=classic]").getAttribute("aria-checked"), "true");
+    const samples = await page.evaluate(async () => {
+      const { PALETTES, COLORS, applyPalette } = await import("/js/themes.js");
+      const samples=[];
+      for (const palette of PALETTES) for (const accent of ["blue","indigo","violet","pink","red","orange","green","teal","banana"]) {
+        applyPalette({palette,accent});
+        const css=getComputedStyle(document.documentElement);
+        samples.push({palette,accent,colors:COLORS[palette],light:css.getPropertyValue("--a-l").trim(),dark:css.getPropertyValue("--a-d").trim()});
+      }
+      return samples;
+    });
+    for (const sample of samples) for (const [index,bg] of sample.colors.entries()) {
+      assert.ok(contrast(hexColor(index < 3 ? sample.light : sample.dark),hexColor(bg)) >= 4.5, `${sample.palette}/${sample.accent}/${bg}`);
+    }
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("Selena: mobile mood artwork loads and one click starts radio with the server mood ID", async () => {
+  const app = await openApp({ config: { signedIn: true, catalogMixes: true } });
+  try {
+    const { page } = app;
+    await page.click(".nav button[data-view=forYou]");
+    await page.waitForSelector(".mix-tile");
+    assert.equal(await page.locator(".selena-card").count(), 6);
+    const images = await page.evaluate(async () => Promise.all([...document.querySelectorAll(".selena-mood")].map(async (el) => {
+      const url=getComputedStyle(el).backgroundImage.slice(5,-2);
+      const img=new Image(); img.src=url; await img.decode(); return img.naturalWidth;
+    })));
+    assert.ok(images.every((width)=>width >= 320));
+    await page.click(".mood-calm");
+    await page.waitForFunction(() => window.__mock.last("play_radio"));
+    const source=await page.evaluate(() => window.__mock.last("play_radio").args.source);
+    assert.equal(source.kind,"personal");
+    assert.deepEqual(JSON.parse(source.options),{mood:["calm"]});
+    assert.equal(await page.evaluate(() => window.__mock.count("play_radio")),1);
+    assert.deepEqual(app.problems, []);
   } finally { await app.close(); }
 });

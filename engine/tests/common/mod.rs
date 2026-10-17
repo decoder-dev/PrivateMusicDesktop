@@ -213,3 +213,35 @@ impl Drop for FakeApi {
         }
     }
 }
+
+/// Deterministic transport failure: accept and close instead of depending on
+/// reserved closed ports, which firewalls can silently drop for a full timeout.
+pub struct CutServer {
+    pub base: String,
+    stop: Arc<AtomicBool>,
+    handle: Option<JoinHandle<()>>,
+}
+
+impl CutServer {
+    pub fn start() -> Self {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
+        listener.set_nonblocking(true).unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        let flag = stop.clone();
+        let handle = std::thread::spawn(move || {
+            while !flag.load(Ordering::Relaxed) {
+                if let Ok((stream, _)) = listener.accept() { drop(stream); }
+                else { std::thread::sleep(std::time::Duration::from_millis(5)); }
+            }
+        });
+        Self { base, stop, handle: Some(handle) }
+    }
+}
+
+impl Drop for CutServer {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        if let Some(handle) = self.handle.take() { let _ = handle.join(); }
+    }
+}

@@ -157,6 +157,8 @@ pub fn start(handle: &AppHandle, state: &AppState) -> Result<(), String> {
         .inner_size(520.0, 760.0)
         .user_agent(WEB_USER_AGENT)
         .incognito(true)
+        .devtools(false)
+        .initialization_script("document.addEventListener('contextmenu', event => event.preventDefault(), true);")
         .on_navigation(|url| {
             let allowed = is_allowed_navigation(url);
             if !allowed {

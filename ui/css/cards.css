@@ -208,3 +208,29 @@
   .mix-catalog .shelf-title { margin-top: 6px; margin-bottom: 8px; }
   .fy-shelves { max-height: 56%; }
 }
+
+/* Mobile DiscoveryMoodCard and MixBackdrop: original artwork, calm ripples,
+   white editorial type, one clear play action. No continuous animation. */
+.selena-row { display:flex; gap:12px; overflow-x:auto; padding:2px var(--gutter) 12px; scroll-snap-type:x proximity; }
+.selena-card { position:relative; isolation:isolate; overflow:hidden; flex:0 0 168px; min-height:146px; padding:16px; border-radius:18px; display:flex; flex-direction:column; justify-content:flex-end; gap:5px; text-align:left; color:#fff; background-position:center; background-size:cover; scroll-snap-align:start; border:1px solid rgb(255 255 255 / 0.12); }
+.selena-card::before { content:""; position:absolute; inset:0; z-index:-1; background:linear-gradient(180deg,rgb(0 0 0 / 0.12),rgb(0 0 0 / 0.82)); }
+.selena-card strong { font:700 21px/1.18 var(--font); letter-spacing:-0.4px; padding-right:18px; }
+.selena-kicker { font:600 10px/1.3 var(--font); letter-spacing:0.6px; text-transform:uppercase; color:rgb(255 255 255 / 0.8); }
+.selena-subtitle { font:400 12px/1.4 var(--font); color:rgb(255 255 255 / 0.88); }
+.selena-play { position:absolute; display:grid; place-items:center; top:14px; right:14px; width:32px; height:32px; border-radius:50%; background:rgb(255 255 255 / 0.2); }
+.selena-card:disabled { opacity:0.6; }
+.selena-card:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.selena-personal { flex-basis:260px; background-image:radial-gradient(at 0% 0%,var(--mix-c0),transparent 75%),radial-gradient(at 100% 0%,var(--mix-c1),transparent 75%),radial-gradient(at 0% 100%,var(--mix-c2),transparent 75%),linear-gradient(var(--mix-c3),var(--mix-c3)); }
+.selena-personal strong { font-size:30px; }
+.mood-energy { background-image:url("../assets/discovery-energy.webp"); }
+.mood-calm { background-image:url("../assets/discovery-calm.webp"); }
+.mood-rain { background-image:url("../assets/discovery-rain.webp"); }
+.mood-sun { background-image:url("../assets/discovery-sun.webp"); }
+.mood-love { background-image:url("../assets/discovery-love.webp"); }
+.mix-tile.mobile-mix { min-height:112px; height:auto; justify-content:flex-end; gap:8px; background:radial-gradient(at 0% 0%,var(--mix-c0),transparent 75%),radial-gradient(at 100% 0%,var(--mix-c1),transparent 75%),radial-gradient(at 0% 100%,var(--mix-c2),transparent 75%),var(--mix-c3); }
+.mix-tile.mobile-mix::before { background:linear-gradient(180deg,rgb(0 0 0 / 0.04),rgb(0 0 0 / 0.68)),radial-gradient(circle at 0% 100%,transparent 0 24%,rgb(255 255 255 / 0.08) 24% 43%,transparent 43% 55%,rgb(255 255 255 / 0.08) 55% 72%,transparent 72%); }
+.mix-tile.mobile-mix .art-box { position:absolute; top:12px; left:14px; }
+.mix-tile.mobile-mix .mix-text { padding-top:24px; padding-right:10px; }
+.mix-play { position:absolute; right:12px; top:12px; color:#fff; }
+.mix-tile-subtitle { display:block; font:400 11px/1.4 var(--font); color:rgb(255 255 255 / 0.84); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+@media (max-height:650px) { .selena-card { min-height:116px; } }

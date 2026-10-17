@@ -29,6 +29,7 @@ pub struct OfflineTrack {
 }
 
 pub struct OfflineStore {
+    writes: Mutex<()>,
     dir: PathBuf,
     index: Mutex<BTreeMap<String, OfflineTrack>>,
 }
@@ -56,7 +57,7 @@ impl OfflineStore {
             .filter(|e| safe_offline_name(&e.file) && dir.join(&e.file).is_file())
             .map(|e| (e.track.id(), e))
             .collect();
-        Ok(Self { dir, index: Mutex::new(index) })
+        Ok(Self { writes: Mutex::new(()), dir, index: Mutex::new(index) })
     }
 
     pub fn dir(&self) -> &Path {
@@ -90,6 +91,7 @@ impl OfflineStore {
     /// Writes the audio and records it. The file appears atomically, so a
     /// crash mid-write never leaves a half file in the index.
     pub fn save(&self, track: &Track, kind: ElementaryKind, audio: &[u8]) -> Result<OfflineTrack> {
+        let _write = self.writes.lock().unwrap_or_else(|p| p.into_inner());
         if track.track_id <= 0 || track.owner_id == 0 || audio.is_empty() {
             return Err(Error::InvalidRequest);
         }
@@ -116,6 +118,7 @@ impl OfflineStore {
     }
 
     pub fn remove(&self, track_id: &str) -> Result<bool> {
+        let _write = self.writes.lock().unwrap_or_else(|p| p.into_inner());
         let mut index = self.lock();
         let Some(entry) = index.remove(track_id) else { return Ok(false) };
         let _ = fs::remove_file(self.dir.join(&entry.file));
@@ -158,6 +161,27 @@ mod tests {
         let reopened = OfflineStore::open(dir.path()).unwrap();
         assert_eq!(reopened.list().len(), 2);
         assert!(reopened.contains("7_1"));
+    }
+
+    #[test]
+    fn concurrent_saves_of_the_same_track_keep_complete_audio_and_index() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = std::sync::Arc::new(OfflineStore::open(dir.path()).unwrap());
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
+        let workers: Vec<_> = (0..8).map(|value| {
+            let (store, barrier) = (store.clone(), barrier.clone());
+            std::thread::spawn(move || {
+                barrier.wait();
+                store.save(&track(7, 1), ElementaryKind::Mp3, &vec![value; 65536]).unwrap();
+            })
+        }).collect();
+        for worker in workers { worker.join().unwrap(); }
+        let audio = fs::read(dir.path().join("7_1.mp3")).unwrap();
+        assert_eq!(audio.len(), 65536);
+        assert!(audio.iter().all(|byte| *byte == audio[0]));
+        let reopened = OfflineStore::open(dir.path()).unwrap();
+        assert_eq!(reopened.list().len(), 1);
+        assert_eq!(reopened.total_bytes(), 65536);
     }
 
     #[test]

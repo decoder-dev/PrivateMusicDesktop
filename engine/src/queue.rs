@@ -245,6 +245,33 @@ impl Queue {
     pub fn clear(&mut self) {
         *self = Self { shuffle: self.shuffle, repeat: self.repeat, ..Self::default() };
     }
+
+    /// Remove only tracks still to come, keeping history and the current item.
+    pub fn clear_upcoming(&mut self) {
+        let Some(cursor) = self.cursor else { return };
+        let mut remove = self.order[cursor + 1..].to_vec();
+        remove.sort_unstable_by(|a, b| b.cmp(a));
+        for index in remove { self.remove(index); }
+    }
+
+    /// Reorder upcoming tracks by their displayed indices. Neither played
+    /// tracks nor the current one may be moved, including under shuffle.
+    pub fn move_upcoming(&mut self, from: usize, to: usize) -> bool {
+        let Some(cursor) = self.cursor else { return false };
+        let (Some(a), Some(b)) = (self.order.iter().position(|i| *i == from), self.order.iter().position(|i| *i == to)) else { return false };
+        if a <= cursor || b <= cursor || from == to { return false; }
+        let item = self.order.remove(a);
+        self.order.insert(b, item);
+        let track = self.tracks.remove(from);
+        self.tracks.insert(to, track);
+        for index in &mut self.order {
+            *index = if *index == from { to }
+                else if from < to && *index > from && *index <= to { *index - 1 }
+                else if from > to && *index >= to && *index < from { *index + 1 }
+                else { *index };
+        }
+        true
+    }
 }
 
 #[cfg(test)]
@@ -252,6 +279,28 @@ mod tests {
     use super::*;
     use rand::rngs::StdRng;
     use rand::SeedableRng;
+
+    #[test]
+    fn upcoming_edits_keep_the_current_track_in_normal_and_shuffled_queues() {
+        for shuffle in [false, true] {
+            let (mut q, mut rng) = queue(8);
+            q.set_shuffle(shuffle, &mut rng);
+            q.advance(false);
+            let current = q.current().unwrap().track_id;
+            let cursor = q.cursor.unwrap();
+            let from = q.order[cursor + 1];
+            let to = *q.order.last().unwrap();
+            let moved = q.tracks[from].track_id;
+            assert!(q.move_upcoming(from, to));
+            assert_eq!(q.current().unwrap().track_id, current);
+            assert_eq!(q.tracks[*q.order.last().unwrap()].track_id, moved);
+            assert!(!q.move_upcoming(q.current_index().unwrap(), to));
+            q.clear_upcoming();
+            assert_eq!(q.current().unwrap().track_id, current);
+            assert_eq!(q.upcoming(), 0);
+            assert!(q.advance(false).is_none());
+        }
+    }
 
     fn track(n: i64) -> Track {
         Track {

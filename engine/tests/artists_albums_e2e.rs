@@ -231,9 +231,10 @@ fn sessions_without_execute_use_audio_get() {
 
 #[test]
 fn a_lost_connection_is_not_papered_over_by_fallbacks() {
-    // Nothing listens on this port: every call fails as "offline".
+    let cut = CutServer::start();
     let album = Album { access_key: Some("k".into()), ..release(-2000859017) };
-    assert_eq!(app("http://127.0.0.1:1").album_tracks(&album, 0, 100).unwrap_err(), Error::Offline);
+    let error = app(&cut.base).album_tracks(&album, 0, 100).unwrap_err();
+    assert!(pm_engine::net::is_connectivity(&error), "{error:?}");
 }
 
 #[test]

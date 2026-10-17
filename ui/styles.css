@@ -11,6 +11,7 @@
    when the window is in the background. The track lists are virtualised, so no
    row ever transitions or animates. */
 @import url("css/tokens.css");
+@import url("css/palettes.css");
 @import url("css/base.css");
 @import url("css/shell.css");
 @import url("css/lists.css");

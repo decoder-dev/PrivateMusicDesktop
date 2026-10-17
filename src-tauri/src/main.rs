@@ -81,6 +81,7 @@ fn start_login_smoke_test(handle: &tauri::AppHandle, report: std::path::PathBuf)
 fn main() {
     tauri::Builder::default()
         // First: a second launch hands over to the running app and exits.
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| tray::show_main(app)))
         .plugin(
             tauri_plugin_window_state::Builder::default()
@@ -108,9 +109,19 @@ fn main() {
 
             let emitter = handle.clone();
             let tray_handle = handle.clone();
-            let last_tooltip = std::sync::Mutex::new(None::<String>);
+            let mut last_tooltip = None::<String>;
             let media: Arc<std::sync::OnceLock<Option<media::Media>>> = Arc::new(std::sync::OnceLock::new());
             let media_for_events = media.clone();
+            let system_updates = pm_engine::media_sync::StatePublisher::spawn(move |state| {
+                if let Some(Some(media)) = media_for_events.get() {
+                    media.on_event(&pm_engine::controller::UiEvent::State(state.clone()));
+                }
+                let text = state.track.as_ref().map(|t| format!("{} — {}", t.title, t.artist));
+                if last_tooltip != text {
+                    tray::set_tooltip(&tray_handle, text.as_deref());
+                    last_tooltip = text;
+                }
+            }).map_err(|error| log::warn!("system media worker unavailable: {error}")).ok();
             let output_device: Arc<std::sync::Mutex<Option<String>>> = Arc::default();
             let device_for_sink = output_device.clone();
             let app = App::new(
@@ -121,15 +132,9 @@ fn main() {
                 },
                 store,
                 move |event| {
-                    if let Some(Some(media)) = media_for_events.get() {
-                        media.on_event(&event);
-                    }
                     if let pm_engine::controller::UiEvent::State(state) = &event {
-                        let text = state.track.as_ref().map(|t| format!("{} — {}", t.title, t.artist));
-                        let mut last = last_tooltip.lock().unwrap_or_else(|p| p.into_inner());
-                        if *last != text {
-                            tray::set_tooltip(&tray_handle, text.as_deref());
-                            *last = text;
+                        if let Some(updates) = &system_updates {
+                            updates.publish(state.clone());
                         }
                     }
                     let _ = emitter.emit("pm-event", &event);
@@ -152,6 +157,7 @@ fn main() {
             });
 
             WebviewWindowBuilder::new(&handle, "main", WebviewUrl::App("index.html".into()))
+                .devtools(false)
                 .title("Private Music")
                 .inner_size(1120.0, 740.0)
                 .min_inner_size(780.0, 540.0)
@@ -239,6 +245,11 @@ fn main() {
             commands::play_next,
             commands::play_last,
             commands::remove_from_queue,
+            commands::clear_upcoming,
+            commands::move_upcoming,
+            commands::set_sleep_timer,
+            commands::sleep_timer,
+            commands::export_track,
             commands::stop,
             commands::search_artists,
             commands::find_artist,

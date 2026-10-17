@@ -518,11 +518,23 @@ impl Core {
         if let Some(existing) = store.list().into_iter().find(|e| e.track.id() == track.id()) {
             return Ok(existing);
         }
-        let fresh = self.api(|client, session| client.refreshed_track(session, track))?;
-        let url = fresh.stream_url.as_deref().ok_or_else(|| Error::Format("no stream address".into()))?;
-        let (kind, audio) = fetch_to_end(url, &self.controller.fetch_config())?;
-        // Keep the metadata the window showed (title, cover) over VK's echo.
-        store.save(&Track { stream_url: None, ..track.clone() }, kind, &audio)
+        for attempt in 0..3 {
+            let result = (|| {
+                let fresh = self.api(|client, session| client.refreshed_track(session, track))?;
+                let url = fresh.stream_url.as_deref().ok_or(Error::Unavailable)?;
+                fetch_to_end(url, &self.controller.fetch_config())
+            })();
+            match result {
+                Ok((kind, audio)) => return store.save(&Track { stream_url: None, ..track.clone() }, kind, &audio),
+                Err(error) if attempt < 2 && (net::is_connectivity(&error) || matches!(error, Error::Http(401 | 403 | 404 | 410 | 408 | 429 | 500..=599))) => {
+                    log::info!("download {}: refreshing the stream address (attempt {}/3)", error.kind(), attempt + 2);
+                    net::drop_connections();
+                    std::thread::sleep(std::time::Duration::from_millis(300 * (attempt + 1)));
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        unreachable!("every download attempt returns or retries within the bound")
     }
 
     pub fn remove_download(&self, track_id: &str) -> Result<bool> {

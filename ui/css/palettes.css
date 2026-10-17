@@ -1,0 +1,23 @@
+/* Page and surface values from the mobile AppPalette, including system mode. */
+:root[data-palette] { --page-top: var(--pal-l-top); --page-bottom: var(--pal-l-bottom); --surface: var(--pal-l-surface); }
+:root[data-palette][data-theme="dark"] { --page-top: var(--pal-d-top); --page-bottom: var(--pal-d-bottom); --surface: var(--pal-d-surface); }
+@media (prefers-color-scheme: dark) {
+  :root[data-palette]:not([data-theme="light"]) { --page-top: var(--pal-d-top); --page-bottom: var(--pal-d-bottom); --surface: var(--pal-d-surface); }
+}
+.palette-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(96px,1fr)); gap: 8px; width: min(500px,100%); }
+.palette-opt { display: flex; flex-direction: column; align-items: center; gap: 7px; min-height: 76px; padding: 10px 6px; border-radius: 14px; border: 2px solid transparent; font-size: 12px; color: var(--text-2); }
+.palette-opt[aria-checked="true"] { border-color: var(--accent); color: var(--text); background: var(--accent-soft); }
+.palette-swatch { width: 42px; height: 27px; border-radius: 8px; border: 1px solid var(--line); }
+.brand-mark img { width: 100%; height: 100%; border-radius: 9px; }
+.palette-classic { background: linear-gradient(135deg, #000000, #131313); }
+.palette-banana { background: linear-gradient(135deg, #181B20, #23272E); }
+.palette-midnight { background: linear-gradient(135deg, #0B1020, #141B33); }
+.palette-forest { background: linear-gradient(135deg, #0D1511, #16221B); }
+.palette-rose { background: linear-gradient(135deg, #1A1115, #261A20); }
+.palette-mocha { background: linear-gradient(135deg, #19130F, #251C16); }
+.palette-halloween { background: linear-gradient(135deg, #100E17, #292033); }
+
+.set-row:has(.palette-grid) { flex-direction:column; align-items:stretch; }
+.set-row:has(.palette-grid) .set-control { width:100%; }
+.set-row:has(.palette-grid) .set-label { flex:0 0 auto; }
+.set-row .palette-grid { width:100%; grid-template-columns:repeat(auto-fit,minmax(90px,1fr)); }

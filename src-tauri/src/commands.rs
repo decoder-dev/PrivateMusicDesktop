@@ -33,6 +33,13 @@ async fn blocking<T: Send + 'static>(work: impl FnOnce() -> Result<T, Error> + S
     }
 }
 
+// Controller operations can briefly wait on engine locks. Keep them off the
+// native window thread, including Pause/Next during recovery.
+async fn control(state: TauriState<'_, AppState>, work: impl FnOnce(&pm_engine::controller::Controller) + Send + 'static) -> CommandResult<()> {
+    let app = state.app.clone();
+    blocking(move || { work(app.controller()); Ok(()) }).await
+}
+
 /// Upper bound for a queue handed over by the window; a runaway caller cannot
 /// make the engine hold millions of tracks.
 const MAX_QUEUE: usize = 20_000;
@@ -45,8 +52,9 @@ fn checked_queue(tracks: Vec<Track>) -> CommandResult<Vec<Track>> {
 }
 
 #[tauri::command]
-pub fn session_state(state: TauriState<'_, AppState>) -> SessionState {
-    state.app.session_state()
+pub async fn session_state(state: TauriState<'_, AppState>) -> CommandResult<SessionState> {
+    let app = state.app.clone();
+    blocking(move || { Ok(app.session_state()) }).await
 }
 
 #[tauri::command]
@@ -63,8 +71,9 @@ pub async fn login_start(handle: AppHandle, state: TauriState<'_, AppState>) -> 
 }
 
 #[tauri::command]
-pub fn logout(state: TauriState<'_, AppState>) {
-    state.app.sign_out();
+pub async fn logout(state: TauriState<'_, AppState>) -> CommandResult<()> {
+    let app = state.app.clone();
+    blocking(move || { app.sign_out(); Ok(()) }).await
 }
 
 #[tauri::command]
@@ -100,95 +109,96 @@ pub async fn search(state: TauriState<'_, AppState>, query: String, offset: u32,
 }
 
 #[tauri::command]
-pub fn player_state(state: TauriState<'_, AppState>) -> State {
-    state.app.controller().state()
+pub async fn player_state(state: TauriState<'_, AppState>) -> CommandResult<State> {
+    let app = state.app.clone();
+    blocking(move || { Ok(app.controller().state()) }).await
 }
 
 #[tauri::command]
-pub fn play_tracks(state: TauriState<'_, AppState>, tracks: Vec<Track>, index: usize) -> CommandResult<()> {
-    state.app.controller().play_tracks(checked_queue(tracks)?, index);
-    Ok(())
+pub async fn play_tracks(state: TauriState<'_, AppState>, tracks: Vec<Track>, index: usize) -> CommandResult<()> {
+    let tracks = checked_queue(tracks)?;
+    control(state, move |controller| controller.play_tracks(tracks, index)).await
 }
 
 #[tauri::command]
-pub fn load_queue(state: TauriState<'_, AppState>, tracks: Vec<Track>, index: usize, position: f64) -> CommandResult<()> {
-    state.app.controller().load_queue(checked_queue(tracks)?, index, position);
-    Ok(())
+pub async fn load_queue(state: TauriState<'_, AppState>, tracks: Vec<Track>, index: usize, position: f64) -> CommandResult<()> {
+    let tracks = checked_queue(tracks)?;
+    control(state, move |controller| controller.load_queue(tracks, index, position)).await
 }
 
 #[tauri::command]
-pub fn toggle(state: TauriState<'_, AppState>) {
-    state.app.controller().toggle();
+pub async fn toggle(state: TauriState<'_, AppState>) -> CommandResult<()> {
+    control(state, move |controller| controller.toggle()).await
 }
 
 #[tauri::command]
-pub fn pause(state: TauriState<'_, AppState>) {
-    state.app.controller().pause();
+pub async fn pause(state: TauriState<'_, AppState>) -> CommandResult<()> {
+    control(state, move |controller| controller.pause()).await
 }
 
 #[tauri::command]
-pub fn resume(state: TauriState<'_, AppState>) {
-    state.app.controller().resume();
+pub async fn resume(state: TauriState<'_, AppState>) -> CommandResult<()> {
+    control(state, move |controller| controller.resume()).await
 }
 
 #[tauri::command]
-pub fn next(state: TauriState<'_, AppState>) {
-    state.app.controller().next();
+pub async fn next(state: TauriState<'_, AppState>) -> CommandResult<()> {
+    control(state, move |controller| controller.next()).await
 }
 
 #[tauri::command]
-pub fn previous(state: TauriState<'_, AppState>) {
-    state.app.controller().previous();
+pub async fn previous(state: TauriState<'_, AppState>) -> CommandResult<()> {
+    control(state, move |controller| controller.previous()).await
 }
 
 #[tauri::command]
-pub fn seek(state: TauriState<'_, AppState>, seconds: f64) {
-    state.app.controller().seek(seconds);
+pub async fn seek(state: TauriState<'_, AppState>, seconds: f64) -> CommandResult<()> {
+    control(state, move |controller| controller.seek(seconds)).await
 }
 
 #[tauri::command]
-pub fn set_volume(state: TauriState<'_, AppState>, volume: f32) {
-    state.app.controller().set_volume(volume);
+pub async fn set_volume(state: TauriState<'_, AppState>, volume: f32) -> CommandResult<()> {
+    control(state, move |controller| controller.set_volume(volume)).await
 }
 
 #[tauri::command]
-pub fn set_shuffle(state: TauriState<'_, AppState>, on: bool) {
-    state.app.controller().set_shuffle(on);
+pub async fn set_shuffle(state: TauriState<'_, AppState>, on: bool) -> CommandResult<()> {
+    control(state, move |controller| controller.set_shuffle(on)).await
 }
 
 #[tauri::command]
-pub fn set_repeat(state: TauriState<'_, AppState>, repeat: Repeat) {
-    state.app.controller().set_repeat(repeat);
+pub async fn set_repeat(state: TauriState<'_, AppState>, repeat: Repeat) -> CommandResult<()> {
+    control(state, move |controller| controller.set_repeat(repeat)).await
 }
 
 #[tauri::command]
-pub fn jump(state: TauriState<'_, AppState>, index: usize) {
-    state.app.controller().jump(index);
+pub async fn jump(state: TauriState<'_, AppState>, index: usize) -> CommandResult<()> {
+    control(state, move |controller| controller.jump(index)).await
 }
 
 #[tauri::command]
-pub fn play_next(state: TauriState<'_, AppState>, track: Track) {
-    state.app.controller().play_next(track);
+pub async fn play_next(state: TauriState<'_, AppState>, track: Track) -> CommandResult<()> {
+    control(state, move |controller| controller.play_next(track)).await
 }
 
 #[tauri::command]
-pub fn play_last(state: TauriState<'_, AppState>, track: Track) {
-    state.app.controller().play_last(track);
+pub async fn play_last(state: TauriState<'_, AppState>, track: Track) -> CommandResult<()> {
+    control(state, move |controller| controller.play_last(track)).await
 }
 
 #[tauri::command]
-pub fn remove_from_queue(state: TauriState<'_, AppState>, index: usize) {
-    state.app.controller().remove_from_queue(index);
+pub async fn remove_from_queue(state: TauriState<'_, AppState>, index: usize) -> CommandResult<()> {
+    control(state, move |controller| controller.remove_from_queue(index)).await
 }
 
 #[tauri::command]
-pub fn stop(state: TauriState<'_, AppState>) {
-    state.app.controller().stop();
+pub async fn stop(state: TauriState<'_, AppState>) -> CommandResult<()> {
+    control(state, move |controller| controller.stop()).await
 }
 
 #[tauri::command]
-pub fn set_visualizer(state: TauriState<'_, AppState>, on: bool) {
-    state.app.controller().set_visualizer(on);
+pub async fn set_visualizer(state: TauriState<'_, AppState>, on: bool) -> CommandResult<()> {
+    control(state, move |controller| controller.set_visualizer(on)).await
 }
 
 #[tauri::command]
@@ -244,8 +254,9 @@ pub fn network_check(state: TauriState<'_, AppState>) {
 
 /// "Retry" for playback that stopped on a connection problem.
 #[tauri::command]
-pub fn retry_playback(state: TauriState<'_, AppState>) {
-    state.app.retry_playback();
+pub async fn retry_playback(state: TauriState<'_, AppState>) -> CommandResult<()> {
+    let app = state.app.clone();
+    blocking(move || { app.retry_playback(); Ok(()) }).await
 }
 
 #[derive(Serialize)]
@@ -271,7 +282,7 @@ pub async fn output_devices() -> Vec<String> {
 
 /// `None` follows the system default. Playback continues on the new output.
 #[tauri::command]
-pub fn set_output_device(state: TauriState<'_, AppState>, name: Option<String>) -> CommandResult<()> {
+pub async fn set_output_device(state: TauriState<'_, AppState>, name: Option<String>) -> CommandResult<()> {
     if name.as_ref().is_some_and(|n| n.is_empty() || n.len() > 512) {
         return Err(Error::InvalidRequest.into());
     }
@@ -282,8 +293,7 @@ pub fn set_output_device(state: TauriState<'_, AppState>, name: Option<String>) 
         }
         *current = name;
     }
-    state.app.controller().reopen_output();
-    Ok(())
+    control(state, |controller| controller.reopen_output()).await
 }
 
 #[tauri::command]
@@ -349,11 +359,9 @@ pub struct Downloads {
 }
 
 #[tauri::command]
-pub fn downloads(state: TauriState<'_, AppState>) -> Downloads {
-    Downloads {
-        tracks: state.app.downloads().into_iter().map(|d| d.track).collect(),
-        bytes: state.app.downloads_size(),
-    }
+pub async fn downloads(state: TauriState<'_, AppState>) -> CommandResult<Downloads> {
+    let app = state.app.clone();
+    blocking(move || Ok(Downloads { tracks: app.downloads().into_iter().map(|d| d.track).collect(), bytes: app.downloads_size() })).await
 }
 
 #[tauri::command]
@@ -364,11 +372,10 @@ pub async fn download(state: TauriState<'_, AppState>, track: Track) -> CommandR
 
 /// `track_id` is "owner_trackid", as the window knows it.
 #[tauri::command]
-pub fn remove_download(state: TauriState<'_, AppState>, track_id: String) -> CommandResult<bool> {
-    if track_id.len() > 64 || !track_id.chars().all(|c| c.is_ascii_digit() || c == '_' || c == '-') {
-        return Err(Error::InvalidRequest.into());
-    }
-    Ok(state.app.remove_download(&track_id)?)
+pub async fn remove_download(state: TauriState<'_, AppState>, track_id: String) -> CommandResult<bool> {
+    if track_id.len() > 64 || !track_id.chars().all(|c| c.is_ascii_digit() || c == '_' || c == '-') { return Err(Error::InvalidRequest.into()); }
+    let app = state.app.clone();
+    blocking(move || { app.remove_download(&track_id) }).await
 }
 
 #[tauri::command]
@@ -490,33 +497,82 @@ pub async fn friend_playlists(state: TauriState<'_, AppState>, owner_id: i64, of
 // Listening history and statistics: local to this computer.
 
 #[tauri::command]
-pub fn history(state: TauriState<'_, AppState>) -> Vec<HistoryEntry> {
-    state.app.history()
+pub async fn history(state: TauriState<'_, AppState>) -> CommandResult<Vec<HistoryEntry>> {
+    let app = state.app.clone();
+    blocking(move || { Ok(app.history()) }).await
 }
 
 #[tauri::command]
-pub fn history_remove(state: TauriState<'_, AppState>, track_id: String) -> CommandResult<bool> {
-    Ok(state.app.history_remove(&track_id)?)
+pub async fn history_remove(state: TauriState<'_, AppState>, track_id: String) -> CommandResult<bool> {
+    let app = state.app.clone();
+    blocking(move || { app.history_remove(&track_id) }).await
 }
 
 #[tauri::command]
-pub fn history_clear(state: TauriState<'_, AppState>) {
-    state.app.history_clear();
+pub async fn history_clear(state: TauriState<'_, AppState>) -> CommandResult<()> {
+    let app = state.app.clone();
+    blocking(move || { app.history_clear(); Ok(()) }).await
 }
 
 /// `scope` is "month", "year" or "all"; `choice` is "YYYY-MM" or "YYYY".
 #[tauri::command]
-pub fn listening_stats(state: TauriState<'_, AppState>, scope: String, choice: Option<String>) -> CommandResult<StatsView> {
-    Ok(state.app.listening_stats(&scope, choice.as_deref())?)
+pub async fn listening_stats(state: TauriState<'_, AppState>, scope: String, choice: Option<String>) -> CommandResult<StatsView> {
+    let app = state.app.clone();
+    blocking(move || { app.listening_stats(&scope, choice.as_deref()) }).await
 }
 
 #[tauri::command]
-pub fn reset_listening_stats(state: TauriState<'_, AppState>) {
-    state.app.reset_listening_stats();
+pub async fn reset_listening_stats(state: TauriState<'_, AppState>) -> CommandResult<()> {
+    let app = state.app.clone();
+    blocking(move || { app.reset_listening_stats(); Ok(()) }).await
 }
 
 /// The window's UTC offset in minutes east, so hours follow the user's clock.
 #[tauri::command]
-pub fn set_utc_offset(state: TauriState<'_, AppState>, minutes: i32) -> CommandResult<()> {
-    Ok(state.app.set_utc_offset(minutes)?)
+pub async fn set_utc_offset(state: TauriState<'_, AppState>, minutes: i32) -> CommandResult<()> {
+    let app = state.app.clone();
+    blocking(move || { app.set_utc_offset(minutes) }).await
+}
+
+#[tauri::command]
+pub async fn clear_upcoming(state: TauriState<'_, AppState>) -> CommandResult<()> {
+    control(state, |controller| controller.clear_upcoming()).await
+}
+
+#[tauri::command]
+pub async fn move_upcoming(state: TauriState<'_, AppState>, from: usize, to: usize) -> CommandResult<()> {
+    control(state, move |controller| controller.move_upcoming(from, to)).await
+}
+
+#[tauri::command]
+pub async fn set_sleep_timer(state: TauriState<'_, AppState>, seconds: Option<u64>, end_of_track: bool) -> CommandResult<()> {
+    let app = state.app.clone();
+    blocking(move || app.controller().set_sleep_timer(seconds, end_of_track)).await
+}
+
+#[tauri::command]
+pub async fn sleep_timer(state: TauriState<'_, AppState>) -> CommandResult<(Option<u64>, bool)> {
+    let app = state.app.clone();
+    blocking(move || Ok(app.controller().sleep_timer())).await
+}
+
+#[tauri::command]
+pub async fn export_track(handle: AppHandle, state: TauriState<'_, AppState>, track: Track) -> CommandResult<bool> {
+    use tauri_plugin_dialog::DialogExt;
+    let app = state.app.clone();
+    blocking(move || {
+        let entry = app.download(&track)?;
+        let source = app.controller().fetch_config().offline_dir.ok_or(Error::InvalidRequest)?.join(&entry.file);
+        let extension = std::path::Path::new(&entry.file).extension().and_then(|e| e.to_str()).ok_or(Error::InvalidRequest)?;
+        let title: String = format!("{} - {}", track.artist, track.title).chars()
+            .map(|c| if c.is_control() || "<>:\"/\\|?*".contains(c) { '_' } else { c }).take(160).collect();
+        let Some(target) = handle.dialog().file().set_file_name(format!("{title}.{extension}"))
+            .add_filter("Audio", &[extension]).blocking_save_file() else { return Ok(false) };
+        let target = target.into_path().map_err(|_| Error::InvalidRequest)?;
+        // The destination comes only from the native save dialog.
+        if target != source {
+            std::fs::copy(source, target).map_err(|e| Error::Stream(format!("saving audio: {e}")))?;
+        }
+        Ok(true)
+    }).await
 }

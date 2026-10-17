@@ -8,6 +8,7 @@ use ringbuf::traits::{Consumer, Observer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
 
 use crate::{Error, Result};
+use super::health::CallbackWatch;
 
 /// Where decoded audio goes. Lives on the audio thread and is not `Send`
 /// (a cpal stream must stay on the thread that built it).
@@ -122,6 +123,7 @@ impl Sink for SimulatedSink {
 }
 
 struct Shared {
+    callbacks: AtomicU64,
     played_frames: AtomicU64,
     paused: AtomicBool,
     volume_bits: AtomicU32,
@@ -131,6 +133,7 @@ struct Shared {
 }
 
 pub struct CpalSink {
+    watch: CallbackWatch,
     _stream: Stream,
     producer: HeapProd<f32>,
     shared: Arc<Shared>,
@@ -183,6 +186,7 @@ impl CpalSink {
         let capacity = (rate as usize * channels) / 2; // half a second
         let (producer, consumer) = HeapRb::<f32>::new(capacity.max(4096)).split();
         let shared = Arc::new(Shared {
+            callbacks: AtomicU64::new(0),
             played_frames: AtomicU64::new(0),
             paused: AtomicBool::new(false),
             volume_bits: AtomicU32::new(1.0f32.to_bits()),
@@ -199,7 +203,7 @@ impl CpalSink {
             other => return Err(Error::Stream(format!("unsupported audio sample format {other:?}"))),
         }?;
         stream.play().map_err(|e| Error::Stream(format!("audio output: {e}")))?;
-        Ok(Self { _stream: stream, producer, shared, rate, channels, capacity: capacity.max(4096) })
+        Ok(Self { watch: CallbackWatch::new(Instant::now()), _stream: stream, producer, shared, rate, channels, capacity: capacity.max(4096) })
     }
 }
 
@@ -217,34 +221,7 @@ where
     device
         .build_output_stream(
             config,
-            move |output: &mut [T], _| {
-                // A flush asks the callback to drop what is queued. The
-                // writer waits for the acknowledgement before writing again.
-                let requested = shared.flush_requested.load(Ordering::Acquire);
-                if requested != shared.flush_acknowledged.load(Ordering::Relaxed) {
-                    while consumer.try_pop().is_some() {}
-                    shared.played_frames.store(0, Ordering::Relaxed);
-                    shared.flush_acknowledged.store(requested, Ordering::Release);
-                }
-                if shared.paused.load(Ordering::Relaxed) {
-                    output.fill(T::EQUILIBRIUM);
-                    return;
-                }
-                let volume = f32::from_bits(shared.volume_bits.load(Ordering::Relaxed));
-                let mut frames_played = 0u64;
-                for frame in output.chunks_mut(channels) {
-                    if consumer.occupied_len() < channels {
-                        frame.fill(T::EQUILIBRIUM);
-                        continue;
-                    }
-                    for slot in frame.iter_mut() {
-                        let sample = consumer.try_pop().unwrap_or(0.0);
-                        *slot = T::from_sample((sample * volume).clamp(-1.0, 1.0));
-                    }
-                    frames_played += 1;
-                }
-                shared.played_frames.fetch_add(frames_played, Ordering::Relaxed);
-            },
+            move |output: &mut [T], _| render_output(output, &mut consumer, &shared, channels),
             move |err| {
                 log::warn!("audio output error: {err}");
                 error_flag.broken.store(true, Ordering::Relaxed);
@@ -252,6 +229,36 @@ where
             None,
         )
         .map_err(|e| Error::Stream(format!("audio output: {e}")))
+}
+
+fn render_output<T: SizedSample + FromSample<f32>>(output: &mut [T], consumer: &mut HeapCons<f32>, shared: &Shared, channels: usize) {
+    shared.callbacks.fetch_add(1, Ordering::Relaxed);
+    // A flush asks the callback to drop what is queued. The writer waits
+    // for the acknowledgement before writing again.
+    let requested = shared.flush_requested.load(Ordering::Acquire);
+    if requested != shared.flush_acknowledged.load(Ordering::Relaxed) {
+        while consumer.try_pop().is_some() {}
+        shared.played_frames.store(0, Ordering::Relaxed);
+        shared.flush_acknowledged.store(requested, Ordering::Release);
+    }
+    if shared.paused.load(Ordering::Relaxed) {
+        output.fill(T::EQUILIBRIUM);
+        return;
+    }
+    let volume = f32::from_bits(shared.volume_bits.load(Ordering::Relaxed));
+    let mut frames_played = 0u64;
+    for frame in output.chunks_mut(channels) {
+        if consumer.occupied_len() < channels {
+            frame.fill(T::EQUILIBRIUM);
+            continue;
+        }
+        for slot in frame.iter_mut() {
+            let sample = consumer.try_pop().unwrap_or(0.0);
+            *slot = T::from_sample((sample * volume).clamp(-1.0, 1.0));
+        }
+        frames_played += 1;
+    }
+    shared.played_frames.fetch_add(frames_played, Ordering::Relaxed);
 }
 
 impl Sink for CpalSink {
@@ -267,6 +274,10 @@ impl Sink for CpalSink {
         while self.shared.flush_acknowledged.load(Ordering::Acquire) != generation && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(1));
         }
+        if self.shared.flush_acknowledged.load(Ordering::Acquire) != generation {
+            log::warn!("audio output stopped acknowledging flushes; reopening is required");
+            self.shared.broken.store(true, Ordering::Relaxed);
+        }
     }
     fn set_paused(&mut self, paused: bool) { self.shared.paused.store(paused, Ordering::Relaxed); }
     fn set_volume(&mut self, volume: f32) {
@@ -274,5 +285,42 @@ impl Sink for CpalSink {
         let volume = if volume.is_finite() { volume.clamp(0.0, 1.0) } else { 1.0 };
         self.shared.volume_bits.store(volume.to_bits(), Ordering::Relaxed);
     }
-    fn is_healthy(&self) -> bool { !self.shared.broken.load(Ordering::Relaxed) }
+    fn is_healthy(&self) -> bool {
+        if self.shared.broken.load(Ordering::Relaxed) {
+            return false;
+        }
+        if !self.watch.healthy(self.shared.callbacks.load(Ordering::Relaxed), Instant::now()) {
+            log::warn!("audio output callbacks stopped for 3 s; reopening is required");
+            self.shared.broken.store(true, Ordering::Relaxed);
+            return false;
+        }
+        true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pause_outputs_silence_and_resume_preserves_queued_audio() {
+        let shared = Shared {
+            callbacks: AtomicU64::new(0), played_frames: AtomicU64::new(0),
+            paused: AtomicBool::new(true), volume_bits: AtomicU32::new(1.0f32.to_bits()),
+            flush_requested: AtomicU64::new(0), flush_acknowledged: AtomicU64::new(0),
+            broken: AtomicBool::new(false),
+        };
+        let (mut producer, mut consumer) = HeapRb::<f32>::new(8).split();
+        producer.push_slice(&[0.5, -0.5, 0.25, -0.25]);
+        let mut output = [1.0f32; 4];
+        render_output(&mut output, &mut consumer, &shared, 2);
+        assert_eq!(output, [0.0; 4], "pause must silence the actual device buffer");
+        assert_eq!(consumer.occupied_len(), 4);
+        assert_eq!(shared.played_frames.load(Ordering::Relaxed), 0);
+        assert_eq!(shared.callbacks.load(Ordering::Relaxed), 1, "paused callbacks still count as healthy");
+        shared.paused.store(false, Ordering::Relaxed);
+        render_output(&mut output, &mut consumer, &shared, 2);
+        assert_eq!(output, [0.5, -0.5, 0.25, -0.25]);
+        assert_eq!(shared.played_frames.load(Ordering::Relaxed), 2);
+    }
 }

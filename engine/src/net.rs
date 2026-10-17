@@ -283,12 +283,20 @@ impl MonitorHandle {
 
     /// Audio is playing (or loading): keep watching.
     pub fn set_playing(&self, playing: bool) {
-        self.update(|f| f.playing = playing);
+        let mut flags = self.shared.flags.lock().unwrap_or_else(|p| p.into_inner());
+        if flags.playing != playing {
+            flags.playing = playing;
+            self.shared.wake.notify_all();
+        }
     }
 
     /// The window has the user's attention: keep watching.
     pub fn set_focused(&self, focused: bool) {
-        self.update(|f| f.focused = focused);
+        let mut flags = self.shared.flags.lock().unwrap_or_else(|p| p.into_inner());
+        if flags.focused != focused {
+            flags.focused = focused;
+            self.shared.wake.notify_all();
+        }
     }
 
     /// Look right now, even if nothing is playing (the user pressed Retry).

@@ -362,6 +362,12 @@ fn same_artist(wanted: &str, found: &str) -> bool {
 }
 
 fn extract_genius_lyrics(html: &str) -> Option<String> {
+    // A legacy outer wrapper can contain contributor/translation headers as
+    // well as the real containers. Prefer the explicit lyric blocks.
+    extract_genius_blocks(html, true).or_else(|| extract_genius_blocks(html, false))
+}
+
+fn extract_genius_blocks(html: &str, explicit: bool) -> Option<String> {
     let lower = html.to_ascii_lowercase();
     let mut cursor = 0;
     let mut fragments = Vec::new();
@@ -369,7 +375,17 @@ fn extract_genius_lyrics(html: &str) -> Option<String> {
         let start = cursor + relative;
         let open_end = lower[start..].find('>')? + start;
         let opening = &lower[start..=open_end];
-        if !opening.contains("data-lyrics-container") && !opening.contains("lyrics__container") {
+        let has_attribute = opening.contains("data-lyrics-container");
+        let is_lyrics = if explicit {
+            opening.split_once("data-lyrics-container").and_then(|(_, tail)| tail.trim_start().strip_prefix('='))
+                .is_some_and(|value| {
+                    let value = value.trim_start();
+                    value.starts_with("\"true\"") || value.starts_with("'true'") || value.starts_with("true>") || value.starts_with("true ")
+                })
+        } else {
+            !has_attribute && opening.contains("lyrics__container")
+        };
+        if !is_lyrics {
             cursor = open_end + 1;
             continue;
         }
@@ -406,17 +422,31 @@ fn strip_html(fragment: &str) -> String {
     let mut out = String::new();
     let mut in_tag = false;
     let mut tag = String::new();
+    let mut excluded: Option<(String, usize)> = None;
     for c in fragment.chars() {
         if c == '<' {
             in_tag = true;
             tag.clear();
         } else if c == '>' && in_tag {
             let normalized = tag.trim_start().to_ascii_lowercase();
-            if normalized.starts_with("br") || normalized.starts_with("/p") { out.push('\n'); }
+            let closing = normalized.starts_with('/');
+            let name = normalized.trim_start_matches('/').split_whitespace().next().unwrap_or("").trim_end_matches('/');
+            if let Some((skipped, depth)) = &mut excluded {
+                if name == skipped {
+                    if closing { *depth -= 1; } else { *depth += 1; }
+                    if *depth == 0 { excluded = None; }
+                }
+            } else if !closing && (matches!(name, "script" | "style" | "button")
+                || normalized.contains("lyricsheader__") || normalized.contains("lyricsfooter__")
+                || normalized.contains("data-exclude-from-selection")) {
+                excluded = Some((name.to_string(), 1));
+            } else if name == "br" || (closing && name == "p") {
+                out.push('\n');
+            }
             in_tag = false;
         } else if in_tag {
             tag.push(c);
-        } else {
+        } else if excluded.is_none() {
             out.push(c);
         }
     }
@@ -633,6 +663,30 @@ pub fn describe(source: &str, error: &Error) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn genius_headers_and_controls_are_not_song_lyrics() {
+        let html = r#"<div data-lyrics-container="true"><div class="LyricsHeader__Container-x">
+            <span>17 Contributors</span><div>Translations<div>English</div></div><h2>Song Lyrics</h2>
+            </div>[Куплет]<br/>Первая строка<br>Вторая &amp; третья
+            <div class="LyricsFooter__Container-x">Embed</div><button>Read more</button></div>"#;
+        assert_eq!(extract_genius_lyrics(html).as_deref(), Some("[Куплет]\nПервая строка\nВторая & третья"));
+    }
+
+    #[test]
+    fn genius_explicit_blocks_win_over_an_outer_legacy_wrapper() {
+        let html = r#"<div class="Lyrics__Container-old">17 Contributors
+            <div data-lyrics-container="true">Один<br>Два</div>Translations
+            <div data-lyrics-container = 'true'><a href="/annotation">Три</a></div></div>"#;
+        assert_eq!(extract_genius_lyrics(html).as_deref(), Some("Один\nДва\n\nТри"));
+    }
+
+    #[test]
+    fn genius_legacy_blocks_still_work_but_metadata_alone_is_not_a_song() {
+        assert_eq!(extract_genius_lyrics(r#"<div class="Lyrics__Container-old">Раз<br>Два</div>"#).as_deref(), Some("Раз\nДва"));
+        assert!(extract_genius_lyrics(r#"<div data-lyrics-container="true"><div class="LyricsHeader__Container-x">17 Contributors</div></div>"#).is_none());
+        assert!(extract_genius_lyrics(r#"<div data-lyrics-container="false">Not lyrics</div>"#).is_none());
+    }
 
     fn track(artist: &str, title: &str, duration: u32) -> Track {
         Track {
