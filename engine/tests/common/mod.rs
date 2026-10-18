@@ -178,6 +178,16 @@ impl FakeApi {
     where
         F: Fn(&str, &str, &str) -> (u16, String) + Send + 'static,
     {
+        Self::start_with_headers(move |path, body, headers| {
+            let (status, value) = handler(path, body, headers);
+            (status, value, Vec::new())
+        })
+    }
+
+    pub fn start_with_headers<F>(handler: F) -> Self
+    where
+        F: Fn(&str, &str, &str) -> (u16, String, Vec<(&'static str, String)>) + Send + 'static,
+    {
         let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
         let port = server.server_addr().to_ip().unwrap().port();
         let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -192,9 +202,10 @@ impl FakeApi {
                     request.headers().iter().map(|h| format!("{}: {}\n", h.field, h.value)).collect();
                 let url = request.url().to_string();
                 log.lock().unwrap().push((url.clone(), body.clone()));
-                let (status, json) = handler(&url, &body, &headers);
+                let (status, json, extra) = handler(&url, &body, &headers);
                 let mut response = tiny_http::Response::from_string(json).with_status_code(status);
                 response.add_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap());
+                for (key, value) in extra { response.add_header(tiny_http::Header::from_bytes(key.as_bytes(), value.as_bytes()).unwrap()); }
                 let _ = request.respond(response);
             }
         });

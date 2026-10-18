@@ -527,6 +527,15 @@ impl Core {
         }
     }
 
+    /// Наличие маршрута ещё не означает доступность VK: проверяем сам API без кеша.
+    pub fn probe_network(&self) -> Result<()> {
+        let session = self.controller.session().ok_or(Error::Unauthorized)?;
+        let started = std::time::Instant::now();
+        let result = self.controller.client().probe_network(&session);
+        log::info!("network probe: result={} elapsed_ms={}", result.as_ref().map(|_| "ok").unwrap_or_else(|error| error.kind()), started.elapsed().as_millis());
+        result
+    }
+
     /// «Повторить» для воспроизведения, остановленного из-за проблемы с подключением.
     pub fn retry_playback(&self) {
         self.controller.retry();

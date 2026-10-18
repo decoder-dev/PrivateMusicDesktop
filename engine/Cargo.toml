@@ -22,6 +22,7 @@ sha2 = "0.10"
 semver = "1"
 rand = "0.8"
 log = "0.4"
+httpdate = "1"
 crossbeam-channel = "0.5"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 

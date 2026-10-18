@@ -71,7 +71,7 @@ pub enum UiEvent {
     /// Маршрут к Интернету изменился, исчез или прекратился (см. [`crate::net`]).
     Network { state: NetState },
     /// Воспроизведение восстанавливается после сбоя потока.
-    Recovery { phase: RecoveryPhase, attempt: u32, max: u32, kind: String },
+    Recovery { phase: RecoveryPhase, attempt: u32, max: u32, kind: String, retry_in_secs: Option<u64> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -160,6 +160,7 @@ fn classify(error: &Error) -> Class {
     match error {
         Error::Timeout | Error::Offline | Error::Transport(_) => Class::Connectivity,
         Error::Http(408 | 429 | 500..=599) => Class::Connectivity,
+        Error::RetryAfter { .. } => Class::Connectivity,
         // 9.06.10: слишком много запросов, контроль флуда, внутренняя ошибка VK.
         Error::Vk { code: 6 | 9 | 10, .. } => Class::Connectivity,
         Error::Stream(message) if message.contains("audio output") || message.starts_with("audio device") => Class::Connectivity,
@@ -243,6 +244,7 @@ type TimerCancel = Arc<(Mutex<bool>, std::sync::Condvar)>;
 
 struct Shared {
     sleep_cancel: Mutex<Option<TimerCancel>>,
+    recovery_cancel: Mutex<Option<TimerCancel>>,
     sleep_deadline: Mutex<Option<Instant>>,
     inner: Mutex<Inner>,
     client: VkClient,
@@ -265,6 +267,7 @@ pub struct Controller {
 
 impl Drop for Controller {
     fn drop(&mut self) {
+        self.shared.cancel_recovery_wait();
         if let Some(cancel) = self.shared.sleep_cancel.lock().unwrap_or_else(|p| p.into_inner()).take() {
             *cancel.0.lock().unwrap_or_else(|p| p.into_inner()) = true;
             cancel.1.notify_all();
@@ -552,6 +555,7 @@ impl Shared {
     /// Забывает об устранении сбоя (начался новый трек, пользователь остановился и т. д.) и о любых
     /// попытках, все еще ожидающих отмены.
     fn cancel_recovery(&self, inner: &mut Inner, events: &mut Vec<UiEvent>) {
+        self.cancel_recovery_wait();
         inner.recovery_token += 1;
         inner.stall_token += 1;
         inner.gave_up = false;
@@ -569,6 +573,7 @@ impl Shared {
             attempt: recovery.attempts,
             max: recovery.max,
             kind: recovery.kind.to_string(),
+            retry_in_secs: None,
         });
     }
 
@@ -596,6 +601,8 @@ impl Shared {
             // Удалите застрявший decoder/download, прежде чем запрашивать еще один URL. Поздняя неудача
             // не должна расходовать бюджет повторных попыток новой попытки.
             self.remote().stop();
+            // Ожидание, запрошенное сервером, не является зависшим декодером.
+            inner.stall_token += 1;
             // Загруженная копия, которую невозможно прочитать: получите ее один раз с VK.
             if std::mem::take(&mut inner.source_offline) {
                 if inner.session.is_some() && !inner.refreshed.contains(&track.id()) && matches!(error, Error::Stream(_) | Error::Http(_)) {
@@ -612,13 +619,15 @@ impl Shared {
                 return;
             }
             let connectivity = class == Class::Connectivity;
-            if connectivity {
+            if net::is_connectivity(&error) {
                 // Какие бы сокеты ни были объединены в пул, они принадлежат маршруту, который потерпел
                 // неудачу.
                 net::drop_connections();
             }
             let max = policy.attempts(connectivity);
-            let kind = if connectivity { "network" } else { "stream" };
+            let kind = if net::is_connectivity(&error) { "network" }
+                else if matches!(error, Error::Http(408 | 429 | 500..=599) | Error::RetryAfter { .. } | Error::Vk { code:6 | 9 | 10, .. }) { "service" }
+                else if connectivity { "device" } else { "stream" };
             let id = track.id();
             let recovery = match inner.recovery.take() {
                 Some(r) if r.track_id == id => r,
@@ -644,14 +653,14 @@ impl Shared {
                 events.push(UiEvent::Error { kind: error.kind().to_string(), message: error.to_string() });
                 // Только реальный сбой соединения указывает на сеть (и VPN); сервис, который продолжает
                 // отвечать на 5хх - другое дело.
-                let kind = if net::is_connectivity(&error) { "network" } else { "service" };
-                events.push(UiEvent::Recovery { phase: RecoveryPhase::Failed, attempt: max, max, kind: kind.into() });
+                events.push(UiEvent::Recovery { phase: RecoveryPhase::Failed, attempt: max, max, kind: kind.into(), retry_in_secs: None });
                 events.push(UiEvent::State(inner.state()));
                 return;
             }
-            let delay = policy.delay(connectivity, attempt, net::jitter_unit());
+            let announced = match error { Error::RetryAfter { seconds, .. } => Duration::from_secs(seconds), _ => Duration::ZERO };
+            let delay = policy.delay(connectivity, attempt, net::jitter_unit()).max(self.client.cooldown_remaining()).max(announced);
             log::info!("stream {} → refreshing url (attempt {attempt}/{max}, in {:.1} s)", what(&error), delay.as_secs_f64());
-            events.push(UiEvent::Recovery { phase: RecoveryPhase::Retrying, attempt, max, kind: kind.into() });
+            events.push(UiEvent::Recovery { phase: RecoveryPhase::Retrying, attempt, max, kind: kind.into(), retry_in_secs:Some(delay.as_secs_f64().ceil() as u64) });
             inner.status = Status::Loading;
             inner.loading_since = Instant::now();
             events.push(UiEvent::State(inner.state()));
@@ -662,11 +671,17 @@ impl Shared {
     /// Запускает следующую попытку восстановления для `track_id` после `delay`, если она не отменена
     /// (новый трек, остановка, смена сети, заменившая ее).
     fn schedule_attempt(self: &Arc<Self>, inner: &mut Inner, track_id: String, delay: Duration) {
+        self.cancel_recovery_wait();
+        let wake = Arc::new((Mutex::new(false), std::sync::Condvar::new()));
+        *self.recovery_cancel.lock().unwrap_or_else(|p| p.into_inner()) = Some(wake.clone());
         inner.recovery_token += 1;
         let token = inner.recovery_token;
         let shared = self.clone();
         std::thread::spawn(move || {
-            std::thread::sleep(delay);
+            let cancelled = wake.1.wait_timeout_while(wake.0.lock().unwrap_or_else(|p| p.into_inner()), delay, |cancelled| !*cancelled)
+                .unwrap_or_else(|p| p.into_inner());
+            if *cancelled.0 { return; }
+            drop(cancelled);
             shared.with(|inner, events| {
                 if inner.recovery_token != token || inner.session.is_none() {
                     return;
@@ -681,6 +696,13 @@ impl Shared {
                 shared.watch_stall(inner, track_id.clone());
             });
         });
+    }
+
+    fn cancel_recovery_wait(&self) {
+        if let Some(cancel) = self.recovery_cancel.lock().unwrap_or_else(|p| p.into_inner()).take() {
+            *cancel.0.lock().unwrap_or_else(|p| p.into_inner()) = true;
+            cancel.1.notify_all();
+        }
     }
 
     /// Звук иссяк и остался сухим: относитесь к нему как к неудачному стриму.
@@ -925,6 +947,7 @@ impl Controller {
             history: OnceLock::new(),
             policy: Mutex::new(RecoveryPolicy::default()),
             sleep_cancel: Mutex::new(None),
+            recovery_cancel: Mutex::new(None),
             sleep_deadline: Mutex::new(None),
         });
         let callback_shared = shared.clone();
@@ -1371,6 +1394,20 @@ impl Controller {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dropping_the_controller_releases_a_long_recovery_wait() {
+        let controller = Controller::new(VkClient::with_base("http://127.0.0.1:9").unwrap(),
+            || Ok(Box::new(crate::audio::SimulatedSink::new(44100,2,1.0)) as Box<dyn Sink>), |_| {},1.0);
+        let retained = Arc::downgrade(&controller.shared);
+        controller.shared.with(|inner,_| controller.shared.schedule_attempt(inner,"unused".into(),Duration::from_secs(86400)));
+        drop(controller);
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while retained.upgrade().is_some() {
+            assert!(Instant::now() < deadline,"a cancelled timer must release playback state");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
 
     #[test]
     fn failures_are_told_apart_by_what_helps() {

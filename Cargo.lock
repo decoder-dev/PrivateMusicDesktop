@@ -3509,10 +3509,11 @@ dependencies = [
 
 [[package]]
 name = "pm_engine"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "cpal",
  "crossbeam-channel",
+ "httpdate",
  "image",
  "keyring",
  "log",
@@ -3655,7 +3656,7 @@ dependencies = [
 
 [[package]]
 name = "private-music-desktop"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "block2",
  "env_logger",

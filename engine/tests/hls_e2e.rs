@@ -19,6 +19,24 @@ fn assert_two_tones(pcm: &Pcm) {
     assert!((high - 880.0).abs() < 16.0, "second half is {high} Hz");
 }
 
+#[test]
+fn decoder_preserves_network_errors_and_server_cooldowns_after_receiving_audio() {
+    if !require_ffmpeg() { return; }
+    let dir=tempfile::tempdir().unwrap();
+    run_ffmpeg(dir.path(),&tone_args(&["-c:a","libmp3lame","-b:a","128k","tone.mp3"]));
+    let bytes=fs::read(dir.path().join("tone.mp3")).unwrap();
+    for error in [pm_engine::Error::Offline,pm_engine::Error::Timeout,pm_engine::Error::RetryAfter{status:429,seconds:120}] {
+        let buffer=SharedBuffer::new(bytes.len()*2);
+        buffer.set_kind(pm_engine::stream::ElementaryKind::Mp3);
+        buffer.push(&bytes[..bytes.len()/2]);buffer.fail(error.clone());
+        let mut decoder=Decoder::open(buffer.reader(),pm_engine::stream::ElementaryKind::Mp3).unwrap();
+        let mut samples=Vec::new();
+        let result=loop {match decoder.next_block(&mut samples) { Ok(true)=>{},Ok(false)=>panic!("network failure must not become end-of-track"),Err(error)=>break error}};
+        assert!(!samples.is_empty(),"some audio must have played before the failure");
+        assert_eq!(result,error);
+    }
+}
+
 /// Зашифровано MPEG-TS HLS. `explicit_iv` выбирает форму IV в ключевой информации.
 fn encrypted_hls(explicit_iv: bool) -> (tempfile::TempDir, Vec<u8>) {
     let dir = tempfile::tempdir().unwrap();

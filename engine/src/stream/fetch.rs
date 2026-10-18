@@ -147,7 +147,9 @@ fn run(url: &str, config: &FetchConfig, buffer: &SharedBuffer) -> Result<()> {
 fn build_client(allow_loopback: bool) -> Client {
     Client::builder()
         .connect_timeout(Duration::from_secs(15))
-        .timeout(Duration::from_secs(60))
+        // Это предел одной блокирующей операции чтения, а не длины трека.
+        // Мёртвое соединение не должно держать отменённую загрузку целую минуту.
+        .timeout(Duration::from_secs(15))
         .dns_resolver(std::sync::Arc::new(PublicResolver { allow_loopback }))
         .redirect(reqwest::redirect::Policy::custom(move |attempt| {
             let url = attempt.url();
@@ -308,7 +310,14 @@ impl Fetcher<'_> {
         }
         match request.send() {
             Ok(response) if response.status().is_success() => Ok(response),
-            Ok(response) => Err(Error::Http(response.status().as_u16())),
+            Ok(response) => {
+                let status = response.status().as_u16();
+                let delay = net::retry_after(response.headers());
+                if (status == 429 || status == 503) && (delay.is_some() || status == 429) {
+                    return Err(Error::RetryAfter { status, seconds:(delay.unwrap_or(Duration::from_secs(1)).as_secs_f64().ceil() as u64).max(1) });
+                }
+                Err(Error::Http(status))
+            },
             Err(err) => Err(Error::from(err)),
         }
     }

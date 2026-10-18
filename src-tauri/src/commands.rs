@@ -15,11 +15,14 @@ use crate::AppState;
 pub struct CommandError {
     kind: String,
     message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    retry_after: Option<u64>,
 }
 
 impl From<Error> for CommandError {
     fn from(error: Error) -> Self {
-        Self { kind: error.kind().to_string(), message: error.to_string() }
+        let retry_after = match error { Error::RetryAfter { seconds, .. } => Some(seconds), _ => None };
+        Self { kind: error.kind().to_string(), message: error.to_string(), retry_after }
     }
 }
 
@@ -29,7 +32,7 @@ type CommandResult<T> = Result<T, CommandError>;
 async fn blocking<T: Send + 'static>(work: impl FnOnce() -> Result<T, Error> + Send + 'static) -> CommandResult<T> {
     match tauri::async_runtime::spawn_blocking(work).await {
         Ok(result) => result.map_err(CommandError::from),
-        Err(_) => Err(CommandError { kind: "internal".into(), message: "the task was interrupted".into() }),
+        Err(_) => Err(CommandError { kind: "internal".into(), message: "the task was interrupted".into(), retry_after:None }),
     }
 }
 
@@ -67,7 +70,7 @@ pub async fn profile(state: TauriState<'_, AppState>) -> CommandResult<Profile> 
 // Специальная асинхронность: в Windows создание окна из синхронной команды приводит к взаимоблокировке
 // WebView2 (окно открывается, но его страница никогда не загружается).
 pub async fn login_start(handle: AppHandle, state: TauriState<'_, AppState>, reset: Option<bool>) -> CommandResult<()> {
-    crate::login::start(&handle, &state, reset.unwrap_or(false)).map_err(|message| CommandError { kind: "login".into(), message })
+    crate::login::start(&handle, &state, reset.unwrap_or(false)).map_err(|message| CommandError { kind: "login".into(), message, retry_after:None })
 }
 
 #[tauri::command]
@@ -212,7 +215,7 @@ pub async fn artwork_palette(url: String) -> CommandResult<pm_engine::artwork::P
 /// Полноэкранный режим для всего окна (собственный вид "full screen" у UI отдельный).
 #[tauri::command]
 pub fn set_fullscreen(window: tauri::WebviewWindow, on: bool) -> CommandResult<()> {
-    window.set_fullscreen(on).map_err(|e| CommandError { kind: "window".into(), message: e.to_string() })
+    window.set_fullscreen(on).map_err(|e| CommandError { kind: "window".into(), message: e.to_string(), retry_after:None })
 }
 
 #[tauri::command]
@@ -250,6 +253,12 @@ pub fn network_focus(state: TauriState<'_, AppState>, focused: bool) {
 #[tauri::command]
 pub fn network_check(state: TauriState<'_, AppState>) {
     state.app.check_network();
+}
+
+#[tauri::command]
+pub async fn network_probe(state: TauriState<'_, AppState>) -> CommandResult<()> {
+    let app = state.app.clone();
+    blocking(move || app.probe_network()).await
 }
 
 /// «Повторить» для воспроизведения, остановленного из-за проблемы с подключением.
@@ -605,7 +614,7 @@ pub fn set_window_mode(window: tauri::WebviewWindow, mode: String) -> CommandRes
         window.center()
     };
     if !matches!(mode.as_str(), "medium" | "maximized" | "fullscreen") {
-        return Err(CommandError { kind: "window".into(), message: "unknown window mode".into() });
+        return Err(CommandError { kind: "window".into(), message: "unknown window mode".into(), retry_after:None });
     }
-    apply().map_err(|e| CommandError { kind: "window".into(), message: e.to_string() })
+    apply().map_err(|e| CommandError { kind: "window".into(), message: e.to_string(), retry_after:None })
 }

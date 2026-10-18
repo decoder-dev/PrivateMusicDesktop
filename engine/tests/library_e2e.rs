@@ -50,7 +50,7 @@ fn adding_returns_the_users_copy() {
 fn a_failed_add_is_not_retried() {
     let api = FakeApi::start(|_, _, _| (502, "bad gateway".into()));
     let error = app(&api.base).add_to_library(&foreign()).unwrap_err();
-    assert!(matches!(error, Error::Http(502)), "{error:?}");
+    assert_eq!(error,Error::UnconfirmedWrite);
     assert_eq!(api.call_count("audio.add"), 1, "a retry could add the track twice");
 }
 

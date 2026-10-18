@@ -276,6 +276,27 @@ fn wait_for(what: &str, f: impl Fn() -> bool) {
 }
 
 #[test]
+fn a_cdn_cooldown_does_not_skip_tracks_or_trigger_a_stall_and_pause_cancels_it() {
+    let media = FakeApi::start_with_headers(|_,_,_|(429,"{}".into(),vec![("Retry-After","120".into())]));
+    let vk = FakeApi::start(|_,_,_|(200,"{}".into()));
+    let rig=rig(&vk.base,1.0);
+    rig.controller.set_recovery_policy(RecoveryPolicy{time_scale:0.02,stall_after:Duration::from_secs(25),..RecoveryPolicy::default()});
+    rig.controller.play_tracks(vec![track(1,Some(format!("{}/music",media.base))),track(2,None)],0);
+    wait_for("service cooldown",|| !rig.recoveries(RecoveryPhase::Retrying).is_empty());
+    std::thread::sleep(Duration::from_millis(650));
+    assert_eq!(rig.recoveries(RecoveryPhase::Retrying).len(),1,"server wait is not a decoder stall");
+    assert!(rig.events.lock().unwrap().iter().any(|event| matches!(event,UiEvent::Recovery{kind,retry_in_secs:Some(120),..} if kind=="service")));
+    assert_eq!(rig.controller.state().track.as_ref().unwrap().track_id,1);
+    assert_eq!(media.call_count("/music"),1);
+    assert_eq!(vk.call_count("audio.getById"),0);
+    rig.controller.pause();rig.wait_state("paused cooldown",|state|state.status==Status::Idle);
+    rig.controller.on_network(NetState::Changed);rig.controller.on_network(NetState::Ok);
+    std::thread::sleep(Duration::from_millis(60));
+    assert_eq!(media.call_count("/music"),1);
+    assert_eq!(vk.call_count("audio.getById"),0);
+}
+
+#[test]
 fn a_url_that_expires_mid_track_is_replaced_and_playback_continues_from_the_position() {
     if !require_ffmpeg() { return; }
     let dir = hls_dir();
@@ -360,7 +381,7 @@ fn repeated_connection_failures_are_bounded_then_playback_pauses_and_offers_a_re
     assert_eq!(state.queue_len, 2);
     let errors = rig.errors();
     assert_eq!(errors.len(), 1, "one clear error, not one per attempt: {errors:?}");
-    assert!(matches!(errors[0].as_str(), "http" | "network"));
+    assert_eq!(errors[0], "service", "VK answers 503: this is a service failure, not a VPN hint");
     let attempts: Vec<u32> = rig.recoveries(RecoveryPhase::Retrying).iter().map(|(a, _)| *a).collect();
     assert_eq!(attempts, vec![1, 2, 3, 4, 5, 6], "six attempts, then it stops");
     assert_eq!(vk.call_count("/method/audio.getById"), 6, "one request per attempt, none extra");

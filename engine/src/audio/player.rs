@@ -583,7 +583,7 @@ fn decode_loop(
         Ok(pair) => pair,
         Err(Error::Cancelled) => return,
         Err(error) => {
-            send_chunk(&sender, &stop, Chunk::Failed { generation, error });
+            send_chunk(&sender, &stop, Chunk::Failed { generation, error:buffer.failure().unwrap_or(error) });
             return;
         }
     };
@@ -645,6 +645,10 @@ fn decode_loop(
                 }
             }
             Ok(false) => {
+                if let Some(error) = buffer.failure() {
+                    send_chunk(&sender, &stop, Chunk::Failed { generation, error });
+                    return;
+                }
                 at_end = true;
                 if !send_chunk(&sender, &stop, Chunk::End { generation }) {
                     return;
@@ -652,7 +656,7 @@ fn decode_loop(
             }
             Err(Error::Cancelled) => return,
             Err(error) => {
-                send_chunk(&sender, &stop, Chunk::Failed { generation, error });
+                send_chunk(&sender, &stop, Chunk::Failed { generation, error:buffer.failure().unwrap_or(error) });
                 return;
             }
         }

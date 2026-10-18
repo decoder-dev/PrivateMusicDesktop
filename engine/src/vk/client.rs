@@ -1,7 +1,8 @@
-use std::sync::Arc;
-use std::time::Duration;
+use std::io::Read;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant, SystemTime};
 
-use reqwest::header::{ACCEPT, CONTENT_TYPE, RETRY_AFTER, USER_AGENT};
+use reqwest::header::{ACCEPT, CONTENT_TYPE, USER_AGENT};
 use serde_json::Value;
 use url::Url;
 
@@ -11,6 +12,8 @@ use crate::{Error, Result};
 
 pub const DEFAULT_BASE_URL: &str = "https://api.vk.ru";
 pub const API_VERSION: &str = "5.199";
+const MAX_API_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_INLINE_WAIT: f64 = 8.0;
 
 /// Что нужно API от вошедшего в систему пользователя. Хранится приложением, никогда не регистрируется.
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -43,17 +46,36 @@ pub struct VkClient {
     http: Arc<Pool>,
     base: Url,
     version: String,
+    cooldown: Arc<Mutex<Option<(Instant, u16)>>>,
 }
 
 /// Секунды ожидания перед повторной попыткой. `Retry-After` — это текст, управляемый сервером:
 /// считается только конечное неотрицательное число, все остальное возвращается к экспоненциальному
-/// графику. Всегда в пределах 0,2 – 8 с.
+/// графику. Длительное ожидание сохраняется в общем ограничителе запросов,
+/// а вызывающему коду возвращается ошибка без блокировки потока на минуты.
+fn announced_delay(raw: &str, now: SystemTime) -> Option<f64> {
+    net::retry_after_at(raw, now).map(|delay| delay.as_secs_f64())
+}
+
 pub fn retry_delay(attempt: u32, retry_after: Option<&str>, jitter: f64) -> f64 {
-    let announced = retry_after
-        .and_then(|raw| raw.trim().parse::<f64>().ok())
-        .filter(|v| v.is_finite() && *v >= 0.0);
+    let announced = retry_after.and_then(|raw| announced_delay(raw, SystemTime::now()));
+    let jitter = if jitter.is_finite() { jitter.clamp(0.0, 2.0) } else { 1.0 };
     let exponential = (2f64.powi(attempt.min(10) as i32) * 0.55).min(4.0);
-    announced.unwrap_or(exponential * jitter).clamp(0.2, 8.0)
+    announced.unwrap_or(exponential * jitter).clamp(0.2, 86400.0)
+}
+
+fn read_api_body(mut reader: impl Read, limit: u64, budget: Duration) -> Result<Vec<u8>> {
+    let mut body = Vec::new();
+    let deadline = Instant::now() + budget;
+    let mut chunk = [0u8; 16 * 1024];
+    loop {
+        if Instant::now() >= deadline { return Err(Error::Timeout); }
+        let n = reader.read(&mut chunk).map_err(|error| net::read_error(&error))?;
+        if n == 0 { break; }
+        if body.len() as u64 + n as u64 > limit { return Err(Error::Format("API response exceeds size limit".into())); }
+        body.extend_from_slice(&chunk[..n]);
+    }
+    Ok(body)
 }
 
 impl VkClient {
@@ -83,7 +105,25 @@ impl VkClient {
                 .build()
                 .map_err(Error::from)
         })?;
-        Ok(Self { http, base, version: API_VERSION.to_string() })
+        Ok(Self { http, base, version: API_VERSION.to_string(), cooldown: Arc::new(Mutex::new(None)) })
+    }
+
+    pub fn cooldown_remaining(&self) -> Duration {
+        self.cooldown.lock().unwrap_or_else(|p| p.into_inner()).as_ref()
+            .map(|(until, _)| until.saturating_duration_since(Instant::now())).unwrap_or_default()
+    }
+
+    fn active_limit(&self) -> Option<Error> {
+        let current = *self.cooldown.lock().unwrap_or_else(|p| p.into_inner());
+        current.filter(|(until,_)| *until > Instant::now()).map(|(until,status)| Error::RetryAfter {
+            status, seconds:(until.saturating_duration_since(Instant::now()).as_secs_f64().ceil() as u64).max(1),
+        })
+    }
+
+    fn defer_requests(&self, seconds: f64, status: u16) {
+        let until = Instant::now() + Duration::from_secs_f64(seconds);
+        let mut current = self.cooldown.lock().unwrap_or_else(|p| p.into_inner());
+        if current.as_ref().is_none_or(|(old, _)| until > *old) { *current = Some((until, status)); }
     }
 
     /// Забывает каждое объединенное соединение: следующий вызов набирает номер снова.
@@ -107,7 +147,15 @@ impl VkClient {
     /// Для вызовов, которые что-то меняют (добавление, удаление): повторная попытка после тайм-аута или
     /// 5xx может применить изменение дважды, поэтому будет ровно одна попытка.
     pub fn call_once(&self, session: &Session, method: &str, params: &[(&str, String)]) -> Result<Value> {
-        self.call_with(session, method, params, 1)
+        // Лимит, известный до отправки, не является неподтверждённой записью.
+        if let Some(error) = self.active_limit() { return Err(error); }
+        match self.call_with(session, method, params, 1) {
+            Err(error) if matches!(error, Error::Timeout | Error::Transport(_) | Error::Format(_) | Error::Http(408 | 500..=599) | Error::RetryAfter { status:500..=599,.. }) => {
+                log::warn!("{method}: write result is unconfirmed kind={}", error.kind());
+                Err(Error::UnconfirmedWrite)
+            }
+            result => result,
+        }
     }
 
     /// Чтение, которое может быть выполнено всего `attempts` раз (вызывающая сторона выполняет
@@ -134,6 +182,20 @@ impl VkClient {
     }
 
     fn call_with(&self, session: &Session, method: &str, params: &[(&str, String)], attempts: u32) -> Result<Value> {
+        self.call_budgeted(session, method, params, attempts, None)
+    }
+
+    /// Проверка доступности VK всегда обращается к серверу и не использует кеш профиля.
+    /// Одна попытка с коротким ожиданием не запускает каскад обновлений сессии.
+    pub fn probe_network(&self, session: &Session) -> Result<()> {
+        let value = self.call_budgeted(session, "users.get", &[], 1, Some(Duration::from_secs(8)))?;
+        if value.as_array().and_then(|items| items.first()).and_then(model::parse_profile).is_none() {
+            return Err(Error::Format("network probe: invalid profile".into()));
+        }
+        Ok(())
+    }
+
+    fn call_budgeted(&self, session: &Session, method: &str, params: &[(&str, String)], attempts: u32, timeout: Option<Duration>) -> Result<Value> {
         let url = self.url(method)?;
         let mut form: Vec<(&str, String)> = vec![
             ("access_token", session.access_token.clone()),
@@ -145,17 +207,19 @@ impl VkClient {
 
         let mut attempt = 0;
         loop {
+            if let Some(error) = self.active_limit() { return Err(error); }
             attempt += 1;
             let last = attempt >= attempts;
-            let sent = self
+            let mut request = self
                 .http
                 .get()
                 .post(url.clone())
                 .header(CONTENT_TYPE, "application/x-www-form-urlencoded; charset=utf-8")
                 .header(ACCEPT, "application/json")
                 .header(USER_AGENT, session.api_user_agent.as_str())
-                .form(&form)
-                .send();
+                .form(&form);
+            if let Some(timeout) = timeout { request = request.timeout(timeout); }
+            let sent = request.send();
             let response = match sent {
                 Ok(r) => r,
                 Err(err) => {
@@ -167,16 +231,26 @@ impl VkClient {
                 }
             };
             let status = response.status().as_u16();
-            let retry_after = response
-                .headers()
-                .get(RETRY_AFTER)
-                .and_then(|v| v.to_str().ok())
-                .map(str::to_string);
-            let body = match response.text() {
+            let announced = net::retry_after(response.headers()).map(|delay| delay.as_secs_f64());
+            if status == 401 { return Err(Error::Unauthorized); }
+            if matches!(status, 408 | 429 | 500 | 502 | 503 | 504) {
+                let delay = announced.unwrap_or_else(|| retry_delay(attempt - 1, None, net::jitter_unit() * 0.3 + 0.85)).max(0.2);
+                if status == 429 || announced.is_some() { self.defer_requests(delay, status); }
+                if !last && delay <= MAX_INLINE_WAIT {
+                    log::info!("{method}: HTTP {status}, retrying (attempt {}/{attempts}, delay_ms={})", attempt + 1, (delay * 1000.0) as u64);
+                    sleep(delay);
+                    continue;
+                }
+                if let Some(delay) = announced {
+                    return Err(Error::RetryAfter {status,seconds:(delay.ceil() as u64).max(1)});
+                }
+                return Err(Error::Http(status));
+            }
+            let body = match read_api_body(response, MAX_API_BYTES, timeout.unwrap_or(Duration::from_secs(30))) {
                 Ok(body) => body,
                 Err(err) => {
                     // Соединение прервалось, пока приходил ответ.
-                    let mapped = Error::from(err);
+                    let mapped = err;
                     if self.transport_failed(method, &mapped, attempt, attempts) {
                         continue;
                     }
@@ -185,12 +259,7 @@ impl VkClient {
             };
             log::debug!("POST {method} status={status} bytes={}", body.len());
 
-            if matches!(status, 408 | 429 | 500 | 502 | 503 | 504) && !last {
-                log::info!("{method}: HTTP {status}, retrying (attempt {}/{attempts})", attempt + 1);
-                sleep(retry_delay(attempt - 1, retry_after.as_deref(), net::jitter_unit() * 0.3 + 0.85));
-                continue;
-            }
-            let parsed: Option<Value> = serde_json::from_str(&body).ok();
+            let parsed: Option<Value> = serde_json::from_slice(&body).ok();
             let vk_error = parsed.as_ref().and_then(|v| v.get("error"));
             let vk_code = vk_error.and_then(|e| e.get("error_code")).and_then(model::int);
             if status == 401 || vk_code == Some(5) {
@@ -201,10 +270,12 @@ impl VkClient {
             }
             if let Some(error) = vk_error {
                 let code = vk_code.unwrap_or(0);
+                let delay = announced.unwrap_or_else(|| retry_delay(attempt - 1, None, net::jitter_unit() * 0.3 + 0.85)).max(0.2);
+                if matches!(code, 6 | 9) { self.defer_requests(delay, 429); }
                 // 6: слишком много запросов в секунду, 9: контроль флуда, 10: внутренний.
-                if matches!(code, 6 | 9 | 10) && !last {
+                if matches!(code, 6 | 9 | 10) && !last && delay <= MAX_INLINE_WAIT {
                     log::info!("{method}: VK error {code}, retrying (attempt {}/{attempts})", attempt + 1);
-                    sleep(retry_delay(attempt - 1, None, net::jitter_unit() * 0.3 + 0.85));
+                    sleep(delay);
                     continue;
                 }
                 let message = error.get("error_msg").and_then(Value::as_str).unwrap_or("").to_string();
@@ -1710,16 +1781,31 @@ mod tests {
 
     #[test]
     fn hostile_retry_after_values_never_escape_the_bounds() {
-        for hostile in ["nan", "NaN", "inf", "-inf", "-5", "1e999", "", "soon", "Wed, 21 Oct 2026 07:28:00 GMT"] {
+        for hostile in ["nan", "NaN", "inf", "-inf", "-5", "1e999", "", "soon", "1.5", "18446744073709551616"] {
             let d = retry_delay(0, Some(hostile), 1.0);
             assert!(d.is_finite() && (0.2..=8.0).contains(&d), "{hostile} -> {d}");
             assert!((d - 0.55).abs() < 1e-9, "{hostile} falls back to the schedule, got {d}");
         }
         assert_eq!(retry_delay(0, Some("3"), 1.0), 3.0);
         assert_eq!(retry_delay(0, Some(" 2 "), 1.0), 2.0);
-        assert_eq!(retry_delay(0, Some("120"), 1.0), 8.0);
+        assert_eq!(retry_delay(0, Some("120"), 1.0), 120.0);
         assert_eq!(retry_delay(0, Some("0"), 1.0), 0.2);
         assert_eq!(retry_delay(40, None, 1.0), 4.0);
+        assert!(retry_delay(0, None, f64::NAN).is_finite());
+        assert!(retry_delay(0, None, f64::INFINITY).is_finite());
+    }
+
+    #[test]
+    fn api_body_is_bounded_in_size_and_total_read_time() {
+        assert_eq!(read_api_body(std::io::Cursor::new(b"abc"), 3, Duration::from_secs(1)).unwrap(), b"abc");
+        assert!(matches!(read_api_body(std::io::Cursor::new(b"abcd"), 3, Duration::from_secs(1)), Err(Error::Format(_))));
+        struct Drip;
+        impl Read for Drip {
+            fn read(&mut self, target: &mut [u8]) -> std::io::Result<usize> {
+                std::thread::sleep(Duration::from_millis(3)); target[0] = b' '; Ok(1)
+            }
+        }
+        assert_eq!(read_api_body(Drip, 1024, Duration::from_millis(1)), Err(Error::Timeout));
     }
 
     #[test]

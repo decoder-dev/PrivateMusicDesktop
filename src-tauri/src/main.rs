@@ -247,6 +247,7 @@ fn main() {
             commands::set_close_to_tray,
             commands::network_focus,
             commands::network_check,
+            commands::network_probe,
             commands::retry_playback,
             commands::output_devices,
             commands::set_output_device,

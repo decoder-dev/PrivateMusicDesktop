@@ -182,7 +182,7 @@ pub fn is_cancelled_io(error: &io::Error) -> bool {
 fn io_error(error: &Error) -> io::Error {
     match error {
         Error::Cancelled => io::Error::other(Cancelled),
-        other => io::Error::other(other.to_string()),
+        other => io::Error::other(other.clone()),
     }
 }
 

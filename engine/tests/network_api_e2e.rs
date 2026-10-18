@@ -37,6 +37,77 @@ fn session(token: &str) -> Session {
     }
 }
 
+#[test]
+fn long_retry_after_is_shared_by_client_clones_without_early_requests() {
+    let api = FakeApi::start_with_headers(|_, _, _| (429, "{}".into(), vec![("Retry-After", "120".into())]));
+    let client = VkClient::with_base(&api.base).unwrap();
+    let started = Instant::now();
+    assert!(matches!(client.profile(&session("token")), Err(Error::RetryAfter {status:429,seconds:120})));
+    assert!(matches!(client.clone().profile(&session("token")), Err(Error::RetryAfter {status:429,..})));
+    assert!(started.elapsed() < Duration::from_secs(2), "cooldown must not block the caller");
+    assert_eq!(api.call_count("users.get"),1);
+    assert!(client.cooldown_remaining() > Duration::from_secs(115));
+}
+
+#[test]
+fn retry_after_http_date_preserves_service_error_and_defers_other_calls() {
+    let date = httpdate::fmt_http_date(std::time::SystemTime::now() + Duration::from_secs(60));
+    let api = FakeApi::start_with_headers(move |_, _, _| (503, "{}".into(), vec![("Retry-After",date.clone())]));
+    let client = VkClient::with_base(&api.base).unwrap();
+    let error = client.profile(&session("token")).unwrap_err();
+    assert!(matches!(error, Error::RetryAfter {status:503,seconds:59..=60}));
+    assert_eq!(error.kind(),"service");
+    assert!(client.call_once(&session("token"),"audio.add",&[]).is_err());
+    assert_eq!(api.call_count("audio.add"),0);
+}
+
+#[test]
+fn connection_probe_bypasses_caches_and_has_one_attempt() {
+    let api=FakeApi::start(|_,_,_| (200,r#"{"response":[{"id":7,"first_name":"A","last_name":"B"}]}"#.into()));
+    let client=VkClient::with_base(&api.base).unwrap();
+    client.probe_network(&session("token")).unwrap();
+    client.probe_network(&session("token")).unwrap();
+    assert_eq!(api.call_count("users.get"),2);
+    let failed=FakeApi::start(|_,_,_| (500,"{}".into()));
+    let client=VkClient::with_base(&failed.base).unwrap();
+    assert_eq!(client.probe_network(&session("token")),Err(Error::Http(500)));
+    assert_eq!(failed.call_count("users.get"),1);
+}
+
+#[test]
+fn connection_probe_rejects_portal_html_and_malformed_success_payloads() {
+    for body in ["<html>Sign in to Wi-Fi</html>",r#"{"response":null}"#,r#"{"response":[]}"#] {
+        let api=FakeApi::start(move |_,_,_| (200,body.into()));
+        let client=VkClient::with_base(&api.base).unwrap();
+        assert!(matches!(client.probe_network(&session("token")),Err(Error::Format(_))));
+        assert_eq!(api.call_count("users.get"),1);
+    }
+}
+
+#[test]
+fn a_permanently_unsupported_method_is_not_retried_as_a_temporary_outage() {
+    let api=FakeApi::start(|_,_,_|(501,"{}".into()));
+    let client=VkClient::with_base(&api.base).unwrap();
+    assert_eq!(client.profile(&session("token")),Err(Error::Http(501)));
+    assert_eq!(api.call_count("users.get"),1);
+}
+
+#[test]
+fn service_failure_never_repeats_a_write_and_oversized_json_is_bounded() {
+    let api=FakeApi::start(|_,_,_|(503,"{}".into()));
+    let client=VkClient::with_base(&api.base).unwrap();
+    assert_eq!(client.call_once(&session("token"),"audio.add",&[]),Err(Error::UnconfirmedWrite));
+    assert_eq!(api.call_count("audio.add"),1);
+    let broken=FakeApi::start(|_,_,_|(200,"<html>Unexpected upstream reply</html>".into()));
+    let client=VkClient::with_base(&broken.base).unwrap();
+    assert_eq!(client.call_once(&session("token"),"audio.add",&[]),Err(Error::UnconfirmedWrite));
+    assert_eq!(broken.call_count("audio.add"),1);
+    let huge=FakeApi::start(|_,_,_| (200," ".repeat(16*1024*1024+1)));
+    let client=VkClient::with_base(&huge.base).unwrap();
+    assert!(matches!(client.profile(&session("token")),Err(Error::Format(_))));
+    assert_eq!(huge.call_count("users.get"),1);
+}
+
 /// Альтернатива VK на простых сокетах с поддержкой активности, поэтому соединения можно подсчитывать и
 /// отключать: считываются первые запросы `cut`, а затем соединение закрывается без ответа (что
 /// коммутатор VPN делает с сокетом в пуле).
@@ -157,7 +228,7 @@ fn a_write_is_never_repeated_after_a_dead_connection() {
     let client = VkClient::with_base(&vk.base).unwrap();
     let s = session("tokentokentoken-1");
     let error = client.call_once(&s, "audio.add", &[("audio_id", "1".into()), ("owner_id", "-3".into())]).unwrap_err();
-    assert!(matches!(error, Error::Transport(_) | Error::Offline), "{error:?}");
+    assert_eq!(error,Error::UnconfirmedWrite);
     assert_eq!(vk.requests.load(Ordering::SeqCst), 1, "a retried write could be applied twice");
     // Сбой все-таки устранили: следующий звонок начнется по новому соединению.
     client.call(&s, "users.get", &[]).unwrap();

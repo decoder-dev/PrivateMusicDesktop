@@ -23,6 +23,24 @@ use serde::Serialize;
 
 use crate::{Error, Result};
 
+/// Retry-After допускает целое число секунд или дату HTTP. Ограничение в сутки
+/// защищает локальные таймеры от непригодных серверных значений.
+pub fn retry_after_at(raw: &str, now: std::time::SystemTime) -> Option<Duration> {
+    let raw = raw.trim();
+    if !raw.is_empty() && raw.bytes().all(|byte| byte.is_ascii_digit()) {
+        return raw.parse::<u64>().ok().map(|seconds| Duration::from_secs(seconds.min(86400)));
+    }
+    httpdate::parse_http_date(raw).ok().map(|date| date.duration_since(now).unwrap_or_default().min(Duration::from_secs(86400)))
+}
+
+/// При неверных часах компьютера дата сервера позволяет сохранить правильную
+/// длительность ожидания. Числовой Retry-After от часов вообще не зависит.
+pub fn retry_after(headers: &reqwest::header::HeaderMap) -> Option<Duration> {
+    let now = headers.get(reqwest::header::DATE).and_then(|value| value.to_str().ok())
+        .and_then(|value| httpdate::parse_http_date(value).ok()).unwrap_or_else(std::time::SystemTime::now);
+    retry_after_at(headers.get(reqwest::header::RETRY_AFTER)?.to_str().ok()?, now)
+}
+
 // ------------------------------------------------------------ соединения
 
 /// Натолкнулся на [`drop_connections`]; каждая [`Pool`] и каждая загрузка потока сравнивают его со
@@ -363,6 +381,23 @@ mod tests {
     }
 
     const NONE: Fingerprint = Fingerprint { v4: None, v4_vk: None, v6: None };
+
+    #[test]
+    fn retry_after_accepts_seconds_and_http_dates_without_unbounded_timers() {
+        let now = std::time::UNIX_EPOCH + Duration::from_secs(100000);
+        let date = httpdate::fmt_http_date(now + Duration::from_secs(120));
+        assert_eq!(retry_after_at(&date,now),Some(Duration::from_secs(120)));
+        assert_eq!(retry_after_at("120",now),Some(Duration::from_secs(120)));
+        assert_eq!(retry_after_at(&httpdate::fmt_http_date(now-Duration::from_secs(1)),now),Some(Duration::ZERO));
+        assert_eq!(retry_after_at("999999999",now),Some(Duration::from_secs(86400)));
+        for bad in ["NaN","-1","0.5","1e9","tomorrow","18446744073709551616"] {
+            assert_eq!(retry_after_at(bad,now),None);
+        }
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(reqwest::header::DATE,httpdate::fmt_http_date(now).parse().unwrap());
+        headers.insert(reqwest::header::RETRY_AFTER,date.parse().unwrap());
+        assert_eq!(retry_after(&headers),Some(Duration::from_secs(120)),"server time avoids local clock skew");
+    }
 
     #[test]
     fn the_first_look_is_a_baseline_not_a_change() {

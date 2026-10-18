@@ -25,6 +25,8 @@ pub struct Decoder {
 fn stream_error(error: SymError) -> Error {
     match error {
         SymError::IoError(io) if super::buffer::is_cancelled_io(&io) => Error::Cancelled,
+        SymError::IoError(io) => io.get_ref().and_then(|inner| inner.downcast_ref::<Error>()).cloned()
+            .unwrap_or_else(|| Error::Stream(format!("decoder: {io}"))),
         other => Error::Stream(format!("decoder: {other}")),
     }
 }
