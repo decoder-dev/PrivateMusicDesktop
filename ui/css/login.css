@@ -10,7 +10,7 @@
 .login-recovery { display:flex; flex-direction:column; gap:8px; align-items:center; }
 .login-restart { border:var(--hair) solid var(--line); border-radius:var(--r-pill); padding:10px 18px; color:var(--accent); background:var(--surface); font:600 14px/20px var(--font); cursor:pointer; }
 .login-restart:disabled { opacity:.5; cursor:wait; }
-.login .login-recovery p { font-size:12px; line-height:18px; color:var(--text-3); }
+.login .login-recovery p { font-size:12px; line-height:18px; color:var(--text-2); }
 .login .note {
   display: flex; gap: 10px; text-align: left; padding: 12px 16px; border-radius: var(--r-compact); font-size: 13px; line-height: 18px; color: var(--text-2);
   background: color-mix(in srgb, var(--warning) 12%, transparent); border: var(--hair) solid color-mix(in srgb, var(--warning) 28%, transparent);
