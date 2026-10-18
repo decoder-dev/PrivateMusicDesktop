@@ -382,9 +382,46 @@ impl Fetcher<'_> {
     }
 
     fn run_progressive(&self, head: Vec<u8>, mut response: Response) -> Result<()> {
-        let kind = sniff_elementary(&head).ok_or_else(|| Error::Stream("unsupported audio format".into()))?;
         let mut first = head;
-        strip_id3_prefix(&mut first);
+        // Обложки в ID3 бывают больше первого сетевого блока. Пропускаем метаданные
+        // порциями, проверяя отмену, и определяем формат по настоящему началу звука.
+        let mut metadata_bytes = 0usize;
+        let mut scratch = [0u8; 16 * 1024];
+        loop {
+            while first.len() < 16 {
+                self.check_cancel()?;
+                let remaining = 16 - first.len();
+                let n = response.read(&mut scratch[..remaining]).map_err(|e| net::read_error(&e))?;
+                if n == 0 {
+                    break;
+                }
+                first.extend_from_slice(&scratch[..n]);
+            }
+            if !first.starts_with(b"ID3") {
+                break;
+            }
+            let length = id3_length(&first).ok_or_else(|| Error::Stream("invalid ID3 header".into()))?;
+            metadata_bytes = metadata_bytes
+                .checked_add(length)
+                .filter(|bytes| *bytes <= MAX_SEGMENT_BYTES)
+                .ok_or_else(|| Error::Stream("metadata exceeds the size limit".into()))?;
+            if length <= first.len() {
+                first.drain(..length);
+            } else {
+                let mut remaining = length - first.len();
+                first.clear();
+                while remaining > 0 {
+                    self.check_cancel()?;
+                    let count = remaining.min(scratch.len());
+                    let n = response.read(&mut scratch[..count]).map_err(|e| net::read_error(&e))?;
+                    if n == 0 {
+                        return Err(Error::Stream("truncated ID3 metadata".into()));
+                    }
+                    remaining -= n;
+                }
+            }
+        }
+        let kind = sniff_elementary(&first).ok_or_else(|| Error::Stream("unsupported audio format".into()))?;
         self.buffer.set_kind(kind);
         if !first.is_empty() && !self.buffer.push(&first) {
             return self.stopped();

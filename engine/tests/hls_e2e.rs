@@ -119,6 +119,42 @@ fn id3_tagged_mp3_is_played_from_the_audio() {
 }
 
 #[test]
+fn mp3_with_large_and_repeated_id3_tags_reaches_the_audio() {
+    if !require_ffmpeg() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    run_ffmpeg(dir.path(), &tone_args(&["-c:a", "libmp3lame", "-b:a", "128k", "tone.mp3"]));
+    let audio = fs::read(dir.path().join("tone.mp3")).unwrap();
+    // Размер превышает первый сетевой блок. Два тега проверяют последовательное
+    // удаление метаданных без потери первого звукового кадра.
+    let size = 96 * 1024usize;
+    let mut tagged = Vec::new();
+    for _ in 0..2 {
+        tagged.extend_from_slice(b"ID3\x04\0\0");
+        tagged.extend_from_slice(&[
+            ((size >> 21) & 127) as u8,
+            ((size >> 14) & 127) as u8,
+            ((size >> 7) & 127) as u8,
+            (size & 127) as u8,
+        ]);
+        tagged.resize(tagged.len() + size, 0);
+    }
+    tagged.extend_from_slice(&audio);
+    fs::write(dir.path().join("large.mp3"), tagged).unwrap();
+    let server = Server::start(dir.path().to_path_buf());
+    assert_two_tones(&decode_all(&format!("{}/large.mp3", server.base)).unwrap());
+}
+
+#[test]
+fn truncated_id3_metadata_is_rejected() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("broken.mp3"), b"ID3\x04\0\0\0\x01\0\0incomplete").unwrap();
+    let server = Server::start(dir.path().to_path_buf());
+    assert!(decode_all(&format!("{}/broken.mp3", server.base)).is_err());
+}
+
+#[test]
 fn byte_range_segments_in_one_file() {
     if !require_ffmpeg() { return; }
     let dir = tempfile::tempdir().unwrap();
