@@ -36,7 +36,8 @@ jobs:
 
       - name: ffmpeg (test fixtures)
         if: runner.os == 'Windows'
-        run: choco install ffmpeg -y --no-progress
+        shell: pwsh
+        run: scripts/ensure-ffmpeg.ps1
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
