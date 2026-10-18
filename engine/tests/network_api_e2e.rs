@@ -63,6 +63,7 @@ fn retry_after_http_date_preserves_service_error_and_defers_other_calls() {
 
 #[test]
 fn connection_probe_bypasses_caches_and_has_one_attempt() {
+    let _serial = serial();
     let api=FakeApi::start(|_,_,_| (200,r#"{"response":[{"id":7,"first_name":"A","last_name":"B"}]}"#.into()));
     let client=VkClient::with_base(&api.base).unwrap();
     client.probe_network(&session("token")).unwrap();
@@ -76,6 +77,7 @@ fn connection_probe_bypasses_caches_and_has_one_attempt() {
 
 #[test]
 fn connection_probe_rejects_portal_html_and_malformed_success_payloads() {
+    let _serial = serial();
     for body in ["<html>Sign in to Wi-Fi</html>",r#"{"response":null}"#,r#"{"response":[]}"#] {
         let api=FakeApi::start(move |_,_,_| (200,body.into()));
         let client=VkClient::with_base(&api.base).unwrap();
@@ -207,6 +209,19 @@ fn a_read_after_a_dead_connection_is_retried_on_a_fresh_one() {
     assert_eq!(vk.requests.load(Ordering::SeqCst), 2, "the cut request, then the retry");
     assert_eq!(vk.accepted.load(Ordering::SeqCst), 2, "the retry did not reuse the dead socket");
     assert!(started.elapsed() < Duration::from_secs(5), "bounded wait: {:?}", started.elapsed());
+}
+
+#[test]
+fn a_connection_probe_never_reuses_a_socket_from_the_previous_route() {
+    let _serial = serial();
+    let vk = RawVk::start(0);
+    let client = VkClient::with_base(&vk.base).unwrap();
+    let session = session("token");
+    client.profile(&session).unwrap();
+    assert_eq!(vk.accepted.load(Ordering::SeqCst),1);
+    client.probe_network(&session).unwrap();
+    assert_eq!(vk.accepted.load(Ordering::SeqCst),2,"the probe must open a fresh connection");
+    assert_eq!(vk.requests.load(Ordering::SeqCst),2);
 }
 
 #[test]

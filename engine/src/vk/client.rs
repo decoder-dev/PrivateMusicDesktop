@@ -188,6 +188,9 @@ impl VkClient {
     /// Проверка доступности VK всегда обращается к серверу и не использует кеш профиля.
     /// Одна попытка с коротким ожиданием не запускает каскад обновлений сессии.
     pub fn probe_network(&self, session: &Session) -> Result<()> {
+        if let Some(error) = self.active_limit() { return Err(error); }
+        // Проверка новой сети не должна использовать сокет, оставшийся от старой.
+        self.reset_connections();
         let value = self.call_budgeted(session, "users.get", &[], 1, Some(Duration::from_secs(8)))?;
         if value.as_array().and_then(|items| items.first()).and_then(model::parse_profile).is_none() {
             return Err(Error::Format("network probe: invalid profile".into()));
