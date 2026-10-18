@@ -3657,8 +3657,11 @@ dependencies = [
 name = "private-music-desktop"
 version = "0.4.2"
 dependencies = [
+ "block2",
  "env_logger",
  "log",
+ "objc2-foundation",
+ "objc2-web-kit",
  "pm_engine",
  "serde",
  "serde_json",
@@ -3670,6 +3673,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-plugin-window-state",
  "url",
+ "webkit2gtk",
  "webview2-com",
  "windows-core 0.62.2",
 ]

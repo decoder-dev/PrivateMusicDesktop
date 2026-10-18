@@ -100,7 +100,7 @@ fn load_verdict(elapsed: Duration, loaded: bool, error_page: bool) -> LoadVerdic
 
 fn reset_load_state() {
     PAGE_LOADED.store(false, Ordering::SeqCst);
-                        PAGE_AUTH_READY.store(false, Ordering::SeqCst);
+    PAGE_AUTH_READY.store(false, Ordering::SeqCst);
     PAGE_AUTH_READY.store(false, Ordering::SeqCst);
     PAGE_ERROR.store(false, Ordering::SeqCst);
     LOAD_FAILED.store(false, Ordering::SeqCst);
@@ -303,19 +303,54 @@ fn clear_login_data(window: &tauri::WebviewWindow) -> Result<(), String> {
     receiver.recv_timeout(Duration::from_secs(20)).map_err(|_| "VK browser reset timed out".to_string())?
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "linux")]
 fn clear_login_data(window: &tauri::WebviewWindow) -> Result<(), String> {
-    // Удаляем cookies через нативный API, включая HttpOnly. Системное хранилище сессии не трогаем.
-    window.navigate(Url::parse("about:blank").unwrap()).map_err(|e| e.to_string())?;
-    for cookie in window.cookies().map_err(|e| e.to_string())? {
-        window.delete_cookie(cookie).map_err(|e| e.to_string())?;
-    }
-    // WebKit применяет удаление асинхронно: новая страница должна получить уже пустое хранилище.
-    for _ in 0..100 {
-        if window.cookies().map_err(|e| e.to_string())?.is_empty() { return Ok(()); }
-        std::thread::sleep(Duration::from_millis(100));
-    }
-    Err("VK cookies reset timed out".to_string())
+    use webkit2gtk::{WebViewExt, WebsiteDataManagerExtManual};
+    let (sender, receiver) = std::sync::mpsc::channel();
+    window
+        .with_webview(move |view| {
+            let inner = view.inner();
+            inner.stop_loading();
+            if let Some(manager) = inner.website_data_manager() {
+                manager.clear(
+                    webkit2gtk::WebsiteDataTypes::ALL,
+                    webkit2gtk::glib::TimeSpan::from_seconds(0),
+                    None::<&webkit2gtk::gio::Cancellable>,
+                    move |result| {
+                        let _ = sender.send(result.map_err(|e| e.to_string()));
+                    },
+                );
+            } else {
+                let _ = sender.send(Err("VK private data manager unavailable".into()));
+            }
+        })
+        .map_err(|e| e.to_string())?;
+    receiver.recv_timeout(Duration::from_secs(20)).map_err(|_| "VK browser reset timed out".to_string())?
+}
+
+#[cfg(target_os = "macos")]
+fn clear_login_data(window: &tauri::WebviewWindow) -> Result<(), String> {
+    use objc2_foundation::{MainThreadMarker, NSDate};
+    use objc2_web_kit::{WKWebView, WKWebsiteDataStore};
+    let (sender, receiver) = std::sync::mpsc::channel();
+    window
+        .with_webview(move |view| unsafe {
+            let Some(main_thread) = MainThreadMarker::new() else {
+                let _ = sender.send(Err("VK browser reset requires the main thread".to_string()));
+                return;
+            };
+            let inner = &*view.inner().cast::<WKWebView>();
+            inner.stopLoading();
+            let store = inner.configuration().websiteDataStore();
+            let types = WKWebsiteDataStore::allWebsiteDataTypes(main_thread);
+            let since = NSDate::dateWithTimeIntervalSince1970(0.0);
+            let done = block2::RcBlock::new(move || {
+                let _ = sender.send(Ok(()));
+            });
+            store.removeDataOfTypes_modifiedSince_completionHandler(&types, &since, &done);
+        })
+        .map_err(|e| e.to_string())?;
+    receiver.recv_timeout(Duration::from_secs(20)).map_err(|_| "VK browser reset timed out".to_string())?
 }
 
 #[cfg(target_os = "windows")]
@@ -428,7 +463,7 @@ fn poll(
                 let _ = std::fs::write(
                     report,
                     if verified {
-                        "loaded VK; private cookie store verified\n"
+                    "loaded VK; private cookie store verified; reset verified\n"
                     } else {
                         "error private cookie store probe failed\n"
                     },
@@ -541,7 +576,8 @@ fn smoke_cookie_store(window: &tauri::WebviewWindow) -> bool {
         return false;
     }
     // Проверяем настоящий сброс приватного профиля, включая HttpOnly cookies.
-    if clear_login_data(window).is_err() {
+    if let Err(error) = clear_login_data(window) {
+        log::warn!("sign-in window: reset probe failed: {error}");
         return false;
     }
     let cleared =
