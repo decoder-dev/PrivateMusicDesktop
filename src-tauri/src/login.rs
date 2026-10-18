@@ -310,7 +310,12 @@ fn clear_login_data(window: &tauri::WebviewWindow) -> Result<(), String> {
     for cookie in window.cookies().map_err(|e| e.to_string())? {
         window.delete_cookie(cookie).map_err(|e| e.to_string())?;
     }
-    Ok(())
+    // WebKit применяет удаление асинхронно: новая страница должна получить уже пустое хранилище.
+    for _ in 0..100 {
+        if window.cookies().map_err(|e| e.to_string())?.is_empty() { return Ok(()); }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    Err("VK cookies reset timed out".to_string())
 }
 
 #[cfg(target_os = "windows")]
