@@ -114,7 +114,7 @@
 
   const commands = {
     session_state: () => state.session,
-    profile: () => ({ id: 7, first_name: "Иван", last_name: "Петров", photo_url: null }),
+    profile: async () => {if(config.profileDelay)await delay(config.profileDelay);return { id: 7, first_name: "Иван", last_name: "Петров", photo_url: null };},
     login_start: async () => {
       if (config.loginPending) return;
       setTimeout(() => {

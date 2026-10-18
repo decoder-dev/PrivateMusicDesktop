@@ -15,7 +15,7 @@ addStrings({
   en: { "nav.smart": "Smart playlists" },
 });
 export function createSmartView({ play, onTrackAction, toast }) {
-  let data=null,lastBucket="";
+  let data=null,lastBucket="",lastAccount=accountId();
   let rules = [],
     current = null,
     generation = 0;
@@ -102,6 +102,7 @@ export function createSmartView({ play, onTrackAction, toast }) {
     const mine = ++generation,
       id = accountId();
     screen.setTracks([]);
+    if(!id){screen.setStatus(t("loading"));return;}
     if (!current) {
       screen.clearStatus();
       return;
@@ -187,7 +188,10 @@ export function createSmartView({ play, onTrackAction, toast }) {
     }
   }
   subscribe("session", () => {
+    const id=accountId();if(id===lastAccount)return;lastAccount=id;
     generation++;
+    data=null;
+    if(id && store.view==="smart"){render();load();}
   });
   const repaint=()=>{if(data && current && store.view==="smart")screen.setTracks(applySmartRule(current,data),{preserveScroll:true});};
   subscribe("likes",()=>{if(!data || store.view!=="smart")return;data.library=libraryTracks();repaint();});
