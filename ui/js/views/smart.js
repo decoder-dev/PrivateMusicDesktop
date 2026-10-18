@@ -6,13 +6,16 @@ import { DEFAULT_RULES, validRule, applySmartRule } from "../smart-rules.js";
 import { readPersonal, writePersonal, accountId } from "../personal.js";
 import { formDialog, confirmDialog } from "../dialog.js";
 import { errorText, t, addStrings } from "../i18n.js";
-import { subscribe } from "../store.js";
+import { subscribe,store } from "../store.js";
+import { libraryTracks } from "../likes.js";
+import { downloads } from "../downloads.js";
 
 addStrings({
   ru: { "nav.smart": ft("Умные плейлисты") },
   en: { "nav.smart": "Smart playlists" },
 });
 export function createSmartView({ play, onTrackAction, toast }) {
+  let data=null,lastBucket="";
   let rules = [],
     current = null,
     generation = 0;
@@ -116,14 +119,8 @@ export function createSmartView({ play, onTrackAction, toast }) {
       ]);
       if (mine !== generation || id !== accountId() || !library) return;
       screen.setTitle(rule.title);
-      screen.setTracks(
-        applySmartRule(rule, {
-          library,
-          history,
-          downloaded: downloaded.tracks,
-          plays,
-        }),
-      );
+      data={library,history,downloaded:downloaded.tracks,plays};
+      screen.setTracks(applySmartRule(rule,data));
       screen.clearStatus();
     } catch (error) {
       if (mine === generation)
@@ -192,6 +189,16 @@ export function createSmartView({ play, onTrackAction, toast }) {
   subscribe("session", () => {
     generation++;
   });
+  const repaint=()=>{if(data && current && store.view==="smart")screen.setTracks(applySmartRule(current,data),{preserveScroll:true});};
+  subscribe("likes",()=>{if(!data || store.view!=="smart")return;data.library=libraryTracks();repaint();});
+  subscribe("downloads",()=>{if(!data || store.view!=="smart" || current?.kind!=="offline")return;data.downloaded=downloads().tracks;repaint();});
+  subscribe("player",player=>{
+    if(!data || store.view!=="smart" || !["month","forgotten"].includes(current?.kind))return;
+    const bucket=`${player.track?.owner_id}_${player.track?.track_id}|${Math.floor(player.position/10)}`;
+    if(bucket===lastBucket)return;lastBucket=bucket;
+    const mine=generation,id=accountId();
+    Promise.all([api.history(),api.monthPlays()]).then(([history,plays])=>{if(mine!==generation || id!==accountId() || !data)return;Object.assign(data,{history,plays});repaint();}).catch(()=>{});
+  });
   return {
     element: screen.element,
     show() {
@@ -200,6 +207,7 @@ export function createSmartView({ play, onTrackAction, toast }) {
     },
     reset() {
       generation++;
+      data=null;
       current = null;
       screen.setTracks([]);
     },

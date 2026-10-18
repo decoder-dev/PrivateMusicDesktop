@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { openApp } from "./harness.js";
+test("a visible smart playlist updates when a favourite is downloaded or removed",async()=>{
+ const app=await openApp({config:{signedIn:true,libraryTotal:5}});try{const{page}=app;await ready(page);await page.click('[data-view="smart"]');await active(page).locator('select[aria-label="Умный плейлист"]').selectOption('offline');await page.waitForFunction(()=>document.querySelector('.smart-view h1')?.textContent==='Скачанное избранное');await page.evaluate(async()=>{const{toggleDownload}=await import('/js/downloads.js');const{libraryTracks}=await import('/js/likes.js');await toggleDownload(libraryTracks()[0]);});await page.waitForFunction(()=>document.querySelector('.smart-view .meta')?.textContent.includes('1'));await page.evaluate(async()=>{const{toggleLike,libraryTracks}=await import('/js/likes.js');await toggleLike(libraryTracks()[0]);});await page.waitForFunction(()=>document.querySelector('.smart-view .empty-state')?.hidden===false);assert.equal(await active(page).locator('.row').count(),0);assert.deepEqual(app.problems,[]);}finally{await app.close();}
+});
 test("new playback settings and smart rules are available in English",async()=>{
   const app=await openApp({language:"en-US",config:{signedIn:true,libraryTotal:5}});try{await ready(app.page);await app.page.click('[data-view="settings"]');assert.equal(await active(app.page).getByRole('switch',{name:'Gapless playback'}).count(),1);assert.equal(await active(app.page).getByRole('switch',{name:'Loudness normalization'}).count(),1);await app.page.click('[data-view="smart"]');await app.page.waitForFunction(()=>document.querySelector('.smart-view h1')?.textContent==='Rediscover');assert.equal(await active(app.page).getByText('Configure',{exact:true}).count(),1);assert.deepEqual(app.problems,[]);}finally{await app.close();}
 });
