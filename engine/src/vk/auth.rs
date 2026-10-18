@@ -2,6 +2,7 @@
 //! выполняет приложение iOS (`login.vk.ru/?act=web_token`).
 
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use reqwest::blocking::Client;
@@ -15,17 +16,63 @@ use crate::{Error, Result};
 /// Идентификатор общедоступного веб-клиента VK, который использует сам веб-клиент vk.ru.
 const WEB_CLIENT_ID: &str = "6287487";
 const TOKEN_URL: &str = "https://login.vk.ru/?act=web_token";
+static EXCHANGE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+/// Только признаки и числовой код: строки ответа VK могут содержать токены и коды входа.
+#[derive(Debug)]
+struct ResponseSummary {
+    response_type: &'static str,
+    has_data: bool,
+    has_token: bool,
+    error_code: Option<i64>,
+}
+
+impl ResponseSummary {
+    fn from_body(body: &Value) -> Self {
+        Self {
+            response_type: match body.get("type").and_then(Value::as_str) {
+                Some("okay") => "okay",
+                Some("error") => "error",
+                Some(_) => "other",
+                None => "missing",
+            },
+            has_data: body.get("data").is_some_and(Value::is_object),
+            has_token: body.pointer("/data/access_token").and_then(Value::as_str).is_some_and(|s| !s.trim().is_empty()),
+            error_code: ["/error/error_code", "/data/error_code", "/error_code"]
+                .iter()
+                .find_map(|path| body.pointer(path).and_then(Value::as_i64)),
+        }
+    }
+}
+
+impl std::fmt::Display for ResponseSummary {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "type={} data={} token={} vk_code={:?}",
+            self.response_type, self.has_data, self.has_token, self.error_code
+        )
+    }
+}
 /// Аудио-методы отвечают по-разному в зависимости от пользовательского агента мобильного приложения.
-pub const API_USER_AGENT: &str = "KateMobileAndroid/56 lite-460 (Android 4.4.2; SDK 19; x86; unknown Android SDK built for x86; ru)";
+pub const API_USER_AGENT: &str =
+    "KateMobileAndroid/56 lite-460 (Android 4.4.2; SDK 19; x86; unknown Android SDK built for x86; ru)";
 
 pub fn exchange_web_session(cookie_header: &str, web_user_agent: &str) -> Result<Session> {
     exchange_at(TOKEN_URL, cookie_header, web_user_agent, now_unix())
 }
 
 pub(crate) fn exchange_at(url: &str, cookie_header: &str, web_user_agent: &str, now: i64) -> Result<Session> {
+    let exchange_id = EXCHANGE_SEQUENCE.fetch_add(1, Ordering::Relaxed) + 1;
+    let started = std::time::Instant::now();
     let cookies = cookie_header.trim();
     let agent = web_user_agent.trim();
     if cookies.is_empty() || agent.is_empty() {
+        log::info!(
+            "web_token id={exchange_id}: skipped, cookies_present={} agent_present={}",
+            !cookies.is_empty(),
+            !agent.is_empty()
+        );
         return Err(Error::Unauthorized);
     }
     let http = Client::builder()
@@ -39,6 +86,8 @@ pub(crate) fn exchange_at(url: &str, cookie_header: &str, web_user_agent: &str, 
     loop {
         attempt += 1;
         let last = attempt >= ATTEMPTS;
+        let request_started = std::time::Instant::now();
+        log::info!("web_token id={exchange_id}: request attempt={attempt}/{ATTEMPTS}");
         let sent = http
             .post(url)
             .header(CONTENT_TYPE, "application/x-www-form-urlencoded; charset=utf-8")
@@ -53,6 +102,11 @@ pub(crate) fn exchange_at(url: &str, cookie_header: &str, web_user_agent: &str, 
             Ok(r) => r,
             Err(err) => {
                 let mapped = Error::from(err);
+                log::warn!(
+                    "web_token id={exchange_id}: request failed attempt={attempt} kind={} elapsed_ms={}",
+                    mapped.kind(),
+                    request_started.elapsed().as_millis()
+                );
                 if !last && matches!(mapped, Error::Timeout | Error::Offline | Error::Transport(_)) {
                     std::thread::sleep(Duration::from_secs_f64(retry_delay(attempt - 1, None, 1.0)));
                     continue;
@@ -61,6 +115,11 @@ pub(crate) fn exchange_at(url: &str, cookie_header: &str, web_user_agent: &str, 
             }
         };
         let status = response.status().as_u16();
+        log::info!(
+            "web_token id={exchange_id}: response status={status} elapsed_ms={} retry={}",
+            request_started.elapsed().as_millis(),
+            matches!(status, 429 | 500..=599) && !last
+        );
         if matches!(status, 429 | 500..=599) && !last {
             std::thread::sleep(Duration::from_secs_f64(retry_delay(attempt - 1, None, 1.0)));
             continue;
@@ -68,14 +127,21 @@ pub(crate) fn exchange_at(url: &str, cookie_header: &str, web_user_agent: &str, 
         if !(200..300).contains(&status) {
             return Err(Error::Format(format!("web_token status {status}")));
         }
-        let set_cookies: Vec<String> = response
-            .headers()
-            .get_all(SET_COOKIE)
-            .iter()
-            .filter_map(|v| v.to_str().ok().map(str::to_string))
-            .collect();
-        let body: Value = response.json().map_err(|_| Error::Format("web_token body".into()))?;
-        return decode(&body, merge_cookies(cookies, &set_cookies), agent, now);
+        let set_cookies: Vec<String> =
+            response.headers().get_all(SET_COOKIE).iter().filter_map(|v| v.to_str().ok().map(str::to_string)).collect();
+        let body: Value = response.json().map_err(|_| {
+            log::warn!("web_token id={exchange_id}: invalid JSON response status={status}");
+            Error::Format("web_token body".into())
+        })?;
+        let summary = ResponseSummary::from_body(&body);
+        let result = decode(&body, merge_cookies(cookies, &set_cookies), agent, now);
+        log::info!(
+            "web_token id={exchange_id}: decoded {summary} result={} response_cookies={} total_ms={}",
+            result.as_ref().err().map(Error::kind).unwrap_or("success"),
+            set_cookies.len(),
+            started.elapsed().as_millis()
+        );
+        return result;
     }
 }
 
@@ -93,7 +159,11 @@ fn decode(body: &Value, cookies: String, web_user_agent: &str, now: i64) -> Resu
         .ok_or_else(|| Error::Format("web_token access_token".into()))?;
     let expires_at = data.get("expires").and_then(int).filter(|raw| *raw > 0).map(|raw| {
         // Текущий web_token возвращает секунды Unix; сохраняйте форму продолжительности работающей.
-        if raw > 1_000_000_000 { raw } else { now + raw }
+        if raw > 1_000_000_000 {
+            raw
+        } else {
+            now + raw
+        }
     });
     Ok(Session {
         access_token: token.to_string(),
@@ -129,10 +199,7 @@ pub(crate) fn merge_cookies(original: &str, set_cookie_headers: &[String]) -> St
 }
 
 pub(crate) fn now_unix() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
 }
 
 impl Session {
@@ -149,9 +216,7 @@ mod tests {
 
     #[test]
     fn decodes_unix_and_duration_expiry() {
-        let ok = |expires: i64| {
-            json!({"type": "okay", "data": {"access_token": "0123456789abcdef0123", "user_id": 77, "expires": expires}})
-        };
+        let ok = |expires: i64| json!({"type": "okay", "data": {"access_token": "0123456789abcdef0123", "user_id": 77, "expires": expires}});
         let s = decode(&ok(1_900_000_000), "a=b".into(), "ua", 1_000).unwrap();
         assert_eq!(s.expires_at, Some(1_900_000_000));
         assert_eq!(s.user_id, Some(77));
@@ -187,11 +252,25 @@ mod tests {
     fn refresh_window() {
         let mut s = decode(
             &json!({"type":"okay","data":{"access_token":"0123456789abcdef0123","expires":2_000_000_000i64}}),
-            String::new(), "ua", 0,
-        ).unwrap();
+            String::new(),
+            "ua",
+            0,
+        )
+        .unwrap();
         assert!(!s.needs_refresh(1_000));
         assert!(s.needs_refresh(2_000_000_000 - 100));
         s.expires_at = None;
         assert!(!s.needs_refresh(5));
     }
+}
+#[test]
+fn response_diagnostics_never_include_untrusted_strings_or_credentials() {
+    let secret = "CANARY-secret-token-code-cookie";
+    let body = serde_json::json!({"type":secret,"data":{"access_token":secret,"user_id":secret},"error":{"error_code":5,"error_msg":secret}});
+    let summary = ResponseSummary::from_body(&body);
+    let output = format!("{summary} {summary:?}");
+    assert!(!output.contains(secret));
+    assert!(output.contains("type=other"));
+    assert!(output.contains("token=true"));
+    assert!(output.contains("Some(5)"));
 }

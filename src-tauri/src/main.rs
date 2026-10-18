@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod diagnostics;
 mod login;
 mod media;
 mod tray;
@@ -39,17 +40,15 @@ fn is_app_url(url: &url::Url) -> bool {
         || url.host_str() == Some("tauri.localhost")
 }
 
-/// Логи идут в `<app log dir>/private-music.log` (перезаписываются при каждом запуске), так что о
-/// проблеме на чьей-то машине можно прочитать потом. `RUST_LOG` переопределяет уровень.
+/// Текущий и предыдущий запуск сохраняются отдельно. `RUST_LOG` переопределяет уровень подробности.
 fn init_logging(handle: &tauri::AppHandle) {
     let mut builder = env_logger::Builder::from_env(
         env_logger::Env::default().default_filter_or("warn,private_music_desktop=info,pm_engine=info"),
     );
+    builder.format_timestamp_millis();
     if let Ok(dir) = handle.path().app_log_dir() {
-        if std::fs::create_dir_all(&dir).is_ok() {
-            if let Ok(file) = std::fs::File::create(dir.join("private-music.log")) {
-                builder.target(env_logger::Target::Pipe(Box::new(file)));
-            }
+        if let Ok(file) = diagnostics::open_log(&dir) {
+            builder.target(env_logger::Target::Pipe(Box::new(file)));
         }
     }
     let _ = builder.try_init();
@@ -100,6 +99,7 @@ fn main() {
                 &handle.package_info().version.to_string(),
             ))));
             log::info!("Private Music {} starting", handle.package_info().version);
+            log::info!("diagnostics: os={} arch={} detailed_login=true previous_log=private-music.previous.log", std::env::consts::OS, std::env::consts::ARCH);
 
             let store: Box<dyn SecretStore> = Box::new(KeyringStore::new(KEYRING_SERVICE)
                 .with_logout_marker(handle.path().app_data_dir()?.join("session.signed-out")));

@@ -425,13 +425,16 @@ impl Core {
 
     /// Повторно выдает токен из сохраненного веб-файла cookie.
     fn refresh(&self, stale: &Session) -> Result<Session> {
+        let refresh_started = std::time::Instant::now();
         let _one_at_a_time = Self::lock(&self.refresh_lock);
         let started = *Self::lock(&self.generation);
+        log::info!("session refresh: generation={started} lock_wait_ms={}", refresh_started.elapsed().as_millis());
         // Возможно, кто-то еще обновился, пока мы ждали блокировки.
         let current = self.controller.session().ok_or(Error::Unauthorized)?;
         if current.access_token != stale.access_token {
             // Обновление можно использовать повторно, но вызов API не может пересекать учетные записи.
             if current.user_id != stale.user_id { return Err(Error::Unauthorized); }
+            log::info!("session refresh: reusing a completed renewal");
             return Ok(current);
         }
         match exchange_at(&self.token_url, &stale.refresh_cookie, &stale.web_user_agent, now_unix()) {
@@ -439,14 +442,17 @@ impl Core {
                 fresh.user_id = fresh.user_id.or(stale.user_id);
                 let generation = Self::lock(&self.generation);
                 if *generation != started || self.controller.session().is_none() {
+                    log::info!("session refresh: discarded obsolete result");
                     // Вышел из системы, пока VK отвечал: оставайтесь вне системы.
                     return Err(Error::Unauthorized);
                 }
                 self.adopt(fresh.clone());
                 drop(generation);
+                log::info!("session refresh: succeeded elapsed_ms={}", refresh_started.elapsed().as_millis());
                 Ok(fresh)
             }
             Err(Error::Unauthorized) => {
+                log::warn!("session refresh: VK refused renewal elapsed_ms={}", refresh_started.elapsed().as_millis());
                 let mut generation = Self::lock(&self.generation);
                 if *generation != started {
                     return Err(Error::Unauthorized);
@@ -457,7 +463,10 @@ impl Core {
                 (self.emit)(UiEvent::SessionExpired);
                 Err(Error::Unauthorized)
             }
-            Err(other) => Err(other),
+            Err(other) => {
+                log::warn!("session refresh: failed kind={} elapsed_ms={}", other.kind(), refresh_started.elapsed().as_millis());
+                Err(other)
+            },
         }
     }
 

@@ -39,6 +39,53 @@ static LOAD_RESTARTED: AtomicBool = AtomicBool::new(false);
 static LOGIN_GENERATION: AtomicU64 = AtomicU64::new(0);
 static LOGIN_RESETTING: AtomicBool = AtomicBool::new(false);
 static LOGIN_TRANSITION: Mutex<()> = Mutex::new(());
+static NAVIGATION_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+static PAGE_STARTED: Mutex<Option<std::time::Instant>> = Mutex::new(None);
+
+/// В URL могут быть одноразовые коды и идентификаторы. Записываем только известный этап входа.
+fn page_stage(url: &Url) -> &'static str {
+    match url.host_str() {
+        Some("vk.ru") if url.path() == "/login" => "vk-login",
+        Some("vk.ru") => "vk-page",
+        Some("login.vk.ru") => "vk-session",
+        Some("id.vk.ru" | "id.vk.com") => "vk-id",
+        Some("vk.com") => "vk-com",
+        _ if url.scheme() == "about" && matches!(url.path(), "blank" | "srcdoc") => "blank",
+        _ if url.scheme() == "blob" => "blob",
+        _ => "other",
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct CookieSummary {
+    total: usize,
+    vk: usize,
+    login: usize,
+    vk_id: usize,
+    selected: usize,
+    session_present: bool,
+}
+
+impl CookieSummary {
+    fn new(cookies: &[tauri::webview::Cookie<'_>], pairs: &[(String, String)]) -> Self {
+        let count = |host: &str| {
+            cookies
+                .iter()
+                .filter(|c| c.domain().unwrap_or("").trim_start_matches('.').eq_ignore_ascii_case(host))
+                .count()
+        };
+        Self {
+            total: cookies.len(),
+            vk: count("vk.ru"),
+            login: count("login.vk.ru"),
+            vk_id: count("id.vk.ru") + count("id.vk.com"),
+            selected: pairs.len(),
+            session_present: pairs.iter().any(|(name, value)| {
+                SESSION_COOKIES.contains(&name.to_ascii_lowercase().as_str()) && !value.is_empty()
+            }),
+        }
+    }
+}
 
 /// Сколько времени может пройти страница входа VK, прежде чем окно будет названо зависшим.
 const LOAD_TIMEOUT: Duration = Duration::from_secs(25);
@@ -101,7 +148,6 @@ fn load_verdict(elapsed: Duration, loaded: bool, error_page: bool) -> LoadVerdic
 fn reset_load_state() {
     PAGE_LOADED.store(false, Ordering::SeqCst);
     PAGE_AUTH_READY.store(false, Ordering::SeqCst);
-    PAGE_AUTH_READY.store(false, Ordering::SeqCst);
     PAGE_ERROR.store(false, Ordering::SeqCst);
     LOAD_FAILED.store(false, Ordering::SeqCst);
     LOAD_RESTARTED.store(true, Ordering::SeqCst);
@@ -140,6 +186,11 @@ fn token_cookies(cookies: &[tauri::webview::Cookie<'_>]) -> Vec<(String, String)
 }
 
 pub fn start(handle: &AppHandle, state: &AppState, reset: bool) -> Result<(), String> {
+    log::info!(
+        "sign-in requested: reset={reset} existing={} generation={}",
+        handle.get_webview_window("login").is_some(),
+        LOGIN_GENERATION.load(Ordering::SeqCst)
+    );
     if let Some(existing) = handle.get_webview_window("login") {
         if reset {
             {
@@ -149,6 +200,7 @@ pub fn start(handle: &AppHandle, state: &AppState, reset: bool) -> Result<(), St
             }
             state.login_check.store(false, Ordering::SeqCst);
             log::info!("sign-in window: resetting the private browser session");
+            let reset_started = std::time::Instant::now();
             // Сначала останавливаем страницу, чтобы она не восстановила удалённые cookies.
             // Это только приватное окно VK: сессия приложения в системном хранилище не меняется.
             let result = (|| {
@@ -157,6 +209,12 @@ pub fn start(handle: &AppHandle, state: &AppState, reset: bool) -> Result<(), St
                 existing.navigate(Url::parse(LOGIN_URL).unwrap()).map_err(|e| e.to_string())
             })();
             LOGIN_RESETTING.store(false, Ordering::SeqCst);
+            log::info!(
+                "sign-in window: reset finished success={} generation={} elapsed_ms={}",
+                result.is_ok(),
+                LOGIN_GENERATION.load(Ordering::SeqCst),
+                reset_started.elapsed().as_millis()
+            );
             result?;
         } else if LOAD_FAILED.load(Ordering::SeqCst) {
             // Страница так и не дошла: «Повторить» загружает ее снова, в том же окне и с теми же
@@ -170,6 +228,7 @@ pub fn start(handle: &AppHandle, state: &AppState, reset: bool) -> Result<(), St
         // Явное завершение также работает, если VK меняет имена файлов cookie сеанса. Только конечная
         // точка токена VK решает, аутентифицируются ли эти файлы cookie.
         if !reset {
+            log::info!("sign-in window: manual session verification requested");
             state.login_check.store(true, Ordering::SeqCst);
         }
         let _ = existing.unminimize();
@@ -180,6 +239,7 @@ pub fn start(handle: &AppHandle, state: &AppState, reset: bool) -> Result<(), St
     #[cfg(target_os = "windows")]
     let private_directory = handle.path().app_cache_dir().map_err(|e| e.to_string())?.join("vk-login-webview");
     if state.login_running.swap(true, Ordering::SeqCst) {
+        log::info!("sign-in window: creation is already in progress");
         return Ok(());
     }
     let running = state.login_running.clone();
@@ -200,14 +260,22 @@ pub fn start(handle: &AppHandle, state: &AppState, reset: bool) -> Result<(), St
     let window = builder
         .on_navigation(|url| {
             let allowed = is_allowed_navigation(url);
+            let navigation = NAVIGATION_SEQUENCE.fetch_add(1, Ordering::Relaxed) + 1;
+            log::info!(
+                "sign-in navigation={navigation}: stage={} allowed={allowed} generation={}",
+                page_stage(url),
+                LOGIN_GENERATION.load(Ordering::SeqCst)
+            );
             if !allowed {
                 // Только адреса входа хоста могут содержать одноразовые коды.
-                log::warn!("sign-in window: blocked a {} page on {:?}", url.scheme(), url.host_str());
+                log::warn!("sign-in window: blocked navigation stage={}", page_stage(url));
             }
             allowed
         })
         .on_page_load(|webview, payload| {
             if payload.event() != PageLoadEvent::Finished {
+                *PAGE_STARTED.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
+                log::info!("sign-in page: started stage={}", page_stage(payload.url()));
                 PAGE_AUTH_READY.store(false, Ordering::SeqCst);
                 return;
             }
@@ -215,7 +283,13 @@ pub fn start(handle: &AppHandle, state: &AppState, reset: bool) -> Result<(), St
             // Cookies могут появиться ещё в VK ID, до завершения входа и проверки 2FA.
             PAGE_AUTH_READY
                 .store(payload.url().scheme() == "https" && host.eq_ignore_ascii_case("vk.ru"), Ordering::SeqCst);
-            log::info!("sign-in window: page loaded on {host}");
+            let elapsed =
+                PAGE_STARTED.lock().unwrap_or_else(|e| e.into_inner()).take().map(|start| start.elapsed().as_millis());
+            log::info!(
+                "sign-in page: finished stage={} elapsed_ms={elapsed:?} auth_ready={}",
+                page_stage(payload.url()),
+                PAGE_AUTH_READY.load(Ordering::SeqCst)
+            );
             if payload.url().scheme() == "https" && is_vk_host(&host) {
                 PAGE_LOADED.store(true, Ordering::SeqCst);
                 PAGE_ERROR.store(false, Ordering::SeqCst);
@@ -251,18 +325,22 @@ pub fn start(handle: &AppHandle, state: &AppState, reset: bool) -> Result<(), St
                 {
                     let _transition = LOGIN_TRANSITION.lock().unwrap_or_else(|e| e.into_inner());
                     if generation != LOGIN_GENERATION.load(Ordering::SeqCst) {
+                        log::info!("sign-in window: discarded obsolete session generation={generation}");
                         continue;
                     }
                     app.sign_in(session);
+                    log::info!("sign-in window: session handed to the application generation={generation}");
                 }
                 let _ = handle.emit("pm-login", "success");
                 let _ = window.close();
             }
             Some(Err(error)) => {
+                log::warn!("sign-in window: stopped with error kind={}", error.kind());
                 let _ = handle.emit("pm-login", format!("error:{}", error.kind()));
                 let _ = window.close();
             }
             None => {
+                log::info!("sign-in window: cancelled or closed");
                 let _ = handle.emit("pm-login", "cancelled");
             }
         }
@@ -356,8 +434,12 @@ fn clear_login_data(window: &tauri::WebviewWindow) -> Result<(), String> {
 #[cfg(target_os = "windows")]
 fn observe_load_errors(window: &tauri::WebviewWindow) -> Result<(), String> {
     use webview2_com::{
-        Microsoft::Web::WebView2::Win32::COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN, NavigationCompletedEventHandler,
+        Microsoft::Web::WebView2::Win32::{
+            ICoreWebView2NavigationCompletedEventArgs2, COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN,
+        },
+        NavigationCompletedEventHandler,
     };
+    use windows_core::Interface;
     let handle = window.app_handle().clone();
     window
         .with_webview(move |view| unsafe {
@@ -369,6 +451,16 @@ fn observe_load_errors(window: &tauri::WebviewWindow) -> Result<(), String> {
                         if let Some(args) = args {
                             let mut success = windows_core::BOOL::default();
                             args.IsSuccess(&mut success)?;
+                            let mut navigation_id = 0;
+                            let _ = args.NavigationId(&mut navigation_id);
+                            let mut http_status = 0;
+                            if let Ok(details) = args.cast::<ICoreWebView2NavigationCompletedEventArgs2>() {
+                                let _ = details.HttpStatusCode(&mut http_status);
+                            }
+                            log::info!(
+                                "sign-in native navigation={navigation_id}: success={} http_status={http_status}",
+                                success.as_bool()
+                            );
                             if !success.as_bool() && !LOGIN_RESETTING.load(Ordering::SeqCst) {
                                 // Код ошибки безопасен для лога: адреса с кодами входа сюда не попадают.
                                 let mut status = COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN;
@@ -421,19 +513,28 @@ fn poll(
     let mut last_header = None;
     let mut load_started = std::time::Instant::now();
     let mut generation = LOGIN_GENERATION.load(Ordering::SeqCst);
+    let mut last_cookie_summary = None;
+    let mut last_diagnostic = std::time::Instant::now();
+    let mut attempts = 0u64;
     loop {
         std::thread::sleep(POLL);
         if handle.get_webview_window("login").is_none() || !running.load(Ordering::SeqCst) {
             return None;
+        }
+        if last_diagnostic.elapsed() >= Duration::from_secs(30) {
+            log::info!("sign-in waiting: generation={generation} attempts={attempts} failures={failures} loaded={} ready={} page_error={} resetting={}", PAGE_LOADED.load(Ordering::SeqCst), PAGE_AUTH_READY.load(Ordering::SeqCst), PAGE_ERROR.load(Ordering::SeqCst), LOGIN_RESETTING.load(Ordering::SeqCst));
+            last_diagnostic = std::time::Instant::now();
         }
         if LOGIN_RESETTING.load(Ordering::SeqCst) {
             continue;
         }
         let current_generation = LOGIN_GENERATION.load(Ordering::SeqCst);
         if generation != current_generation {
+            log::info!("sign-in window: attempt changed generation={generation}->{current_generation}");
             generation = current_generation;
             failures = 0;
             last_header = None;
+            last_cookie_summary = None;
         }
         if LOAD_RESTARTED.swap(false, Ordering::SeqCst) {
             load_started = std::time::Instant::now();
@@ -463,7 +564,7 @@ fn poll(
                 let _ = std::fs::write(
                     report,
                     if verified {
-                    "loaded VK; private cookie store verified; reset verified\n"
+                        "loaded VK; private cookie store verified; reset verified\n"
                     } else {
                         "error private cookie store probe failed\n"
                     },
@@ -483,16 +584,25 @@ fn poll(
             }
         };
         let pairs = token_cookies(&cookies);
+        let summary = CookieSummary::new(&cookies, &pairs);
+        if last_cookie_summary.as_ref() != Some(&summary) {
+            log::info!("sign-in cookies: generation={generation} {summary:?}");
+            last_cookie_summary = Some(summary);
+        }
         let manual = check.swap(false, Ordering::SeqCst);
         if !manual && !PAGE_AUTH_READY.load(Ordering::SeqCst) {
             continue;
         }
         let Some(header) = session_header(&pairs, manual) else {
             if manual {
+                log::info!("sign-in window: manual verification has no eligible cookies");
                 let _ = handle.emit("pm-login", "pending:unauthorized");
             }
             continue;
         };
+        attempts += 1;
+        let exchange_started = std::time::Instant::now();
+        log::info!("sign-in exchange: attempt={attempts} generation={generation} manual={manual}");
         if last_header.as_ref() != Some(&header) {
             failures = 0;
             last_header = Some(header.clone());
@@ -501,8 +611,14 @@ fn poll(
         let Some(exchanged) =
             exchange_if_current(generation, &LOGIN_GENERATION, || exchange_web_session(&header, WEB_USER_AGENT))
         else {
+            log::info!("sign-in exchange: obsolete response discarded attempt={attempts} generation={generation}");
             continue;
         };
+        log::info!(
+            "sign-in exchange: attempt={attempts} result={} elapsed_ms={}",
+            exchanged.as_ref().err().map(Error::kind).unwrap_or("success"),
+            exchange_started.elapsed().as_millis()
+        );
         match exchanged {
             Ok(session) => {
                 // Закрытие окна во время запроса HTTP отменяет принятие.
@@ -598,6 +714,25 @@ fn smoke_cookie_store(window: &tauri::WebviewWindow) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn page_and_cookie_diagnostics_do_not_expose_secrets() {
+        use tauri::webview::Cookie;
+        let secret = "CANARY-secret-code-cookie";
+        let url: Url = format!("https://id.vk.ru/{secret}?code={secret}&access_token={secret}").parse().unwrap();
+        let cookies = [
+            Cookie::build((secret, secret)).domain(".vk.ru").path("/").build(),
+            Cookie::build(("remixsid", secret)).domain("login.vk.ru").path("/").build(),
+        ];
+        let pairs = token_cookies(&cookies);
+        let summary = CookieSummary::new(&cookies, &pairs);
+        let output = format!("{} {summary:?}", page_stage(&url));
+        assert!(!output.contains(secret));
+        assert!(summary.session_present);
+        assert_eq!(summary.selected, 2);
+        assert_eq!(page_stage(&url), "vk-id");
+        assert_eq!(page_stage(&format!("https://{secret}.example/{secret}").parse().unwrap()), "other");
+    }
 
     #[test]
     fn reset_discards_late_token_success_and_failure() {
