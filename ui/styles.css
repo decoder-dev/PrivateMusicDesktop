@@ -1,15 +1,16 @@
-/* Private Music desktop: soft motion, flat when asked.
-
-   The look follows the iOS app (tokens in css/tokens.css come from its palette,
-   accents, radii and elevations). Motion is short, ease-out and system-like:
-   hover and press fades, a settle when a screen or menu appears, a slide when a
-   page is pushed. Nothing moves on its own while idle; the only continuous
-   animation is the live spectrum in the full-screen view. Everything stops under
-   prefers-reduced-motion. Blur is limited to chrome the content passes under
-   (the player bar, menus, dialogs, toasts) and falls back to an opaque surface
-   with prefers-reduced-transparency, prefers-contrast, the Settings switch and
-   when the window is in the background. The track lists are virtualised, so no
-   row ever transitions or animates. */
+/*
+ * Рабочий стол Private Music: плавное движение, плавное движение по запросу.
+ *
+ * Внешний вид соответствует приложению iOS (токены в css/tokens.css основаны на его палитре, акцентах,
+ * радиусах и высотах). Движение короткое, плавное и системное: наведение и нажатие плавно исчезают,
+ * стабилизируются при появлении экрана или меню, слайд при нажатии на страницу. Ничто не движется само
+ * по себе, пока он простаивает; единственная непрерывная анимация — это живой спектр в полноэкранном
+ * режиме. Все останавливается при предпочтении ограниченного движения. Размытие ограничено хромом, под
+ * которым проходит контент (панель проигрывателя, меню, диалоговые окна, всплывающие сообщения) и
+ * возвращается к непрозрачной поверхности с предпочтениями пониженной прозрачности, предпочтениями
+ * контрастности, переключателем «Настройки» и когда окно находится в фоновом режиме. Списки треков
+ * виртуализированы, поэтому ни одна строка не перемещается и не анимируется.
+ */
 @import url("css/tokens.css");
 @import url("css/palettes.css");
 @import url("css/base.css");

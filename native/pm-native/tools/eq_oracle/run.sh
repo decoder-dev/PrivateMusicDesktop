@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Compares the Rust filter design with the original Swift formulas (kept
-# verbatim in main.swift) over a grid and 20,000 random inputs; every
-# coefficient must match bit for bit. Needs swiftc.
+# Сравнивает расчёт фильтров Rust с исходными формулами Swift из main.swift
+# на сетке значений и 20 000 случайных входных наборов. Все коэффициенты
+# должны совпадать побитно. Требуется swiftc.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$here/../../../.."
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
-# The staticlib is built without LTO so the Swift linker can read it.
+# Статическая библиотека построена без LTO, поэтому компоновщик Swift может ее прочитать.
 CARGO_PROFILE_RELEASE_LTO=off RUSTFLAGS="-C embed-bitcode=no" CARGO_TARGET_DIR="$work/rust" \
   cargo build --release --manifest-path "$root/native/Cargo.toml"
 swiftc -O -import-objc-header "$root/PrivateMusic/Native/PrivateMusicDSP.h" "$here/main.swift" \

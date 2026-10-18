@@ -1,4 +1,5 @@
-//! Release discovery and bounded, checksum-verified downloads. No webview navigation.
+//! Обнаружение релизов и ограниченные загрузки с проверкой контрольной суммы. Нет навигации по
+//! веб-просмотру.
 use reqwest::{
     blocking::{Client, Response},
     header::{ACCEPT, AUTHORIZATION},
@@ -220,7 +221,8 @@ impl Updater {
             file.sync_all().map_err(|_| "disk")?;
             drop(file);
             let target = self.directory.join(&plan.installer.name);
-            // A previous verified download may be replaced; partial files never appear ready.
+            // Предыдущую проверенную загрузку можно заменить; частичные файлы никогда не появляются
+            // готовыми.
             if target.exists() {
                 fs::remove_file(&target).map_err(|_| "disk")?;
             }
@@ -234,7 +236,7 @@ impl Updater {
         let _ = fs::remove_file(part);
         Ok(self.finish(result, &emit))
     }
-    /// Revalidate immediately before the native installer is opened.
+    /// Повторите проверку непосредственно перед открытием собственного установщика.
     pub fn verified_file(&self) -> Result<PathBuf> {
         let _guard = self.running()?;
         let (path, hash) = self.inner.lock().unwrap_or_else(|p| p.into_inner()).ready.clone().ok_or("release")?;

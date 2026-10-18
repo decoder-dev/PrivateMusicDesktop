@@ -1,24 +1,22 @@
-//! Endless radio: a queue started from a mix, the personal stream or "more
-//! like this" keeps filling from the same source while it plays.
+//! Бесконечное радио пополняет очередь из персонального микса, каталога
+//! или рекомендаций «Похожие треки», сохраняя выбранный источник.
 //!
-//! The rules come from the iOS app (`ContinuationPrefetchPolicy`,
+//! Правила соответствуют мобильной версии (`ContinuationPrefetchPolicy`,
 //! `MixTrackContinuationCursor`, `RadioRecommendationCursor`,
 //! `PlaybackQueueBuilder.uniqueAdditions`):
 //!
-//! * a refill starts when at most [`REFILL_REMAINING`] tracks are left after
-//!   the current one, and a queue never holds more than [`UPCOMING_LIMIT`]
-//!   tracks after it;
-//! * a stream mix is read window by window and the window only moves on after
-//!   a page arrived; "more like this" asks VK for recommendations seeded with
-//!   a rotating track, newly queued tracks becoming seeds themselves;
-//! * everything already queued, played or removed in this session is
-//!   skipped, and a round that brings nothing new is retried a few times;
-//! * a round that fails or stays empty never loops: it stops until the next
-//!   track starts, and after [`MAX_BAD_ROUNDS`] in a row (or at once for a
-//!   dead session) the radio gives up and the queue simply ends.
+//! * пополнение начинается, когда после текущего осталось не больше
+//!   [`REFILL_REMAINING`] треков; фоновое пополнение добавляет не больше
+//!   [`UPCOMING_LIMIT`] треков вперёд и не ограничивает размер списка на экране;
+//! * курсор потока сдвигается только после успешного ответа; для похожих треков
+//!   исходный трек постепенно меняется, включая новые добавленные композиции;
+//! * уже добавленные, прослушанные или удалённые в этой сессии треки исключаются;
+//!   пустой результат повторяется ограниченное число раз;
+//! * после [`MAX_BAD_ROUNDS`] неудачных раундов или недействительной сессии
+//!   пополнение прекращается, и очередь доигрывает оставшиеся треки.
 //!
-//! This module holds the policy and the cursor; the controller runs the
-//! requests (off the audio thread and outside its lock).
+//! Модуль хранит правила и курсор. Запросы выполняются вне аудиопотока
+//! и вне блокировки контроллера.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -29,61 +27,61 @@ use serde::Serialize;
 use crate::vk::Track;
 use crate::{Error, Result};
 
-/// Refill when this many tracks or fewer remain after the current one.
+/// Заполните его, когда после текущего трека останется столько или меньше треков.
 pub const REFILL_REMAINING: usize = 6;
-/// Most tracks the queue holds after the current one (iOS `queueLimit`).
+/// Большинство треков в очереди находятся после текущего (iOS `queueLimit`).
 pub const UPCOMING_LIMIT: usize = 80;
-/// Tracks asked for per stream-mix page (iOS `MixTrackRequestPolicy.pageSize`).
+/// Треки запрашиваются для каждой страницы стрим-микса (iOS `MixTrackRequestPolicy.pageSize`).
 pub const PAGE_SIZE: u32 = 100;
-/// Pages the window loads when it starts a mix (iOS `pageCount`).
+/// Страницы, которые окно загружает при запуске микса (iOS `pageCount`).
 pub const WINDOW_PAGES: u32 = 4;
-/// Where the stream window continues after the pages the window loaded.
+/// Окно потока продолжается после загрузки страниц в окне.
 pub const FIRST_REFILL_OFFSET: u32 = WINDOW_PAGES * PAGE_SIZE;
-/// Requests per round when a page brings nothing new.
+/// Запросов за раунд, когда страница не приносит ничего нового.
 pub const ATTEMPTS: u32 = 3;
-/// Pause between those requests (the iOS prefetch waits the same).
+/// Делайте паузу между этими запросами (то же самое ждет предварительная выборка iOS).
 pub const ATTEMPT_PAUSE: Duration = Duration::from_millis(180);
-/// Rounds without new tracks, or failed rounds, in a row before giving up.
+/// Раунды без новых треков или неудачные раунды подряд, прежде чем сдаться.
 pub const MAX_BAD_ROUNDS: u32 = 3;
-/// Seed tracks remembered for "more like this".
+/// Семенные треки запомнились для «Похожие треки».
 pub const SEED_LIMIT: usize = 32;
 
-/// What kind of source the queue refills from; shown by the window.
+/// Из какого источника пополняется очередь; показано у окна.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum RadioKind {
-    /// The personal stream mix (VK's `common`).
+    /// Персональный стрим-микс (`common` из VK).
     Personal,
-    /// A catalogue mix.
+    /// Микс из каталога.
     Catalog,
-    /// Recommendations seeded with a track.
+    /// Рекомендации засеяны треком.
     Similar,
 }
 
-/// What one request asks VK for.
+/// О чем просит один запрос VK.
 #[derive(Debug, Clone, PartialEq)]
-#[allow(clippy::large_enum_variant)] // one short-lived value per request
+#[allow(clippy::large_enum_variant)] // одно кратковременное значение на каждый запрос
 pub enum RadioRequest {
-    /// A page of a stream mix, starting at `offset`.
+    /// Страница микса потока, начинающаяся с `offset`.
     Page { offset: u32 },
-    /// Recommendations seeded with this track.
+    /// Рекомендации, засеянные этим треком.
     Seed(Track),
 }
 
-/// Runs one request against VK (with token renewal); built by the app.
+/// Выполняет один запрос к VK (с обновлением токена); построено приложением.
 pub type RadioFetch = Arc<dyn Fn(&RadioRequest) -> Result<Vec<Track>> + Send + Sync>;
 
-/// A running radio. Lives inside the controller's state.
+/// Работающее радио. Живет внутри состояния контроллера.
 pub struct Radio {
     pub kind: RadioKind,
-    /// Tells a stale worker that the radio it started was replaced.
+    /// Сообщает залежавшемуся рабочему, что радио, которое он запускал, заменили.
     pub generation: u64,
     pub fetch: RadioFetch,
-    /// A round is being fetched.
+    /// Выполняется выборка раунда.
     pub in_flight: bool,
-    /// The queue ran out while a round was fetched: play on when it lands.
+    /// Очередь закончилась, пока был получен раунд: играйте, когда он приземлится.
     pub waiting: bool,
-    /// The radio gave up.
+    /// Радио сдалось.
     pub done: bool,
     offset: u32,
     seeds: Vec<Track>,
@@ -111,12 +109,12 @@ impl Radio {
         radio
     }
 
-    /// Whether a round should start now, given the tracks left in the queue.
+    /// Должен ли раунд начинаться сейчас, учитывая треки, оставшиеся в очереди.
     pub fn wants_refill(&self, upcoming: usize) -> bool {
         !self.done && !self.in_flight && upcoming <= REFILL_REMAINING
     }
 
-    /// The next request, or `None` when there is nothing to ask with.
+    /// Следующий запрос, или `None`, когда спросить нечего.
     pub fn next_request(&self) -> Option<RadioRequest> {
         match self.kind {
             RadioKind::Personal | RadioKind::Catalog => Some(RadioRequest::Page { offset: self.offset }),
@@ -124,8 +122,8 @@ impl Radio {
         }
     }
 
-    /// A request was answered: the window moves on (only now, so a failed
-    /// request is asked again rather than skipped).
+    /// На запрос был дан ответ: окно перемещается дальше (только сейчас, поэтому неудавшийся запрос
+    /// запрашивается повторно, а не пропускается).
     pub fn answered(&mut self, request: &RadioRequest) {
         match request {
             RadioRequest::Page { offset } => self.offset = offset.saturating_add(PAGE_SIZE),
@@ -133,14 +131,14 @@ impl Radio {
         }
     }
 
-    /// What of a page is new to this radio.
+    /// Что за страница новая для этого радио.
     pub fn fresh(&self, proposed: Vec<Track>) -> Vec<Track> {
         let mut known = HashSet::new();
         proposed.into_iter().filter(|t| !self.seen.contains(&t.id()) && known.insert(t.id())).collect()
     }
 
-    /// Remembers tracks that joined the queue; for "more like this" they
-    /// become the freshest seeds.
+    /// Запоминает треки, попавшие в очередь; для «Похожие треки» они становятся самыми свежими
+    /// семенами.
     pub fn record(&mut self, added: &[Track]) {
         self.seen.extend(added.iter().map(Track::id));
         if self.kind == RadioKind::Similar {
@@ -155,8 +153,8 @@ impl Radio {
         self.seed_at = 0;
     }
 
-    /// Books the end of a round: `added` tracks joined the queue, or the
-    /// round failed with `failure`.
+    /// Записывает конец раунда: треки `added` присоединились к очереди, или раунд провалился с
+    /// `failure`.
     pub fn finish_round(&mut self, added: usize, failure: Option<&Error>) {
         if added > 0 {
             self.bad_rounds = 0;

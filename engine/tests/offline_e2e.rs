@@ -1,5 +1,5 @@
-//! Downloads: a track is saved through the real HLS path, then plays with the
-//! network gone; a lost file falls back to streaming.
+//! Загрузки: трек сохраняется по реальному пути HLS, затем воспроизводится без сети; потерянный файл
+//! возвращается к потоковой передаче.
 
 mod common;
 
@@ -70,7 +70,7 @@ fn a_downloaded_track_plays_without_the_network() {
     assert_eq!(app.downloads().len(), 1);
     assert_eq!(app.download(&track()).unwrap(), saved, "a second download is the same file");
 
-    // The CDN and VK go away.
+    // CDN и VK исчезают.
     drop(media);
     drop(vk);
     app.controller().play_tracks(vec![track()], 0);

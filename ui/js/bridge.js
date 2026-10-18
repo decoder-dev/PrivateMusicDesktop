@@ -1,5 +1,5 @@
-// The only file that talks to Tauri. Everything else uses these functions,
-// which keeps the UI testable against a fake backend.
+// Единственный файл, который разговаривает с Таури. Все остальное использует эти функции, что позволяет
+// протестировать UI на поддельном бэкэнде.
 
 const tauri = () => {
   const t = window.__TAURI__;
@@ -9,5 +9,5 @@ const tauri = () => {
 
 export const invoke = (command, args) => tauri().core.invoke(command, args);
 
-/** Subscribes to a backend event; resolves to an unsubscribe function. */
+/** Подписывается на серверное событие; превращается в функцию отписки. */
 export const listen = (event, handler) => tauri().event.listen(event, (e) => handler(e.payload));

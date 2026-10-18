@@ -1,4 +1,4 @@
-/* Menus, dialogs, toasts and the undo banner. */
+/* Меню, диалоговые окна, всплывающие уведомления и баннер отмены. */
 
 @keyframes pop-in { from { opacity: 0; transform: scale(0.96); } }
 @keyframes pop-in-sub { from { opacity: 0; transform: scale(0.97); } }
@@ -25,7 +25,10 @@
 .menu-gap { width: 16px; flex: none; }
 .menu-sep { height: var(--hair); margin: 4px 6px; background: var(--line); }
 
-/* While a menu or dialog is open the chrome below it goes flat: one blur layer at a time. */
+/*
+ * Когда меню или диалоговое окно открыто, хром внизу становится плоским: по одному слою размытия за
+ * раз.
+ */
 body.overlay-open .player { -webkit-backdrop-filter: none; backdrop-filter: none; }
 
 .dialog {
@@ -46,7 +49,7 @@ body.overlay-open .player { -webkit-backdrop-filter: none; backdrop-filter: none
 .dialog-text { font-size: 15px; line-height: 21px; margin: 0 0 20px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 
-/* Toasts: a glass capsule above the player bar. */
+/* Тосты: стеклянная капсула над панелью игрока. */
 .toast {
   position: fixed; z-index: 90; left: 50%; bottom: calc(var(--bar-h) + var(--bar-gap) + 16px); transform: translateX(-50%);
   max-width: min(560px, 90vw); padding: 10px 20px; border-radius: var(--r-pill); box-shadow: var(--sh-rest);

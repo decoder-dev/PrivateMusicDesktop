@@ -1,6 +1,5 @@
-//! End to end: ffmpeg builds real streams, a local server hands them out, the
-//! engine downloads, decrypts, demuxes and decodes them, and we measure the
-//! audio that comes out.
+//! Комплексно: ffmpeg создает реальные потоки, локальный сервер передает их, движок загружает,
+//! расшифровывает, демультиплексирует и декодирует их, а мы измеряем выходной звук.
 
 mod common;
 
@@ -20,7 +19,7 @@ fn assert_two_tones(pcm: &Pcm) {
     assert!((high - 880.0).abs() < 16.0, "second half is {high} Hz");
 }
 
-/// Encrypted MPEG-TS HLS. `explicit_iv` selects the IV form in the key info.
+/// Зашифровано MPEG-TS HLS. `explicit_iv` выбирает форму IV в ключевой информации.
 fn encrypted_hls(explicit_iv: bool) -> (tempfile::TempDir, Vec<u8>) {
     let dir = tempfile::tempdir().unwrap();
     let key: Vec<u8> = (0..16u8).map(|i| i.wrapping_mul(17).wrapping_add(3)).collect();
@@ -155,17 +154,17 @@ fn seeking_lands_on_the_requested_time() {
         Pcm { rate: decoder.sample_rate, channels: decoder.channels, samples }
     };
 
-    // Mid second tone.
+    // Середина второго тона.
     decoder.seek(9.0).unwrap();
     let after = read_seconds(&mut decoder, 1.0);
     assert!((after.frequency(0.0, 1.0) - 880.0).abs() < 16.0);
 
-    // Back into the first tone.
+    // Вернитесь к первому тону.
     decoder.seek(2.0).unwrap();
     let after = read_seconds(&mut decoder, 1.0);
     assert!((after.frequency(0.0, 1.0) - 440.0).abs() < 8.0);
 
-    // Right at the join: 100 ms before the change the audio is still 440 Hz.
+    // Прямо при соединении: за 100 мс до изменения звук все еще имеет частоту 440 Гц.
     decoder.seek(5.9).unwrap();
     let after = read_seconds(&mut decoder, 0.6);
     assert!((after.frequency(0.0, 0.07) - 440.0).abs() < 20.0, "before the join: {}", after.frequency(0.0, 0.07));
@@ -213,8 +212,8 @@ fn cancelling_never_hangs_the_download_or_a_reader() {
     buffer.cancel();
     fetch.join().unwrap();
     assert!(buffer.is_cancelled());
-    // Whatever arrived before the cancel is readable; then the reader errors
-    // out instead of waiting forever.
+    // Все, что поступило до отмены, можно прочитать; тогда читатель выдает ошибку вместо того, чтобы
+    // ждать вечно.
     let mut sink = Vec::new();
     let _ = buffer.reader().read_to_end(&mut sink);
 }

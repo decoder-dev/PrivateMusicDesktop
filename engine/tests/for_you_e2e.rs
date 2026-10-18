@@ -1,4 +1,4 @@
-//! "For you": the personal mix, recommendations and radio from a track.
+//! "For you": персональный микс, рекомендации и радио из трека.
 
 mod common;
 
@@ -41,12 +41,13 @@ fn the_mix_collects_tracks_wherever_vk_nests_them_without_duplicates() {
     let tracks = app(&api.base).mix().unwrap();
     let ids: Vec<i64> = tracks.iter().map(|t| t.track_id).collect();
     assert_eq!(ids, vec![1, 2, 3]);
-    // Four pages at once, as the iOS app asks: a stream mix answers a page with few tracks.
+    // Четыре страницы одновременно, как запрашивает приложение iOS: микс потока отвечает на страницу с
+    // несколькими треками.
     assert_eq!(api.call_count("getStreamMixAudios"), 4);
 }
 
 #[test]
-fn the_mix_window_asks_pages_of_100_at_offsets_0_100_200_300_and_keeps_at_most_80() {
+fn the_mix_window_keeps_all_unique_tracks_from_its_four_pages() {
     let api = FakeApi::start(|_, body, _| {
         let offset: i64 = body.split('&').find_map(|p| p.strip_prefix("offset=")).and_then(|v| v.parse().ok()).unwrap();
         assert!(body.contains("count=100"), "{body}");
@@ -54,7 +55,7 @@ fn the_mix_window_asks_pages_of_100_at_offsets_0_100_200_300_and_keeps_at_most_8
         (200, format!(r#"{{"response":[{}]}}"#, items.join(",")))
     });
     let tracks = app(&api.base).mix().unwrap();
-    assert_eq!(tracks.len(), 80);
+    assert_eq!(tracks.len(), 160);
     assert_eq!(tracks[0].track_id, 1);
     assert_eq!(tracks[40].track_id, 101, "pages are joined in offset order");
     let mut offsets: Vec<String> = api.calls.lock().unwrap().iter()
@@ -114,4 +115,19 @@ fn similar_tracks_are_seeded_and_never_repeat_the_seed() {
     let similar = app.similar(&seed).unwrap();
     assert_eq!(similar.iter().map(|t| t.track_id).collect::<Vec<_>>(), vec![4]);
     assert_eq!(app.recommendations().unwrap()[0].track_id, 8);
+}
+
+#[test]
+fn mix_continuation_moves_past_the_initial_window_without_a_track_cap() {
+    let api=FakeApi::start(|_,body,_| {
+        let offset:i64=body.split('&').find_map(|p|p.strip_prefix("offset=")).unwrap().parse().unwrap();
+        let items=(0..100).map(|i|audio(offset+i+1)).collect::<Vec<_>>();
+        (200,format!(r#"{{"response":[{}]}}"#,items.join(",")))
+    });
+    let app=app(&api.base);
+    let first=app.mix().unwrap();let next=app.stream_mix_at("common",None,400).unwrap();
+    assert_eq!(first.len(),400);assert_eq!(next.len(),400);
+    assert_eq!(first.last().unwrap().track_id,400);assert_eq!(next[0].track_id,401);
+    assert_eq!(next.last().unwrap().track_id,800);
+    assert_eq!(app.stream_mix_at("common",None,1_000_001).unwrap_err(),pm_engine::Error::InvalidRequest);
 }

@@ -1,4 +1,4 @@
-/* One page scroll, original mobile artwork, distinct tuned mixes. */
+/* Прокрутка на одну страницу, оригинальные мобильные иллюстрации, отдельные настроенные миксы. */
 .discovery-view .view-header { flex:none; padding-top:24px; padding-bottom:20px; }
 .discovery-view > .list { scroll-behavior:auto; }
 .discovery-view .fy-shelves { max-height:none; overflow:visible; border-bottom:0; padding-bottom:8px; }
@@ -40,7 +40,7 @@
  .mix-card .mix-tile::before { background:linear-gradient(180deg,transparent,#000); }
 }
 
-/* Selena's orbital mark is drawn in CSS, so it stays sharp at either window size. */
+/* Орбитальная отметка Селены нарисована в CSS, поэтому она остается четкой при любом размере окна. */
 .discovery-view .selena-personal { min-height:188px; flex-basis:304px; padding:24px; }
 .selena-personal::after { content:""; position:absolute; z-index:-1; width:180px; height:180px; right:-42px; top:-50px; border:1px solid rgb(255 255 255 / 0.25); border-radius:50%; box-shadow:0 0 0 20px rgb(255 255 255 / 0.035),0 0 0 42px rgb(255 255 255 / 0.035),0 0 0 65px rgb(255 255 255 / 0.035); transform:rotate(-28deg) scaleX(0.72); }
 .discovery-view .selena-personal strong { font-size:38px; letter-spacing:-1.3px; }
@@ -70,7 +70,7 @@
  .discovery-view .shelf-heading .shelf-title { font-size:18px; }
 }
 
-/* The card owns both controls, including hover movement and clipping. */
+/* Карта владеет обоими элементами управления, включая перемещение при наведении и обрезку. */
 .discovery-view .mix-card { isolation:isolate; overflow:hidden; border-radius:18px; transition:transform 160ms var(--ease-std); }
 .discovery-view .mix-card:hover { transform:translateY(-2px); }
 .discovery-view .mix-card .mix-tile { transform:none; }
@@ -81,3 +81,23 @@
 .discovery-view .mix-card .mix-text { padding-right:30px; }
 .discovery-view .mix-card .mix-tile:focus-visible { outline-offset:-3px; }
 @media(prefers-reduced-motion:reduce) { .discovery-view .mix-card:hover { transform:none; } }
+
+.discovery-view .view-header { display:flex; flex-direction:column; align-items:stretch; gap:16px; }
+.fy-heading-row { display:flex; align-items:center; justify-content:space-between; gap:20px; min-width:0; }
+.discovery-view .fy-heading-row .vh-text { flex:0 1 auto; min-width:0; }
+.fy-heading-row .tabs { flex:none; }
+.fy-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+.discovery-view .fy-toolbar .vh-actions { margin:0; flex:none; gap:8px; }
+.fy-tools { display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-width:0; }
+.discovery-view .fy-toolbar .btn, .discovery-view .mix-tuning > summary { min-height:38px; padding-inline:14px; }
+.discovery-view .fy-jump { border-color:transparent; background:transparent; color:var(--text-2); padding-inline:8px; }
+.discovery-view .fy-jump:hover { background:var(--hover); color:var(--text); }
+@media(max-width:640px) {
+ .discovery-view .view-header { gap:12px; }
+ .fy-heading-row { align-items:flex-start; flex-wrap:wrap; gap:12px; }
+ .fy-tools { gap:6px; }
+ .discovery-view .fy-toolbar .btn, .discovery-view .mix-tuning > summary { padding-inline:10px; }
+}
+
+.mix-continuation { display:flex; justify-content:center; padding:20px var(--gutter) 28px; }
+.mix-continuation[hidden] { display:none; }

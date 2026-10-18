@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Runs install.sh against a fake GitHub API: release lookup, asset download,
-# checksum check (good and tampered), AppImage install and uninstall.
+# Проверяет install.sh с тестовым API GitHub: поиск релиза, загрузку файла,
+# правильные и повреждённые контрольные суммы, установку и удаление AppImage.
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 work="$(mktemp -d)"
@@ -40,7 +40,7 @@ http.server.ThreadingHTTPServer(("127.0.0.1", port), H).serve_forever()
 PY
 
 port=$((20000 + RANDOM % 20000))
-start_server() { # $1: "tamper" to serve a corrupted AppImage
+start_server() { # $1: "tamper" для обслуживания поврежденного AppImage.
   if [ -n "${server:-}" ]; then kill "$server" 2>/dev/null || true; wait "$server" 2>/dev/null || true; fi
   case "${1:-}" in
     tamper) TAMPER=1 python3 "$work/server.py" "$work" "$port" & ;;

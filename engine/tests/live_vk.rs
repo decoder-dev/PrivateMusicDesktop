@@ -1,6 +1,6 @@
-//! Talks to the real api.vk.ru with a deliberately invalid token, to check
-//! that real VK answers parse the way the client expects. Needs internet, so
-//! it only runs with `--ignored`. No credentials are involved.
+//! Общается с настоящим api.vk.ru с заведомо недействительным токеном, чтобы проверить, что настоящие
+//! ответы VK анализируются так, как ожидает клиент. Нужен интернет, поэтому работает только с
+//! `--ignored`. Никаких учетных данных не требуется.
 
 use pm_engine::vk::{Session, VkClient};
 use pm_engine::Error;
@@ -29,7 +29,7 @@ fn vk_rejects_a_bad_token_as_unauthorized_not_as_a_parse_error() {
 #[test]
 #[ignore = "needs internet"]
 fn the_web_token_endpoint_says_not_signed_in_without_cookies() {
-    // A made-up cookie is not a session: VK must answer "not signed in".
+    // Созданный файл cookie не является сеансом: VK должен ответить на "not signed in".
     let result = pm_engine::vk::exchange_web_session("remixlang=0; remixsid=bogus", "Mozilla/5.0 test");
     assert_eq!(result.unwrap_err(), Error::Unauthorized);
 }

@@ -1,5 +1,5 @@
-//! The tray (menu bar on macOS) icon: transport controls, and the way back to
-//! a window that was closed while music plays.
+//! Значок на панели задач (строка меню на macOS): элементы управления транспортировкой и возврат к
+//! окну, которое было закрыто во время воспроизведения музыки.
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -26,7 +26,7 @@ fn labels() -> Labels {
     }
 }
 
-/// Brings the main window back (from the tray, a second launch, the Dock).
+/// Возвращает главное окно обратно (из трея, второй запуск, Док).
 pub fn show_main(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
@@ -35,10 +35,10 @@ pub fn show_main(app: &AppHandle) {
     }
 }
 
-/// `false` when the desktop has no tray (some Linux sessions): then closing
-/// the window must quit, or the app would keep running with no way back.
+/// `false`, когда на рабочем столе нет панели задач (некоторые сеансы Linux): при закрытии окна
+/// необходимо завершить работу, иначе приложение продолжит работать без возможности возврата.
 pub fn create(app: &AppHandle) -> bool {
-    // The Linux tray library is loaded at run time and panics when missing.
+    // Библиотека лотков Linux загружается во время выполнения и вызывает панику при ее отсутствии.
     let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| build(app)));
     match built {
         Ok(Ok(())) => true,
@@ -94,7 +94,7 @@ fn build(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// "Title — Artist" on hover, or the app name when nothing plays.
+/// "Title — Artist" при наведении или название приложения, когда ничего не воспроизводится.
 pub fn set_tooltip(app: &AppHandle, text: Option<&str>) {
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
         let _ = tray.set_tooltip(Some(text.unwrap_or("Private Music")));

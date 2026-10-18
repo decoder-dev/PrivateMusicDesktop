@@ -1,4 +1,4 @@
-//! The app layer against a fake VK API and a fake token endpoint.
+//! Уровень приложения против поддельного VK API и поддельной конечной точки токена.
 
 mod common;
 
@@ -90,7 +90,7 @@ fn library_pages_skip_bad_entries_but_advance_by_the_raw_count() {
     let api = FakeApi::start(|_, body, _| {
         let offset: usize = body.split('&').find_map(|p| p.strip_prefix("offset=")).unwrap().parse().unwrap();
         let json = if offset == 0 {
-            // An ad object between two tracks.
+            // Рекламный объект между двумя треками.
             r#"{"response":{"count":5,"items":[
               {"id":1,"owner_id":7,"artist":"A","title":"T1"},
               {"type":"ad"},
@@ -186,7 +186,7 @@ fn a_token_close_to_expiry_is_refreshed_before_the_call() {
     let token = FakeApi::start(|_, _, _| (200, token_ok("tokentokentoken-NEW")));
     let (app, _) = app(&api.base, format!("{}/?act=web_token", token.base), Arc::new(MemoryStore::default()));
     let mut s = session("tokentokentoken-OLD");
-    s.expires_at = Some(1); // long past
+    s.expires_at = Some(1); // давно в прошлом
     app.sign_in(s);
     app.library(0, 10).unwrap();
     assert_eq!(token.call_count("web_token"), 1);
@@ -265,7 +265,7 @@ fn the_app_says_when_the_sign_in_will_not_survive_a_restart() {
     let app = App::new(
         VkClient::with_base(&api.base).unwrap(),
         || Ok(Box::new(SimulatedSink::new(44_100, 2, 1.0)) as Box<dyn Sink>),
-        Box::new(MemoryStore::default()), // forgets at exit
+        Box::new(MemoryStore::default()), // забывает на выходе
         move |e| events.lock().unwrap().push(e),
         AppOptions { fetch: lab_config(), token_url: "http://127.0.0.1:9/never".into(), volume: 1.0, ..AppOptions::default() },
     );

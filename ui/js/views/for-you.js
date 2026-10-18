@@ -10,7 +10,7 @@ import { errorText, t, addStrings } from "../i18n.js";
 import { paintStatus, watchSegmented } from "../ui-parts.js";
 
 addStrings({ ru: { "fy.selena": "От Selena", "fy.personal": "Персональная подборка", "fy.personalNote": "По вашим прослушиваниям", "fy.energy": "Энергия", "fy.calm": "Спокойствие", "fy.rain": "Грусть", "fy.sun": "Радость", "fy.love": "Любовь", "fy.moodFallback": "Отдельный микс для этого настроения пока недоступен — играет Selena." }, en: { "fy.selena": "From Selena", "fy.personal": "Personal selection", "fy.personalNote": "Based on what you play", "fy.energy": "Energy", "fy.calm": "Calm", "fy.rain": "Melancholy", "fy.sun": "Joy", "fy.love": "Love", "fy.moodFallback": "There is no separate mix for this mood yet — playing Selena." } });
-addStrings({ ru: { "fy.expand": "Все миксы", "fy.collapse": "Свернуть", "fy.tracks": "Треки подборки", "fy.pinned": "Закреплённые миксы", "fy.pin": "Закрепить микс", "fy.unpin": "Открепить микс", "fy.pinStorage": "Не удалось сохранить закреплённые миксы.", "fy.previous":"Предыдущие карточки", "fy.next":"Следующие карточки" }, en: { "fy.expand": "All mixes", "fy.collapse": "Collapse", "fy.tracks": "Selection tracks", "fy.pinned": "Pinned mixes", "fy.pin": "Pin mix", "fy.unpin": "Unpin mix", "fy.pinStorage": "Pinned mixes could not be saved.", "fy.previous":"Previous cards", "fy.next":"Next cards" } });
+addStrings({ ru: { "fy.more":"Показать ещё", "fy.moreError":"Повторить загрузку", "fy.jump": "К трекам", "fy.expand": "Все миксы", "fy.collapse": "Свернуть", "fy.tracks": "Треки подборки", "fy.pinned": "Закреплённые миксы", "fy.pin": "Закрепить микс", "fy.unpin": "Открепить микс", "fy.pinStorage": "Не удалось сохранить закреплённые миксы.", "fy.previous":"Предыдущие карточки", "fy.next":"Следующие карточки" }, en: { "fy.more":"Show more", "fy.moreError":"Retry loading", "fy.jump": "To tracks", "fy.expand": "All mixes", "fy.collapse": "Collapse", "fy.tracks": "Selection tracks", "fy.pinned": "Pinned mixes", "fy.pin": "Pin mix", "fy.unpin": "Unpin mix", "fy.pinStorage": "Pinned mixes could not be saved.", "fy.previous":"Previous cards", "fy.next":"Next cards" } });
 const MOODS = [
   ["energy",["энерг","бодр","energy","energetic"]], ["calm",["спокой","calm","relax"]], ["rain",["груст","печал","sad","melanch"]], ["sun",["радост","весел","joy","happy"]], ["love",["любов","романт","love","romance"]],
 ];
@@ -20,8 +20,11 @@ const SOURCES = {
   recs: { label: "fy.recs", load: () => api.recommendations() },
 };
 
-/** VK's personal mix and recommendations, one tab each, loaded on first look. */
-/** A stable colour family per mix, so each card keeps its look between visits. */
+/** Персональный микс и рекомендации VK, по одной вкладке на каждую, загружаются при первом просмотре. */
+/**
+ * Стабильная цветовая гамма для каждого микса, поэтому каждая карта сохраняет свой внешний вид между
+ * посещениями.
+ */
 function mixHue(text) {
   let hash = 0;
   for (const char of text) hash = (hash * 31 + char.codePointAt(0)) >>> 0;
@@ -30,7 +33,7 @@ function mixHue(text) {
 
 export function createForYouView({ play, onTrackAction, toast }) {
   let current = "mix";
-  const cache = new Map(); // source -> tracks
+  const cache = new Map(); // источник -> треки
   let generation = 0;
   let sessionGeneration = 0;
   let categories = null;
@@ -45,9 +48,14 @@ export function createForYouView({ play, onTrackAction, toast }) {
   let catalogGeneration = 0;
   let releasesLoaded = false;
   let releasesGeneration = 0;
-  // The tuning the list on screen was loaded with: a queue started from it
-  // keeps refilling from the same mix.
+  // Настройкой загрузился список на экране: очередь, запущенная из него, продолжает пополняться из
+  // одной и той же смеси.
   let listOptions = null;
+  let displayedTracks = [];
+  let continuationOffset = 400;
+  let continuationBusy = false;
+  let continuationEmpty = 0;
+  const continuationCache = new Map();
 
   const tabs = h("div", { class: "tabs", role: "tablist" },
     Object.entries(SOURCES).map(([id, source]) =>
@@ -58,8 +66,8 @@ export function createForYouView({ play, onTrackAction, toast }) {
   const tuning = h("details", { class: "mix-tuning", ontoggle: (event) => {
     if (event.target.open) loadTuning();
   } }, h("summary", { text: t("fy.tune") }), tuningContent);
-  // A shelf shows only with something to show: its items, or one line saying
-  // why there are none. An empty answer hides it altogether.
+  // На полке отображается только то, что можно показать: предметы или одна строка, объясняющая, почему
+  // их нет. Пустой ответ вообще это скрывает.
   const catalogStatus = h("div", { class: "status", role: "status", hidden: true });
   const catalogGrid = h("div", { class: "mix-grid" });
   const catalogTitle = h("h2", { class: "shelf-title", text: t("fy.catalog") });
@@ -97,12 +105,67 @@ export function createForYouView({ play, onTrackAction, toast }) {
       headerExtra: h("div", { class: "set-inline" }, tabs, tuning, refresh),
     },
   });
-  // Shelves and tracks share one vertical scroll surface.
+  // Полки и направляющие имеют одну вертикальную поверхность прокрутки.
   screen.element.classList.add("discovery-view");
-  const jumpTracks = h("button", { class: "btn", type: "button", text: t("fy.tracks"), onclick: () => screen.list.scrollToRows() });
-  screen.element.querySelector(".vh-actions").append(jumpTracks);
+  const jumpTracks = h("button", { class: "btn fy-jump", type: "button", title:t("fy.tracks"), "aria-label":t("fy.tracks"), onclick: () => screen.list.scrollToRows() },t("fy.jump"),icon("chevron",14));
+  const discoveryHeader=screen.element.querySelector(".view-header");
+  const heading=discoveryHeader.querySelector(".vh-text");
+  const playbackActions=discoveryHeader.querySelector(".vh-actions");
+  const downloadAction=playbackActions.lastElementChild;
+  discoveryHeader.replaceChildren(
+    h("div",{class:"fy-heading-row"},heading,tabs),
+    h("div",{class:"fy-toolbar"},playbackActions,
+      h("div",{class:"fy-tools"},tuning,refresh,downloadAction,jumpTracks)));
+
   const shelves = h("div", { class: "fy-shelves" }, selenaShelf, pinnedShelf, catalogShelf, releasesShelf, h("h2", { class: "discovery-tracks-title shelf-title", text: t("fy.tracks") }));
   screen.list.setHeader(shelves);
+  const moreButton=h("button",{class:"btn",type:"button",text:t("fy.more"),onclick:()=>loadMoreMix()});
+  const moreFooter=h("div",{class:"mix-continuation",hidden:true},moreButton);
+  screen.list.element.append(moreFooter);
+  screen.list.element.addEventListener("scroll",()=>{
+    const list=screen.list.element;
+    if(list.scrollTop+list.clientHeight>=list.scrollHeight-280)loadMoreMix();
+  },{passive:true});
+
+  function sourceCacheKey() { return listSource.kind==="catalog"?`catalog:${listSource.mix_id}:${listSource.options??"plain"}`:`mix:${listSource.options??"plain"}`; }
+  function setMixTracks(tracks, { preserveScroll=false, offset=400 }={}) {
+    displayedTracks=tracks;
+    continuationOffset=offset;
+    continuationEmpty=0;
+    continuationBusy=false;
+    if(current==="mix") {
+      listSource={...listSource,next_offset:offset};
+      cache.set(sourceCacheKey(),tracks);continuationCache.set(sourceCacheKey(),offset);
+    }
+    moreFooter.hidden=current!=="mix" || !tracks.length;
+    moreButton.disabled=false;moreButton.textContent=t("fy.more");
+    screen.setTracks(tracks,{preserveScroll});
+  }
+  async function loadMoreMix() {
+    if(current!=="mix" || continuationBusy || continuationEmpty>=3 || !displayedTracks.length || continuationOffset>1_000_000)return;
+    const mine=generation,source={...listSource},offset=continuationOffset;
+    continuationBusy=true;moreButton.disabled=true;moreButton.textContent=t("loading");
+    try {
+      const fresh=source.kind==="catalog"?await api.streamMix(source.mix_id,source.options,offset):await api.mix(source.options,offset);
+      if(mine!==generation || current!=="mix")return;
+      const known=new Set(displayedTracks.map(track=>`${track.owner_id}_${track.track_id}`));
+      const additions=fresh.filter(track=>{const key=`${track.owner_id}_${track.track_id}`;if(known.has(key))return false;known.add(key);return true;});
+      continuationOffset+=400;
+      continuationEmpty=additions.length?0:continuationEmpty+1;
+      listSource={...source,next_offset:continuationOffset};
+      displayedTracks=displayedTracks.concat(additions);
+      cache.set(sourceCacheKey(),displayedTracks);continuationCache.set(sourceCacheKey(),continuationOffset);
+      screen.setTracks(displayedTracks,{preserveScroll:true});
+      moreFooter.hidden=continuationEmpty>=3;
+      moreButton.textContent=t("fy.more");
+    } catch(error) {
+      if(mine!==generation)return;
+      moreButton.textContent=t("fy.moreError");toast(errorText(error),{error:true});
+    } finally {
+      if(mine===generation){continuationBusy=false;moreButton.disabled=false;}
+    }
+  }
+
 
   function renderTabs() {
     for (const button of tabs.querySelectorAll("button")) button.setAttribute("aria-selected", String(button.dataset.source === current));
@@ -110,7 +173,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
     paintShelves();
   }
 
-  // What each shelf holds, so showing and hiding stays in one place.
+  // Что находится на каждой полке, поэтому показ и скрытие остаются в одном месте.
   const shelfState = { catalog: "empty", releases: "empty" };
   function paintShelves() {
     selenaShelf.hidden = current !== "mix";
@@ -121,7 +184,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
     releasesShelf.hidden = shelfState.releases === "empty";
   }
 
-  /** One compact line: the reason and a link to try again. */
+  /** Одна компактная строка: причина и ссылка, чтобы повторить попытку. */
   function paintShelfError(status, title, error, retry) {
     paintStatus(status, errorText(error), { error: true, extra: "inline" });
     status.append(h("button", { class: "link-text retry-link", type: "button", text: t("fy.retryTune"), onclick: retry }));
@@ -130,13 +193,14 @@ export function createForYouView({ play, onTrackAction, toast }) {
 
   async function load(id, { force = false } = {}) {
     const mine = ++generation;
+    continuationBusy=false;continuationEmpty=0;
     const options = id === "mix" ? encodeSelection(selected) : null;
     const cacheKey = id === "mix" ? `mix:${options ?? "plain"}` : id;
     refresh.disabled = false;
     if (!force && cache.has(cacheKey)) {
       if (id === "mix") { listOptions = options; listSource = { kind: "personal", options }; activeMix=options?null:"common#"; paintActive(); }
       screen.clearStatus();
-      screen.setTracks(cache.get(cacheKey));
+      setMixTracks(cache.get(cacheKey),{offset:continuationCache.get(cacheKey)??400});
       return;
     }
     const hadTracks = screen.list.length > 0;
@@ -149,7 +213,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
       cache.set(cacheKey, tracks);
       if (id === "mix") { listOptions = options; listSource = { kind: "personal", options }; activeMix=options?null:"common#"; paintActive(); }
       screen.clearStatus();
-      screen.setTracks(tracks);
+      setMixTracks(tracks);
     } catch (error) {
       if (mine !== generation) return;
       if (!hadTracks) screen.setStatus(errorText(error), { error: true });
@@ -169,13 +233,14 @@ export function createForYouView({ play, onTrackAction, toast }) {
       if(mine!==generation)return;
       if(id!=="mix")cache.set(id,tracks);
       else if(source.kind==="personal")cache.set(`mix:${source.options??"plain"}`,tracks);
-      screen.clearStatus();screen.setTracks(tracks);
+      screen.clearStatus();setMixTracks(tracks);
     }catch(error){if(mine===generation)toast(errorText(error),{error:true});}
     finally{if(mine===generation)refresh.disabled=false;}
   }
 
   function select(id) {
     current = id;
+    moreFooter.hidden=id!=="mix";
     renderTabs();
     load(id);
   }
@@ -231,6 +296,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
         h("button", { class: "btn primary", type: "button", text: t("fy.applyTune"), onclick: () => {
           saveSelection();
           cache.clear();
+      continuationCache.clear();displayedTracks=[];continuationBusy=false;moreFooter.hidden=true;
           tuning.open = false;
           current = "mix";
           renderTabs();
@@ -248,8 +314,8 @@ export function createForYouView({ play, onTrackAction, toast }) {
   async function loadCatalog(force = false) {
     if (catalogLoaded && !force) return;
     const mine = ++catalogGeneration;
-    // No placeholder: a shelf that turns out empty must not flash a panel.
-    // A retry keeps its error line, with the link disabled, until the answer.
+    // Нет заполнителя: полка, которая окажется пустой, не должна мигать панелью. При повторной попытке
+    // строка ошибки сохраняется с отключенной ссылкой до получения ответа.
     catalogStatus.querySelector(".retry-link")?.setAttribute("disabled", "");
     try {
       const mixes = await api.catalogMixes();
@@ -277,7 +343,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
     try {
       const albums = await api.newReleases();
       if (mine !== releasesGeneration) return;
-      // A release VK sends without a title still gets a card.
+      // Релиз, отправленный VK без названия, все равно получает карточку.
       releasesRow.replaceChildren(...albums.map((album) =>
         albumCard(album.title?.trim() ? album : { ...album, title: t("album.untitled") }, () => openAlbum(album))));
       releasesLoaded = true;
@@ -301,7 +367,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
     try {
       let options = null;
       if (aliases) {
-        // Tuned catalogue cards carry the authoritative mix_options.
+        // На каталожных карточках настроенных автомобилей имеется авторитетное обозначение mix_options.
         const tuned = catalog.find(mix => mix.options && moodMatch(`${mix.title} ${mix.subtitle}`, aliases));
         if (tuned) {
           await playCatalogMix(tuned, button);
@@ -324,7 +390,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
       listOptions = options;
       listSource = { kind: "personal", options };
       activeMix = aliases ? button.className : "common#";
-      screen.clearStatus(); screen.setTracks(tracks);
+      screen.clearStatus(); setMixTracks(tracks);
       await play(tracks,0,{ radio: { kind: "personal", options }, shuffle: false });
     } catch (error) { if (mine === generation) toast(errorText(error), { error: true }); }
     finally { button.disabled = false; button.removeAttribute("aria-busy"); }
@@ -340,7 +406,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
       const tracks = await api.streamMix(mix.id, mix.options);
       if (mine !== generation) return;
       if (!tracks.length) throw new Error(t("fy.noCatalog"));
-      // The plain personal stream is the same radio as the "My mix" tab.
+      // Обычный личный поток — это то же радио, что и вкладка «Мой микс».
       const personal = mix.id === "common" && !mix.options;
       const source = personal ? { kind: "personal", options: null } : { kind: "catalog", mix_id: mix.id, options: mix.options ?? null };
       current = "mix";
@@ -349,7 +415,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
       activeMix = mixKey(mix);
       renderTabs();
       screen.clearStatus();
-      screen.setTracks(tracks);
+      setMixTracks(tracks);
       paintActive();
       await play(tracks, 0, { shuffle: false, radio: source });
       paintStatus(catalogStatus, "");
@@ -384,7 +450,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
         pinned = wasPinned ? pinned.filter(item => mixKey(item) !== key) : [...pinned,mix].slice(-32);
         try { localStorage.setItem(pinStorage,JSON.stringify(pinned)); }
         catch { pinned=before; toast(t("fy.pinStorage"),{error:true}); return; }
-        // Keep the original card and its keyboard focus in place.
+        // Сохраните исходную карту и фокус клавиатуры на месте.
         const restoreFocus=pin.closest('.pinned-grid')!=null;
         renderPinned();
         for(const control of shelves.querySelectorAll('[data-pin-key]')) {
@@ -421,7 +487,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
 
   function saveSelection() {
     try { localStorage.setItem("mix.filter-selection.v1", JSON.stringify(selected)); }
-    catch { /* storage can be disabled */ }
+    catch { /* хранилище можно отключить */ }
   }
 
   const syncPins = session => {
@@ -448,6 +514,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
       generation += 1;
       catalogGeneration += 1;
       cache.clear();
+      continuationCache.clear();displayedTracks=[];continuationBusy=false;moreFooter.hidden=true;
       catalogLoaded = false;
       catalogGrid.replaceChildren();
       paintStatus(catalogStatus, "");

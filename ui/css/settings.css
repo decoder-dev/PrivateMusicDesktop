@@ -1,4 +1,4 @@
-/* Settings: grouped cards of rows with switches, swatches and the equaliser. */
+/* Настройки: сгруппированные карточки рядов с переключателями, свотчами и эквалайзером. */
 
 .settings .set-body { overflow-y: auto; padding: 8px var(--gutter) var(--clear); display: flex; flex-direction: column; gap: 28px; width: 100%; max-width: calc(640px + 2 * var(--gutter)); margin: 0; flex: 1 1 auto; min-height: 0; }
 .set-section { display: flex; flex-direction: column; }
@@ -25,9 +25,12 @@
 .set-keys tr:first-child td { border-top: 0; }
 .set-keys td:first-child { width: 190px; white-space: nowrap; }
 
-/* Theme and accent pickers. The theme options are small previews of the real UI (a sidebar, a few rows, the player
-   bar) in that theme; "system" is the light preview with the dark one clipped along the true corner-to-corner
-   diagonal, so the edge is anti-aliased. Labels keep one weight and one width: only colour and the ring change. */
+/*
+ * Выбор тем и акцентов. Параметры темы представляют собой небольшие предварительные просмотры реального
+ * UI (боковая панель, несколько строк, панель проигрывателя) в этой теме; "system" — это светлый
+ * предварительный просмотр, в котором темный фрагмент обрезан по истинной диагонали от угла к углу,
+ * поэтому края сглажены. Этикетки сохраняют один вес и одну ширину: меняются только цвет и кольцо.
+ */
 .theme-picker, .accent-grid { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .theme-opt { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; width: 92px; padding: 8px 0 6px; border-radius: 14px; color: var(--text-2); transition: opacity var(--t-release) var(--ease-std), color var(--t-hover) var(--ease-std), background-color var(--t-hover) var(--ease-std); }
 .theme-opt:hover { background: var(--hover); color: var(--text); }
@@ -89,7 +92,7 @@
 .accent-opt[data-v="teal"] { --sw-l: #0f787a; --sw-d: #3dcccc; }
 .accent-opt[data-v="banana"] { --sw-l: #805600; --sw-d: #f4d66f; }
 
-/* ---------- equaliser ---------- */
+/* ---------- эквалайзер ---------- */
 .eq { display: flex; flex-direction: column; }
 .eq-bands { position: relative; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; padding: 12px 8px 16px; }
 .eq-band { display: flex; flex-direction: column; align-items: center; gap: 6px; }

@@ -1,6 +1,6 @@
-/* Track lists (virtualised: nothing in here may transition), artwork, states, skeletons. */
+/* Списки треков (виртуальные: ничто здесь не может переходить), обложки, состояния, скелетоны. */
 
-/* ---------- artwork with a placeholder behind it ---------- */
+/* ---------- изображение с заполнителем позади него ---------- */
 .art-box {
   --art-size: 48px;
   position: relative; display: block; flex: none; overflow: hidden; width: var(--art-size); height: var(--art-size);
@@ -16,7 +16,7 @@
 .art-box img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .art-box.fill { --art-size: 100%; width: 100%; height: auto; aspect-ratio: 1; }
 
-/* ---------- list ---------- */
+/* ---------- список ---------- */
 .list { position: relative; flex: 1 1 auto; overflow-y: auto; min-height: 0; padding-bottom: var(--clear); }
 .list .spacer { position: relative; width: 100%; }
 .list .window { position: absolute; left: 0; right: 0; }
@@ -52,7 +52,7 @@
 .link-text:disabled { cursor: default; }
 .row .link-text:focus-visible { outline-offset: 0; }
 
-/* The playing indicator: four static capsules, or a pause glyph. */
+/* Индикатор воспроизведения: четыре статические капсулы или символ паузы. */
 .pbars { display: inline-flex; align-items: flex-end; justify-content: space-between; width: 18px; height: 16px; color: var(--accent); }
 .pbars i { display: block; width: 3px; border-radius: 2px; background: currentColor; }
 .pbars i:nth-child(1) { height: 46%; } .pbars i:nth-child(2) { height: 88%; } .pbars i:nth-child(3) { height: 66%; } .pbars i:nth-child(4) { height: 38%; }
@@ -63,7 +63,7 @@
   .row .actions .download { display: none; }
 }
 
-/* ---------- states: empty, error, loading ---------- */
+/* ---------- состояния: пусто, ошибка, загрузка ---------- */
 .status, .empty-state {
   --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18V5l11-2v13'/%3E%3Ccircle cx='6' cy='18' r='3'/%3E%3Ccircle cx='17' cy='16' r='3'/%3E%3C/svg%3E");
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
@@ -80,7 +80,7 @@
 }
 .status.error::before, .empty-state.error::before { background: var(--danger); }
 .view > .status:not(.progress):not(.loading), .view > .empty-state, .tab-pane > .status:not(.progress):not(.loading), .tab-pane > .empty-state { flex: 1 1 auto; }
-/* A one-line progress note and the radio note are not panels. */
+/* Однострочное сообщение о ходе выполнения и радиопримечание не являются панелями. */
 .status.progress, .status.radio-note, .status.inline {
   flex-direction: row; justify-content: flex-start; max-width: none; margin: 0; padding: 4px var(--gutter) 8px; text-align: left; font-size: 13px; gap: 8px;
 }
@@ -89,7 +89,7 @@
 .status.compact { padding: 16px 24px; gap: 8px; }
 .status.compact::before { width: 26px; height: 26px; }
 
-/* Skeletons are static on purpose: no shimmer to keep the CPU quiet. */
+/* Скелеты намеренно статичны: никакого мерцания, чтобы CPU оставался тихим. */
 .status.loading { align-items: stretch; justify-content: flex-start; max-width: none; margin: 0; padding: 8px 0; gap: 0; }
 .status.loading::before { display: none; }
 .sk-rows { display: flex; flex-direction: column; width: 100%; }

@@ -1,4 +1,4 @@
-//! Switching the sound output while music plays.
+//! Переключение вывода звука во время воспроизведения музыки.
 
 mod common;
 
@@ -56,7 +56,7 @@ fn switching_output_reopens_the_device_and_keeps_the_place() {
     wait_for("playing again", || controller.state().status == Status::Playing && opened.load(Ordering::SeqCst) == 2);
     assert!(controller.state().position >= 5.9, "carries on, not from 0:00: {:?}", controller.state().position);
 
-    // Paused: nothing plays until asked, then from the same place.
+    // Пауза: ничего не воспроизводится, пока не спросят, затем с того же места.
     controller.pause();
     wait_for("paused", || controller.state().status == Status::Paused);
     let at = controller.state().position;

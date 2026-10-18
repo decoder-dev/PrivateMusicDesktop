@@ -1,5 +1,7 @@
-/* Full-screen now playing. It follows the theme: white on dark, black on light,
-   over a heavily blurred cover. Only here do blurs and gradients cover the whole window. */
+/*
+ * Сейчас воспроизводится полноэкранный режим. Он соответствует теме: белое на темном, черное на
+ * светлом, на сильно размытой обложке. Только здесь размытия и градиенты покрывают все окно.
+ */
 
 .np {
   --np-a: #3385fa; --np-b: #1a6be0;
@@ -16,7 +18,10 @@
 @keyframes np-out { to { opacity: 0; transform: translateY(24px) scale(0.985); } }
 .np :focus-visible { outline-color: var(--np-fg); }
 
-/* Backdrop: a 240px copy of the cover, blurred where it is small, then scaled up to the window. */
+/*
+ * Фон: копия обложки размером 240 пикселей, размытая в небольших местах, а затем увеличенная до размера
+ * окна.
+ */
 .np-backdrop { position: absolute; inset: 0; overflow: hidden; background: linear-gradient(135deg, color-mix(in srgb, var(--np-a) 60%, transparent), color-mix(in srgb, var(--np-b) 60%, transparent)); }
 .np-backdrop .np-bd {
   position: absolute; left: 50%; top: 50%; width: 240px; height: 240px; margin: -120px 0 0 -120px; object-fit: cover; opacity: 0;
@@ -87,7 +92,7 @@
 .np-like.on { color: var(--accent); }
 .np-next { margin-top: 10px; font-size: 13px; line-height: 18px; color: var(--np-fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Side panel: lyrics or the queue. */
+/* Боковая панель: тексты песен или очередь. */
 .np-side, .ly, .np-queue {
   position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column;
   width: min(420px, 36vw); flex: none; height: 100%; max-height: 100%; border-radius: 22px;
@@ -126,7 +131,7 @@
 .np-chip { padding: 0 16px; min-height: 36px; border-radius: 999px; background: var(--np-glass); color: var(--np-fg); font-weight: 600; font-size: 14px; transition: background-color var(--t-hover) var(--ease-std); }
 .np-chip:hover { background: var(--np-glass-hover); }
 
-/* Queue panel. */
+/* Панель очереди. */
 .np-queue { background: color-mix(in srgb, var(--np-fg) 6%, transparent); border: var(--hair) solid color-mix(in srgb, var(--np-fg) 10%, transparent); }
 .nq-head { flex: none; padding: 16px 16px 4px; font: 600 13px/18px var(--font); color: var(--np-fg-2); }
 .nq-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 8px 12px; }
@@ -141,7 +146,7 @@
 .nq-row .t span { font: 400 12px/16px var(--font); color: var(--np-fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nq-empty { padding: 24px 16px; color: var(--np-fg-2); font-size: 14px; }
 
-/* Transport. */
+/* Транспорт. */
 .np-bottom { padding: 0 max(var(--gutter), 4vw) 20px; display: flex; flex-direction: column; gap: 10px; align-items: center; }
 .np-seek { width: min(100%, 640px); display: grid; grid-template-columns: 44px minmax(0, 1fr) 48px; gap: 10px; align-items: center; color: var(--np-fg-2); font: 500 11px/16px var(--font); font-variant-numeric: tabular-nums; letter-spacing: 0.06px; }
 .np-seek span:first-child { text-align: right; }
@@ -174,11 +179,11 @@
 .np-quick button[aria-pressed="true"] { color: var(--accent); }
 .np-quick button[aria-pressed="true"] .q-ico { background: var(--accent-fill); }
 
-/* Controls step aside while music plays and nothing is touched. */
+/* Элементы управления отодвинуты в сторону, пока играет музыка, и ничего не трогается. */
 .np.idle { cursor: none; }
 .np.idle .np-top, .np.idle .np-bottom, .np.idle .np-next { opacity: 0; pointer-events: none; }
 
-/* Narrow or portrait: the panel takes the place of the cover and the text. */
+/* Узкая или книжная: панель заменяет обложку и текст. */
 @media (max-width: 860px), (max-aspect-ratio: 1/1) {
   .np-stage { flex-direction: column; justify-content: center; gap: 12px; }
   .np-main { flex-direction: column; text-align: center; gap: 18px; }
@@ -187,7 +192,7 @@
   .np-artist-row { justify-content: center; }
   .np-side, .ly, .np-queue { width: 100%; border-radius: 22px; flex: 1 1 0; height: auto; }
   .np[data-side="lyrics"] .np-main, .np[data-side="queue"] .np-main { display: none; }
-  /* With the cover gone, the title and artist move into the header. */
+  /* Когда обложка исчезла, название и исполнитель переместились в заголовок. */
   .np[data-side="lyrics"] .np-kicker .k2, .np[data-side="queue"] .np-kicker .k2 { display: block; }
   .ly-line { text-align: center; transform-origin: center; }
   .ly-message { align-items: center; text-align: center; }

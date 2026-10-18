@@ -1,15 +1,15 @@
-//! Container and stream plumbing: MPEG-TS demux, ISO BMFF box walking, CMAF
-//! fragment/initialization parsing, VK URL unmasking, loaded-ahead folding
-//! and HLS AES-128-CBC. Behaviour mirrors the C implementation it replaces
-//! (kept under `tests/reference/` and compared on random and malformed input).
+//! Сантехника контейнеров и потоков: демультиплексирование MPEG-TS, ISO BMFF перемещение по коробке,
+//! синтаксический анализ CMAF fragment/initialization, демаскировка VK URL, свертывание с опережающей
+//! загрузкой и HLS AES-128-CBC. Поведение отражает реализацию C, которую она заменяет (сохраняется под
+//! `tests/reference/` и сравнивается со случайными и искаженными входными данными).
 //!
-//! Every read of caller data goes through [`Buf`], which yields 0 outside the
-//! slice instead of panicking: the C code never read out of range on inputs
-//! that reached those lines, and the Rust build aborts on panic.
+//! Каждое чтение данных вызывающего объекта проходит через [`Buf`], что дает 0 за пределами среза
+//! вместо паники: код C никогда не считывает данные за пределы диапазона на входах, которые достигли
+//! этих строк, и сборка Rust прерывается при панике.
 
 use core::slice;
 
-// ------------------------------------------------------------------ helpers
+// ------------------------------------------------------------------ Помощники
 
 #[derive(Clone, Copy)]
 struct Buf<'a>(&'a [u8]);
@@ -291,7 +291,7 @@ pub unsafe extern "C" fn pm_mpegts_parse_pmt(
     true
 }
 
-/// Returns (offset, length) of the elementary slice, updating `remaining`.
+/// Возвращает (смещение, длину) элементарного среза, обновляя `remaining`.
 fn pes_slice(payload: &[u8], unit_start: bool, remaining: &mut i32) -> Option<(i32, i32)> {
     let payload_length = payload.len() as i32;
     let mut start = 0i32;
@@ -333,8 +333,8 @@ fn pes_slice(payload: &[u8], unit_start: bool, remaining: &mut i32) -> Option<(i
             *remaining = 0;
         }
     }
-    // The C version published offset/length before the final `count > 0`
-    // check, so a zero-length slice still reported them while returning false.
+    // Версия C опубликовала offset/length до финальной проверки `count > 0`, поэтому срез нулевой длины
+    // все равно сообщал о них, возвращая false.
     Some((start, count))
 }
 
@@ -396,7 +396,8 @@ impl Reassembly<'_> {
     }
 }
 
-/// Returns consumed bytes, 0 to stop draining, -1 when more payload is needed.
+/// Возвращает использованные байты: 0, чтобы остановить слив, -1, когда требуется больше полезной
+/// нагрузки.
 fn drain_pes(
     r: &mut Reassembly,
     out: &mut [u8],
@@ -624,7 +625,7 @@ fn parse_box(d: Buf, length: i32, offset: i32, limit: i32, st: &mut pm_iso_statu
     let mut header_size = 8;
     let mut size = i64::from(size32);
     if size32 == 0 {
-        // `offset + 8 <= limit` already held above.
+        // `offset + 8 <= limit` уже состоялся выше.
         set_status(st, PM_ISO_OK, 0, 0);
         return Some(pm_iso_box { type_, start: offset, size: limit - offset, header_size: 8 });
     }
@@ -653,7 +654,7 @@ fn parse_box(d: Buf, length: i32, offset: i32, limit: i32, st: &mut pm_iso_statu
     Some(pm_iso_box { type_, start: offset, size: size as i32, header_size })
 }
 
-/// Walks `[start, end)`; boxes beyond `cap` are counted but not stored.
+/// Прогулки `[start, end)`; коробки за пределами `cap` учитываются, но не сохраняются.
 fn walk(d: Buf, length: i32, start: i32, end: i32, out: &mut [pm_iso_box], st: &mut pm_iso_status) -> i32 {
     set_status(st, PM_ISO_OK, 0, 0);
     if start < 0 || start > end || end > length {
@@ -822,8 +823,8 @@ fn find_box(boxes: &[pm_iso_box], type_: u32) -> Option<pm_iso_box> {
     boxes.iter().find(|b| b.type_ == type_).copied()
 }
 
-/// A walk result: the stored boxes plus the full count (which may exceed the
-/// storage cap, exactly like the C walk).
+/// Результат прогулки: сохраненные коробки плюс полное количество (которое может превышать ограничение
+/// хранилища, точно так же, как прогулка C).
 struct Children {
     boxes: [pm_iso_box; BOX_CAP],
     count: i32,
@@ -842,7 +843,7 @@ fn walk_cap(d: Buf, length: i32, start: i32, end: i32) -> (Children, pm_iso_stat
     (c, st)
 }
 
-/// `pm_cmaf_walk_children`: failure code depends on the walk status.
+/// `pm_cmaf_walk_children`: код ошибки зависит от статуса обхода.
 fn walk_children(d: Buf, length: i32, parent: &pm_iso_box, st: &mut pm_cmaf_status) -> Option<Children> {
     let (c, walk_st) = walk_cap(d, length, payload_start(parent), payload_end(parent));
     if walk_st.code != PM_ISO_OK && c.count == 0 {
@@ -853,7 +854,7 @@ fn walk_children(d: Buf, length: i32, parent: &pm_iso_box, st: &mut pm_cmaf_stat
     Some(c)
 }
 
-/// `pm_cmaf_walk_range`: always reports truncation.
+/// `pm_cmaf_walk_range`: всегда сообщает об усечении.
 fn walk_range(d: Buf, length: i32, start: i32, end: i32, st: &mut pm_cmaf_status) -> Option<Children> {
     let (c, walk_st) = walk_cap(d, length, start, end);
     if walk_st.code != PM_ISO_OK && c.count == 0 {
@@ -1271,7 +1272,7 @@ pub unsafe extern "C" fn pm_cmaf_extract_fragment(
     sink.written
 }
 
-// ------------------------------------------------------- CMAF initialization
+// --------------------------------------- Инициализация CMAF
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -1563,7 +1564,7 @@ pub unsafe extern "C" fn pm_cmaf_parse_initialization(
     1
 }
 
-// ---------------------------------------------------------------- VK unmask
+// -------------------------------------------------- VK разоблачить
 
 pub const PM_VK_UNMASK_NOT_MASKED: i32 = 0;
 pub const PM_VK_UNMASK_FAILED: i32 = -1;
@@ -1693,7 +1694,7 @@ pub unsafe extern "C" fn pm_vk_unmask(
     let mut state = (parsed_key as i32) ^ user_id;
     let mut indexes = [0i32; 4096];
     for position in (0..character_length).rev() {
-        // Same wrapping arithmetic the C build relied on for large keys.
+        // Та же арифметика переноса, что и сборка C, использовалась для больших ключей.
         state = (character_length.wrapping_mul(position + 1) ^ state.wrapping_add(position)) % character_length;
         if state < 0 {
             state += character_length;
@@ -1709,7 +1710,7 @@ pub unsafe extern "C" fn pm_vk_unmask(
     character_length
 }
 
-// ------------------------------------------------------------ loaded ahead
+// ------------------------------------------------------------ загружено вперед
 
 #[no_mangle]
 pub unsafe extern "C" fn pm_buffer_max_loaded_ahead(
@@ -1762,7 +1763,7 @@ extern "C" {
     ) -> i32;
 }
 
-/// Hardware-backed CommonCrypto on Apple platforms.
+/// CommonCrypto с аппаратной поддержкой на платформах Apple.
 #[cfg(target_vendor = "apple")]
 unsafe fn cbc_decrypt_pkcs7(ct: &[u8], key: &[u8; 16], iv: &[u8; 16], out: &mut [u8]) -> Option<usize> {
     let mut moved = 0usize;
@@ -1788,7 +1789,7 @@ unsafe fn cbc_decrypt_pkcs7(ct: &[u8], key: &[u8; 16], iv: &[u8; 16], out: &mut 
     soft_cbc_decrypt_pkcs7(ct, key, iv, out)
 }
 
-/// Portable AES-128 CBC + PKCS#7, used off-Apple (and by tests everywhere).
+/// Портативный AES-128 CBC + PKCS#7, использовался вне Apple (и везде тестировался).
 pub fn soft_cbc_decrypt_pkcs7(ct: &[u8], key: &[u8; 16], iv: &[u8; 16], out: &mut [u8]) -> Option<usize> {
     if ct.is_empty() || ct.len() % BLOCK != 0 || out.len() < ct.len() {
         return None;
@@ -1853,7 +1854,7 @@ pub unsafe extern "C" fn pm_aes128_cbc_decrypt(
 }
 
 mod aes {
-    //! Straightforward AES-128 block decryption (FIPS-197).
+    //! Простая расшифровка блока AES-128 (FIPS-197).
 
     fn build_sbox() -> ([u8; 256], [u8; 256]) {
         let mut sbox = [0u8; 256];

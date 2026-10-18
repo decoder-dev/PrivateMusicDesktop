@@ -1,4 +1,4 @@
-//! Bugs found in review, each pinned by the scenario that showed it.
+//! Ошибки, обнаруженные при проверке, каждая связана со сценарием, в котором она была обнаружена.
 
 mod common;
 
@@ -65,8 +65,8 @@ fn hls() -> (tempfile::TempDir, Server) {
     (dir, server)
 }
 
-/// An expired token while a restored queue asks VK for stream addresses is
-/// renewed from the cookie; it is not a sign-out.
+/// Токен с истекшим сроком действия, когда восстановленная очередь запрашивает у VK адреса потоков,
+/// обновляется из файла cookie; это не выход.
 #[test]
 fn an_expired_token_during_playback_is_renewed_not_signed_out() {
     if !require_ffmpeg() { return; }
@@ -82,7 +82,7 @@ fn an_expired_token_during_playback_is_renewed_not_signed_out() {
     let store = Arc::new(MemoryStore::default());
     let (app, events) = app(&vk.base, format!("{}/?act=web_token", token.base), store.clone(), 20.0);
     app.sign_in(session("OLD"));
-    // Saved queues carry no stream address, so this goes through audio.getById.
+    // Сохраненные очереди не содержат адреса потока, поэтому он проходит через audio.getById..
     app.controller().load_queue(vec![track(1, None)], 0, 0.0);
     app.controller().toggle();
     wait_for("playback", || app.controller().state().status == Status::Playing);
@@ -91,7 +91,7 @@ fn an_expired_token_during_playback_is_renewed_not_signed_out() {
     assert!(!events.lock().unwrap().iter().any(|e| matches!(e, UiEvent::SessionExpired)));
 }
 
-/// Signing out while a token refresh is still waiting for VK must stick.
+/// Выход из системы во время ожидания обновления токена VK должен сохраняться.
 #[test]
 fn signing_out_during_a_refresh_stays_signed_out() {
     let vk = FakeApi::start(|_, _, _| (200, r#"{"error":{"error_code":5,"error_msg":"expired"}}"#.into()));
@@ -111,8 +111,8 @@ fn signing_out_during_a_refresh_stays_signed_out() {
     assert!(store.load().unwrap().is_none(), "nor save the session again");
 }
 
-/// VK rounds the length up; a seek into the last second may land past the
-/// real end of the audio. That is the end of the track, not a failure.
+/// VK округляет длину вверх; поиск в последнюю секунду может оказаться за пределами реального конца
+/// звука. Это конец пути, а не провал.
 #[test]
 fn a_seek_past_the_real_end_ends_the_track() {
     if !require_ffmpeg() { return; }
@@ -124,7 +124,7 @@ fn a_seek_past_the_real_end_ends_the_track() {
         move || slot.take().map(|s| Box::new(s) as Box<dyn Sink>).ok_or(Error::Stream("one".into())),
         move |e| log.lock().unwrap().push(e),
     );
-    // The audio is 12.0 s; VK says 13.
+    // Звук — 12,0 с; VK говорит 13.
     player.play("1_1", &format!("{}/index.m3u8", media.base), 13.0, 0.0, lab_config());
     wait_for("playing", || events.lock().unwrap().iter().any(|e| matches!(e, PlayerEvent::Playing { .. })));
     player.seek(12.6);
@@ -135,8 +135,8 @@ fn a_seek_past_the_real_end_ends_the_track() {
     assert!(!failed, "{:?}", events.lock().unwrap());
 }
 
-/// Removing the playing track when it is the last one must not replay the
-/// one before it.
+/// Удаление воспроизводимой дорожки, когда она является последней, не должно воспроизводить предыдущую
+/// дорожку.
 #[test]
 fn removing_the_playing_last_track_stops_or_wraps() {
     if !require_ffmpeg() { return; }
@@ -160,7 +160,7 @@ fn removing_the_playing_last_track_stops_or_wraps() {
     }
 }
 
-/// A seek while nothing plays is where the next Play starts.
+/// Следующее воспроизведение начинается с поиска, пока ничего не воспроизводится.
 #[test]
 fn a_seek_while_idle_is_kept_for_the_next_play() {
     if !require_ffmpeg() { return; }

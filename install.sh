@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Installs Private Music on macOS or Linux from the latest GitHub release.
+# Установка Private Music на macOS и Linux из последнего релиза GitHub.
 #
-#   ./install.sh                 install or update
-#   ./install.sh --uninstall     remove it
+#   ./install.sh                 установка или обновление
+#   ./install.sh --uninstall     удаление
 #
-# The repository is private, so a token is needed: set GITHUB_TOKEN, or log in
-# with the GitHub CLI (`gh auth login`) and it is picked up from there.
-# Settings (all optional): PM_REPO, PM_VERSION (e.g. v0.2.0), PM_API (for tests).
+# Публичный репозиторий доступен без токена. Для приватного доступа задайте
+# GITHUB_TOKEN или выполните `gh auth login`: скрипт получит токен из GitHub CLI.
+# Необязательные параметры: PM_REPO, PM_VERSION (например v0.4.1), PM_API (для тестов).
 set -euo pipefail
 
 REPO="${PM_REPO:-decoder-dev/PrivateMusicDesktop}"
@@ -25,7 +25,7 @@ case "$(uname -s)" in
   *) die "this script is for macOS and Linux; on Windows use install.ps1." ;;
 esac
 
-# ---------------------------------------------------------------- uninstall
+# ------------------------------------------------------------------ удалить
 if [ "${1:-}" = "--uninstall" ]; then
   if [ "$OS" = macos ]; then
     rm -rf "/Applications/$APP_NAME.app" "$HOME/Applications/$APP_NAME.app"
@@ -41,15 +41,15 @@ if [ "${1:-}" = "--uninstall" ]; then
   exit 0
 fi
 
-# --------------------------------------------------------------------- token
+# --------------------------------------- токен
 TOKEN="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
 if [ -z "$TOKEN" ] && command -v gh >/dev/null 2>&1; then
   TOKEN="$(gh auth token 2>/dev/null || true)"
 fi
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-# The token goes to curl through a private file, never on its command line,
-# where any local user could read it in the process list.
+# Токен передается в личный файл, а не в командную строку, где любой локальный пользователь может
+# прочитать его в списке процессов.
 AUTH=()
 if [ -n "$TOKEN" ]; then
   (umask 077; printf 'Authorization: Bearer %s\n' "$TOKEN" > "$TMP/auth")
@@ -58,7 +58,7 @@ fi
 
 api() { curl -fsSL "${AUTH[@]+"${AUTH[@]}"}" -H "Accept: application/vnd.github+json" "$@"; }
 
-# ------------------------------------------------------------------- release
+# ----------------------------------------------------------------------------
 say "looking up the release ($VERSION)"
 if [ "$VERSION" = latest ]; then URL="$API/repos/$REPO/releases/latest"; else URL="$API/repos/$REPO/releases/tags/$VERSION"; fi
 RELEASE="$(api "$URL")" || die "could not read the release. For a private repository set GITHUB_TOKEN (or run 'gh auth login'); a draft release must be published first."
@@ -66,7 +66,7 @@ RELEASE="$(api "$URL")" || die "could not read the release. For a private reposi
 TAG="$(printf '%s\n' "$RELEASE" | sed -n 's/^ *"tag_name": *"\([^"]*\)".*/\1/p' | head -n1)"
 [ -n "$TAG" ] || die "the release has no tag."
 
-# Pairs of "asset id<TAB>file name", from the pretty-printed JSON.
+# Пары "asset id<TAB>file name" из красиво напечатанного JSON.
 ASSETS="$(printf '%s\n' "$RELEASE" | awk '
   /"url": *"[^"]*\/releases\/assets\/[0-9]+"/ { match($0, /assets\/[0-9]+/); id = substr($0, RSTART + 7, RLENGTH - 7) }
   /^ *"name": *"/ && id != "" { n = $0; sub(/^ *"name": *"/, "", n); sub(/".*/, "", n); print id "\t" n; id = "" }')"
@@ -74,7 +74,7 @@ ASSETS="$(printf '%s\n' "$RELEASE" | awk '
 asset_id() { printf '%s\n' "$ASSETS" | awk -F'\t' -v pat="$1" '$2 ~ pat { print $1; exit }'; }
 asset_name() { printf '%s\n' "$ASSETS" | awk -F'\t' -v pat="$1" '$2 ~ pat { print $2; exit }'; }
 
-fetch() { # pattern -> downloads the matching asset into $TMP, prints its path
+fetch() { # шаблон -> загружает соответствующий ресурс в $TMP, печатает его путь
   local id name
   id="$(asset_id "$1")"; name="$(asset_name "$1")"
   [ -n "$id" ] || die "the release has no file matching $1."
@@ -84,7 +84,7 @@ fetch() { # pattern -> downloads the matching asset into $TMP, prints its path
   printf '%s' "$TMP/$name"
 }
 
-verify() { # path
+verify() { # путь
   local sums id name want got
   id="$(asset_id '^SHA256SUMS\.txt$')"
   [ -n "$id" ] || die "the release has no SHA256SUMS.txt; refusing to install an unverified file."
@@ -112,13 +112,13 @@ install_macos() {
   rm -rf "$dest/$APP_NAME.app"
   cp -R "$app" "$dest/$APP_NAME.app"
   hdiutil detach -quiet "$mount" || true
-  # The build is not notarised; a file fetched by this script is trusted by
-  # you, so drop the quarantine flag that would otherwise block the first launch.
+  # Сборка не нотариально заверена; файлу, полученному этим скриптом, вы доверяете, поэтому отмените
+  # флаг карантина, который в противном случае заблокировал бы первый запуск.
   xattr -dr com.apple.quarantine "$dest/$APP_NAME.app" 2>/dev/null || true
   say "installed: $dest/$APP_NAME.app"
 }
 
-# --------------------------------------------------------------------- Linux
+# --------------------------------------- Linux
 install_linux() {
   case "$(uname -m)" in x86_64 | amd64) ;; *) die "only x86-64 Linux builds are published." ;; esac
   if [ -z "${PM_FORCE_APPIMAGE:-}" ] && command -v dpkg >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then

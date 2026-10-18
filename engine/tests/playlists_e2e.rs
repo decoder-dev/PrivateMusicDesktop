@@ -1,5 +1,5 @@
-//! Editing the user's own playlists: the right calls, one attempt each, and
-//! nothing sent for playlists that belong to someone else.
+//! Редактирование собственных плейлистов пользователя: правильные вызовы, по одной попытке и ничего не
+//! отправляется для чужих плейлистов.
 
 mod common;
 

@@ -1,9 +1,8 @@
-//! Private Music desktop engine.
+//! Настольный движок Private Music.
 //!
-//! Everything here is synchronous and free of GUI types so it can be tested
-//! headless: the VK client, the HLS fetcher (using the same `pm_native` core as
-//! the iOS app for playlist parsing, AES-128 and MPEG-TS demuxing), the
-//! decoder, the queue and the player thread.
+//! Здесь все синхронно и не содержит типов GUI, поэтому его можно тестировать без головы: клиент VK,
+//! сборщик HLS (использует то же ядро `pm_native`, что и приложение iOS для анализа плейлистов,
+//! демультиплексирования AES-128 и MPEG-TS), декодер, очередь и проигрыватель. нить.
 
 pub mod app;
 pub mod artwork;

@@ -16,18 +16,18 @@ pub struct Track {
     pub lyrics_id: Option<i64>,
     pub is_hq: bool,
     pub track_code: Option<String>,
-    /// The artists VK names on the track (`main_artists`, then
-    /// `featured_artists`), so the window can open an artist page. Missing in
-    /// queues and downloads saved before this existed.
+    /// Имена исполнителей VK на треке (`main_artists`, затем `featured_artists`), поэтому в окне можно
+    /// открыть страницу исполнителя. Отсутствует в очередях и загрузках, сохраненных до того, как это
+    /// существовало.
     #[serde(default)]
     pub artists: Vec<ArtistRef>,
-    /// The release the track belongs to, when VK gave a complete locator.
+    /// Релиз, к которому относится трек, на который VK дал полный локатор.
     #[serde(default)]
     pub album: Option<AlbumRef>,
 }
 
-/// An artist as a track or an album names it. `id` is VK's artist id (an
-/// opaque string); a name VK gave without one has `None`.
+/// Исполнитель как трек или альбом называет его. `id` — идентификатор исполнителя VK (непрозрачная
+/// строка); имя, которое дал VK, не содержит `None`.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ArtistRef {
     #[serde(default)]
@@ -35,7 +35,7 @@ pub struct ArtistRef {
     pub name: String,
 }
 
-/// Where a track's album lives: enough to open it.
+/// Где живет альбом трека: достаточно, чтобы его открыть.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct AlbumRef {
     pub album_id: i64,
@@ -46,7 +46,7 @@ pub struct AlbumRef {
     pub title: Option<String>,
 }
 
-/// An artist from `audio.searchArtists` or VK's artist catalogue page.
+/// Художник со страницы каталога исполнителей `audio.searchArtists` или VK.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Artist {
     pub id: String,
@@ -54,8 +54,8 @@ pub struct Artist {
     pub photo_url: Option<String>,
 }
 
-/// A release (VK keeps albums as playlists, so the locator is the same:
-/// owner, id and, for community-owned ones, an access key).
+/// Релиз (VK хранит альбомы в виде плейлистов, поэтому локатор тот же: владелец, идентификатор и, для
+/// альбомов, принадлежащих сообществу, ключ доступа).
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Album {
     pub album_id: i64,
@@ -75,7 +75,7 @@ pub struct Album {
     pub year: Option<i32>,
     #[serde(default)]
     pub is_followed: bool,
-    /// What `audio.followPlaylist` wants as `hash`, when VK sends one.
+    /// То, что `audio.followPlaylist` хочет как `hash`, когда VK отправляет его.
     #[serde(default)]
     pub follow_hash: Option<String>,
 }
@@ -85,13 +85,13 @@ impl Album {
         format!("{}_{}", self.owner_id, self.album_id)
     }
 
-    /// The key, when there is one that is not just blank.
+    /// Ключ, когда есть такой, не просто пустой.
     pub fn usable_access_key(&self) -> Option<&str> {
         self.access_key.as_deref().map(str::trim).filter(|k| !k.is_empty())
     }
 
-    /// Community and official albums have a negative owner; VK wants an
-    /// `access_key` for their tracks.
+    /// Сообщество и официальные альбомы имеют отрицательного владельца; VK хочет получить `access_key`
+    /// для своих треков.
     pub fn needs_access_key(&self) -> bool {
         self.owner_id < 0 && self.usable_access_key().is_none()
     }
@@ -100,10 +100,9 @@ impl Album {
         self.artists.iter().map(|a| a.name.as_str())
     }
 
-    /// Prefers what `other` knows about access. An `access_key` is only
-    /// valid for its own `owner_id` + `id`, so a different album that has a
-    /// key replaces the locator entirely instead of having its key grafted
-    /// onto a stale id.
+    /// Предпочитает то, что `other` знает о доступе. `access_key` действителен только для своего
+    /// собственного `owner_id` + `id`, поэтому другой альбом, имеющий ключ, полностью заменяет локатор
+    /// вместо того, чтобы привязывать свой ключ к устаревшему идентификатору.
     pub fn merging_access_metadata(&self, other: &Album) -> Album {
         let use_other = other.id() != self.id() && other.usable_access_key().is_some();
         Album {
@@ -122,19 +121,19 @@ impl Album {
     }
 }
 
-/// A title worth searching for: not blank and not VK's "unnamed".
+/// Название, которое стоит поискать: не пустое и не "unnamed" от VK.
 pub fn is_usable_title(title: &str) -> bool {
     let trimmed = title.trim();
     !trimmed.is_empty() && !trimmed.eq_ignore_ascii_case("unnamed")
 }
 
 impl Track {
-    /// `owner_audio`, the identity VK and the iOS app use.
+    /// `owner_audio`, идентификатор VK и приложение iOS.
     pub fn id(&self) -> String {
         format!("{}_{}", self.owner_id, self.track_id)
     }
 
-    /// The form `audio.getById` wants: `owner_audio[_accessKey]`.
+    /// Форма `audio.getById` хочет: `owner_audio[_accessKey]`.
     pub fn audio_id_with_key(&self) -> String {
         match self.access_key.as_deref().filter(|k| !k.is_empty()) {
             Some(key) => format!("{}_{}", self.id(), key),
@@ -168,8 +167,8 @@ pub struct Profile {
     pub photo_url: Option<String>,
 }
 
-/// A VK catalogue stream mix, including optional tuning already attached to
-/// a mood or activity tile.
+/// Микс потока из каталога VK, включая дополнительные настройки, уже прикрепленные к плитке настроения
+/// или активности.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct MusicMix {
     pub id: String,
@@ -181,8 +180,8 @@ pub struct MusicMix {
 }
 
 impl MusicMix {
-    /// Identity of a mix: its stream id plus the tuning, so two moods of the
-    /// same stream stay apart.
+    /// Идентичность микса: идентификатор потока плюс настройка, поэтому два настроения одного и того же
+    /// потока остаются отдельными.
     pub fn key(&self) -> String {
         format!("{}\n{}", self.id, self.options.as_deref().unwrap_or(""))
     }
@@ -198,12 +197,12 @@ impl Profile {
 pub struct Page<T> {
     pub items: Vec<T>,
     pub total: u32,
-    /// Offset to request next, `None` when the list is exhausted.
+    /// Смещение для следующего запроса, `None`, когда список исчерпан.
     pub next_offset: Option<u32>,
 }
 
-/// VK sends ids as numbers, numeric strings or floats depending on the
-/// method, so every integer read goes through here.
+/// VK отправляет идентификаторы в виде чисел, числовых строк или чисел с плавающей запятой в
+/// зависимости от метода, поэтому здесь проходит каждое целочисленное чтение.
 pub(crate) fn int(value: &Value) -> Option<i64> {
     match value {
         Value::Number(n) => n.as_i64().or_else(|| n.as_f64().map(|f| f.round() as i64)),
@@ -222,8 +221,8 @@ fn best_photo(object: &Value, keys: &[&str]) -> Option<String> {
         .and_then(unmask::secure_remote_url)
 }
 
-/// Cover: `album.thumb`, then `album.photo`, then a top-level `thumb`,
-/// largest first. Stream-mix tracks often carry only the last.
+/// Обложка: `album.thumb`, затем `album.photo`, затем `thumb` верхнего уровня, сначала самый крупный.
+/// Треки Stream-mix часто содержат только последнюю версию.
 fn track_artwork(object: &Value) -> Option<String> {
     const KEYS: [&str; 3] = ["photo_600", "photo_300", "photo_270"];
     if let Some(album) = object.get("album") {
@@ -236,8 +235,8 @@ fn track_artwork(object: &Value) -> Option<String> {
     object.get("thumb").and_then(|t| best_photo(t, &KEYS))
 }
 
-/// Lossy decode of one `audio` object. One ad or placeholder entry must not
-/// fail a whole page, so anything that is not a real track is skipped.
+/// Декодирование с потерями одного объекта `audio`. Одно объявление или запись-заполнитель не должны
+/// проваливаться на всей странице, поэтому все, что не является реальным треком, пропускается.
 pub fn parse_track(object: &Value, user_id: Option<i64>) -> Option<Track> {
     let track_id = int(object.get("id")?)?;
     let owner_id = int(object.get("owner_id")?)?;
@@ -276,8 +275,8 @@ pub fn parse_track(object: &Value, user_id: Option<i64>) -> Option<Track> {
     })
 }
 
-/// `main_artists` then `featured_artists`, each `{name, id, domain}`.
-/// Duplicates (the same id twice) are dropped.
+/// `main_artists`, затем `featured_artists`, каждый `{name, id, domain}`. Дубликаты (дважды с одним и
+/// тем же идентификатором) удаляются.
 fn track_artists(object: &Value) -> Vec<ArtistRef> {
     let mut found: Vec<ArtistRef> = Vec::new();
     for key in ["main_artists", "featured_artists"] {
@@ -301,9 +300,8 @@ fn artist_ref(entry: &Value) -> Option<ArtistRef> {
     Some(ArtistRef { id, name })
 }
 
-/// A nested `album` with both its id and its owner. A top-level `album_id`
-/// or an id without an owner is not a locator: the album's owner can differ
-/// from the track's.
+/// Вложенный `album` с идентификатором и владельцем. `album_id` верхнего уровня или идентификатор без
+/// владельца не являются локатором: владелец альбома может отличаться от владельца трека.
 fn album_ref(object: &Value) -> Option<AlbumRef> {
     let album = object.get("album")?;
     let album_id = int(album.get("id")?)?;
@@ -319,13 +317,13 @@ fn album_ref(object: &Value) -> Option<AlbumRef> {
     })
 }
 
-/// VK artist ids are opaque strings (`"5730061962467626447"`, sometimes a
-/// domain). Anything else is not sent back to VK.
+/// Идентификаторы исполнителей VK представляют собой непрозрачные строки (`"5730061962467626447"`,
+/// иногда домен). Все остальное не отправляется обратно в VK.
 pub fn valid_artist_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 128 && id.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
 }
 
-/// A number or a string, as text: VK sends artist ids both ways.
+/// Число или строка в виде текста: VK отправляет идентификаторы исполнителей в обе стороны.
 fn string_id(value: &Value) -> Option<String> {
     match value {
         Value::String(s) if !s.trim().is_empty() => Some(s.trim().to_string()),
@@ -339,9 +337,8 @@ fn is_usable_artist(name: &str) -> bool {
     !trimmed.is_empty() && !trimmed.eq_ignore_ascii_case("unknown")
 }
 
-/// Every `https` picture under `value`, with the size it claims (`width`,
-/// `height`, `size`, or the `_600` in a key), largest wins; on a tie the
-/// first one seen.
+/// Каждая картинка `https` под `value` заявленного размера (`width`, `height`, `size` или `_600` в
+/// ключе) выигрывает по величине; на галстуке первый увиденный.
 fn largest_picture(value: &Value) -> Option<String> {
     let mut found: Vec<(i64, String)> = Vec::new();
     collect_pictures(value, None, 0, &mut found);
@@ -388,8 +385,8 @@ fn collect_pictures(value: &Value, inherited: Option<i64>, depth: u32, out: &mut
     }
 }
 
-/// An album's cover: a direct `photo_*` / `cover_url` first, then the
-/// largest picture in `thumb`, `cover`, `thumbs`, `photos`, …
+/// Обложка альбома: сначала прямая `photo_*`/`cover_url`, затем самая большая картинка в `thumb`,
+/// `cover`, `thumbs`, `photos`,…
 fn album_artwork(object: &Value) -> Option<String> {
     for key in ["photo_1200", "photo_600", "photo_300", "photo_270", "photo", "cover_url", "thumb_url", "image"] {
         let Some(value) = object.get(key) else { continue };
@@ -403,8 +400,8 @@ fn album_artwork(object: &Value) -> Option<String> {
     ["thumb", "cover", "thumbs", "photos", "images", "grid"].iter().find_map(|key| object.get(*key).and_then(largest_picture))
 }
 
-/// Release year from `release_date` (a unix time, or a bare year, as a
-/// number or a string, or an ISO date), else from `year`.
+/// Год выпуска из `release_date` (время unix или чистый год в виде числа или строки или даты ISO),
+/// иначе из `year`.
 fn release_year(object: &Value) -> Option<i32> {
     let plausible = |year: i64| (1900..=2200).contains(&year).then_some(year as i32);
     if let Some(raw) = object.get("release_date") {
@@ -423,9 +420,9 @@ fn release_year(object: &Value) -> Option<i32> {
     object.get("year").and_then(int).and_then(plausible)
 }
 
-/// Gregorian year of a unix time (UTC), without a date library.
+/// Григорианский год unix-времени (UTC), без библиотеки дат.
 fn year_of_unix(seconds: i64) -> i32 {
-    // Howard Hinnant's days-to-civil.
+    // Гражданская жизнь Говарда Хиннанта.
     let z = seconds.div_euclid(86_400) + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z - era * 146_097;
@@ -444,9 +441,8 @@ fn flag(value: Option<&Value>) -> Option<bool> {
     }
 }
 
-/// Lossy decode of one album / release object. Artists come from
-/// `main_artists`, `artists` (objects or plain names) and `artist`, unique
-/// by name.
+/// Декодирование с потерями одного объекта альбома/релиза. Художники происходят из `main_artists`,
+/// `artists` (объекты или простые имена) и `artist`, уникальных по имени.
 pub fn parse_album(object: &Value) -> Option<Album> {
     let album_id = int(object.get("id")?)?;
     let owner_id = int(object.get("owner_id")?)?;
@@ -489,17 +485,17 @@ pub fn parse_album(object: &Value) -> Option<Album> {
         access_key: text(object.get("access_key")).filter(|k| !k.trim().is_empty()),
         artists,
         year: release_year(object),
-        // VK's playlist objects say `is_following`; older payloads
+        // В объектах списка воспроизведения VK указано `is_following`; более старые полезные нагрузки
         // `is_followed` / `followed`.
         is_followed: ["is_following", "is_followed", "followed"].iter().any(|k| flag(object.get(*k)) == Some(true)),
         follow_hash: text(object.get("follow_hash")).filter(|h| !h.is_empty()),
     })
 }
 
-/// An artist object wherever it sits in a response: a name (or title) and
-/// an id (or `artist_id`, or `domain`). Audio rows and albums also have
-/// both, so those shapes are refused, as is a typed object whose type is
-/// not an artist and that carries no picture.
+/// Объект исполнителя, где бы он ни находился в ответе: имя (или заголовок) и идентификатор (или
+/// `artist_id`, или `domain`). Аудиостроки и альбомы также имеют и то, и другое, поэтому эти формы
+/// отвергаются, как и печатный объект, тип которого не является художником и который не содержит
+/// изображения.
 pub fn parse_artist(object: &Value) -> Option<Artist> {
     let name = text(object.get("name")).or_else(|| text(object.get("title")))?.trim().to_string();
     if name.is_empty() {
@@ -533,7 +529,7 @@ pub fn parse_playlist(object: &Value) -> Option<Playlist> {
             })
         })
         .or_else(|| {
-            // `thumbs` is an array of photo objects.
+            // `thumbs` — массив фотообъектов.
             object.get("thumbs").and_then(Value::as_array).and_then(|list| {
                 list.iter().find_map(|t| {
                     best_photo(t, &["photo_1200", "photo_600", "photo_300", "photo_270"])
@@ -544,7 +540,7 @@ pub fn parse_playlist(object: &Value) -> Option<Playlist> {
     Some(Playlist {
         playlist_id,
         owner_id,
-        // An untitled playlist is still a playlist.
+        // Плейлист без названия по-прежнему остается плейлистом.
         title: text(object.get("title")).unwrap_or_else(|| "Playlist".to_string()),
         description: text(object.get("description")).filter(|d| !d.is_empty()),
         count: object.get("count").and_then(int).unwrap_or(0).max(0) as u32,
@@ -562,8 +558,9 @@ pub fn parse_profile(object: &Value) -> Option<Profile> {
     })
 }
 
-/// Page arithmetic shared by every list method: advance by the raw entry
-/// count, so skipping an ad object never replays the same window.
+/// Страничная арифметика, общая для всех методов списка: продвижение по необработанному количеству
+/// записей, поэтому пропуск рекламного объекта никогда не приводит к повторному воспроизведению того же
+/// окна.
 pub fn next_offset(offset: u32, received: u32, total: u32) -> Option<u32> {
     let consumed = offset.saturating_add(received);
     (received > 0 && consumed < total).then_some(consumed)
@@ -576,7 +573,7 @@ mod tests {
 
     #[test]
     fn track_carries_its_artists_and_album_locator() {
-        // Shape of an `audio.get` item from VK.
+        // Форма предмета `audio.get` из VK.
         let value = json!({
             "artist": "Монеточка, Noize MC", "id": 456239017, "owner_id": -2001859017,
             "title": "Последняя дискотека", "duration": 224, "access_key": "c5d0a0d1d2", "is_explicit": false,
@@ -618,7 +615,7 @@ mod tests {
 
     #[test]
     fn release_from_an_artist_page() {
-        // `audio.getAlbumsByArtist` item.
+        // `audio.getAlbumsByArtist` элемент.
         let value = json!({
             "id": 13859017, "owner_id": -2000859017, "type": 1, "title": " Раскраски для взрослых ",
             "description": "", "count": 13, "is_following": false, "year": 2018, "release_date": 1527800400,

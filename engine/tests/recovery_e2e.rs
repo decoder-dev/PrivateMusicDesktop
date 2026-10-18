@@ -1,6 +1,6 @@
-//! Playback that heals itself when the network or the stream URLs change under
-//! it (a VPN switched on or off): expired URLs, dropped connections, bounded
-//! retries, the pause-with-retry state, downloads that never notice.
+//! Воспроизведение, которое самовосстанавливается при изменении сети или потока URLs под ним (включение
+//! или выключение VPN): истекший URLs, разрыв соединений, ограниченные повторы, состояние паузы с
+//! повтором, загрузки, которые никогда не замечаются.
 
 mod common;
 
@@ -51,9 +51,9 @@ fn session() -> Session {
     }
 }
 
-/// A media server with an `old/` and a `new/` face onto the same HLS files.
-/// `old/` stops serving segments after `old_segments` of them (the signed
-/// URL expired mid-track) and can drop a connection in the middle of a segment.
+/// Медиа-сервер с `old/` и `new/` обращен к одним и тем же файлам HLS. `old/` прекращает обслуживать
+/// сегменты после `old_segments` (срок действия подписанного URL истек в середине дорожки) и может
+/// разорвать соединение в середине сегмента.
 struct Media {
     base: String,
     old_segments: Arc<AtomicUsize>,
@@ -111,8 +111,8 @@ impl Drop for Media {
     }
 }
 
-/// Plain sockets, so a connection can really be cut: promises a whole file,
-/// sends half of the files named in `cut` (once each) and hangs up.
+/// Обычные сокеты, так что соединение действительно можно обрезать: обещает целый файл, отправляет
+/// половину файлов, названных в `cut` (по одному разу) и вешает трубку.
 struct CutMedia {
     base: String,
     requests: Arc<Mutex<Vec<String>>>,
@@ -191,8 +191,8 @@ fn hls_dir() -> tempfile::TempDir {
     dir
 }
 
-/// A fake `api.vk.ru` whose `audio.getById` answers with the `new/` face of
-/// `stream_base`, or with a 503, depending on `healthy`.
+/// Поддельный `api.vk.ru`, `audio.getById` которого отвечает `new/` лицом `stream_base` или цифрой 503,
+/// в зависимости от `healthy`.
 fn fake_vk(stream_url: String, healthy: Arc<AtomicBool>) -> FakeApi {
     FakeApi::start(move |_, body, _| {
         if !healthy.load(Ordering::SeqCst) {
@@ -231,7 +231,7 @@ fn rig(vk_base: &str, speed: f64) -> Rig {
         1.0,
         lab_config(),
     );
-    // Waits shrink fiftyfold; the shape of the schedule stays.
+    // Ожидание сокращается в пятьдесят раз; форма графика сохраняется.
     controller.set_recovery_policy(RecoveryPolicy { time_scale: 0.02, stall_after: Duration::from_secs(100), ..RecoveryPolicy::default() });
     controller.set_session(Some(session()));
     Rig { controller, events, states }
@@ -279,7 +279,7 @@ fn wait_for(what: &str, f: impl Fn() -> bool) {
 fn a_url_that_expires_mid_track_is_replaced_and_playback_continues_from_the_position() {
     if !require_ffmpeg() { return; }
     let dir = hls_dir();
-    // Two of six segments (4 s) come through, then the signed URL "expires".
+    // Проходят два из шести сегментов (4 с), затем знак URL "expires".
     let media = Media::start(dir.path().to_path_buf(), 2);
     let healthy = Arc::new(AtomicBool::new(true));
     let vk = fake_vk(media.url("new"), healthy);
@@ -287,13 +287,13 @@ fn a_url_that_expires_mid_track_is_replaced_and_playback_continues_from_the_posi
     rig.controller.play_tracks(vec![track(1, Some(media.url("old"))), track(2, Some(media.url("new")))], 0);
 
     wait_for("the recovery to be reported", || !rig.recoveries(RecoveryPhase::Recovered).is_empty());
-    // Track 1 ends and track 2 plays through: the queue was never lost.
+    // Трек 1 заканчивается и воспроизводится трек 2: очередь ни разу не потерялась.
     rig.wait_state("the end of the queue", |s| s.status == Status::Idle && s.track.as_ref().map(|t| t.track_id) == Some(2));
 
     assert_eq!(rig.recoveries(RecoveryPhase::Retrying), vec![(1, 3)], "one attempt, from a content failure");
     assert_eq!(vk.call_count("/method/audio.getById"), 1, "exactly one fresh URL asked for");
     assert!(rig.errors().is_empty(), "healing is silent: {:?}", rig.errors());
-    // Playback went on from where it broke, not from the beginning.
+    // Воспроизведение продолжилось с того места, где оно было прервано, а не с самого начала.
     let states = rig.states.lock().unwrap().clone();
     let broke_at = states.iter().filter(|s| s.track.as_ref().map(|t| t.track_id) == Some(1)).map(|s| s.position).fold(0.0, f64::max);
     assert!(broke_at >= 3.0, "the stream broke around 4 s, saw {broke_at}");
@@ -311,8 +311,8 @@ fn the_position_survives_the_recovery() {
     let rig = rig(&vk.base, 6.0);
     rig.controller.play_tracks(vec![track(1, Some(media.url("old")))], 0);
     wait_for("the retry", || !rig.recoveries(RecoveryPhase::Retrying).is_empty());
-    // The first Playing state after the retry starts near the break (6 s of
-    // the 12 s were buffered), never at 0:00.
+    // Первое состояние воспроизведения после повторной попытки начинается около перерыва (6 секунд из
+    // 12 были буферизованы), а не в 0:00.
     let retry_at = rig.states.lock().unwrap().len();
     wait_for("playing again", || rig.states.lock().unwrap().iter().skip(retry_at).any(|s| s.status == Status::Playing));
     let resumed = rig.states.lock().unwrap().iter().skip(retry_at).find(|s| s.status == Status::Playing).map(|s| s.position).unwrap();
@@ -336,7 +336,7 @@ fn a_dead_url_is_not_retried_by_the_fetcher_itself() {
     if !require_ffmpeg() { return; }
     let dir = hls_dir();
     let media = Media::start(dir.path().to_path_buf(), 0);
-    // 403 on every segment: one request each for the first segment, no hammering.
+    // 403 в каждом сегменте: по одному запросу для первого сегмента, без забивки.
     let error = decode_all(&media.url("old")).err().expect("fails");
     assert_eq!(error, pm_engine::Error::Http(403));
     assert_eq!(media.count("index0.ts"), 1);
@@ -365,13 +365,13 @@ fn repeated_connection_failures_are_bounded_then_playback_pauses_and_offers_a_re
     assert_eq!(attempts, vec![1, 2, 3, 4, 5, 6], "six attempts, then it stops");
     assert_eq!(vk.call_count("/method/audio.getById"), 6, "one request per attempt, none extra");
 
-    // It stays stopped: no spinning in the background.
+    // Он остается остановленным: в фоновом режиме не вращается.
     std::thread::sleep(Duration::from_millis(400));
     assert_eq!(vk.call_count("/method/audio.getById"), 6);
     assert_eq!(rig.recoveries(RecoveryPhase::Retrying).len(), 6);
     assert_eq!(rig.controller.state().status, Status::Idle);
 
-    // The user fixes the VPN and presses Retry: a fresh URL, same track.
+    // Пользователь исправляет VPN и нажимает «Повторить»: новый URL, тот же трек.
     healthy.store(true, Ordering::SeqCst);
     rig.controller.retry();
     wait_for("track 1 to play again", || rig.states.lock().unwrap().iter().any(|s| s.status == Status::Playing));
@@ -391,7 +391,7 @@ fn playback_that_gave_up_resumes_by_itself_when_the_network_settles() {
     rig.controller.play_tracks(vec![track(1, Some(cut.base.clone()))], 0);
     wait_for("the pause", || !rig.recoveries(RecoveryPhase::Failed).is_empty());
 
-    // The network comes back: "changed", then "ok" once it holds still.
+    // Сеть возвращается: "changed", затем "ok", как только она замирает.
     healthy.store(true, Ordering::SeqCst);
     rig.controller.on_network(NetState::Changed);
     rig.controller.on_network(NetState::Ok);
@@ -418,8 +418,8 @@ fn a_network_change_makes_cached_urls_stale_and_the_next_track_asks_for_a_fresh_
     assert_eq!(media.count("old/index.m3u8"), 1, "the stale URL was not used again");
 }
 
-/// A driver can stop consuming audio without returning an error. Once the
-/// sink watchdog marks it unhealthy, recovery must reopen it on the same track.
+/// Драйвер может прекратить потребление звука, не возвращая ошибку. Как только сторожевой таймер
+/// раковины отметит его как неработоспособный, восстановление должно снова открыть его по тому же пути.
 struct StalledOutput {
     sink: SimulatedSink,
     stalled: Arc<AtomicBool>,
@@ -488,11 +488,11 @@ fn downloaded_tracks_never_notice_the_network() {
     let saved = track(1, None);
     store.save(&saved, kind, &audio).unwrap();
     rig.controller.set_offline(store);
-    drop(media); // nothing to reach, and VK answers 503 anyway
+    drop(media); // не к чему дотянуться, а VK все равно отвечает на 503
 
     rig.controller.play_tracks(vec![track(1, Some("https://cdn.example/stale.m3u8".into()))], 0);
     rig.wait_state("playing from disk", |s| s.status == Status::Playing);
-    // A VPN is switched on and off while it plays.
+    // VPN включается и выключается во время воспроизведения.
     rig.controller.on_network(NetState::Changed);
     rig.controller.on_network(NetState::Unreachable);
     rig.controller.on_network(NetState::Changed);
@@ -508,7 +508,7 @@ fn downloaded_tracks_never_notice_the_network() {
 fn a_dead_track_is_still_skipped_once_its_fresh_urls_fail_too() {
     if !require_ffmpeg() { return; }
     let dir = hls_dir();
-    // Fresh URLs are as dead as the old one (403 on every segment).
+    // Свежий URLs так же мёртв, как и старый (403 на каждом сегменте).
     let media = Media::start(dir.path().to_path_buf(), 0);
     let vk = fake_vk(media.url("old"), Arc::new(AtomicBool::new(true)));
     let rig = rig(&vk.base, 20.0);
@@ -536,7 +536,7 @@ fn pausing_while_vk_resolves_a_track_rejects_the_late_reply() {
     let rig = rig(&vk.base, 1.0);
     rig.controller.play_tracks(vec![track(1, None)], 0);
     wait_for("the pending URL request", || vk.call_count("/method/audio.getById") == 1);
-    rig.controller.toggle(); // Loading must be cancellable with the same button.
+    rig.controller.toggle(); // Загрузку необходимо отменить той же кнопкой.
     rig.wait_state("cancelled loading", |s| s.status == Status::Idle);
     rig.controller.on_network(NetState::Changed);
     rig.controller.on_network(NetState::Ok);

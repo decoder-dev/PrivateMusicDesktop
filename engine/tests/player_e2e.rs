@@ -1,5 +1,5 @@
-//! The player thread against a simulated sound card: events, pause, seek,
-//! stop, track changes, errors and resampling, all on real HLS from ffmpeg.
+//! Поток проигрывателя на симулируемой звуковой карте: события, пауза, поиск, остановка, отслеживание
+//! изменений, ошибки и повторная выборка, и все это на реальном HLS из ffmpeg.
 
 mod common;
 
@@ -75,7 +75,7 @@ fn plays_a_track_to_its_end_and_resamples_to_the_device() {
     let dir = tempfile::tempdir().unwrap();
     hls(dir.path());
     let server = Server::start(dir.path().to_path_buf());
-    // The device runs at 48 kHz, the track is 44.1 kHz; 20x real time.
+    // Девайс работает на 48 kHz, трек 44.1 kHz; 20x реального времени.
     let rig = rig(48_000, 20.0);
     rig.player.play("1_1", &format!("{}/index.m3u8", server.base), 12.0, 0.0, lab_config());
     rig.wait("the end", |e| e.iter().any(|x| matches!(x, PlayerEvent::Ended { .. })));
@@ -88,7 +88,7 @@ fn plays_a_track_to_its_end_and_resamples_to_the_device() {
     assert!(loading < playing && playing < ended, "{events:?}");
     assert!(!events.iter().any(|e| matches!(e, PlayerEvent::Failed { .. })), "{events:?}");
 
-    // The sink was flushed at the very start only; everything written is the track.
+    // Раковина была смыта только в самом начале; все написанное это трек.
     let pcm = pcm_of(&rig, 48_000);
     assert!((pcm.seconds() - 12.0).abs() < 0.3, "device audio is {} s", pcm.seconds());
     assert!((pcm.frequency(1.0, 5.0) - 440.0).abs() < 10.0);
@@ -133,13 +133,13 @@ fn seek_jumps_and_the_audio_after_it_is_the_right_part() {
     rig.player.play("1_1", &format!("{}/index.m3u8", server.base), 12.0, 0.0, lab_config());
     rig.wait("playing", |e| e.iter().any(|x| matches!(x, PlayerEvent::Playing { .. })));
     rig.player.seek(8.0);
-    // The seek reports the new position at once.
+    // Поиск сразу сообщает о новом положении.
     let start = Instant::now();
     while !(rig.last_position() >= 8.0 && rig.last_position() < 9.5) {
         assert!(start.elapsed() < Duration::from_secs(10), "position after seek: {}", rig.last_position());
         std::thread::sleep(Duration::from_millis(10));
     }
-    // Wait until about a second of the 880 Hz section is in the sink.
+    // Подождите, пока около секунды участка 880 Гц не окажется в стоке.
     let wait = Instant::now();
     while rig.captured.lock().unwrap().len() < 44_100 * 2 {
         assert!(wait.elapsed() < Duration::from_secs(10), "no audio after seek");
@@ -249,7 +249,7 @@ fn a_nan_volume_never_reaches_the_device() {
     rig.player.set_volume(f32::NAN);
     rig.player.set_volume(f32::INFINITY);
     std::thread::sleep(Duration::from_millis(100));
-    // The sink is created lazily at the first Play, so ask the thread to open it.
+    // Приемник создается лениво при первом воспроизведении, поэтому попросите тред открыть его.
     let cut = CutServer::start();
     rig.player.play("1_1", &format!("{}/nothing.m3u8", cut.base), 1.0, 0.0, lab_config());
     let start = Instant::now();

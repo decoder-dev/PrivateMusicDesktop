@@ -12,23 +12,23 @@ use crate::{Error, Result};
 pub const DEFAULT_BASE_URL: &str = "https://api.vk.ru";
 pub const API_VERSION: &str = "5.199";
 
-/// What the API needs from a signed-in user. Held by the app, never logged.
+/// Что нужно API от вошедшего в систему пользователя. Хранится приложением, никогда не регистрируется.
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Session {
     pub access_token: String,
     pub user_id: Option<i64>,
-    /// Unix seconds, when VK told us.
+    /// Unix-секунды, когда нам сообщил VK.
     pub expires_at: Option<i64>,
-    /// Audio methods answer differently depending on the app user agent.
+    /// Аудио-методы отвечают по-разному в зависимости от пользовательского агента приложения.
     pub api_user_agent: String,
-    /// Cookie header used to re-issue the token without a new sign-in.
+    /// Заголовок файла cookie, используемый для повторного выпуска токена без нового входа в систему.
     pub refresh_cookie: String,
     pub web_user_agent: String,
 }
 
 impl std::fmt::Debug for Session {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Secrets must not reach a log line through `{:?}`.
+        // Секреты не должны достигать строки журнала через `{:?}`.
         f.debug_struct("Session")
             .field("user_id", &self.user_id)
             .field("expires_at", &self.expires_at)
@@ -38,16 +38,16 @@ impl std::fmt::Debug for Session {
 
 #[derive(Clone)]
 pub struct VkClient {
-    /// Rebuilt (all pooled connections dropped) after a transport error or a
-    /// network change; clones share it.
+    /// Восстановлено (все соединения в пуле разорваны) после транспортной ошибки или изменения сети;
+    /// клоны разделяют это.
     http: Arc<Pool>,
     base: Url,
     version: String,
 }
 
-/// Seconds to wait before a retry. `Retry-After` is server-controlled text:
-/// only a finite, non-negative number is believed, everything else falls
-/// back to the exponential schedule. Always within 0.2 – 8 s.
+/// Секунды ожидания перед повторной попыткой. `Retry-After` — это текст, управляемый сервером:
+/// считается только конечное неотрицательное число, все остальное возвращается к экспоненциальному
+/// графику. Всегда в пределах 0,2 – 8 с.
 pub fn retry_delay(attempt: u32, retry_after: Option<&str>, jitter: f64) -> f64 {
     let announced = retry_after
         .and_then(|raw| raw.trim().parse::<f64>().ok())
@@ -61,8 +61,8 @@ impl VkClient {
         Self::with_base(DEFAULT_BASE_URL)
     }
 
-    /// `base` must be https. Plain http is accepted only for a loopback host
-    /// so tests can talk to a local server.
+    /// `base` должен быть https. Обычный http принимается только для хоста с обратной связью, поэтому
+    /// тесты могут взаимодействовать с локальным сервером.
     pub fn with_base(base: &str) -> Result<Self> {
         let base = Url::parse(base).map_err(|_| Error::InvalidRequest)?;
         let loopback = matches!(base.host_str(), Some("127.0.0.1" | "localhost" | "::1"));
@@ -73,12 +73,12 @@ impl VkClient {
             reqwest::blocking::Client::builder()
                 .timeout(Duration::from_secs(30))
                 .connect_timeout(Duration::from_secs(15))
-                // A connection idle for long is the one a VPN switch killed:
-                // do not trust it, and let the OS notice dead peers.
+                // Соединение в течение длительного времени простоя - это то, которое отключил
+                // коммутатор VPN: не доверяйте ему и позвольте OS заметить мертвые узлы.
                 .pool_idle_timeout(Duration::from_secs(20))
                 .tcp_keepalive(Duration::from_secs(30))
-                // The token travels in the body: a 307/308 would replay it at
-                // whatever host the response names.
+                // Токен перемещается в теле: 307/308 будет воспроизводить его на любом хосте, на
+                // котором указан ответ.
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .map_err(Error::from)
@@ -86,7 +86,7 @@ impl VkClient {
         Ok(Self { http, base, version: API_VERSION.to_string() })
     }
 
-    /// Forgets every pooled connection: the next call dials again.
+    /// Забывает каждое объединенное соединение: следующий вызов набирает номер снова.
     pub fn reset_connections(&self) {
         net::drop_connections();
     }
@@ -98,28 +98,27 @@ impl VkClient {
         self.base.join(&format!("method/{method}")).map_err(|_| Error::InvalidRequest)
     }
 
-    /// POSTs a VK method and returns the `response` value. Read-only calls
-    /// are retried on transient failures.
+    /// POSTs является методом VK и возвращает значение `response`. Вызовы только для чтения повторяются
+    /// в случае временных сбоев.
     pub fn call(&self, session: &Session, method: &str, params: &[(&str, String)]) -> Result<Value> {
         self.call_with(session, method, params, 3)
     }
 
-    /// For calls that change something (add, delete): a retry after a timeout
-    /// or a 5xx could apply the change twice, so there is exactly one attempt.
+    /// Для вызовов, которые что-то меняют (добавление, удаление): повторная попытка после тайм-аута или
+    /// 5xx может применить изменение дважды, поэтому будет ровно одна попытка.
     pub fn call_once(&self, session: &Session, method: &str, params: &[(&str, String)]) -> Result<Value> {
         self.call_with(session, method, params, 1)
     }
 
-    /// A read that may be tried `attempts` times in all (the caller does its
-    /// own waiting between rounds, as the stream recovery does).
+    /// Чтение, которое может быть выполнено всего `attempts` раз (вызывающая сторона выполняет
+    /// собственное ожидание между раундами, как это делает восстановление потока).
     pub fn call_limited(&self, session: &Session, method: &str, params: &[(&str, String)], attempts: u32) -> Result<Value> {
         self.call_with(session, method, params, attempts.max(1))
     }
 
-    /// After a transport failure the pooled connections are suspect (a VPN
-    /// switch leaves dead sockets behind): drop them so the next request
-    /// dials again. Returns true when the caller should retry now, after the
-    /// back-off has been slept.
+    /// После сбоя транспорта соединения в пуле вызывают подозрение (коммутатор VPN оставляет
+    /// неработающие сокеты): отбросьте их, чтобы следующий запрос набрался снова. Возвращает true,
+    /// когда вызывающий абонент должен повторить попытку сейчас, после того как отсрочка была отложена.
     fn transport_failed(&self, method: &str, error: &Error, attempt: u32, attempts: u32) -> bool {
         if !net::is_connectivity(error) {
             return false;
@@ -176,7 +175,7 @@ impl VkClient {
             let body = match response.text() {
                 Ok(body) => body,
                 Err(err) => {
-                    // The connection died while the answer was coming.
+                    // Соединение прервалось, пока приходил ответ.
                     let mapped = Error::from(err);
                     if self.transport_failed(method, &mapped, attempt, attempts) {
                         continue;
@@ -202,7 +201,7 @@ impl VkClient {
             }
             if let Some(error) = vk_error {
                 let code = vk_code.unwrap_or(0);
-                // 6: too many requests per second, 9: flood control, 10: internal.
+                // 6: слишком много запросов в секунду, 9: контроль флуда, 10: внутренний.
                 if matches!(code, 6 | 9 | 10) && !last {
                     log::info!("{method}: VK error {code}, retrying (attempt {}/{attempts})", attempt + 1);
                     sleep(retry_delay(attempt - 1, None, net::jitter_unit() * 0.3 + 0.85));
@@ -226,7 +225,7 @@ impl VkClient {
             .ok_or_else(|| Error::Format("users.get: empty".into()))
     }
 
-    /// The user's id: from the session, else asked from VK once.
+    /// Идентификатор пользователя: из сеанса, иначе запросили один раз у VK.
     pub fn user_id(&self, session: &Session) -> Result<i64> {
         match session.user_id {
             Some(id) => Ok(id),
@@ -244,8 +243,8 @@ impl VkClient {
         Ok(tracks_page(&value, offset, Some(user)))
     }
 
-    /// Copies a track into the user's "My music". Returns the copy, which has
-    /// its own id and the user as owner.
+    /// Копирует трек в пользовательский «Моя музыка». Возвращает копию, имеющую собственный идентификатор
+    /// и пользователя в качестве владельца.
     pub fn add_track(&self, session: &Session, track: &Track) -> Result<Track> {
         if track.track_id <= 0 || track.owner_id == 0 {
             return Err(Error::InvalidRequest);
@@ -263,7 +262,7 @@ impl VkClient {
         Ok(Track { track_id: id, owner_id: owner, access_key: None, ..track.clone() })
     }
 
-    /// Removes a track from the user's "My music" (`track` is the user's copy).
+    /// Удаляет трек из пользовательского «Моя музыка» (`track` — пользовательская копия).
     pub fn delete_track(&self, session: &Session, track: &Track) -> Result<()> {
         if track.track_id <= 0 || track.owner_id == 0 {
             return Err(Error::InvalidRequest);
@@ -276,14 +275,14 @@ impl VkClient {
         Ok(())
     }
 
-    /// VK's recommendations for the user, or "more like this" when a seed
-    /// track is given (VK's own radio-from-a-track).
+    /// Рекомендации VK для пользователя или «Похожие треки», если задан исходный трек (собственное
+    /// радио-из-трека VK).
     pub fn recommendations(&self, session: &Session, seed: Option<&Track>) -> Result<Vec<Track>> {
         self.recommendations_with(session, seed, false)
     }
 
-    /// The radio's refills: shuffled, like the iOS radio cursor asks, so a
-    /// seed that comes round again does not give the same page twice.
+    /// Пополнения радио: перетасованы, как просит радиокурсор iOS, чтобы повторно пришедшее семя не
+    /// давало одну и ту же страницу дважды.
     pub fn shuffled_recommendations(&self, session: &Session, seed: &Track) -> Result<Vec<Track>> {
         self.recommendations_with(session, Some(seed), true)
     }
@@ -308,17 +307,17 @@ impl VkClient {
         Ok(dedupe(tracks))
     }
 
-    /// One page of the user's personal VK mix (an endless stream).
+    /// Одна страница личного микса VK пользователя (бесконечный поток).
     pub fn mix(&self, session: &Session, offset: u32, count: u32) -> Result<Vec<Track>> {
         self.mix_with_options(session, offset, count, None)
     }
 
-    /// One page of the personal stream with VK tuning options applied.
+    /// Одна страница личного потока с примененными параметрами настройки VK.
     pub fn mix_with_options(&self, session: &Session, offset: u32, count: u32, options: Option<&str>) -> Result<Vec<Track>> {
         self.stream_mix(session, "common", offset, count, options)
     }
 
-    /// One page of a catalogue mix. IDs are validated by the app boundary.
+    /// Одна страница микса каталога. IDs проверяются границей приложения.
     pub fn stream_mix(&self, session: &Session, mix_id: &str, offset: u32, count: u32, options: Option<&str>) -> Result<Vec<Track>> {
         let mut params = vec![
             ("mix_id", mix_id.to_string()),
@@ -334,16 +333,21 @@ impl VkClient {
         Ok(dedupe(found))
     }
 
-    /// What a mix screen or a fresh queue starts with: several pages at once,
-    /// as the iOS app asks (`MixTrackRequestPolicy`: pages of 100 at offsets
-    /// 0, 100, 200, 300), because a stream mix often answers a page with only
-    /// a handful of tracks. Pages that fail are skipped while any other brings
-    /// something; a dead session is reported so the caller renews it.
+    /// С чего начинается экран микса или новая очередь: сразу несколько страниц, как запрашивает
+    /// приложение iOS (`MixTrackRequestPolicy`: страницы по 100 со смещениями 0, 100, 200, 300), потому
+    /// что микс потока часто отвечает на страницу только с несколькими треками. Страницы, которые
+    /// терпят неудачу, пропускаются, в то время как любая другая что-то приносит; сообщается о
+    /// неактивном сеансе, поэтому вызывающий абонент возобновляет его.
     pub fn mix_window(&self, session: &Session, mix_id: &str, options: Option<&str>) -> Result<Vec<Track>> {
-        use crate::radio::{PAGE_SIZE, UPCOMING_LIMIT, WINDOW_PAGES};
+        self.mix_window_at(session, mix_id, options, 0)
+    }
+
+    /// Следующая порция микса; ограничение очереди не обрезает список на экране.
+    pub fn mix_window_at(&self, session: &Session, mix_id: &str, options: Option<&str>, offset: u32) -> Result<Vec<Track>> {
+        use crate::radio::{PAGE_SIZE, WINDOW_PAGES};
         let pages: Vec<Result<Vec<Track>>> = std::thread::scope(|scope| {
             let handles: Vec<_> = (0..WINDOW_PAGES)
-                .map(|page| scope.spawn(move || self.stream_mix(session, mix_id, page * PAGE_SIZE, PAGE_SIZE, options)))
+                .map(|page| scope.spawn(move || self.stream_mix(session, mix_id, offset + page * PAGE_SIZE, PAGE_SIZE, options)))
                 .collect();
             handles.into_iter().map(|h| h.join().unwrap_or(Err(Error::Cancelled))).collect()
         });
@@ -365,20 +369,19 @@ impl VkClient {
                 None => Ok(tracks),
             };
         }
-        tracks.truncate(UPCOMING_LIMIT);
         Ok(tracks)
     }
 
-    /// VK's mood, activity and genre choices for the personal stream mix.
+    /// Настроение, активность и выбор жанра VK для личного микса стрима.
     pub fn mix_settings(&self, session: &Session) -> Result<Value> {
         self.call(session, "audio.getStreamMixSettings", &[("mix_id", "common".into())])
     }
 
-    /// VK's home catalogue mixes, as the iOS client builds them: mixes found
-    /// in the root `catalog.getAudio` payload, plus those of every catalogue
-    /// section that looks like a mix shelf (`catalog.getSection`, at most
-    /// eight, in parallel). The personal `common` mix always comes first, so
-    /// a signed-in user never sees an empty shelf.
+    /// Домашний каталог VK смешивает по мере того, как клиент iOS создает их: миксы, найденные в
+    /// корневой полезной нагрузке `catalog.getAudio`, а также миксы из каждого раздела каталога,
+    /// который выглядит как полка микса (`catalog.getSection`, не более восьми, параллельно).
+    /// Персональный микс `common` всегда стоит на первом месте, поэтому вошедший в систему пользователь
+    /// никогда не увидит пустую полку.
     pub fn catalog_mixes(&self, session: &Session) -> Result<Vec<MusicMix>> {
         let snapshot = self.catalog_snapshot(session, true, false)?;
         let mut mixes = snapshot.mixes;
@@ -395,14 +398,13 @@ impl VkClient {
         Ok(mixes)
     }
 
-    /// The "New releases" shelf, as the iOS client builds it: release-shaped
-    /// albums from the root `catalog.getAudio` payload, and, only when that
-    /// holds none, the albums of the catalogue sections that look like
-    /// release shelves (`catalog.getSection`, at most eight, in parallel).
-    /// A section that fails is dropped; a dead session or network is not.
+    /// Полка «Новые релизы» в том виде, в котором ее строит клиент iOS: альбомы в форме релизов из
+    /// корневой полезной нагрузки `catalog.getAudio` и, только когда ее нет, альбомы разделов каталога,
+    /// которые выглядят как полки релизов (`catalog.getSection`, максимум восемь, параллельно).
+    /// Неисправный раздел удаляется; мертвая сессия или сеть нет.
     pub fn new_releases(&self, session: &Session) -> Result<Vec<Album>> {
         let snapshot = self.catalog_snapshot(session, false, true)?;
-        // An album the window could not open again is not worth a card.
+        // Альбом, окно которого не удалось открыть снова, не стоит и карты.
         let releases: Vec<Album> = snapshot.releases.into_iter().filter(|album| album.album_id > 0).collect();
         if releases.is_empty() {
             log::warn!("catalog new releases: none found; {}", snapshot.shape);
@@ -410,8 +412,8 @@ impl VkClient {
         Ok(releases)
     }
 
-    /// `catalog.getAudio` and the section hydration behind it (iOS
-    /// `catalogSnapshot`). Only what the caller wants is hydrated.
+    /// `catalog.getAudio` и гидратация секции за ним (iOS `catalogSnapshot`). Увлажняется только то,
+    /// что хочет вызывающий абонент.
     fn catalog_snapshot(&self, session: &Session, want_mixes: bool, want_releases: bool) -> Result<CatalogSnapshot> {
         let mut mixes = Vec::new();
         let mut releases = Vec::new();
@@ -426,7 +428,7 @@ impl VkClient {
                 shape = catalog_shape(&root, mixes.len(), releases.len(), &sections);
             }
             Err(error) if is_fatal(&error) => return Err(error),
-            // Section hydration below may still recover usable content.
+            // Гидратация раздела ниже может по-прежнему восстанавливать полезный контент.
             Err(error) => log::warn!("catalog.getAudio failed: {}", error.kind()),
         }
         let mut mixes = dedupe_mixes(mixes);
@@ -440,8 +442,8 @@ impl VkClient {
             for (section, payload) in payloads {
                 collect_mixes(&payload, Some(section.title.trim()), &mut hydrated);
             }
-            // New mixes are appended; one the root already had only gains
-            // what the root lacked (a cover, a subtitle).
+            // Добавлены новые миксы; тот, который уже был в руте, только получил то, чего не хватало
+            // руту (обложка, подзаголовок).
             mixes.extend(hydrated);
             mixes = dedupe_mixes(mixes);
         }
@@ -458,8 +460,8 @@ impl VkClient {
         Ok(CatalogSnapshot { mixes, releases, shape })
     }
 
-    /// `catalog.getSection` for each section, in parallel. A section that
-    /// fails is dropped (and logged by kind); a dead session is not.
+    /// `catalog.getSection` для каждой секции параллельно. Раздел, который потерпел неудачу, удаляется
+    /// (и регистрируется по типу); мертвая сессия - нет.
     fn hydrate<'a>(&self, session: &Session, sections: &[&'a CatalogSection]) -> Result<Vec<(&'a CatalogSection, Value)>> {
         let results: Vec<Result<Value>> = std::thread::scope(|scope| {
             let jobs: Vec<_> = sections
@@ -484,7 +486,7 @@ impl VkClient {
         Ok(payloads)
     }
 
-    /// VK's own plain text for a track's `lyrics_id`.
+    /// Собственный простой текст VK для `lyrics_id` трека.
     pub fn lyrics_text(&self, session: &Session, lyrics_id: i64) -> Result<Option<String>> {
         let value = self.call(session, "audio.getLyrics", &[("lyrics_id", lyrics_id.to_string())])?;
         Ok(value.get("text").and_then(Value::as_str).map(str::to_string))
@@ -518,9 +520,9 @@ impl VkClient {
             &[("owner_id", owner_id.to_string()), ("count", count.to_string()), ("offset", offset.to_string())],
         )?;
         let (entries, raw_count) = collect_entries(&value);
-        // Followed releases come back in the same list; they belong on the
-        // Albums shelf (`followed_albums`), and only the ones VK typed as a
-        // release beyond doubt are left out here.
+        // Последующие выпуски возвращаются в тот же список; им место на полке «Альбомы»
+        // (`followed_albums`), и здесь остаются только те, что VK обозначены как релиз вне всякого
+        // сомнения.
         let items: Vec<Playlist> = entries
             .iter()
             .filter_map(library_entry)
@@ -532,7 +534,7 @@ impl VkClient {
         Ok(Page { items, total, next_offset: model::next_offset(offset, raw_count, total) })
     }
 
-    /// The user's friends (`friends.get`), by name, with their photos.
+    /// Друзья пользователя (`friends.get`) по имени и с их фотографиями.
     pub fn friends(&self, session: &Session, offset: u32, count: u32) -> Result<Page<Profile>> {
         let value = self.call(
             session,
@@ -545,15 +547,15 @@ impl VkClient {
             ],
         )?;
         let (entries, raw_count) = collect_entries(&value);
-        // Deleted or banned accounts come back without a name: not listed.
+        // Удаленные или заблокированные учетные записи возвращаются без имени: их нет в списке.
         let items: Vec<Profile> =
             entries.iter().filter(|entry| entry.get("deactivated").is_none()).filter_map(model::parse_profile).collect();
         let total = value.get("count").and_then(model::int).map(|n| n.max(0) as u32).unwrap_or(0).max(offset + raw_count);
         Ok(Page { items, total, next_offset: model::next_offset(offset, raw_count, total) })
     }
 
-    /// A friend's "My music" (`audio.get` of their id). VK refuses when they
-    /// keep it private; that comes back as the usual VK error.
+    /// «Моя музыка» друга (`audio.get` его идентификатора). VK отказывается, когда они сохраняют
+    /// конфиденциальность; это возвращается как обычная ошибка VK.
     pub fn friend_tracks(&self, session: &Session, owner_id: i64, offset: u32, count: u32) -> Result<Page<Track>> {
         let user = self.user_id(session)?;
         let value = self.call(
@@ -564,7 +566,7 @@ impl VkClient {
         Ok(tracks_page(&value, offset, Some(user)))
     }
 
-    /// A friend's playlists (`audio.getPlaylists` of their id).
+    /// Плейлисты друга (`audio.getPlaylists` его идентификатора).
     pub fn friend_playlists(&self, session: &Session, owner_id: i64, offset: u32, count: u32) -> Result<Page<Playlist>> {
         self.playlists_of(session, owner_id, offset, count)
     }
@@ -602,7 +604,7 @@ impl VkClient {
             "audio.createPlaylist",
             &[("owner_id", user.to_string()), ("title", title.clone()), ("description", description.clone())],
         )?;
-        // VK answers with the new playlist; fill in what it may leave out.
+        // VK отвечает новым плейлистом; заполните то, что может быть упущено.
         let mut playlist = model::parse_playlist(&value).ok_or_else(|| Error::Format("audio.createPlaylist".into()))?;
         playlist.owner_id = user;
         if playlist.title.is_empty() || playlist.title == "Playlist" {
@@ -641,7 +643,7 @@ impl VkClient {
         Ok(())
     }
 
-    /// Adds (`add = true`) or removes a track in one of the user's playlists.
+    /// Добавляет (`add = true`) или удаляет трек в одном из плейлистов пользователя.
     pub fn change_playlist(&self, session: &Session, playlist: &Playlist, track: &Track, add: bool) -> Result<()> {
         self.own_playlist(session, playlist)?;
         if track.track_id <= 0 || track.owner_id == 0 {
@@ -680,9 +682,9 @@ impl VkClient {
         Ok(tracks_page(&value, offset, session.user_id))
     }
 
-    /// Artists matching a query (`audio.searchArtists`). The answer is
-    /// `{count, items}` but has also come back nested, so every artist-shaped
-    /// object is collected wherever it sits.
+    /// Исполнители, соответствующие запросу (`audio.searchArtists`). Ответ — `{count, items}`, но он
+    /// также вернулся вложенным, поэтому каждый объект в форме художника собирается там, где он
+    /// находится.
     pub fn search_artists(&self, session: &Session, query: &str, offset: u32, count: u32) -> Result<Vec<Artist>> {
         let value = self.call(
             session,
@@ -694,14 +696,14 @@ impl VkClient {
         Ok(dedupe_by(found, |a| a.id.clone()))
     }
 
-    /// The artist VK's search ranks as the one meant by `name`, if any.
+    /// Поиск исполнителя VK приравнивается к запросу `name`, если таковой имеется.
     pub fn find_artist(&self, session: &Session, name: &str) -> Result<Option<Artist>> {
         let candidates = self.search_artists(session, name, 0, 8)?;
         Ok(best_artist_match(candidates, name))
     }
 
-    /// An artist's tracks: `audio.getAudiosByArtist`, and VK's catalogue
-    /// artist page when that is refused or empty.
+    /// Треки исполнителя: `audio.getAudiosByArtist` и страница исполнителя в каталоге VK, если она
+    /// отклонена или пуста.
     pub fn artist_tracks(&self, session: &Session, artist_id: &str, offset: u32, count: u32) -> Result<Page<Track>> {
         let user = session.user_id;
         match self.call(
@@ -732,10 +734,10 @@ impl VkClient {
         )
     }
 
-    /// An artist's releases. `audio.getAlbumsByArtist` is the list; the
-    /// catalogue artist page fills in what its entries lack (keys, covers)
-    /// and replaces the list when every entry is a bare stub. The catalogue
-    /// also names the artist with a photo, which the list never does.
+    /// Релизы художника. `audio.getAlbumsByArtist` — список; страница исполнителя каталога заполняет
+    /// то, чего не хватает в ее записях (ключи, обложки), и заменяет список, когда каждая запись
+    /// представляет собой пустую заглушку. В каталоге также указан художник с фотографией, чего в
+    /// списке нет.
     pub fn artist_albums(&self, session: &Session, artist_id: &str, offset: u32, count: u32) -> Result<ArtistAlbums> {
         let mut list: Vec<Album> = Vec::new();
         let mut list_total: Option<u32> = None;
@@ -775,11 +777,10 @@ impl VkClient {
         Ok(Page { items, total, next_offset: model::next_offset(offset, raw_count, total) })
     }
 
-    /// The releases the user follows: `audio.getPlaylists` with
-    /// `filters=albums`. `filters` is a union of categories, not a chain of
-    /// qualifiers (`followed,albums` would add every playlist saved from
-    /// someone else), so it names only `albums`; anything VK still marks as
-    /// person-made is left out.
+    /// Пользовательские версии следующие: `audio.getPlaylists` с `filters=albums`. `filters` — это
+    /// объединение категорий, а не цепочка квалификаторов (`followed,albums` будет добавлять каждый
+    /// плейлист, сохраненный от кого-то другого), поэтому он называет только `albums`; все, что VK
+    /// помечает как рукотворное, не учитывается.
     pub fn followed_albums(&self, session: &Session, offset: u32, count: u32) -> Result<Page<Album>> {
         let mut params = vec![("count", count.to_string()), ("offset", offset.to_string()), ("filters", "albums".to_string())];
         if let Ok(user) = self.user_id(session) {
@@ -795,8 +796,8 @@ impl VkClient {
             .collect();
         let total = value.get("count").and_then(model::int).map(|n| n.max(0) as u32).unwrap_or(offset + raw_count);
         let total = total.max(offset + raw_count);
-        // A full page always continues: VK's `count` for this list does not
-        // always describe the same set as `items`.
+        // Всегда продолжается полная страница: `count` VK в этом списке не всегда описывает тот же
+        // набор, что и `items`.
         let next_offset = match raw_count {
             0 => None,
             n if n >= count => Some(offset + n),
@@ -805,8 +806,8 @@ impl VkClient {
         Ok(Page { items, total, next_offset })
     }
 
-    /// `album` with a usable `access_key` when it is a community release
-    /// that needs one. Unchanged when it already has one or a person owns it.
+    /// `album` с пригодным для использования `access_key`, когда он требуется для выпуска сообщества.
+    /// Не изменяется, если он уже есть или им владеет человек.
     pub fn resolved_album(&self, session: &Session, album: &Album) -> Result<Album> {
         if !album.needs_access_key() {
             return Ok(album.clone());
@@ -814,13 +815,11 @@ impl VkClient {
         Ok(self.resolve_album_access_key(session, album, false)?.unwrap_or_else(|| album.clone()))
     }
 
-    /// One page of an album's tracks, and the album as VK described it.
+    /// Одна страница треков альбома и описание альбома как VK.
     ///
-    /// `execute.getPlaylist`, then `audio.get` for sessions that reject the
-    /// former. When access is denied the key is looked up again through
-    /// search; when the playlist methods still refuse (or answer empty), the
-    /// album is put together from public `audio.search` hits that belong to
-    /// it.
+    /// `execute.getPlaylist`, затем `audio.get` для сеансов, которые отклоняют первый. Если в доступе
+    /// отказано, ключ снова ищется посредством поиска; когда методы плейлиста по-прежнему отказываются
+    /// (или отвечают пусто), альбом собирается из принадлежащих ему публичных хитов `audio.search`.
     pub fn album_tracks(&self, session: &Session, album: &Album, offset: u32, count: u32) -> Result<AlbumTracks> {
         let effective = self.resolved_album(session, album)?;
         let mut last_error = None;
@@ -875,8 +874,8 @@ impl VkClient {
         }
         match self.call(session, "execute.getPlaylist", &params) {
             Ok(value) => {
-                // VK describes the playlist next to its audios; what it says
-                // (cover, year, follow state, size) beats what the window had.
+                // VK описывает список воспроизведения рядом с его аудиозаписями; то, что там написано
+                // (обложка, год, состояние, размер), превосходит то, что было на окне.
                 let described = value
                     .get("playlist")
                     .and_then(model::parse_album)
@@ -905,8 +904,8 @@ impl VkClient {
                 }
             }
             Err(error) if is_fatal(&error) || is_access_denied(&error) => return Err(error),
-            // Older sessions can reject execute.getPlaylist; the plain album
-            // query below still works for them.
+            // Более старые сессии могут отклонять execute.getPlaylist; простой запрос альбома ниже все
+            // еще работает для них.
             Err(error) => log::debug!("execute.getPlaylist: {}, trying audio.get", error.kind()),
         }
         let mut params = vec![
@@ -922,9 +921,9 @@ impl VkClient {
         Ok(AlbumTracks { album: album.clone(), tracks: tracks_page(&value, offset, user) })
     }
 
-    /// Finds an `access_key` for `album`: `audio.getPlaylistById` when a key
-    /// or a person owner makes that possible, else the best match among
-    /// `audio.searchAlbums` results for its title and artist.
+    /// Находит `access_key` для `album`: `audio.getPlaylistById`, когда ключ или владелец человека
+    /// делают это возможным, в противном случае лучшее совпадение среди результатов
+    /// `audio.searchAlbums` для его названия и исполнителя.
     fn resolve_album_access_key(&self, session: &Session, album: &Album, force_search: bool) -> Result<Option<Album>> {
         if !force_search && album.usable_access_key().is_some() {
             return Ok(Some(album.clone()));
@@ -955,8 +954,8 @@ impl VkClient {
         model::parse_album(&value).ok_or_else(|| Error::Format("audio.getPlaylistById".into()))
     }
 
-    /// When the playlist methods deny access, a usable track list is
-    /// rebuilt from public `audio.search` results that belong to the album.
+    /// Когда методы списка воспроизведения запрещают доступ, пригодный для использования список треков
+    /// перестраивается из общедоступных результатов `audio.search`, принадлежащих альбому.
     fn album_tracks_via_search(&self, session: &Session, album: &Album, offset: u32, count: u32) -> Result<Page<Track>> {
         let mut collected: Vec<Track> = Vec::new();
         let append = |collected: &mut Vec<Track>, tracks: Vec<Track>, soft_artist_match: bool| {
@@ -970,22 +969,22 @@ impl VkClient {
         let wanted = (count + offset).max(40) as usize;
         for query in album_search_queries(album) {
             let page = self.search(session, &query, 0, 100)?;
-            // Search often leaves `album_title` out; for a query that already
-            // names the album, the artist matching is enough.
+            // Поиск часто не учитывает `album_title`; для запроса, в котором уже назван альбом,
+            // достаточно сопоставления исполнителя.
             let names_title = model::is_usable_title(&album.title) && fold(&query).contains(&fold(&album.title));
             append(&mut collected, page.items, names_title);
             if collected.len() >= wanted {
                 break;
             }
         }
-        // A key that search turned up may open the playlist after all.
+        // Ключ, который нашелся при поиске, все-таки может открыть плейлист.
         if collected.len() < 8 && album.usable_access_key().is_some() {
             if let Ok(found) = self.fetch_album_tracks(session, album, 0, (count + offset).max(100)) {
                 append(&mut collected, found.tracks.items, false);
             }
         }
-        // The artist's own tracks are a second public source when title
-        // search is thin.
+        // Собственные треки исполнителя являются вторым общедоступным источником, когда поиск названий
+        // скуден.
         if collected.len() < 8 {
             if let Some(name) = album.artist_names().next() {
                 let artist = self.search_artists(session, name, 0, 5).ok().and_then(|list| list.into_iter().next());
@@ -994,8 +993,8 @@ impl VkClient {
                 }
             }
         }
-        // Last resort: artist-matched hits for the title alone, and failing
-        // even that, the top hits, so a known title does not open empty.
+        // В крайнем случае: хиты, соответствующие исполнителю, только по заголовку, а в противном
+        // случае - лучшие хиты, поэтому известное название не открывается пустым.
         if collected.is_empty() && model::is_usable_title(&album.title) {
             let page = self.search(session, &album.title, 0, 100)?;
             append(&mut collected, page.items.clone(), true);
@@ -1009,9 +1008,9 @@ impl VkClient {
         Ok(slice_page(collected, offset, count))
     }
 
-    /// Saves a release to the user's albums, or takes it out. VK has no
-    /// `audio.unfollowPlaylist`: removing a followed album is the same
-    /// `audio.deletePlaylist` call as deleting one's own playlist.
+    /// Сохраняет релиз в альбомы пользователя или удаляет его. VK не ​​имеет `audio.unfollowPlaylist`:
+    /// удаление следующего альбома — это тот же вызов `audio.deletePlaylist`, что и удаление
+    /// собственного плейлиста.
     pub fn follow_album(&self, session: &Session, album: &Album, follow: bool) -> Result<()> {
         let mut params = vec![("owner_id", album.owner_id.to_string()), ("playlist_id", album.album_id.to_string())];
         if let Some(hash) = album.follow_hash.as_deref().filter(|h| !h.is_empty()) {
@@ -1025,16 +1024,15 @@ impl VkClient {
         Ok(())
     }
 
-    /// Fresh stream URL for one track (`audio.getById`). Done right before
-    /// play when the URL we hold may have expired.
+    /// Свежий стрим URL на один трек (`audio.getById`). Делается прямо перед игрой, когда срок действия
+    /// имеющегося у нас URL может истек.
     pub fn refreshed_track(&self, session: &Session, track: &Track) -> Result<Track> {
         self.refreshed_track_with(session, track, 3)
     }
 
-    /// Like [`refreshed_track`](Self::refreshed_track) with a single request:
-    /// the stream recovery loop spaces its own attempts, and retrying here as
-    /// well would multiply one outage into many requests (the iOS app does
-    /// the same for its `playbackRecovery` policy).
+    /// Как и [`refreshed_track`](Self::refreshed_track) с одним запросом: цикл восстановления потока
+    /// распределяет свои собственные попытки, и повторная попытка здесь также умножит один сбой на
+    /// множество запросов (приложение iOS делает то же самое для своей политики `playbackRecovery`).
     pub fn refreshed_track_once(&self, session: &Session, track: &Track) -> Result<Track> {
         self.refreshed_track_with(session, track, 1)
     }
@@ -1054,30 +1052,29 @@ impl VkClient {
     }
 }
 
-/// An artist's releases and, when the catalogue named them, the artist.
+/// Релизы художника и, если они указаны в каталоге, художник.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ArtistAlbums {
     pub artist: Option<Artist>,
     pub albums: Page<Album>,
 }
 
-/// A page of an album's tracks and the album as VK described it (with the
-/// key that opened it).
+/// Страница с треками альбома и описанием альбома как VK (с ключом, открывающим его).
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct AlbumTracks {
     pub album: Album,
     pub tracks: Page<Track>,
 }
 
-/// What the album screen shows instead of VK's own refusal text.
+/// Что показывает экран альбома вместо собственного текста отказа VK.
 const ALBUM_DENIED: &str = "Could not load this album's tracks. Try again or find it in search.";
 
-/// Failures no fallback can help with: a dead session or no network.
+/// Сбои, при которых никакой резервный вариант не может помочь: мертвый сеанс или отсутствие сети.
 fn is_fatal(error: &Error) -> bool {
     matches!(error, Error::Unauthorized | Error::Offline | Error::Timeout | Error::Transport(_) | Error::Cancelled)
 }
 
-/// VK refusing audio of someone else's playlist.
+/// VK отказывается от аудио из чужого плейлиста.
 fn is_access_denied(error: &Error) -> bool {
     let Error::Vk { code, message } = error else { return false };
     if matches!(code, 15 | 201 | 203 | 204) {
@@ -1099,7 +1096,7 @@ fn dedupe_by<T, K: Eq + std::hash::Hash>(items: Vec<T>, key: impl Fn(&T) -> K) -
     items.into_iter().filter(|item| seen.insert(key(item))).collect()
 }
 
-/// Lower case, trimmed, ё as е: for comparing names VK spells loosely.
+/// Нижний регистр, обрезанный, ё как е: для сравнения имен VK пишется свободно.
 fn fold(text: &str) -> String {
     text.trim().to_lowercase().replace('ё', "е")
 }
@@ -1108,9 +1105,8 @@ fn names_match(a: &str, b: &str) -> bool {
     a == b || a.contains(b) || b.contains(a)
 }
 
-/// Artist from search to use for a name: an exact match, else one of a
-/// collaboration's parts, else a close prefix (at least three letters and
-/// most of the name).
+/// Исполнитель из поиска для использования имени: точное совпадение, иначе одна из частей коллаборации,
+/// иначе близкий префикс (минимум три буквы и большая часть имени).
 fn best_artist_match(candidates: Vec<Artist>, name: &str) -> Option<Artist> {
     let target = fold(name);
     let score = |candidate: &str| -> u32 {
@@ -1151,11 +1147,10 @@ fn collaboration_parts(value: &str) -> Vec<String> {
     parts.iter().map(|p| fold(p)).filter(|p| !p.is_empty()).collect()
 }
 
-/// The page of releases an artist screen shows. The list from
-/// `audio.getAlbumsByArtist` has the offset applied already, so it is only
-/// enriched from the catalogue, never extended or sliced again. When the
-/// list is empty, or holds only stubs with neither a cover nor a size, the
-/// catalogue replaces it.
+/// Страница релизов, на которой отображается экран исполнителя. К списку из `audio.getAlbumsByArtist`
+/// уже применено смещение, поэтому он только пополняется из каталога и никогда больше не расширяется и
+/// не разрезается. Если список пуст или содержит только заглушки без обложки и размера, каталог
+/// заменяет его.
 fn artist_album_page(list: Vec<Album>, list_total: Option<u32>, catalog: Vec<Album>, offset: u32, count: u32) -> Page<Album> {
     let incomplete = |a: &Album| a.count == 0 && a.artwork_url.is_none();
     let prefer_catalog = !catalog.is_empty() && list.iter().all(incomplete);
@@ -1174,10 +1169,10 @@ fn artist_album_page(list: Vec<Album>, list_total: Option<u32>, catalog: Vec<Alb
     slice_page(catalog, offset, count)
 }
 
-/// Most catalogue sections hydrated for one shelf.
+/// Большинство разделов каталога сведены под одну полку.
 const HYDRATION_LIMIT: usize = 8;
 
-/// A section of the catalogue as `catalog.getAudio` lists them.
+/// Они перечислены в разделе каталога под названием `catalog.getAudio`.
 struct CatalogSection {
     id: String,
     title: String,
@@ -1185,7 +1180,7 @@ struct CatalogSection {
 }
 
 impl CatalogSection {
-    /// Title and url, lower case: what the markers are matched against.
+    /// Заголовок и URL-адрес, строчные буквы: с чем сопоставляются маркеры.
     fn blob(&self) -> String {
         format!("{} {}", self.title, self.url.as_deref().unwrap_or("")).to_lowercase()
     }
@@ -1207,24 +1202,25 @@ impl CatalogSection {
     }
 }
 
-/// One entry per section id, in order; ids that could not be sent are dropped.
+/// Одна запись для каждого идентификатора раздела по порядку; идентификаторы, которые не удалось
+/// отправить, удаляются.
 fn unique_sections(sections: &mut Vec<CatalogSection>) {
     let mut seen = std::collections::HashSet::new();
     sections.retain(|s| s.id.len() <= 512 && !s.id.chars().any(char::is_control) && seen.insert(s.id.clone()));
 }
 
-/// What `catalog.getAudio` and its hydrated sections gave.
+/// Что дал `catalog.getAudio` и его гидратированные разделы.
 struct CatalogSnapshot {
     mixes: Vec<MusicMix>,
     releases: Vec<Album>,
-    /// Structure of the root answer, for the log when a shelf comes out empty.
+    /// Структура корневого ответа, для журнала, когда полка оказывается пустой.
     shape: String,
 }
 
 const COMMON_MIX_ID: &str = "common";
 
-/// The personal stream, titled as the app names it. VK's own wording for it
-/// varies ("Мой микс", "VK Микс"), so it is always replaced with this.
+/// Персональный поток, названный так, как его называет приложение. Собственная формулировка VK
+/// варьируется ("Мой микс", "VK Микс"), поэтому она всегда заменяется этой.
 fn common_mix() -> MusicMix {
     MusicMix {
         id: COMMON_MIX_ID.into(),
@@ -1236,7 +1232,7 @@ fn common_mix() -> MusicMix {
     }
 }
 
-/// Mixes unique by id and tuning; a repeat only fills what the first lacked.
+/// Миксы уникальные по id и настройке; повтор лишь восполняет то, чего не хватало первому.
 fn dedupe_mixes(mixes: Vec<MusicMix>) -> Vec<MusicMix> {
     let mut out: Vec<MusicMix> = Vec::new();
     for mix in mixes {
@@ -1261,8 +1257,8 @@ fn dedupe_mixes(mixes: Vec<MusicMix>) -> Vec<MusicMix> {
     out
 }
 
-/// A public catalogue label, safe for the log: no control characters, no
-/// long digit runs (a url may carry a user id), cut short.
+/// Метка общедоступного каталога, безопасная для журнала: без управляющих символов, без длинных цифр
+/// (URL-адрес может содержать идентификатор пользователя), обрезанная.
 fn shown(text: &str) -> String {
     let mut out = String::new();
     let mut digits = 0;
@@ -1284,8 +1280,8 @@ fn shown(text: &str) -> String {
     out
 }
 
-/// The structure of a catalogue answer and nothing else: key names, counts,
-/// public section labels and block data types. No ids, tokens or raw text.
+/// Структура ответа каталога и ничего больше: имена ключей, счетчики, метки общедоступных разделов и
+/// типы данных блоков. Никаких идентификаторов, токенов или необработанного текста.
 fn catalog_shape(root: &Value, mixes: usize, albums: usize, sections: &[CatalogSection]) -> String {
     fn walk(value: &Value, depth: u8, blocks: &mut usize, kinds: &mut std::collections::BTreeSet<String>, mix_keys: &mut std::collections::BTreeSet<String>) {
         if depth > 24 {
@@ -1335,8 +1331,8 @@ fn catalog_shape(root: &Value, mixes: usize, albums: usize, sections: &[CatalogS
     )
 }
 
-/// A real section id is not just a number: `-2000123456` is an
-/// owner-negated object id, so a single leading minus is ignored first.
+/// Реальный идентификатор раздела — это не просто число: `-2000123456` — это идентификатор объекта,
+/// отрицающий владельца, поэтому сначала игнорируется один ведущий минус.
 fn is_section_id(id: &str) -> bool {
     let id = id.trim();
     let digits = id.strip_prefix('-').unwrap_or(id);
@@ -1355,8 +1351,8 @@ fn catalog_section(value: &Value) -> Option<CatalogSection> {
         || kind.to_lowercase().contains("section")
         || object.contains_key("blocks")
         || object.contains_key("next_from");
-    // The loose clause: a title and a url describe a playlist or an album as
-    // well as a section, so there the id itself has to look like a section's.
+    // Свободное предложение: заголовок и URL-адрес описывают плейлист или альбом, а также раздел,
+    // поэтому сам идентификатор должен выглядеть как идентификатор раздела.
     let titled_link = object.contains_key("title") && url.is_some() && is_section_id(&id);
     if !(looks_like_section || titled_link) {
         return None;
@@ -1365,8 +1361,8 @@ fn catalog_section(value: &Value) -> Option<CatalogSection> {
     Some(CatalogSection { id, title, url })
 }
 
-/// Sections listed anywhere in a catalogue response (`catalog.sections`,
-/// `sections`, or section-shaped objects).
+/// Разделы, перечисленные в любом месте ответа каталога (`catalog.sections`, `sections` или объекты в
+/// форме разделов).
 fn collect_catalog_sections(value: &Value, out: &mut Vec<CatalogSection>) {
     fn visit(value: &Value, out: &mut Vec<CatalogSection>, depth: u8) {
         if depth > 64 {
@@ -1388,9 +1384,8 @@ fn collect_catalog_sections(value: &Value, out: &mut Vec<CatalogSection>) {
     visit(value, out, 0);
 }
 
-/// Release-shaped objects anywhere in a catalogue response. Audio rows also
-/// carry an id, owner, title and `main_artists`, so a `duration` rules an
-/// object out.
+/// Объекты в форме выпуска в любом месте ответа каталога. Строки аудио также содержат идентификатор,
+/// владельца, заголовок и `main_artists`, поэтому `duration` исключает объект.
 fn collect_albums(value: &Value, out: &mut Vec<Album>) {
     match value {
         Value::Array(list) => list.iter().for_each(|v| collect_albums(v, out)),
@@ -1423,8 +1418,8 @@ fn collect_artists(value: &Value, out: &mut Vec<Artist>) {
     }
 }
 
-/// The artist a catalogue artist page is about: its `artists` block, the
-/// requested id first.
+/// Артист, о котором идет страница исполнителя в каталоге: его блок `artists`, сначала запрошенный
+/// идентификатор.
 fn catalog_artist(value: &Value, artist_id: &str) -> Option<Artist> {
     let mut found = Vec::new();
     collect_artists(value.get("artists").unwrap_or(&Value::Null), &mut found);
@@ -1432,8 +1427,8 @@ fn catalog_artist(value: &Value, artist_id: &str) -> Option<Artist> {
     Some(found.swap_remove(index))
 }
 
-/// The playlist object a list entry is, or wraps (`playlist`, `album`,
-/// `audio_playlist`). Objects with a `duration` are audio rows.
+/// Объект списка воспроизведения, которым является запись списка, или его оболочка (`playlist`,
+/// `album`, `audio_playlist`). Объекты с `duration` являются звуковыми строками.
 fn library_entry(value: &Value) -> Option<&Value> {
     let is_entry = |v: &Value| v.get("id").is_some() && v.get("owner_id").is_some() && v.get("duration").is_none();
     for key in ["playlist", "album", "audio_playlist"] {
@@ -1444,8 +1439,8 @@ fn library_entry(value: &Value) -> Option<&Value> {
     is_entry(value).then_some(value)
 }
 
-/// Marks only a person-made list carries: an `original` (saved from
-/// someone else) or an `album_type` of `playlist` / `collection`.
+/// Пометки несет только составленный человеком список: `original` (сохраненный от кого-то другого) или
+/// `album_type` из `playlist`/`collection`.
 fn has_playlist_marker(entry: &Value) -> bool {
     if entry.get("original").is_some_and(Value::is_object) {
         return true;
@@ -1454,11 +1449,10 @@ fn has_playlist_marker(entry: &Value) -> bool {
     matches!(kind.as_str(), "playlist" | "collection")
 }
 
-/// A followed release in the plain `audio.getPlaylists` list, beyond doubt:
-/// VK typed it as a release, named its artists, and dated it (or flagged it
-/// `type: 1`), with no playlist marker. VK stamps release-like metadata on
-/// ordinary playlists too, so anything less stays a playlist: an extra card
-/// is a blemish, a playlist that vanishes is a bug.
+/// Последующий релиз в простом списке `audio.getPlaylists`, вне всякого сомнения: VK напечатал его как
+/// релиз, назвал исполнителей и датировал его (или пометил как `type: 1`), без маркера плейлиста. VK
+/// также добавляет метаданные, подобные выпуску, в обычные плейлисты, поэтому все, что меньше, остается
+/// плейлистом: лишняя карта — это недостаток, а исчезающий плейлист — ошибка.
 fn looks_like_followed_album(entry: &&Value) -> bool {
     let kind = entry.get("album_type").and_then(Value::as_str).unwrap_or("").to_lowercase();
     let release = matches!(kind.as_str(), "album" | "single" | "ep" | "compilation" | "main_only");
@@ -1471,8 +1465,8 @@ fn looks_like_followed_album(entry: &&Value) -> bool {
     1 + u32::from(dated) + u32::from(typed) >= 2
 }
 
-/// Searches that may find an album: "title artist", "artist title", the
-/// title, the artist.
+/// Поисковые запросы, по которым можно найти альбом: "title artist", "artist title", название,
+/// исполнитель.
 fn album_search_queries(album: &Album) -> Vec<String> {
     let title = album.title.trim();
     let artist = album.artist_names().next().map(str::trim).unwrap_or("");
@@ -1490,9 +1484,9 @@ fn album_search_queries(album: &Album) -> Vec<String> {
     dedupe_by(queries, |q| q.to_lowercase())
 }
 
-/// The search result that is `album`: the same id (with a key if one has
-/// it), else the same title by one of its artists, else the same title,
-/// keyed results first.
+/// Результатом поиска является `album`: тот же идентификатор (с ключом, если он есть), в противном
+/// случае то же название одного из его исполнителей, в противном случае то же название, сначала
+/// результаты с ключом.
 fn preferred_album_match<'a>(candidates: &'a [Album], album: &Album) -> Option<&'a Album> {
     let keyed = |a: &&Album| a.usable_access_key().is_some();
     let same: Vec<&Album> = candidates.iter().filter(|c| c.id() == album.id()).collect();
@@ -1518,8 +1512,8 @@ fn preferred_album_match<'a>(candidates: &'a [Album], album: &Album) -> Option<&
     titled.iter().copied().find(keyed).or(titled.first().copied()).or_else(|| candidates.iter().find(keyed))
 }
 
-/// A search hit is on `album` when VK says so, or when its album title
-/// matches and so does the artist (or the album names none).
+/// Поисковый результат попадает на `album`, когда VK говорит об этом, или когда название его альбома
+/// совпадает, а также совпадает с исполнителем (или в названии альбома нет названия).
 fn track_belongs(track: &Track, album: &Album) -> bool {
     if track.album.as_ref().is_some_and(|r| r.album_id == album.album_id && r.owner_id == album.owner_id) {
         return true;
@@ -1575,9 +1569,9 @@ fn scalar_text(value: Option<&Value>) -> Option<String> {
     })
 }
 
-/// Every stream-mix tile anywhere in a catalogue answer (iOS `collectMixes`):
-/// an object with a `mix_id`, or typed `…stream_mix…`. A tile without a title
-/// still counts. `section` is the official shelf it was found in.
+/// Каждая плитка микширования потоков в любом месте каталога отвечает (iOS `collectMixes`): объект с
+/// `mix_id` или типизированный `…stream_mix…`. Плитка без названия по-прежнему засчитывается. `section`
+/// — официальная полка, на которой он был найден.
 fn collect_mixes(value: &Value, section: Option<&str>, out: &mut Vec<MusicMix>) {
     fn visit(value: &Value, section: Option<&str>, out: &mut Vec<MusicMix>, depth: u8) {
         if depth > 64 {
@@ -1616,8 +1610,7 @@ fn collect_mixes(value: &Value, section: Option<&str>, out: &mut Vec<MusicMix>) 
     visit(value, section, out, 0);
 }
 
-/// `mix_options` / `options` of a tunable tile: a non-empty string, or an
-/// object re-encoded compactly.
+/// `mix_options`/`options` настраиваемого тайла: непустая строка или компактно перекодированный объект.
 fn mix_options(value: &Value) -> Option<String> {
     match value {
         Value::String(raw) if !raw.is_empty() && raw.len() <= 8_192 => Some(raw.clone()),
@@ -1626,8 +1619,8 @@ fn mix_options(value: &Value) -> Option<String> {
     }
 }
 
-/// A picture inside a cover-like object: the usual sizes first, then
-/// whatever it nests (iOS `firstRemoteURL`).
+/// Изображение внутри объекта, похожего на крышку: сначала обычные размеры, затем все вложенное (iOS
+/// `firstRemoteURL`).
 fn first_remote_url(object: &serde_json::Map<String, Value>, depth: u8) -> Option<String> {
     for key in ["photo_1200", "photo_600", "photo_300", "photo_270", "cover_url", "url"] {
         if let Some(url) = object.get(key).and_then(Value::as_str).and_then(crate::unmask::secure_remote_url) {
@@ -1657,8 +1650,8 @@ fn first_remote_url(object: &serde_json::Map<String, Value>, depth: u8) -> Optio
     None
 }
 
-/// The mix tile's own cover (iOS `mixCoverURL`): never the avatar of a
-/// nested owner. A cover given as a list of pictures is read too.
+/// Собственная обложка микс-тайла (iOS `mixCoverURL`): никогда не является аватаром вложенного
+/// владельца. Также читается обложка в виде списка картинок.
 fn mix_cover(object: &serde_json::Map<String, Value>) -> Option<String> {
     const KEYS: [&str; 11] = ["photo_1200", "photo_600", "photo_300", "photo_270", "cover_url", "thumb_url", "image", "cover", "icon", "background_image_url", "background_url"];
     let from_list = |list: &Vec<Value>| {
@@ -1698,8 +1691,8 @@ fn tracks_page(value: &Value, offset: u32, user: Option<i64>) -> Page<Track> {
     Page { items, total, next_offset: model::next_offset(offset, raw_count, total) }
 }
 
-/// The entries of a list response and how many raw entries it held. The
-/// response is `{count, items:[…]}` or, for some methods, a bare array.
+/// Записи ответа списка и количество необработанных записей, которые он содержал. Ответом будет
+/// `{count, items:[…]}` или, для некоторых методов, пустой массив.
 fn collect_entries(value: &Value) -> (Vec<Value>, u32) {
     let list = match value {
         Value::Array(list) => list.clone(),

@@ -1,16 +1,16 @@
 <#
 .SYNOPSIS
-  Checks that installing a newer Private Music over an older one keeps the
-  signed-in session and the app's data, the way a user's update does.
+Проверяет, что при установке более новой версии Private Music поверх старой сохраняется сеанс входа в
+систему и данные приложения так же, как это происходит при обновлении пользователя.
 
 .DESCRIPTION
-  scripts\upgrade-check.ps1 -Old <old setup.exe> -New <new setup.exe>
+scripts\upgrade-check.ps1 -Старый <старый setup.exe> -Новый <новый setup.exe>
 
-  Installs OLD silently, plants markers where the app keeps things (the secret
-  the sign-in lives in, and the app data folders), installs NEW over it
-  silently and fails if a marker is gone, the version did not change to NEW's,
-  or the program is missing. Meant for CI (it changes the current user's
-  installed programs and Credential Manager).
+Устанавливает OLD автоматически, устанавливает маркеры там, где приложение хранит данные (секрет, в
+котором хранится вход в систему, и папки данных приложения), устанавливает NEW поверх него
+автоматически и завершается сбоем, если маркер пропал, версия не изменилась на версию NEW или
+программа отсутствует. Предназначен для CI (меняет установленные у текущего пользователя программы и
+диспетчер учетных данных).
 #>
 [CmdletBinding()]
 param(
@@ -21,7 +21,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $AppName = 'Private Music'
 $AppId = 'com.dec.privatemusic2.desktop'
-$Target = "vk-session.$AppId"   # where the keyring crate keeps the sign-in
+$Target = "vk-session.$AppId"   # где в ящике для ключей хранится вход в систему
 $Marker = 'upgrade-marker.txt'
 
 function Say($text) { Write-Host "==> $text" -ForegroundColor Cyan }
@@ -38,14 +38,14 @@ function Get-Installed {
   return $null
 }
 
-# The installer writes the folder with quotes around it.
+# Установщик записывает папку в кавычки.
 function Folder-Of($entry) { return ([string]$entry.InstallLocation).Trim('"') }
 
 function Install($setup) {
   Say "installing $(Split-Path $setup -Leaf)"
   $process = Start-Process -FilePath $setup -ArgumentList '/S' -PassThru -Wait
   if ($process.ExitCode -ne 0) { Fail "the installer exited with $($process.ExitCode)" }
-  # NSIS may hand over to a copy of itself: wait until the registry shows it.
+  # NSIS может передать свою копию: подождите, пока реестр не покажет это.
   for ($i = 0; $i -lt 60 -and -not (Get-Installed); $i++) { Start-Sleep -Seconds 1 }
 }
 

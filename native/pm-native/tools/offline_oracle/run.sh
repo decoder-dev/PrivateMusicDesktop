@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Replays the original Swift eviction loop (kept in main.swift) against the
-# Rust policy on 20,000 random libraries; the chosen tracks must match.
+# Сравнивает правила удаления кэша Rust с исходным циклом Swift из main.swift
+# на 20 000 случайных библиотеках. Наборы выбранных треков должны совпадать.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$here/../../../.."

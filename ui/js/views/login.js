@@ -4,12 +4,12 @@ import { api } from "../api.js";
 import { icon } from "../icons.js";
 import { isNetworkError, vpnHint } from "../network.js";
 
-/** The sign-in screen. VK's own page opens in a separate window. */
+/** Экран входа в систему. Собственная страница VK открывается в отдельном окне. */
 export function createLoginView({ onError }) {
   const message = h("p", { class: "message", role: "status" });
   const button = h("button", { class: "btn primary", type: "button", onclick: start }, t("login.button"));
   const note = h("p", { class: "note", hidden: true, role: "note" }, icon("alert", 16), h("span", { text: t("login.notPersistent") }));
-  // The VPN hint, for a sign-in page that does not load or a token request that fails.
+  // Подсказка VPN для страницы входа, которая не загружается, или для невыполненного запроса токена.
   const hint = h("div", { class: "net-hint-slot", hidden: true });
   let waiting = false;
 
@@ -30,7 +30,7 @@ export function createLoginView({ onError }) {
       message.textContent = "";
       onError(error);
     } finally {
-      // Opening the window completed; keep a way to bring it back to front.
+      // Открытие окна завершено; держите способ вернуть его на передний план.
       button.disabled = false;
     }
   }
@@ -46,7 +46,7 @@ export function createLoginView({ onError }) {
 
   return {
     element,
-    /** Called with "success" | "cancelled" | "error:<kind>" from the backend. */
+    /** Вызов с помощью "success" | "cancelled" | "error:<kind>" из бэкэнда. */
     loginResult(result) {
       button.disabled = false;
       showHint(result === "loadfailed" || (result.startsWith("error:") && isNetworkError({ kind: result.slice(6) })));

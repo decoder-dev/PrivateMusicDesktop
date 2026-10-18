@@ -1,7 +1,6 @@
-//! Fragmented MP4 (CMAF) HLS audio: the `moov` of the init section tells us
-//! the AAC configuration, each `moof`/`mdat` fragment holds raw AAC frames.
-//! Both are parsed by `pm_native`; here the frames are wrapped in ADTS
-//! headers so the rest of the engine sees one kind of stream.
+//! Фрагментированный звук MP4 (CMAF) HLS: `moov` раздела инициализации сообщает нам конфигурацию AAC,
+//! каждый фрагмент `moof`/`mdat` содержит необработанные кадры AAC. Оба анализируются `pm_native`;
+//! здесь кадры заключены в заголовки ADTS, поэтому остальная часть движка видит поток одного типа.
 
 use pm_native::media::{
     pm_cmaf_extract_fragment, pm_cmaf_init, pm_cmaf_parse_initialization, pm_cmaf_sample, pm_cmaf_status, PM_CMAF_OK,
@@ -42,7 +41,7 @@ impl Bits<'_> {
     }
 }
 
-/// (audio object type, sampling frequency index, channel configuration)
+/// (тип аудиообъекта, индекс частоты дискретизации, конфигурация канала)
 fn parse_audio_specific_config(asc: &[u8]) -> Result<(u8, u8, u8)> {
     let bad = || Error::Stream("unsupported AAC configuration".into());
     let mut bits = Bits { data: asc, position: 0 };
@@ -52,11 +51,11 @@ fn parse_audio_specific_config(asc: &[u8]) -> Result<(u8, u8, u8)> {
     }
     let frequency_index = bits.read(4).ok_or_else(bad)?;
     if frequency_index == 15 {
-        // An explicit rate cannot be signalled in an ADTS header.
+        // Явная скорость не может быть указана в заголовке ADTS.
         return Err(bad());
     }
     let channels = bits.read(4).ok_or_else(bad)?;
-    // ADTS can only carry AAC Main, LC, SSR and LTP.
+    // ADTS может нести только AAC Main, LC, SSR и LTP.
     if !(1..=4).contains(&object_type) || channels == 0 || channels > 7 {
         return Err(bad());
     }
@@ -68,12 +67,12 @@ impl Cmaf {
         if data.is_empty() || data.len() > i32::MAX as usize {
             return Err(Error::Stream("invalid initialization section".into()));
         }
-        // SAFETY: pm_cmaf_init and pm_cmaf_status are plain C structs; the
-        // zeroed value is what the native code expects to be overwritten.
+        // SAFETY: pm_cmaf_init и pm_cmaf_status — простые структуры C; обнуленное значение — это то,
+        // что собственный код ожидает перезаписать.
         let mut init: pm_cmaf_init = unsafe { std::mem::zeroed() };
         let mut status = pm_cmaf_status::default();
-        // SAFETY: `data` is valid for `data.len()` bytes; `init`/`status` are
-        // valid for writes.
+        // SAFETY: `data` действителен для байтов `data.len()`; `init`/`status` действительны для
+        // записи.
         let ok = unsafe { pm_cmaf_parse_initialization(data.as_ptr(), data.len() as i32, &mut init, &mut status) };
         if ok != 1 || status.code != PM_CMAF_OK {
             return Err(Error::Stream(format!("invalid fragmented MP4 initialization (code {})", status.code)));
@@ -107,8 +106,8 @@ impl Cmaf {
             Some(slice) => (slice.as_mut_ptr(), slice.len() as i32),
             None => (std::ptr::null_mut(), 0),
         };
-        // SAFETY: `data` and `out` are valid for the lengths passed; the
-        // decode-time pointers refer to fields of `self`.
+        // SAFETY: `data` и `out` действительны для переданных длин; указатели времени декодирования
+        // относятся к полям `self`.
         let count = unsafe {
             pm_cmaf_extract_fragment(
                 data.as_ptr(),
@@ -133,13 +132,13 @@ impl Cmaf {
         Ok(count)
     }
 
-    /// One fragment's AAC frames as ADTS.
+    /// AAC одного фрагмента кадрируется как ADTS.
     pub fn fragment_to_adts(&mut self, data: &[u8]) -> Result<Vec<u8>> {
         if data.len() < 16 || data.len() > i32::MAX as usize {
             return Err(Error::Stream("media fragment is too small".into()));
         }
-        // Two passes like the iOS code: count first, then fill. The decode
-        // clock must not advance during the count.
+        // Два прохода, как в коде iOS: сначала подсчитайте, затем заполните. Тактовый сигнал
+        // декодирования не должен смещаться вперед во время счета.
         let (saved_time, saved_has) = (self.decode_time, self.has_decode_time);
         let total = self.call(data, None)?;
         self.decode_time = saved_time;
@@ -182,13 +181,13 @@ mod tests {
 
     #[test]
     fn audio_specific_config_aac_lc_44100_stereo() {
-        // 00010 0100 0010 000 -> object 2, index 4 (44100), channels 2
+        // 00010 0100 0010 000 -> объект 2, индекс 4 (44100), каналы 2
         assert_eq!(parse_audio_specific_config(&[0x12, 0x10]).unwrap(), (2, 4, 2));
     }
 
     #[test]
     fn unsupported_configs_are_rejected() {
-        // HE-AAC (object 5), explicit rate (index 15), empty, zero channels.
+        // HE-AAC (объект 5), явная ставка (индекс 15), пустые, нулевые каналы.
         for asc in [&[0x2B, 0x92][..], &[0x17, 0x80, 0x00][..], &[][..], &[0x12, 0x00][..]] {
             assert!(parse_audio_specific_config(asc).is_err(), "{asc:?}");
         }

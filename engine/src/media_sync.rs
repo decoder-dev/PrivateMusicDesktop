@@ -1,17 +1,16 @@
-//! What the operating system's media controls (media keys, lock screen,
-//! "Now Playing" widgets) should be told, and how to react to their buttons.
-//! Pure logic: the OS bindings live in the app shell.
+//! Что следует сообщать элементам управления мультимедиа операционной системы (клавишам мультимедиа,
+//! экрану блокировки, виджетам "Now Playing") и как реагировать на их кнопки. Чистая логика: привязки
+//! OS находятся в оболочке приложения.
 //!
-//! The OS needs few messages: a new title when the track changes, and a
-//! playback state when it changes or the position jumps. Sending the position
-//! four times a second would wake the whole desktop for nothing; the OS
-//! extrapolates between messages.
+//! OS требуется несколько сообщений: новый заголовок при смене трека и состояние воспроизведения при
+//! его изменении или изменении позиции. Отправка позиции четыре раза в секунду приведет к спячке всего
+//! рабочего стола; OS экстраполирует сообщения.
 
 use crate::controller::{Controller, State, Status};
 
-/// OS media/notification APIs may block. Never call them on the audio thread:
-/// it must keep processing Pause/Stop even when the desktop stops answering.
-/// One pending state is enough; slow consumers must not accumulate positions.
+/// OS media/notification APIs может заблокировать. Никогда не вызывайте их по аудиопотоку: он должен
+/// продолжать обработку Pause/Stop, даже когда рабочий стол перестает отвечать. Одного ожидающего
+/// состояния достаточно; медленные потребители не должны накапливать позиции.
 pub struct StatePublisher {
     latest: std::sync::Arc<std::sync::Mutex<Option<State>>>,
     wake: std::sync::mpsc::SyncSender<()>,
@@ -35,8 +34,8 @@ impl StatePublisher {
 
     pub fn publish(&self, state: State) {
         *self.latest.lock().unwrap_or_else(|p| p.into_inner()) = Some(state);
-        // Full means a wake is already queued. Disconnected means the OS
-        // integration stopped; neither case may stop playback.
+        // Полное означает, что пробуждение уже поставлено в очередь. Отключено означает, что интеграция
+        // OS остановлена; ни в одном случае воспроизведение не может быть остановлено.
         let _ = self.wake.try_send(());
     }
 }
@@ -79,7 +78,7 @@ pub enum MediaAction {
 pub struct MediaSync {
     track: Option<String>,
     sent: Option<Class>,
-    /// Position and time of the last playback message, for extrapolation.
+    /// Позиция и время последнего сообщения воспроизведения для экстраполяции.
     last_position: f64,
     last_at: f64,
 }
@@ -96,13 +95,13 @@ fn class(status: Status, has_track: bool) -> Class {
         _ if !has_track => Class::Stopped,
         Status::Idle => Class::Stopped,
         Status::Paused => Class::Paused,
-        // Loading and buffering are "playing" to the OS: the user wants sound.
+        // Загрузка и буферизация — это "playing" для OS: пользователю нужен звук.
         Status::Loading | Status::Playing | Status::Buffering => Class::Playing,
     }
 }
 
 impl MediaSync {
-    /// `now` is any monotonic clock in seconds.
+    /// `now` — любые монотонные часы в секундах.
     pub fn update(&mut self, state: &State, now: f64) -> Updates {
         let mut updates = Updates::default();
         let id = state.track.as_ref().map(|t| t.id());
@@ -115,7 +114,7 @@ impl MediaSync {
                 cover_url: t.artwork_url.clone(),
                 duration: f64::from(t.duration),
             }));
-            // A new track always restates the playback.
+            // Новый трек всегда возобновляет воспроизведение.
             self.sent = None;
         }
         let current = class(state.status, state.track.is_some());
@@ -138,7 +137,7 @@ impl MediaSync {
     }
 }
 
-/// Carries out a button press from the OS.
+/// Осуществляет нажатие кнопки с OS.
 pub fn apply(controller: &Controller, action: MediaAction) {
     let state = controller.state();
     match action {
@@ -205,8 +204,8 @@ mod tests {
         }).unwrap();
         publisher.publish(state(Status::Playing, Some(track(1)), 0.0));
         entry.recv_timeout(Duration::from_secs(2)).unwrap();
-        // The OS handler is blocked, as a stuck SMTC call would be. Publishing
-        // Pause and many subsequent positions must still return immediately.
+        // Обработчик OS заблокирован, как и зависший вызов SMTC. Пауза публикации и многие последующие
+        // позиции все равно должны немедленно вернуться.
         let (finished, completion) = sync_channel(1);
         std::thread::spawn(move || {
             for n in 1..=1000 {
@@ -228,7 +227,7 @@ mod tests {
         let u = sync.update(&state(Status::Loading, Some(track(1)), 0.0), 0.0);
         assert_eq!(u.metadata.as_ref().unwrap().as_ref().unwrap().title, "T1");
         assert_eq!(u.playback, Some(Playback::Playing(0.0)));
-        // The same track, loading → playing: nothing new to say.
+        // Тот же трек, загрузка → воспроизведение: ничего нового сказать не могу.
         let u = sync.update(&state(Status::Playing, Some(track(1)), 0.0), 0.1);
         assert_eq!(u, Updates::default());
     }
@@ -253,11 +252,11 @@ mod tests {
         sync.update(&state(Status::Playing, Some(track(1)), 10.0), 0.0);
         let u = sync.update(&state(Status::Paused, Some(track(1)), 12.0), 2.0);
         assert_eq!(u.playback, Some(Playback::Paused(12.0)));
-        // Paused time does not advance the extrapolation.
+        // Время паузы не ускоряет экстраполяцию.
         assert_eq!(sync.update(&state(Status::Paused, Some(track(1)), 12.0), 30.0), Updates::default());
         let u = sync.update(&state(Status::Playing, Some(track(1)), 12.0), 31.0);
         assert_eq!(u.playback, Some(Playback::Playing(12.0)));
-        // A jump of a minute is a seek.
+        // Прыжок на минуту – это поиск.
         let u = sync.update(&state(Status::Playing, Some(track(1)), 100.0), 32.0);
         assert_eq!(u.playback, Some(Playback::Playing(100.0)));
     }
@@ -276,7 +275,7 @@ mod tests {
         let u = sync.update(&state(Status::Idle, None, 0.0), 1.0);
         assert_eq!(u.metadata, Some(None));
         assert_eq!(u.playback, Some(Playback::Stopped));
-        // Stopped stays quiet however the position wiggles.
+        // Остановился, молчит, но позиция колеблется.
         assert_eq!(sync.update(&state(Status::Idle, None, 0.0), 2.0), Updates::default());
     }
 

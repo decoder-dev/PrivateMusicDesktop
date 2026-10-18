@@ -1,12 +1,12 @@
-// Motion is read live: the person can switch "reduce motion" on while the app
-// runs, so nothing here is captured once at load.
+// Движение считывается в реальном времени: человек может включить «Уменьшение движения» во время работы
+// приложения, поэтому при загрузке ничего не фиксируется.
 
 const query = matchMedia("(prefers-reduced-motion: no-preference)");
 
-/** True when the system allows animation right now. */
+/** Верно, если система прямо сейчас разрешает анимацию. */
 export const motionOk = () => query.matches;
 
-/** Calls `fn(motionOk)` whenever the system setting changes. */
+/** Вызывает `fn(motionOk)` всякий раз, когда изменяются настройки системы. */
 export function onMotionChange(fn) {
   const handler = () => fn(query.matches);
   query.addEventListener("change", handler);
@@ -14,9 +14,9 @@ export function onMotionChange(fn) {
 }
 
 /**
- * Runs `done` once when the animation that was just started on `element` ends.
- * With motion off, or when no animation is running, it runs at once, so
- * closing logic never waits for something that will not happen.
+ * Запускается `done` один раз, когда заканчивается анимация, которая только что была запущена на
+ * `element`. Если движение отключено или анимация не запущена, она запускается сразу, поэтому логика
+ * закрытия никогда не ждет того, чего не произойдет.
  */
 export function afterAnimation(element, done, fallback = 450) {
   if (!motionOk() || !element.getAnimations?.().length) {
@@ -36,7 +36,7 @@ export function afterAnimation(element, done, fallback = 450) {
   const timer = setTimeout(finish, fallback);
 }
 
-/** Plays a one-shot enter animation class on an element that was just shown. */
+/** Воспроизводит одноразовый класс анимации ввода для только что показанного элемента. */
 export function enter(element) {
   if (!motionOk()) return;
   element.classList.remove("enter");
@@ -45,7 +45,10 @@ export function enter(element) {
   element.addEventListener("animationend", () => element.classList.remove("enter"), { once: true });
 }
 
-/** A one-shot glyph swap (play/pause, heart): the new glyph pops in. Only when the glyph actually changed. */
+/**
+ * Однократная замена глифа (play/pause, сердце): появляется новый глиф. Только тогда, когда глиф
+ * действительно изменился.
+ */
 export function morph(element) {
   if (!motionOk() || !element) return;
   element.classList.add("morph");

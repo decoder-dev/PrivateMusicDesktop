@@ -1,9 +1,8 @@
-//! Getting a track from a VK stream URL to decoded audio.
+//! Загрузка, расшифровка и разбор потока до элементарного аудио.
 //!
-//! `fetch` downloads (HLS playlist, keys, segments, or a plain file), decrypts
-//! and demuxes into one elementary stream (ADTS AAC or MP3) inside a
-//! [`SharedBuffer`]; `decode` reads that buffer with symphonia while the
-//! download is still running, so playback starts after the first segment.
+//! HLS, AES-128 и контейнеры обрабатываются общей библиотекой `pm_native`.
+//! Результат поступает в общий буфер, из которого читает декодер.
+//! Сетевые ошибки и отмена передаются потребителю без раскрытия секретов.
 
 pub mod buffer;
 pub mod cmaf;

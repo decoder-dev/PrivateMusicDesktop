@@ -1,5 +1,5 @@
-//! Everything the window needs, in one object: sign-in state, VK data with
-//! automatic token refresh, and the playback controller.
+//! Слой приложения: состояние входа, данные VK, обновление токена
+//! и контроллер воспроизведения. Предоставляет окну единый интерфейс.
 
 use std::sync::{Arc, Mutex};
 
@@ -22,11 +22,11 @@ use crate::{Error, Result};
 
 const TOKEN_URL: &str = "https://login.vk.ru/?act=web_token";
 
-/// Furthest offset the window may ask for in an artist or album list; VK's
-/// own lists end long before.
+/// Самое дальнее смещение, которое может запросить окно в списке исполнителей или альбомов; Собственные
+/// списки VK заканчиваются задолго до этого.
 const MAX_OFFSET: u32 = 100_000;
 
-/// Upper bound for a search query from the window.
+/// Верхняя граница поискового запроса из окна.
 const MAX_QUERY: usize = 500;
 
 fn checked_offset(offset: u32) -> Result<u32> {
@@ -68,8 +68,8 @@ fn checked_mix_options(options: Option<&str>) -> Result<Option<String>> {
     Ok(Some(value.to_string()))
 }
 
-/// An album handed over by the window: a real locator, and an access key or
-/// follow hash that is a plain token, since both are sent back to VK.
+/// Альбом, переданный через окно: настоящий локатор и ключ доступа или хэш отслеживания, который
+/// является простым токеном, поскольку оба отправляются обратно в VK.
 fn checked_album(album: &Album) -> Result<()> {
     let token = |value: &Option<String>| {
         value.as_deref().is_none_or(|v| v.len() <= 256 && v.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'))
@@ -87,12 +87,11 @@ fn checked_album(album: &Album) -> Result<()> {
     Ok(())
 }
 
-/// Tells the network monitor whether audio is on its way.
+/// Сообщает сетевому монитору, идёт ли загрузка или воспроизведение аудио.
 type ActivityHook = Arc<dyn Fn(bool) + Send + Sync>;
 
-/// VK errors that mean "this token is not good here (any more)": 5 arrives as
-/// [`Error::Unauthorized`]; 17 is "validation required" and 28 "application
-/// authorization failed", both seen when a token meets a new IP address.
+/// Ошибки недействительной сессии VK: код 5 соответствует [`Error::Unauthorized`],
+/// коды 17 и 28 могут появиться при смене IP-адреса и требуют обновления токена.
 fn needs_new_session(error: &Error) -> bool {
     matches!(error, Error::Unauthorized | Error::Vk { code: 17 | 28, .. })
 }
@@ -104,16 +103,16 @@ fn describe_vk(error: &Error) -> String {
     }
 }
 
-/// Where an endless queue refills from, as the window names it.
+/// Откуда пополняется бесконечная очередь, как называет ее окно.
 #[derive(Debug, Clone, Deserialize)]
-#[allow(clippy::large_enum_variant)] // handed over once per radio
+#[allow(clippy::large_enum_variant)] // передается один раз на радио
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum RadioSource {
-    /// The personal stream mix, with the tuning the window applied.
+    /// Персональный микс потока с примененной настройкой окна.
     Personal { options: Option<String> },
-    /// A catalogue mix.
+    /// Микс из каталога.
     Catalog { mix_id: String, options: Option<String> },
-    /// VK's radio seeded with a track ("more like this").
+    /// Радио VK засеяно треком («Похожие треки»).
     Similar { seed: Track },
 }
 
@@ -121,12 +120,13 @@ pub enum RadioSource {
 pub struct SessionState {
     pub signed_in: bool,
     pub profile: Option<Profile>,
-    /// False when the OS secret store failed, so the sign-in will not survive a restart.
+    /// Значение false, если в секретном хранилище OS произошел сбой, поэтому вход в систему не
+    /// сохранится после перезапуска.
     pub persistent: bool,
 }
 
-/// The app object the shell holds. It is cheap to share: everything lives in
-/// [`Core`], which the controller can also reach to renew an expired token.
+/// Объект приложения, который хранится в оболочке. Делиться дешево: все находится в [`Core`], к
+/// которому контроллер также может обратиться, чтобы обновить токен с истекшим сроком действия.
 pub struct App {
     core: Arc<Core>,
 }
@@ -144,37 +144,36 @@ pub struct Core {
     emit: Arc<dyn Fn(UiEvent) + Send + Sync>,
     profile: Mutex<Option<Profile>>,
     persistent: Mutex<bool>,
-    /// One refresh at a time: two screens hitting 401 together must not both
-    /// re-issue the token.
+    /// Одно обновление за раз: два экрана, одновременно выдающие 401, не должны повторно выдавать
+    /// токен.
     refresh_lock: Mutex<()>,
-    /// Bumped by every sign-out, under this lock. A refresh that started
-    /// before a sign-out must not sign the user back in when it finishes.
+    /// Сталкивался с каждым выходом из дома под этим замком. Обновление, начавшееся до выхода из
+    /// системы, не должно возвращать пользователя в систему после завершения.
     generation: Mutex<u64>,
     token_url: String,
     lrclib: Option<LrcLib>,
     genius: Option<GeniusLyrics>,
     offline: Option<Arc<OfflineStore>>,
     history: Arc<History>,
-    /// Watches the route to the internet; `None` when turned off.
+    /// Следит за маршрутом в интернет; `None` при выключении.
     network: Option<NetworkMonitor>,
 }
 
 pub struct AppOptions {
-    /// Where downloads are kept; `None` disables them.
+    /// Где хранятся загрузки; `None` отключает их.
     pub offline_dir: Option<std::path::PathBuf>,
-    /// Where the play history and statistics are kept; `None` keeps them in
-    /// memory only.
+    /// Где хранится история игр и статистика; `None` хранит их только в памяти.
     pub history_dir: Option<std::path::PathBuf>,
     pub lyrics_base: String,
-    /// Genius search host; empty turns the Genius fallback off.
+    /// Гениальный поисковый хост; пустое отключает резервный вариант Genius.
     pub genius_base: String,
     pub fetch: FetchConfig,
     pub token_url: String,
     pub volume: f32,
-    /// Notice network changes (a VPN switched on or off) and heal playback.
-    /// Tests that must not depend on the machine's network turn it off.
+    /// Обратите внимание на изменения в сети (включение или выключение VPN) и исправьте
+    /// воспроизведение. Тесты, которые не должны зависеть от сети машины, отключают ее.
     pub watch_network: bool,
-    /// Where the monitor reads the local addresses; `None` asks the OS.
+    /// Где монитор считывает локальные адреса; `None` спрашивает OS.
     pub address_source: Option<Arc<dyn AddressSource>>,
     pub network_config: MonitorConfig,
 }
@@ -209,7 +208,7 @@ impl App {
     {
         let emit: Arc<dyn Fn(UiEvent) + Send + Sync> = Arc::new(emit);
         let controller_emit = emit.clone();
-        // The monitor only needs to look while audio is on its way.
+        // Монитору нужно смотреть только во время передачи звука.
         let activity: Arc<std::sync::OnceLock<ActivityHook>> = Arc::default();
         let activity_for_events = activity.clone();
         let controller = Controller::with_fetch(
@@ -292,10 +291,15 @@ impl App {
 }
 
 impl App {
-    /// Plays `tracks` from `index` and keeps the queue filling from `source`
-    /// while it plays (see [`radio`]). The tracks are what the window already
-    /// loaded from that same source.
+    /// Воспроизводит `tracks` из `index` и сохраняет заполнение очереди из `source` во время
+    /// воспроизведения (см. [`radio`]). Треки — это то, что окно уже загрузило из того же источника.
     pub fn play_radio(&self, source: RadioSource, tracks: Vec<Track>, index: usize) -> Result<()> {
+        self.play_radio_from(source, tracks, index, None)
+    }
+
+    pub fn play_radio_from(&self, source: RadioSource, tracks: Vec<Track>, index: usize, next_offset: Option<u32>) -> Result<()> {
+        let next_offset = next_offset.unwrap_or(radio::FIRST_REFILL_OFFSET);
+        if next_offset > 1_000_000 { return Err(Error::InvalidRequest); }
         let weak = Arc::downgrade(&self.core);
         let ask = move |call: &dyn Fn(&VkClient, &Session) -> Result<Vec<Track>>| -> Result<Vec<Track>> {
             weak.upgrade().ok_or(Error::Unauthorized)?.api(call)
@@ -308,7 +312,7 @@ impl App {
                     let (offset, options) = (*offset, options.clone());
                     ask(&|client, session| client.stream_mix(session, "common", offset, radio::PAGE_SIZE, options.as_deref()))
                 });
-                (RadioKind::Personal, radio::FIRST_REFILL_OFFSET, Vec::new(), fetch)
+                (RadioKind::Personal, next_offset, Vec::new(), fetch)
             }
             RadioSource::Catalog { mix_id, options } => {
                 let mix_id = checked_mix_id(&mix_id)?.to_string();
@@ -318,7 +322,7 @@ impl App {
                     let (offset, options, mix_id) = (*offset, options.clone(), mix_id.clone());
                     ask(&|client, session| client.stream_mix(session, &mix_id, offset, radio::PAGE_SIZE, options.as_deref()))
                 });
-                (RadioKind::Catalog, radio::FIRST_REFILL_OFFSET, Vec::new(), fetch)
+                (RadioKind::Catalog, next_offset, Vec::new(), fetch)
             }
             RadioSource::Similar { seed } => {
                 if seed.track_id <= 0 || seed.owner_id == 0 {
@@ -329,7 +333,7 @@ impl App {
                     let seed = seed.clone();
                     ask(&|client, session| client.shuffled_recommendations(session, &seed))
                 });
-                // The seed first, then what the window already got for it.
+                // Сначала семя, а затем то, что окно уже получило за него.
                 let seeds = std::iter::once(seed).chain(tracks.iter().cloned()).collect();
                 (RadioKind::Similar, 0, seeds, fetch)
             }
@@ -351,7 +355,7 @@ impl Core {
         mutex.lock().unwrap_or_else(|p| p.into_inner())
     }
 
-    /// Adopts a fresh session (just signed in, or just refreshed).
+    /// Принимает новый сеанс (только что вошедший в систему или только что обновленный).
     pub fn sign_in(&self, session: Session) {
         let mut generation = Self::lock(&self.generation);
         *generation += 1;
@@ -369,7 +373,8 @@ impl Core {
         };
         *Self::lock(&self.persistent) = saved;
         *Self::lock(&self.profile) = None;
-        // A refreshed token may not name its user: keep the account we know.
+        // Обновленный токен может не называть своего пользователя: сохраните ту учетную запись, которую
+        // мы знаем.
         if session.user_id.is_some() {
             self.history.set_account(session.user_id);
         }
@@ -391,7 +396,7 @@ impl Core {
         self.controller.set_session(None);
     }
 
-    /// Retry a transient OS credential failure without replacing the provider.
+    /// Повторите временную ошибку учетных данных OS без замены поставщика.
     pub fn retry_session_storage(&self) {
         let _generation = Self::lock(&self.generation);
         if !self.store.is_durable() { return; }
@@ -418,14 +423,14 @@ impl Core {
         }
     }
 
-    /// Re-issues the token from the stored web cookie.
+    /// Повторно выдает токен из сохраненного веб-файла cookie.
     fn refresh(&self, stale: &Session) -> Result<Session> {
         let _one_at_a_time = Self::lock(&self.refresh_lock);
         let started = *Self::lock(&self.generation);
-        // Someone else may have refreshed while we waited for the lock.
+        // Возможно, кто-то еще обновился, пока мы ждали блокировки.
         let current = self.controller.session().ok_or(Error::Unauthorized)?;
         if current.access_token != stale.access_token {
-            // A refresh may be reused, but an API call cannot cross accounts.
+            // Обновление можно использовать повторно, но вызов API не может пересекать учетные записи.
             if current.user_id != stale.user_id { return Err(Error::Unauthorized); }
             return Ok(current);
         }
@@ -434,7 +439,7 @@ impl Core {
                 fresh.user_id = fresh.user_id.or(stale.user_id);
                 let generation = Self::lock(&self.generation);
                 if *generation != started || self.controller.session().is_none() {
-                    // Signed out while VK was answering: stay signed out.
+                    // Вышел из системы, пока VK отвечал: оставайтесь вне системы.
                     return Err(Error::Unauthorized);
                 }
                 self.adopt(fresh.clone());
@@ -456,8 +461,8 @@ impl Core {
         }
     }
 
-    /// Runs a VK call with a valid token: refreshed ahead of expiry, and once
-    /// more if VK answers 401 anyway.
+    /// Выполняет вызов VK с действительным токеном: обновляется до истечения срока действия и еще раз,
+    /// если VK все равно отвечает на 401.
     pub fn api<T>(&self, call: impl Fn(&VkClient, &Session) -> Result<T>) -> Result<T> {
         let retry = !*Self::lock(&self.persistent);
         if retry { self.retry_session_storage(); }
@@ -469,22 +474,22 @@ impl Core {
             session = match self.refresh(&session) {
                 Ok(fresh) => fresh,
                 Err(Error::Unauthorized) => return Err(Error::Unauthorized),
-                Err(_) => session, // a temporary network failure must keep the cookie
+                Err(_) => session, // временный сбой сети должен сохранить файл cookie
             };
         }
         if *Self::lock(&self.generation) != started { return Err(Error::Unauthorized); }
         let answer = call(self.controller.client(), &session);
         if *Self::lock(&self.generation) != started { return Err(Error::Unauthorized); }
         match answer {
-            // A session VK stopped accepting, which is also how a changed IP
-            // shows (the token was minted on the other network): renew it from
-            // the cookie once and ask again once. Never a loop.
+            // Сеанс VK перестал принимать, что также показывает измененный IP (токен был отчеканен в
+            // другой сети): один раз обновите его из cookie и один раз спросите еще раз. Никогда не
+            // петля.
             Err(error) if needs_new_session(&error) => {
                 log::info!("VK refused the session ({}), renewing it once", describe_vk(&error));
                 let fresh = match self.refresh(&session) {
                     Ok(fresh) => fresh,
-                    // The renewal's own failure explains a refused sign-in;
-                    // for other errors the original answer is the useful one.
+                    // Собственный сбой продления объясняет отказ во входе; для других ошибок полезен
+                    // исходный ответ.
                     Err(renewal) if error == Error::Unauthorized => return Err(renewal),
                     Err(_) => return Err(error),
                 };
@@ -496,16 +501,16 @@ impl Core {
         }
     }
 
-    /// Tells the engine whether the window has the user's attention; the
-    /// network is only watched while it does or while audio plays.
+    /// Сообщает движку, привлекает ли окно внимание пользователя; сеть просматривается только во время
+    /// ее работы или во время воспроизведения звука.
     pub fn set_window_focused(&self, focused: bool) {
         if let Some(network) = &self.network {
             network.set_focused(focused);
         }
     }
 
-    /// The user pressed "Retry" after a network failure: forget every pooled
-    /// connection and look at the network now.
+    /// Пользователь нажал «Повторить» после сбоя сети: забудьте обо всех соединениях пула и посмотрите на
+    /// сеть сейчас.
     pub fn check_network(&self) {
         net::drop_connections();
         if let Some(network) = &self.network {
@@ -513,7 +518,7 @@ impl Core {
         }
     }
 
-    /// "Retry" for playback that stopped on a connection problem.
+    /// «Повторить» для воспроизведения, остановленного из-за проблемы с подключением.
     pub fn retry_playback(&self) {
         self.controller.retry();
     }
@@ -533,7 +538,7 @@ impl Core {
                 self.controller.set_session(Some(session));
             }
         }
-        // A session that did not name its user: the history starts now.
+        // Сеанс, в котором не указано имя пользователя: история начинается сейчас.
         if self.history.account().is_none() && self.controller.session().is_some() {
             self.history.set_account(Some(profile.id));
         }
@@ -565,17 +570,17 @@ impl Core {
         self.offline.as_ref().map(|o| o.total_bytes()).unwrap_or(0)
     }
 
-    /// Downloads a track for listening without a connection. A fresh stream
-    /// address is asked for first: the one the window holds may have expired.
+    /// Скачивает трек для прослушивания без подключения. Сначала запрашивается новый адрес потока: срок
+    /// действия адреса, хранящегося в окне, возможно, истек.
     pub fn download(&self, track: &Track) -> Result<OfflineTrack> {
         let store = self.offline()?;
         if let Some(existing) = store.list().into_iter().find(|e| e.track.id() == track.id()) {
             if std::fs::metadata(store.dir().join(&existing.file)).is_ok_and(|file| file.is_file() && file.len() == existing.bytes && file.len() > 0) {
                 return Ok(existing);
             }
-            // A cache entry can outlive a file deleted or truncated outside
-            // the app. Download/export must restore it instead of returning
-            // a successful result that points at missing audio.
+            // Запись в кэше может пережить файл, удаленный или усеченный за пределами приложения.
+            // Загрузка и экспорт должен восстановить его вместо возврата успешного результата,
+            // указывающего на отсутствие звука.
             store.remove(&track.id())?;
         }
         for attempt in 0..3 {
@@ -601,14 +606,13 @@ impl Core {
         self.offline()?.remove(track_id)
     }
 
-    /// The personal mix: several pages at once (see `VkClient::mix_window`).
+    /// Персональный микс: сразу несколько страниц (см. `VkClient::mix_window`).
     pub fn mix(&self) -> Result<Vec<Track>> {
         self.mix_with_options(None)
     }
 
     pub fn mix_with_options(&self, options: Option<&str>) -> Result<Vec<Track>> {
-        let options = checked_mix_options(options)?;
-        self.api(|client, session| client.mix_window(session, "common", options.as_deref()))
+        self.stream_mix_at("common", options, 0)
     }
 
     pub fn mix_settings(&self) -> Result<Value> {
@@ -620,12 +624,17 @@ impl Core {
     }
 
     pub fn stream_mix(&self, mix_id: &str, options: Option<&str>) -> Result<Vec<Track>> {
-        let mix_id = checked_mix_id(mix_id)?.to_string();
-        let options = checked_mix_options(options)?;
-        self.api(|client, session| client.mix_window(session, &mix_id, options.as_deref()))
+        self.stream_mix_at(mix_id, options, 0)
     }
 
-    /// The "New releases" shelf of VK's catalogue.
+    pub fn stream_mix_at(&self, mix_id: &str, options: Option<&str>, offset: u32) -> Result<Vec<Track>> {
+        if offset > 1_000_000 { return Err(Error::InvalidRequest); }
+        let mix_id = checked_mix_id(mix_id)?.to_string();
+        let options = checked_mix_options(options)?;
+        self.api(|client, session| client.mix_window_at(session, &mix_id, options.as_deref(), offset))
+    }
+
+    /// Полка «Новые релизы» из каталога VK.
     pub fn new_releases(&self) -> Result<Vec<Album>> {
         self.api(|client, session| client.new_releases(session))
     }
@@ -634,7 +643,7 @@ impl Core {
         self.api(|client, session| client.recommendations(session, None))
     }
 
-    /// "More like this": VK's radio seeded with one track.
+    /// "More like this": Радио VK засеяно одним треком.
     pub fn similar(&self, track: &Track) -> Result<Vec<Track>> {
         self.api(|client, session| client.recommendations(session, Some(track)))
     }
@@ -667,13 +676,13 @@ impl Core {
         self.api(|client, session| client.delete_track(session, track))
     }
 
-    /// Lyrics for a track: timed LRCLIB first, then the exact VK lyric id,
-    /// Genius when its search result matches, then plain LRCLIB text.
+    /// Текст для трека: сначала приурочен LRCLIB, затем точный идентификатор текста VK, Genius, когда
+    /// его результат поиска совпадает, затем простой текст LRCLIB.
     ///
-    /// A source that fails does not hide another source's answer. `Err` is
-    /// returned only when no source gave a definitive answer ("found" or
-    /// "none"), so the user is told "could not load" only when we really could
-    /// not find out; the failure is in the log either way.
+    /// Источник, который терпит неудачу, не скрывает ответ другого источника. `Err` возвращается только
+    /// тогда, когда ни один источник не дал однозначного ответа ("found" или "none"), поэтому
+    /// пользователю сообщают "could not load" только тогда, когда мы действительно не можем это
+    /// выяснить; в любом случае ошибка записывается в журнал.
     pub fn lyrics(&self, track: &Track) -> Result<Option<Lyrics>> {
         let mut failure: Option<Error> = None;
         let mut answered = false;
@@ -713,9 +722,9 @@ impl Core {
                 Ok(Some(found)) => return Ok(Some(found)),
                 Ok(None) => answered = true,
                 Err(error) => {
-                    // Genius is an optional last-resort source. Its public
-                    // endpoints can reject automated requests; that must not
-                    // turn "no lyrics found" into a playback-facing error.
+                    // Genius — это дополнительный источник последней надежды. Его общедоступные
+                    // конечные точки могут отклонять автоматические запросы; это не должно превращать
+                    // "no lyrics found" в ошибку воспроизведения.
                     log::warn!("lyrics source failed: {}", crate::lyrics::describe("genius", &error));
                     failure = failure.or(Some(error));
                 }
@@ -728,7 +737,7 @@ impl Core {
         }
     }
 
-    // The play history and statistics live on this computer only.
+    // История игр и статистика хранятся только на этом компьютере.
 
     pub fn history(&self) -> Vec<HistoryEntry> {
         self.history.entries()
@@ -753,12 +762,12 @@ impl Core {
         self.history.reset_stats();
     }
 
-    /// Minutes east of UTC, reported by the window, for hours and weekdays.
+    /// Минуты к востоку от UTC, указанные в окне, для часов и дней недели.
     pub fn set_utc_offset(&self, minutes: i32) -> Result<()> {
         self.history.set_utc_offset(minutes)
     }
 
-    /// Writes the history to disk now (the app is closing).
+    /// Сейчас записывает историю на диск (приложение закрывается).
     pub fn flush_history(&self) {
         self.history.flush();
     }
@@ -767,14 +776,14 @@ impl Core {
         self.api(|client, session| client.playlists(session, offset, count.clamp(1, 200)))
     }
 
-    /// The signed-in user's friends.
+    /// Друзья вошедшего пользователя.
     pub fn friends(&self, offset: u32, count: u32) -> Result<Page<Profile>> {
         let offset = checked_offset(offset)?;
         self.api(|client, session| client.friends(session, offset, count.clamp(1, 200)))
     }
 
-    /// A friend's tracks. `owner_id` must be a person (VK ids of people are
-    /// positive), never a community and never "0".
+    /// Следы друга. `owner_id` должен быть человеком (идентификаторы людей VK положительны), а не
+    /// сообществом и никогда "0".
     pub fn friend_tracks(&self, owner_id: i64, offset: u32, count: u32) -> Result<Page<Track>> {
         let owner_id = checked_person(owner_id)?;
         let offset = checked_offset(offset)?;
@@ -797,7 +806,7 @@ impl Core {
         self.api(|client, session| client.search_artists(session, query, offset, count.clamp(1, 100)))
     }
 
-    /// The artist meant by a name, for tracks that do not link one.
+    /// Под названием исполнитель имел в виду треки, которые не связаны между собой.
     pub fn find_artist(&self, name: &str) -> Result<Option<Artist>> {
         let Some(name) = checked_query(name)? else { return Ok(None) };
         self.api(|client, session| client.find_artist(session, name))

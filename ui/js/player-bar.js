@@ -9,14 +9,14 @@ import { hasArtist, openArtistOf } from "./navigation.js";
 import { artBox, bindRange, syncRange, swapArt } from "./ui-parts.js";
 import { coverPalette } from "./palette.js";
 
-/** The bottom bar: what is playing, transport, position and volume. */
+/** Нижняя панель: что играет, транспорт, позиция и громкость. */
 export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
   let dragging = false;
   let lastVolume = 1;
 
   const coverSlot = h("span", { class: "cover-slot" }, artBox(null, { size: 22 }));
   const title = h("div", { class: "title", text: t("nothing") });
-  // The artist opens its page, when the track names one.
+  // Исполнитель открывает свою страницу, когда трек называет свое.
   const artist = h("button", { class: "artist link-text", type: "button", title: t("artist.open"), disabled: true,
     onclick: () => openArtistOf(store.player.track) });
 
@@ -29,7 +29,7 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
     onclick: () => { api.setRepeat({ off: "all", all: "one", one: "off" }[store.player.repeat] ?? "off"); } }, icon("repeat", 18));
 
   const elapsed = h("span", { text: "0:00" });
-  /** The right-hand label counts down, like the iOS scrubber. */
+  /** Правая метка ведет обратный отсчет, как скруббер iOS. */
   const remaining = (seconds) => `-${formatTime(Math.max(0, seconds))}`;
   const total = h("span", { text: remaining(0) });
   const seek = h("input", {
@@ -93,7 +93,7 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
   let coverUrl;
   let tintToken = 0;
 
-  /** The bar takes a tint from the cover, once per track. */
+  /** Панель меняет оттенок обложки один раз на трек. */
   async function applyTint(url) {
     const mine = ++tintToken;
     if (!url) { element.classList.add("no-tint"); return; }

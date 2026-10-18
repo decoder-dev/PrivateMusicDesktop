@@ -1,17 +1,13 @@
-//! The brain of the app: queue + player + VK, behind a small thread-safe API.
+//! Потокобезопасное управление очередью, плеером и запросами VK.
 //!
-//! The UI layer only calls methods here and listens to [`UiEvent`]s. Policy
-//! lives here, where it can be tested without a window:
+//! Интерфейс вызывает методы контроллера и получает [`UiEvent`]. Здесь задаются
+//! переход к следующему треку, повтор, перемешивание и восстановление ошибок.
 //!
-//! * a track that ends starts the next one (repeat/shuffle aware);
-//! * a stream that fails is recovered (see [`RecoveryPolicy`]): VK stream URLs
-//!   expire and are bound to the network that asked for them, so the track is
-//!   resumed where it broke from a fresh URL, with bounded back-off. A
-//!   connection problem never skips tracks: after the bound playback pauses
-//!   with an error and a retry; a dead track is skipped, at most three times
-//!   in a row;
-//! * network and API calls never run on the audio thread or under the state
-//!   lock.
+//! Истёкший адрес потока заменяется свежим, а воспроизведение продолжается
+//! с сохранённой позиции по правилам [`RecoveryPolicy`]. При сетевой ошибке
+//! трек не пропускается: после ограниченного числа попыток плеер ждёт повтора
+//! или восстановления сети. Недоступные треки пропускаются не больше трёх подряд.
+//! Запросы не выполняются в аудиопотоке или под блокировкой состояния.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
@@ -32,7 +28,7 @@ use crate::vk::{Session, Track, VkClient};
 use crate::Error;
 
 const MAX_CONSECUTIVE_FAILURES: u32 = 3;
-/// Pressing Previous after this many seconds restarts the track instead.
+/// Нажатие кнопки «Предыдущий» после этого количества секунд вместо этого перезапускает дорожку.
 const RESTART_THRESHOLD: f64 = 4.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -56,55 +52,54 @@ pub struct State {
     pub repeat: Repeat,
     pub queue_index: Option<usize>,
     pub queue_len: usize,
-    /// Set while the queue refills itself from a mix or a seeded radio.
+    /// Установите, пока очередь пополняется из микса или радиоприемника.
     pub radio: Option<RadioKind>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[allow(clippy::large_enum_variant)] // events are short-lived and moved once
+#[allow(clippy::large_enum_variant)] // события кратковременны и переносятся один раз
 pub enum UiEvent {
     SleepTimer { remaining: Option<u64>, end_of_track: bool },
     State(State),
     Queue { tracks: Vec<Track>, current: Option<usize> },
     Error { kind: String, message: String },
-    /// The VK token no longer works: show the sign-in screen.
+    /// Токен VK больше не работает: покажите экран входа.
     SessionExpired,
-    /// Visualizer levels (0…1), about 30 per second while it is on.
+    /// Уровни визуализатора (0…1), около 30 в секунду при включенном режиме.
     Spectrum { bands: Vec<f32> },
-    /// The route to the internet changed, vanished or settled (see [`crate::net`]).
+    /// Маршрут к Интернету изменился, исчез или прекратился (см. [`crate::net`]).
     Network { state: NetState },
-    /// Playback is healing itself after a failed stream.
+    /// Воспроизведение восстанавливается после сбоя потока.
     Recovery { phase: RecoveryPhase, attempt: u32, max: u32, kind: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum RecoveryPhase {
-    /// A new attempt is scheduled or running.
+    /// Новая попытка запланирована или выполняется.
     Retrying,
-    /// The bound was reached: playback is paused and waits for a retry.
+    /// Достигнута граница: воспроизведение приостановлено и ожидает повторной попытки.
     Failed,
-    /// The track has been playing again for a few seconds.
+    /// Трек воспроизводится снова в течение нескольких секунд.
     Recovered,
 }
 
-/// How stubbornly a broken stream is recovered. The numbers follow the iOS
-/// app's `StreamFailureRetryPolicy` (3 same-track attempts for dead URLs, a
-/// wider budget for connection failures, never skipping on those) with
-/// exponential back-off and jitter on top.
+/// Как упорно восстанавливается прерванный ручей. Цифры соответствуют `StreamFailureRetryPolicy`
+/// приложения iOS (3 попытки одного и того же трека для мертвого URLs, более широкий бюджет на сбои
+/// соединения, их никогда не пропускают) с экспоненциальным замедлением и джиттером на вершине.
 #[derive(Debug, Clone, Copy)]
 pub struct RecoveryPolicy {
-    /// Attempts after a connection failure (reset, timeout, DNS, TLS, 5xx).
+    /// Попытки после сбоя соединения (сброс, таймаут, DNS, TLS, 5xx).
     pub connectivity_attempts: u32,
-    /// Attempts after the address stopped working (401/403/404/410, bad data).
+    /// Попытки после адреса перестали работать (401/403/404/410, неверные данные).
     pub content_attempts: u32,
-    /// Audio that stays dry this long counts as a failed stream.
+    /// Аудио, которое остается сухим так долго, считается неудачным потоком.
     pub stall_after: Duration,
-    /// Seconds of audio after a recovery before it counts as recovered (a
-    /// stream that dies again sooner continues the same attempt count).
+    /// Секунды звука после восстановления, прежде чем он будет считаться восстановленным (поток,
+    /// который прекращается раньше, продолжает считать попытки с тем же числом).
     pub probation_secs: f64,
-    /// Multiplies every wait; tests shrink it.
+    /// Умножает каждое ожидание; тесты уменьшают его.
     pub time_scale: f64,
 }
 
@@ -125,10 +120,9 @@ impl RecoveryPolicy {
         if connectivity { self.connectivity_attempts } else { self.content_attempts }
     }
 
-    /// Wait before attempt number `attempt` (1-based). A dead address is
-    /// re-resolved at once the first time, as always; a bad connection gets a
-    /// moment first. Later attempts back off: 1.2, 2.4, 4.8 … seconds, up to
-    /// 20 (6 for dead addresses), ±15 %.
+    /// Подождите перед попыткой номер `attempt` (от 1). Мертвый адрес переразрешается сразу с первого
+    /// раза, как всегда; плохая связь получает преимущество в первую очередь. Последующие попытки
+    /// отступают: 1,2, 2,4, 4,8… секунды, до 20 (6 для мертвых адресов), ±15 %.
     pub fn delay(&self, connectivity: bool, attempt: u32, unit: f64) -> Duration {
         let unit = if unit.is_finite() { unit.clamp(0.0, 1.0) } else { 0.5 };
         let seconds = match (connectivity, attempt) {
@@ -144,8 +138,8 @@ impl RecoveryPolicy {
         Duration::from_secs_f64((seconds * scale).clamp(0.0, 3600.0))
     }
 
-    /// After the network came back: a short jittered start, not the back-off
-    /// that belonged to the dead path.
+    /// После того, как сеть восстановилась: короткий резкий старт, а не замедление, свойственное
+    /// мертвому пути.
     pub fn network_return_delay(&self, unit: f64) -> Duration {
         let unit = if unit.is_finite() { unit.clamp(0.0, 1.0) } else { 0.5 };
         self.scaled(0.1 + 0.4 * unit)
@@ -154,11 +148,11 @@ impl RecoveryPolicy {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Class {
-    /// The connection or route is bad: wait, drop connections, try again.
+    /// Соединение или маршрут плохие: подождите, разорвите соединение, повторите попытку.
     Connectivity,
-    /// The address is dead or the data is bad: ask VK for a new one.
+    /// Адрес недействителен или данные неверны: запросите у VK новый.
     Content,
-    /// Nothing recovery can fix (access denied, sign-in needed, …).
+    /// Восстановление ничего не может исправить (доступ запрещен, требуется вход в систему и т. д.).
     Fatal,
 }
 
@@ -166,18 +160,29 @@ fn classify(error: &Error) -> Class {
     match error {
         Error::Timeout | Error::Offline | Error::Transport(_) => Class::Connectivity,
         Error::Http(408 | 429 | 500..=599) => Class::Connectivity,
-        // 6/9/10: too many requests, flood control, VK internal error.
+        // 9.06.10: слишком много запросов, контроль флуда, внутренняя ошибка VK.
         Error::Vk { code: 6 | 9 | 10, .. } => Class::Connectivity,
+        Error::Stream(message) if message.contains("audio output") || message.starts_with("audio device") => Class::Connectivity,
         Error::Http(_) | Error::Stream(_) => Class::Content,
         _ => Class::Fatal,
     }
 }
 
-/// A log-safe name for a failure (never a URL).
+/// Логически безопасное имя для сбоя (никогда не URL).
 fn what(error: &Error) -> String {
     match error {
         Error::Http(status) => status.to_string(),
-        Error::Stream(_) => "stream error".into(),
+        Error::Stream(message) => {
+            let category = if message.contains("audio output") || message.starts_with("audio device") { "audio output unavailable" }
+                else if message.starts_with("decoder:") { "audio decoding failed" }
+                else if message.contains("size limit") { "stream size limit" }
+                else if message.contains("playlist") { "invalid playlist" }
+                else if message.contains("initialization") || message.contains("AAC configuration") { "unsupported stream initialization" }
+                else if message.contains("empty response") || message.contains("held no audio") || message.contains("ended before any audio") { "empty audio stream" }
+                else if message.starts_with("resampler:") || message=="invalid audio format" { "audio conversion failed" }
+                else { "stream error" };
+            category.into()
+        },
         Error::Timeout => "timeout".into(),
         Error::Offline => "connect failed".into(),
         Error::Transport(_) => "connection lost".into(),
@@ -196,41 +201,41 @@ struct Inner {
     volume: f32,
     rng: StdRng,
     failures: u32,
-    /// Tracks already retried with a fresh URL during this attempt.
+    /// Во время этой попытки треки уже были повторены с новым URL.
     refreshed: HashSet<String>,
-    /// Where the next start of the current track begins (a restored session).
+    /// Где начинается следующий старт текущего трека (восстановленная сессия).
     pending_start: f64,
-    /// The endless source the queue refills from, if it came from one.
+    /// Бесконечный источник, из которого пополняется очередь, если она пришла из него.
     radio: Option<Radio>,
     radio_generation: u64,
-    /// The failure being healed, if any.
+    /// Неисправность исцеляется, если таковая имеется.
     recovery: Option<Recovery>,
-    /// Bumped to cancel an attempt that is waiting out its back-off.
+    /// Столкнулся с необходимостью отменить попытку, ожидающую отмены.
     recovery_token: u64,
-    /// Playback gave up on a connection problem and resumes by itself when
-    /// the network settles.
+    /// Воспроизведение прекратилось из-за проблемы с подключением и возобновилось само собой, когда
+    /// сеть стабилизируется.
     gave_up: bool,
-    /// Bumped to cancel the stall watchdog of an earlier buffering.
+    /// Натолкнулся на отмену сторожевого таймера предыдущей буферизации.
     stall_token: u64,
-    /// Bumped by every network change; URLs resolved under an older value are
-    /// not trusted (VK ties them to the network that asked).
+    /// Сталкивался с каждым изменением сети; URLs, разрешенные под более старым значением, не являются
+    /// доверенными (VK связывает их с запрашивавшей сетью).
     network_epoch: u64,
-    /// Track id → network epoch its stream URL was resolved under.
+    /// Идентификатор трека → эпоха сети, в которой был разрешен его поток URL.
     fresh: HashMap<String, u64>,
-    /// The current track plays from a downloaded file: nothing here applies.
+    /// Текущий трек воспроизводится из загруженного файла: здесь ничего не применимо.
     source_offline: bool,
     loading_since: Instant,
 }
 
 struct Recovery {
     track_id: String,
-    /// Failures so far, which is also the number of the attempt they asked for.
+    /// На данный момент неудачных попыток, что также является номером попытки, которую они запросили.
     attempts: u32,
-    /// The bound for the kind of failure seen last, and its name for the window.
+    /// Граница вида сбоя, который наблюдался последним, и его имя для окна.
     max: u32,
     kind: &'static str,
     started: Instant,
-    /// Set when audio flows again: the position it restarted from.
+    /// Установите, когда звук возобновится: позиция, с которой он возобновился.
     probation_from: Option<f64>,
 }
 
@@ -250,7 +255,7 @@ struct Shared {
     policy: Mutex<RecoveryPolicy>,
 }
 
-/// Renews an expired session (see [`Controller::set_refresher`]).
+/// Обновляет истекший сеанс (см. [`Controller::set_refresher`]).
 pub type Refresher = Arc<dyn Fn(&Session) -> crate::Result<Session> + Send + Sync>;
 
 pub struct Controller {
@@ -297,7 +302,7 @@ impl Shared {
         self.remote.get().expect("controller is fully built")
     }
 
-    /// Runs `f` under the lock, then emits what it returned after unlocking.
+    /// Запускает `f` под блокировкой, затем выдает то, что вернул после разблокировки.
     fn with<R>(&self, f: impl FnOnce(&mut Inner, &mut Vec<UiEvent>) -> R) -> R {
         let mut events = Vec::new();
         let result = {
@@ -319,10 +324,10 @@ impl Shared {
         config
     }
 
-    /// Starts the queue's current track, or stops when there is none.
+    /// Запускает текущую дорожку очереди или останавливает ее, если ее нет.
     fn start_current(self: &Arc<Self>, inner: &mut Inner, events: &mut Vec<UiEvent>) {
         inner.user_paused = false;
-        // Whatever was being healed belongs to what was playing before.
+        // Все, что исцелялось, принадлежит тому, что играло раньше.
         self.cancel_recovery(inner, events);
         if let Some(radio) = inner.radio.as_mut() {
             radio.waiting = false;
@@ -335,7 +340,7 @@ impl Shared {
             return;
         };
         let start = std::mem::take(&mut inner.pending_start).clamp(0.0, f64::from(track.duration));
-        // A fresh start: listening to it counts from zero again.
+        // Новое начало: прослушивание снова имеет значение с нуля.
         if let Some(history) = self.history.get() {
             history.restart();
         }
@@ -344,15 +349,15 @@ impl Shared {
         inner.position = start;
         inner.duration = f64::from(track.duration);
         events.push(UiEvent::State(inner.state()));
-        // A downloaded copy plays from disk. If its file has gone, the player
-        // fails and the usual retry fetches the track from VK instead.
+        // Загруженная копия воспроизводится с диска. Если его файл исчез, проигрыватель терпит неудачу
+        // и вместо этого при обычной повторной попытке извлекается дорожка из VK.
         let downloaded = if inner.refreshed.contains(&track.id()) {
             None
         } else {
             self.offline.get().and_then(|o| o.address(&track.id()))
         };
         if let Some(address) = downloaded {
-            // No credentials, no network: nothing about VPNs concerns it.
+            // Никаких учетных данных, никакой сети: ничего о VPNs его не касается.
             inner.source_offline = true;
             let config = self.fetch_config(inner);
             self.remote().play(&track.id(), &address, f64::from(track.duration), start, config);
@@ -365,7 +370,7 @@ impl Shared {
                 let config = self.fetch_config(inner);
                 self.remote().play(&track.id(), &url, f64::from(track.duration), start, config);
             }
-            // No address, or one resolved before the network changed.
+            // Адрес отсутствует или адрес был решен до изменения сети.
             _ => {
                 inner.pending_start = start;
                 self.refresh_then_play(inner, track)
@@ -373,7 +378,7 @@ impl Shared {
         }
     }
 
-    /// A URL resolved under an earlier network epoch is not trusted.
+    /// URL, разрешенный в более раннюю сетевую эпоху, не является доверенным.
     fn is_stale(&self, inner: &Inner, track: &Track) -> bool {
         inner.session.is_some() && inner.network_epoch > 0 && inner.fresh.get(&track.id()) != Some(&inner.network_epoch)
     }
@@ -382,10 +387,10 @@ impl Shared {
         *self.policy.lock().unwrap_or_else(|p| p.into_inner())
     }
 
-    /// Asks VK for a fresh stream URL on a worker thread, then plays it.
+    /// Запрашивает у VK новый поток URL в рабочем потоке, а затем воспроизводит его.
     fn refresh_then_play(self: &Arc<Self>, inner: &mut Inner, track: Track) {
         let Some(session) = inner.session.clone() else {
-            // Without a session there is nothing to ask; behave like a failure.
+            // Без сеанса спрашивать не о чем; вести себя как неудачник.
             let shared = self.clone();
             std::thread::spawn(move || shared.fail_track(&track, Error::Unauthorized));
             return;
@@ -396,17 +401,17 @@ impl Shared {
         let shared = self.clone();
         std::thread::spawn(move || {
             let mut result = shared.client.refreshed_track_once(&session, &track);
-            // An expired token is renewed from the stored cookie, not treated
-            // as a sign-out, exactly like the app's own calls.
+            // Токен с истекшим сроком действия обновляется из сохраненного файла cookie и не
+            // рассматривается как выход из системы, как и собственные вызовы приложения.
             if result == Err(Error::Unauthorized) {
                 if let Some(refresh) = shared.refresher.get() {
                     result = refresh(&session).and_then(|fresh| shared.client.refreshed_track_once(&fresh, &track));
                 }
             }
             shared.with(|inner, events| {
-                // The same track can be restarted, paused or re-resolved while
-                // VK is answering. A late reply must never revive old playback
-                // or mark an address from the old network as fresh.
+                // Тот же трек можно перезапустить, приостановить или повторно разрешить, пока VK
+                // отвечает. Поздний ответ никогда не должен возобновлять старое воспроизведение или
+                // помечать адрес из старой сети как свежий.
                 if inner.recovery_token != token || inner.session.is_none()
                     || inner.queue.current().map(Track::id) != Some(track.id()) {
                     return;
@@ -417,7 +422,7 @@ impl Shared {
                 }
                 match result {
                 Ok(fresh) => {
-                    // The user may have moved on while VK was answering.
+                    // Возможно, пользователь ушел дальше, пока VK отвечал.
                     if inner.queue.current().map(Track::id) != Some(track.id()) {
                         return;
                     }
@@ -439,7 +444,7 @@ impl Shared {
         });
     }
 
-    /// Starts a radio round on a worker thread when the queue is running low.
+    /// Запускает радио-раунд в рабочем потоке, когда очередь заканчивается.
     fn maybe_refill(self: &Arc<Self>, inner: &mut Inner) {
         let upcoming = inner.queue.upcoming();
         let Some(radio) = inner.radio.as_mut() else { return };
@@ -452,7 +457,7 @@ impl Shared {
         std::thread::spawn(move || shared.refill(generation));
     }
 
-    /// One radio round: up to a few requests until something new arrives.
+    /// Один радиораунд: до нескольких запросов, пока не поступит что-то новое.
     fn refill(self: &Arc<Self>, generation: u64) {
         let mut added_total = 0;
         let mut failure = None;
@@ -499,7 +504,7 @@ impl Shared {
             radio.in_flight = false;
             radio.finish_round(added_total, failure.as_ref());
             if std::mem::take(&mut radio.waiting) {
-                // The queue ran dry while this round was on its way.
+                // Пока этот раунд был в пути, очередь иссякла.
                 if added_total > 0 && inner.queue.advance(false).is_some() {
                     inner.failures = 0;
                     inner.refreshed.clear();
@@ -511,13 +516,13 @@ impl Shared {
                     events.push(UiEvent::State(inner.state()));
                 }
             } else if added_total > 0 {
-                // Still short after this page: ask for the next one.
+                // После этой страницы все еще мало: попросите следующую.
                 self.maybe_refill(inner);
             }
         });
     }
 
-    /// A track cannot be played: report it and move on, within limits.
+    /// Трек не может воспроизводиться: сообщите об этом и двигайтесь дальше, в пределах ограничений.
     fn fail_track(self: &Arc<Self>, track: &Track, error: Error) {
         self.with(|inner, events| self.fail_track_in(inner, events, track, error));
     }
@@ -544,8 +549,8 @@ impl Shared {
         }
     }
 
-    /// Forgets the failure being healed (a new track started, the user
-    /// stopped, …) and any attempt still waiting out its back-off.
+    /// Забывает об устранении сбоя (начался новый трек, пользователь остановился и т. д.) и о любых
+    /// попытках, все еще ожидающих отмены.
     fn cancel_recovery(&self, inner: &mut Inner, events: &mut Vec<UiEvent>) {
         inner.recovery_token += 1;
         inner.stall_token += 1;
@@ -567,9 +572,9 @@ impl Shared {
         });
     }
 
-    /// A stream could not be fetched, decoded or resolved. Decides between
-    /// healing it (fresh URL, fresh connections, back-off), skipping a dead
-    /// track, and pausing with a retry once the bound is reached.
+    /// Не удалось получить, декодировать или разрешить поток. Принимает решение между его исцелением
+    /// (свежие URL, новые соединения, откат), пропуском мертвого трека и паузой с повторной попыткой
+    /// после достижения границы.
     fn stream_failed(self: &Arc<Self>, track: Track, error: Error) {
         self.stream_failed_at(track, error, None);
     }
@@ -588,10 +593,10 @@ impl Shared {
                 events.push(UiEvent::State(inner.state()));
                 return;
             }
-            // Retire a stalled decoder/download before asking for another URL.
-            // Its late failure must not consume the new attempt's retry budget.
+            // Удалите застрявший decoder/download, прежде чем запрашивать еще один URL. Поздняя неудача
+            // не должна расходовать бюджет повторных попыток новой попытки.
             self.remote().stop();
-            // A downloaded copy that cannot be read: fetch it from VK once.
+            // Загруженная копия, которую невозможно прочитать: получите ее один раз с VK.
             if std::mem::take(&mut inner.source_offline) {
                 if inner.session.is_some() && !inner.refreshed.contains(&track.id()) && matches!(error, Error::Stream(_) | Error::Http(_)) {
                     inner.pending_start = inner.position;
@@ -608,7 +613,8 @@ impl Shared {
             }
             let connectivity = class == Class::Connectivity;
             if connectivity {
-                // Whatever sockets are pooled belong to a route that failed.
+                // Какие бы сокеты ни были объединены в пул, они принадлежат маршруту, который потерпел
+                // неудачу.
                 net::drop_connections();
             }
             let max = policy.attempts(connectivity);
@@ -624,8 +630,8 @@ impl Shared {
                 inner.recovery = None;
                 inner.recovery_token += 1;
                 if !connectivity {
-                    // This address will not work however often it is asked
-                    // for: a dead track, skipped within the usual limits.
+                    // Этот адрес не будет работать, как бы часто его ни просили: мертвый трек,
+                    // пропущенный в обычных пределах.
                     log::warn!("stream {}: still failing after {max} fresh URLs, giving up on this track", what(&error));
                     self.fail_track_in(inner, events, &track, error);
                     return;
@@ -636,8 +642,8 @@ impl Shared {
                 inner.status = Status::Idle;
                 self.remote().stop();
                 events.push(UiEvent::Error { kind: error.kind().to_string(), message: error.to_string() });
-                // Only a real connection failure points at the network (and a
-                // VPN); a service that keeps answering 5xx is another matter.
+                // Только реальный сбой соединения указывает на сеть (и VPN); сервис, который продолжает
+                // отвечать на 5хх - другое дело.
                 let kind = if net::is_connectivity(&error) { "network" } else { "service" };
                 events.push(UiEvent::Recovery { phase: RecoveryPhase::Failed, attempt: max, max, kind: kind.into() });
                 events.push(UiEvent::State(inner.state()));
@@ -653,8 +659,8 @@ impl Shared {
         });
     }
 
-    /// Runs the next recovery attempt for `track_id` after `delay`, unless it
-    /// is cancelled (a new track, a stop, a network change that replaced it).
+    /// Запускает следующую попытку восстановления для `track_id` после `delay`, если она не отменена
+    /// (новый трек, остановка, смена сети, заменившая ее).
     fn schedule_attempt(self: &Arc<Self>, inner: &mut Inner, track_id: String, delay: Duration) {
         inner.recovery_token += 1;
         let token = inner.recovery_token;
@@ -666,7 +672,7 @@ impl Shared {
                     return;
                 }
                 let Some(track) = inner.queue.current().cloned().filter(|t| t.id() == track_id) else { return };
-                // Carry on where it broke, not from the beginning.
+                // Продолжайте там, где сломались, а не с самого начала.
                 inner.pending_start = inner.position;
                 inner.status = Status::Loading;
                 inner.loading_since = Instant::now();
@@ -677,7 +683,7 @@ impl Shared {
         });
     }
 
-    /// Audio ran dry and stayed dry: treat it like a failed stream.
+    /// Звук иссяк и остался сухим: относитесь к нему как к неудачному стриму.
     fn watch_stall(self: &Arc<Self>, inner: &mut Inner, track_id: String) {
         inner.stall_token += 1;
         let token = inner.stall_token;
@@ -706,9 +712,9 @@ impl Shared {
         }
     }
 
-    /// Every stream URL resolved so far belongs to the old network: each
-    /// remote track is asked for a fresh one before it plays next. Whatever
-    /// plays from a downloaded file is untouched.
+    /// Каждый разрешенный на данный момент поток URL принадлежит старой сети: для каждого удаленного
+    /// трека запрашивается новый перед воспроизведением следующего. Все, что воспроизводится из
+    /// загруженного файла, остается нетронутым.
     fn network_changed(&self) {
         self.with(|inner, _| {
             inner.network_epoch += 1;
@@ -717,9 +723,8 @@ impl Shared {
         });
     }
 
-    /// The network is stable again: a stream that was waiting out a back-off,
-    /// a stalled one, and a playback that gave up all start over at once
-    /// (after a short random pause, so nothing stampedes).
+    /// Сеть снова стабильна: поток, который ждал отката, застопорился, и воспроизведение, которое
+    /// сдалось, началось сразу же (после небольшой случайной паузы, чтобы ничего не тормозило).
     fn network_settled(self: &Arc<Self>) {
         let shared = self;
         let policy = self.policy();
@@ -788,7 +793,7 @@ impl Shared {
                     inner.refreshed.remove(&track_id);
                     let position = inner.position;
                     if let Some(recovery) = inner.recovery.as_mut().filter(|r| r.track_id == track_id) {
-                        // Audio flows again; it counts as recovered after a few seconds.
+                        // Звук снова течет; он считается восстановленным через несколько секунд.
                         recovery.probation_from = Some(position);
                     }
                     events.push(UiEvent::State(inner.state()));
@@ -831,7 +836,7 @@ impl Shared {
                     events.push(inner.queue_event());
                     self.start_current(inner, events);
                 } else if inner.radio.as_ref().is_some_and(|r| !r.done) {
-                    // An endless queue is never over: wait for its next page.
+                    // Бесконечная очередь никогда не заканчивается: ждите следующей страницы.
                     if let Some(radio) = inner.radio.as_mut() {
                         radio.waiting = true;
                     }
@@ -860,8 +865,8 @@ impl Shared {
 }
 
 impl Controller {
-    /// `make_sink` builds the output device on the audio thread;
-    /// `emit` receives every [`UiEvent`] (it must not block).
+    /// `make_sink` создает устройство вывода в аудиопотоке; `emit` получает каждый [`UiEvent`] (он не
+    /// должен блокироваться).
     pub fn new<F>(
         client: VkClient,
         make_sink: F,
@@ -874,8 +879,8 @@ impl Controller {
         Self::with_fetch(client, make_sink, emit, volume, FetchConfig::new("PrivateMusicDesktop"))
     }
 
-    /// Like [`Controller::new`] with an explicit stream-fetch configuration
-    /// (tests allow a loopback server this way).
+    /// Как [`Controller::new`] с явной конфигурацией потоковой выборки (тесты позволяют использовать
+    /// сервер обратной связи таким образом).
     pub fn with_fetch<F>(
         client: VkClient,
         make_sink: F,
@@ -946,31 +951,31 @@ impl Controller {
         });
     }
 
-    /// How the controller renews an expired token when it asks VK for a
-    /// fresh stream address. Set once by the app.
+    /// Как контроллер обновляет токен с истекшим сроком действия, когда он запрашивает у VK новый адрес
+    /// потока. Устанавливается один раз с помощью приложения.
     pub fn set_refresher(&self, refresher: Refresher) {
         let _ = self.shared.refresher.set(refresher);
     }
 
-    /// Changes how stubbornly broken streams are recovered (tests shorten the waits).
+    /// Изменяет способ восстановления поврежденных потоков (тесты сокращают время ожидания).
     pub fn set_recovery_policy(&self, policy: RecoveryPolicy) {
         *self.shared.policy.lock().unwrap_or_else(|p| p.into_inner()) = policy;
     }
 
-    /// The route to the internet changed, settled or vanished (see [`net`]).
+    /// Маршрут к Интернету изменился, стабилизировался или исчез (см. [`net`]).
     pub fn on_network(&self, state: NetState) {
         self.shared.on_network(state);
     }
 
-    /// The same as [`on_network`](Self::on_network) for a thread that outlives
-    /// this borrow (the network monitor).
+    /// То же, что [`on_network`](Self::on_network) для потока, пережившего это заимствование (сетевой
+    /// монитор).
     pub fn network_listener(&self) -> impl Fn(NetState) + Send + Sync + 'static {
         let shared = self.shared.clone();
         move |state| shared.on_network(state)
     }
 
-    /// The user's "try again" for a playback that failed: fresh connections,
-    /// a fresh URL, the same position, a full set of attempts.
+    /// Пользовательский "try again" для неудачного воспроизведения: свежие соединения, свежий URL, та
+    /// же позиция, полный набор попыток.
     pub fn retry(&self) {
         self.shared.with(|inner, events| {
             if inner.queue.current().is_none() || inner.source_offline {
@@ -987,17 +992,18 @@ impl Controller {
         });
     }
 
-    /// Where downloaded tracks are played from. Set once by the app.
+    /// Откуда воспроизводятся скачанные треки. Устанавливается один раз с помощью приложения.
     pub fn set_offline(&self, store: Arc<OfflineStore>) {
         let _ = self.shared.offline.set(store);
     }
 
-    /// Where plays are recorded for the history and statistics. Set once by the app.
+    /// Где записываются игры для истории и статистики. Устанавливается один раз с помощью приложения.
     pub fn set_history(&self, history: Arc<History>) {
         let _ = self.shared.history.set(history);
     }
 
-    /// The download settings playback uses (user agent, size cap).
+    /// При воспроизведении используются настройки загрузки (пользовательский агент, ограничение
+    /// размера).
     pub fn fetch_config(&self) -> FetchConfig {
         let inner = self.shared.lock();
         self.shared.fetch_config(&inner)
@@ -1023,9 +1029,9 @@ impl Controller {
         });
     }
 
-    /// Plays a queue that keeps refilling from its source (see [`radio`]).
-    /// `offset` is where a stream mix continues, `seeds` the tracks a seeded
-    /// radio starts asking about; `tracks` count as already heard.
+    /// Воспроизводит очередь, которая продолжает пополняться из своего источника (см. [`radio`]).
+    /// `offset` — это место, где продолжается микс потока, `seeds` — треки, о которых начинает
+    /// спрашивать радиостанция; `tracks` считайте, как уже слышали.
     pub fn play_radio(&self, tracks: Vec<Track>, index: usize, kind: RadioKind, fetch: RadioFetch, offset: u32, seeds: Vec<Track>) {
         self.shared.with(|inner, events| {
             let Inner { queue, rng, .. } = inner;
@@ -1039,8 +1045,8 @@ impl Controller {
         });
     }
 
-    /// Puts a queue in place without playing it (a restored session). The
-    /// next play starts at `position` seconds.
+    /// Ставит очередь на место без ее воспроизведения (восстановленный сеанс). Следующая игра начнется
+    /// через `position` секунд.
     pub fn load_queue(&self, tracks: Vec<Track>, index: usize, position: f64) {
         self.shared.with(|inner, events| {
             let Inner { queue, rng, .. } = inner;
@@ -1059,8 +1065,8 @@ impl Controller {
         self.shared.with(|inner, events| {
             inner.user_paused = true;
             if inner.status == Status::Loading {
-                // Pausing while the stream is being healed stops the healing;
-                // Play starts again from here.
+                // Пауза во время исцеления потока останавливает исцеление; Игра начинается снова
+                // отсюда.
                 let position = inner.position;
                 self.shared.cancel_recovery(inner, events);
                 inner.pending_start = position;
@@ -1085,7 +1091,7 @@ impl Controller {
             Status::Playing | Status::Buffering => self.pause(),
             Status::Paused => self.resume(),
             Status::Idle => {
-                // Start whatever is queued, from the top of the track.
+                // Запускайте все, что стоит в очереди, с начала дорожки.
                 self.shared.with(|inner, events| {
                     if inner.queue.current().is_some() {
                         self.shared.start_current(inner, events);
@@ -1104,7 +1110,7 @@ impl Controller {
             let target = seconds.max(0.0);
             inner.position = if inner.duration > 0.0 { target.min(inner.duration) } else { target };
             if inner.status == Status::Idle {
-                // Nothing is playing: the next Play starts here.
+                // Ничего не играет: здесь начинается следующая игра.
                 inner.pending_start = inner.position;
             }
             events.push(UiEvent::State(inner.state()));
@@ -1112,8 +1118,8 @@ impl Controller {
         self.shared.remote().seek(seconds);
     }
 
-    /// Switches to another sound output (the shell's `make_sink` decides
-    /// which): the device is reopened and playback carries on where it was.
+    /// Переключается на другой вывод звука (`make_sink` оболочки решает, какой): устройство снова
+    /// открывается, и воспроизведение продолжается с того места, где оно было.
     pub fn reopen_output(&self) {
         self.shared.with(|inner, events| {
             self.shared.remote().reopen_sink();
@@ -1124,7 +1130,8 @@ impl Controller {
                     self.shared.start_current(inner, events);
                 }
                 _ => {
-                    // Paused or idle: the next Play starts from here on the new output.
+                    // Пауза или режим ожидания: следующее воспроизведение начинается с этого места на
+                    // новом выходе.
                     if had_track {
                         inner.pending_start = inner.position;
                     }
@@ -1135,13 +1142,13 @@ impl Controller {
         });
     }
 
-    /// Equaliser gains in dB (see `audio::eq::BANDS`); `None` turns it off.
+    /// Усиления эквалайзера в dB (см. `audio::eq::BANDS`); `None` выключает его.
     pub fn set_equalizer(&self, gains: Option<[f32; 10]>) {
         self.shared.remote().set_equalizer(gains);
     }
 
-    /// Starts or stops the spectrum events. Off by default: analysing audio
-    /// costs CPU that only the full-screen view needs.
+    /// Запускает или останавливает события спектра. По умолчанию отключено: анализ звука требует CPU,
+    /// который необходим только для полноэкранного просмотра.
     pub fn set_visualizer(&self, on: bool) {
         self.shared.remote().set_visualizer(on);
     }
@@ -1185,7 +1192,7 @@ impl Controller {
         });
     }
 
-    /// Plays the track at `index` of the queue as listed.
+    /// Воспроизводит трек с позиции `index` в указанной очереди.
     pub fn jump(&self, index: usize) {
         self.shared.with(|inner, events| {
             if inner.queue.jump(index).is_some() {
@@ -1207,8 +1214,8 @@ impl Controller {
         });
     }
 
-    /// A timer remains in the engine even if the player view is closed.
-    /// Replacing it wakes the old waiter immediately instead of leaking threads.
+    /// Таймер остается в движке, даже если вид игрока закрыт. Его замена немедленно пробуждает старого
+    /// официанта вместо утечки потоков.
     pub fn set_sleep_timer(&self, seconds: Option<u64>, end_of_track: bool) -> crate::Result<()> {
         if seconds.is_some_and(|n| n == 0 || n > 86_400) || (seconds.is_some() && end_of_track) {
             return Err(Error::InvalidRequest);
@@ -1233,7 +1240,7 @@ impl Controller {
                 if *cancelled { return; }
                 drop(cancelled);
                 let Some(shared) = weak.upgrade() else { return };
-                // Serialize expiry with cancellation/replacement of the timer.
+                // Сериализуйте истечение срока действия с помощью cancellation/replacement таймера.
                 let current = shared.sleep_cancel.lock().unwrap_or_else(|p| p.into_inner());
                 if !current.as_ref().is_some_and(|v| Arc::ptr_eq(v, &wake)) { return; }
                 *shared.sleep_deadline.lock().unwrap_or_else(|p| p.into_inner()) = None;
@@ -1314,8 +1321,8 @@ impl Controller {
                 inner.radio = None;
             }
             if was_current && was_last && !inner.queue.is_empty() {
-                // Removing the last track of the queue while it plays: the
-                // queue is over, unless it repeats. Never replay the previous one.
+                // Удаление последнего трека очереди во время его воспроизведения: очередь окончена,
+                // если она не повторяется. Никогда не переигрывайте предыдущее.
                 if inner.queue.repeat() == Repeat::All {
                     inner.queue.rewind();
                 } else {
@@ -1380,26 +1387,28 @@ mod tests {
 
     #[test]
     fn log_names_never_carry_the_error_text() {
-        // `Transport` and `Stream` texts can hold addresses; the log gets a fixed name.
+        // Тексты `Transport` и `Stream` могут содержать адреса; журнал получает фиксированное имя.
         assert_eq!(what(&Error::Transport("https://cdn/x?token=abc".into())), "connection lost");
         assert_eq!(what(&Error::Stream("https://cdn/x?token=abc".into())), "stream error");
         assert_eq!(what(&Error::Http(403)), "403");
+        assert_eq!(what(&Error::Stream("decoder: bad packet https://secret".into())), "audio decoding failed");
+        assert_eq!(classify(&Error::Stream("audio device disconnected or stopped responding".into())), Class::Connectivity);
     }
 
     #[test]
     fn the_schedule_is_bounded_jittered_and_backs_off() {
         let policy = RecoveryPolicy::default();
         let secs = |connectivity, attempt, unit| policy.delay(connectivity, attempt, unit).as_secs_f64();
-        // A dead address is re-resolved at once the first time, then backs off.
+        // Мертвый адрес повторно разрешается сразу в первый раз, а затем прекращается.
         assert_eq!(secs(false, 1, 0.5), 0.0);
         assert!((secs(false, 2, 0.5) - 1.2).abs() < 1e-9);
         assert!((secs(false, 3, 0.5) - 2.4).abs() < 1e-9);
-        // A bad connection gets a moment, then 1.2, 2.4, 4.8 … capped at 20 s.
+        // Плохое соединение длится мгновение, затем 1,2, 2,4, 4,8… ограничено 20 с.
         assert!((0.3..0.5).contains(&secs(true, 1, 0.5)));
         let ladder: Vec<f64> = (2..=6).map(|n| secs(true, n, 0.5)).collect();
         assert!(ladder.windows(2).all(|w| w[1] > w[0]), "{ladder:?}");
         assert!(ladder.iter().all(|d| *d <= 20.0));
-        // Jitter stays within ±15 %, and nothing ever exceeds the caps.
+        // Джиттер остается в пределах ±15 %, и ничто никогда не превышает допустимые пределы.
         for attempt in 1..=40 {
             for unit in [0.0, 0.3, 1.0, f64::NAN] {
                 assert!(secs(true, attempt, unit) <= 20.0 && secs(false, attempt, unit) <= 6.0);
@@ -1407,12 +1416,13 @@ mod tests {
         }
         let (low, high) = (secs(true, 4, 0.0), secs(true, 4, 1.0));
         assert!(high / low < 1.4 && low < 4.8 && high > 4.8);
-        // The total wait before giving up on a connection problem is well under a minute.
+        // Общее время ожидания, прежде чем отказаться от проблемы с соединением, составляет менее
+        // минуты.
         let total: f64 = (1..=policy.connectivity_attempts).map(|n| secs(true, n, 1.0)).sum();
         assert!(total < 50.0, "{total}");
-        // After the network returns: a short random pause.
+        // После восстановления сети: короткая случайная пауза.
         assert!(policy.network_return_delay(0.0).as_secs_f64() >= 0.1 && policy.network_return_delay(1.0).as_secs_f64() <= 0.5);
-        // Tests shrink every wait.
+        // Тесты сокращаются с каждым ожиданием.
         let fast = RecoveryPolicy { time_scale: 0.01, ..policy };
         assert!(fast.delay(true, 6, 1.0).as_secs_f64() < 0.25);
     }

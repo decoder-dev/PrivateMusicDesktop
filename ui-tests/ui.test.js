@@ -3,8 +3,8 @@ import test from "node:test";
 import { openApp } from "./harness.js";
 
 const rows = (page) => page.locator(".main > .view:not([hidden]) .row");
-// The suite runs with reduced motion (every state change is instant, so nothing waits for an
-// animation); tests about motion ask for it explicitly.
+// Пакет работает с уменьшенным количеством движений (каждое изменение состояния происходит мгновенно,
+// поэтому анимации не требуется); тесты на движение требуют этого явно.
 const motionApp = (options = {}) => openApp({ ...options, reducedMotion: "no-preference" });
 
 async function waitForLibrary(page) {
@@ -97,7 +97,7 @@ test("one click plays from that row with the visible list as the queue", async (
     const call = await page.evaluate(() => window.__mock.last("play_tracks"));
     assert.equal(call.args.index, 2);
     assert.ok(call.args.tracks.length > 50 && call.args.tracks.every((t) => t.artist === "Исполнитель 5"));
-    // The player bar follows the backend state.
+    // Панель проигрывателя соответствует состоянию серверной части.
     await page.waitForFunction(() => { const t = document.querySelector(".player .title")?.textContent; return t && t !== "Ничего не играет"; });
     assert.equal(await page.locator(".player .play").getAttribute("aria-label"), "Пауза");
     assert.equal(await page.locator(".row[aria-selected=true]").count(), 1);
@@ -187,7 +187,7 @@ test("search: debounced, stale answers are dropped, more pages load on scroll", 
     await page.click(".nav button[data-view=search]");
     const input = page.locator(".main > .view:not([hidden]) input[type=search]");
     await input.fill("slow");
-    await input.fill("fast");   // a newer query must win even though "slow" answers later
+    await input.fill("fast");   // более новый запрос должен выиграть, даже если "slow" ответит позже
     await page.waitForFunction(() => [...document.querySelectorAll(".main > .view:not([hidden]) .row .title")].some((e) => e.textContent.startsWith("fast")));
     await page.waitForTimeout(500);
     const titles = await rows(page).locator(".title").allInnerTexts();
@@ -235,9 +235,9 @@ test("titles from VK are text, never markup", async () => {
   } finally { await app.close(); }
 });
 
-// ------------------------------------------------------------ motion and design
+// -------------------------------------------- Движение и дизайн
 
-/** "rgb(…)", "rgba(…)" or "color(srgb r g b / a)" as [r, g, b, a] with 0-255 channels. */
+/** "rgb(…)", "rgba(…)" или "color(srgb r g b / a)" как [r, g, b, a] с каналами 0–255. */
 function parseColor(text) {
   const srgb = text.match(/^color\(srgb ([\d.e-]+) ([\d.e-]+) ([\d.e-]+)(?: \/ ([\d.e-]+))?\)$/);
   if (srgb) return [srgb[1], srgb[2], srgb[3]].map((v) => Number(v) * 255).concat(srgb[4] === undefined ? 1 : Number(srgb[4]));
@@ -259,7 +259,7 @@ test("motion: reduced motion removes all motion", async () => {
   try {
     const { page } = app;
     await waitForLibrary(page);
-    // Interact with everything that animates when motion is on.
+    // Взаимодействуйте со всем, что оживляет, когда включено движение.
     await rows(page).nth(1).click({ button: "right" });
     await page.waitForSelector(".menu");
     await page.click(".menu [data-action=add-to-playlist]");
@@ -277,7 +277,7 @@ test("motion: reduced motion removes all motion", async () => {
     await frames(page);
     const slow = await page.evaluate(() => {
       const bad = [];
-      const limit = 0.00002; // 0.01 ms, in seconds
+      const limit = 0.00002; // 0,01 мс, в секундах
       for (const el of document.querySelectorAll("*")) {
         for (const pseudo of [null, "::before", "::after"]) {
           const s = getComputedStyle(el, pseudo);
@@ -289,14 +289,14 @@ test("motion: reduced motion removes all motion", async () => {
     });
     assert.deepEqual(slow, []);
     assert.equal(await page.evaluate(() => document.getAnimations().length), 0);
-    // Closing is instant too: nothing waits for an animation to end.
+    // Закрытие также происходит мгновенно: ничто не ждет окончания анимации.
     await page.keyboard.press("Escape");
     await page.waitForSelector(".np", { state: "hidden", timeout: 1500 });
     assert.deepEqual(app.problems, []);
   } finally { await app.close(); }
 });
 
-/** Lets a few frames pass: finished transitions are only retired when the page paints. */
+/** Пропускает несколько кадров: готовые переходы удаляются только при рисовании страницы. */
 const frames = (page) => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve)))));
 
 async function playAndOpenFrom(page) {
@@ -316,11 +316,12 @@ test("motion: nothing runs continuously while idle, and rows never transition", 
       .filter((a) => a.playState === "running")
       .map((a) => ({ name: a.animationName ?? a.transitionProperty ?? "", infinite: a.effect?.getComputedTiming().iterations === Infinity })));
     assert.deepEqual(await running(), [], "an idle library has no running animation");
-    // Rows are recreated while scrolling, so no row or part of one may transition.
+    // Строки воссоздаются во время прокрутки, поэтому ни одна строка или ее часть не могут перейти.
     const rowTransitions = await page.evaluate(() => [...document.querySelectorAll(".row, .row *")]
       .filter((el) => getComputedStyle(el).transitionDuration.split(",").some((d) => parseFloat(d) > 0)).length);
     assert.equal(rowTransitions, 0);
-    // With the full-screen view open and the visualizer on, only the canvas moves: no CSS loop.
+    // При открытом полноэкранном режиме и включенном визуализаторе перемещается только холст: нет цикла
+    // CSS.
     await rows(page).first().dblclick();
     await playAndOpenFrom(page);
     await page.waitForTimeout(800);
@@ -338,14 +339,14 @@ test("motion: screens, dialogs and the full-screen view animate in and out when 
   try {
     const { page } = app;
     await waitForLibrary(page);
-    // A dialog fades out (class "closing") and is then removed.
+    // Диалоговое окно затухает (класс "closing"), а затем удаляется.
     await page.click(".nav button[data-view=playlists]");
     await page.click(".main > .view:not([hidden]) .view:not([hidden]) .view-header .btn.primary");
     await page.waitForSelector(".dialog[open]");
     await page.keyboard.press("Escape");
     await page.waitForSelector(".dialog.closing", { timeout: 1000 });
     await page.waitForFunction(() => !document.querySelector(".dialog"), null, { timeout: 2000 });
-    // Pages that are pushed say so; the sidebar does not.
+    // Нажатые страницы говорят об этом; боковой панели нет.
     await page.click(".nav button[data-view=library]");
     assert.equal(await page.locator(".main").getAttribute("data-dir"), null);
     await rows(page).first().locator(".artist").click();
@@ -353,13 +354,13 @@ test("motion: screens, dialogs and the full-screen view animate in and out when 
     assert.equal(await page.locator(".main").getAttribute("data-dir"), "push");
     await page.click(".artist-view button[aria-label=Назад]");
     await page.waitForFunction(() => document.querySelector(".main").dataset.dir === "back");
-    // The full-screen view settles away before it is hidden.
+    // Полноэкранный режим исчезнет, прежде чем он будет скрыт.
     await rows(page).first().dblclick();
     await playAndOpenFrom(page);
     await page.keyboard.press("Escape");
     await page.waitForSelector(".np.closing", { timeout: 1000 });
     await page.waitForSelector(".np", { state: "hidden", timeout: 2000 });
-    // A toast fades out as well.
+    // Тост тоже угасает.
     await rows(page).nth(1).hover();
     await rows(page).nth(1).locator("[data-action=like]").click();
     await page.waitForSelector(".toast");
@@ -382,7 +383,7 @@ test("motion: the system setting is read live, not once", async () => {
     await at(page, 100);
     await page.waitForFunction(() => document.querySelector(".ly-line.active")?.textContent === "Строка 19");
     assert.equal(await page.evaluate(() => window.__behaviors.at(-1)), "smooth", "lyrics glide while motion is allowed");
-    // The person switches "reduce motion" on while the window is open.
+    // Человек включает «Уменьшение движения», пока окно открыто.
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.waitForFunction(() => document.querySelector(".np").dataset.mode === "off");
     await at(page, 150);
@@ -420,10 +421,10 @@ test("effects: blur is limited to chrome, nothing keeps will-change, and flat ch
     assert.deepEqual(found.filtered.filter((f) => !f.allowed), [], "filter lives in the full-screen backdrop only");
     assert.deepEqual(found.willChange, []);
     assert.deepEqual(found.transitionAll, [], "no transition: all");
-    // Content under the menu and the bar is not blurred by anything else: the list and its rows.
+    // Содержимое под меню и панелью не размыто ничем другим: списком и его строками.
     assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector(".list")).backdropFilter), "none");
 
-    // The simplified look (Settings) and a background window make the chrome flat: no backdrop filter anywhere.
+    // Упрощенный вид (Настройки) и фоновое окно делают хром плоским: нигде нет фонового фильтра.
     await page.keyboard.press("Escape");
     await page.click(".nav button[data-view=settings]");
     await page.check("#set-flat");
@@ -506,13 +507,14 @@ test("design: a liked heart takes the accent, never red, and the playing row is 
       return [getComputedStyle(document.querySelector(".player .like.on")).color, accent];
     });
     assert.equal(heart, accent);
-    // The playing row: the title is accent, the artist is not, and a playback indicator sits in the row.
+    // Воспроизводимый ряд: заголовок имеет акцент, исполнитель — нет, в ряду находится индикатор
+    // воспроизведения.
     const row = rows(page).first();
     const [title, artist] = await row.evaluate((el) => [getComputedStyle(el.querySelector(".title")).color, getComputedStyle(el.querySelector(".artist")).color]);
     assert.equal(title, accent);
     assert.notEqual(artist, accent);
     assert.equal(await row.locator(".pbars").count(), 1);
-    await page.click(".player .play"); // pause: the capsules become a pause glyph
+    await page.click(".player .play"); // пауза: капсулы становятся символом паузы
     await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .pbars.paused"));
     assert.deepEqual(app.problems, []);
   } finally { await app.close(); }
@@ -535,7 +537,8 @@ test("design: the collapsed sidebar names every button, and keyboard focus is vi
     await page.keyboard.press("Tab");
     const ring = await page.evaluate(() => { const s = getComputedStyle(document.activeElement); return [s.outlineStyle, s.outlineWidth]; });
     assert.deepEqual(ring, ["solid", "2px"]);
-    // Tab through the sidebar and the bar: every stop has a visible ring or a visible state.
+    // Перемещайтесь по боковой панели и панели: каждая остановка имеет видимое кольцо или видимое
+    // состояние.
     assert.deepEqual(app.problems, []);
   } finally { await app.close(); }
 });
@@ -618,7 +621,7 @@ test("full screen: with lyrics the panel never runs under the controls, narrow o
       assert.ok(box.ly.top >= box.top.bottom - 1, `${width}x${height}: lyrics start below the header`);
       assert.ok(box.ly.height > 120, "there is room to read");
       if (width <= 860) assert.equal(box.cover, "none", "the lyrics take the place of the cover");
-      // The queue shares the panel and also stays above the controls.
+      // Очередь разделяет панель и остается над элементами управления.
       await page.click(".np-quick button:nth-child(2)");
       await page.waitForSelector(".np-queue:not([hidden])");
       const queue = await page.evaluate(() => ({ q: document.querySelector(".np-queue").getBoundingClientRect().bottom, c: document.querySelector(".np-bottom").getBoundingClientRect().top, ly: document.querySelector(".ly").hidden }));
@@ -642,7 +645,8 @@ test("full screen: it follows the theme, and the controls fade instead of vanish
       assert.equal(colour, scheme === "dark" ? "rgb(255, 255, 255)" : "rgb(0, 0, 0)");
       const weight = await page.evaluate(() => getComputedStyle(document.querySelector(".np-title")).fontWeight);
       assert.equal(weight, "700", "bold, never heavy");
-      // After a pause with no pointer movement the controls fade (opacity), they are not display:none or hidden.
+      // После паузы без движения указателя элементы управления исчезают (непрозрачность), они не
+      // становятся display:none и не скрываются.
       await page.waitForFunction(() => document.querySelector(".np").classList.contains("idle"), null, { timeout: 6000 });
       await page.waitForTimeout(400);
       const faded = await page.evaluate(() => { const s = getComputedStyle(document.querySelector(".np-bottom")); return [s.opacity, s.visibility]; });
@@ -732,11 +736,12 @@ test("menus: the sub-menu opens beside its parent, flips to the left when the ri
   try {
     const { page } = app;
     await waitForLibrary(page);
-    // Right-click far to the right so the sub-menu cannot open on that side.
+    // Щелкните правой кнопкой мыши далеко вправо, чтобы подменю не открылось на этой стороне.
     await rows(page).nth(2).click({ button: "right", position: { x: 560, y: 20 } });
     await page.click(".menu [data-action=add-to-playlist]");
     await page.waitForSelector(".menu.sub");
-    // The sub-menu is placed after it is attached: wait for it to settle beside its parent.
+    // Подменю размещается после его прикрепления: подождите, пока оно расположится рядом со своим
+    // родительским элементом.
     await page.waitForFunction(() => {
       const [parent, sub] = [...document.querySelectorAll(".menu")].map((m) => m.getBoundingClientRect());
       return sub && (sub.right <= parent.left + 1 || sub.left >= parent.right - 1) && sub.left >= 0 && sub.right <= 1000;
@@ -768,7 +773,7 @@ test("keyboard: Space toggles, arrows seek, Ctrl+arrows skip, M mutes, / opens s
     assert.equal((await page.evaluate(() => window.__mock.last("set_volume"))).args.volume, 1);
     await page.keyboard.press("/");
     await page.waitForSelector(".main > .view:not([hidden]) input[type=search]:focus");
-    // Typing in the search box must not trigger shortcuts.
+    // Ввод в поле поиска не должен вызывать ярлыки.
     const toggles = await page.evaluate(() => window.__mock.count("toggle"));
     await page.keyboard.type("a b");
     assert.equal(await page.evaluate(() => window.__mock.count("toggle")), toggles);
@@ -872,7 +877,7 @@ test("layouts: narrow window collapses the sidebar; light and dark are readable;
       await page.screenshot({ path: `${shots}/${name}-np-lyrics.png` });
     } finally { await app.close(); }
   }
-  // Empty, loading and failed states, in both themes.
+  // Состояния «Пустой», «Загрузка» и «Неудачный» в обеих темах.
   for (const [name, config] of [["loading", { pageDelay: 3000 }], ["empty", { libraryTotal: 0 }], ["error", { failing: ["library"] }]]) {
     for (const colorScheme of ["dark", "light"]) {
       const app = await openApp({ config: { signedIn: true, ...config }, colorScheme });
@@ -884,7 +889,7 @@ test("layouts: narrow window collapses the sidebar; light and dark are readable;
   }
 });
 
-// ------------------------------------------------------------- full screen
+// --------------------------------------------- Во весь экран
 
 const bandsOf = (level) => Array.from({ length: 48 }, (_, i) => Math.max(0, Math.min(1, level * (1 - i / 60))));
 const inked = (page) => page.evaluate(() => {
@@ -914,7 +919,7 @@ test("buffering: the loading ring is centred inside the play button, in the bar 
       const b = document.querySelector(selector).getBoundingClientRect();
       const r = document.querySelector(`${selector} .spinner`).getBoundingClientRect();
       const ring = document.querySelector(`${selector} .spinner`), host = document.querySelector(selector);
-      // Sizes without the rotation, which widens the bounding box of a turning square.
+      // Размеры без поворота, который расширяет ограничивающую рамку поворотного квадрата.
       return { dx: Math.abs(r.x + r.width / 2 - (b.x + b.width / 2)), dy: Math.abs(r.y + r.height / 2 - (b.y + b.height / 2)), inside: ring.offsetWidth <= host.offsetWidth && ring.offsetHeight <= host.offsetHeight };
     }, button);
     for (const button of [".np .np-play", ".player .play"]) {
@@ -922,7 +927,7 @@ test("buffering: the loading ring is centred inside the play button, in the bar 
       const { dx, dy, inside } = await offsets(button);
       assert.ok(dx < 1 && dy < 1 && inside, `${button}: ring off centre by ${dx}, ${dy} (inside: ${inside})`);
     }
-    // Repeat-one keeps its small "1" in the corner of the repeat button only.
+    // Повтор-один сохраняет свой маленький "1" только в углу кнопки повтора.
     await page.evaluate(() => { window.__mock.state.player.repeat = "one"; window.__mock.emitState(); });
     await page.waitForSelector(".player .controls .badge");
     assert.equal(await page.locator(".player .controls .badge").count(), 1);
@@ -985,7 +990,7 @@ test("full screen: the bars sink to nothing once playback pauses", async () => {
       const { data } = c.getContext("2d").getImageData(0, 0, c.width, c.height);
       let n = 0;
       for (let i = 3; i < data.length; i += 4) if (data[i] > 0) n += 1;
-      return n < before * 0.4; // resting stubs remain; the tall bars are gone
+      return n < before * 0.4; // покоящиеся заглушки остаются; высокие решетки исчезли
     }, loud, { timeout: 5000 });
   } finally { await app.close(); }
 });
@@ -995,7 +1000,7 @@ test("full screen: the cover's colours come from the engine, or from the name wh
     const app = await openApp({ config });
     try {
       const { page } = app;
-      await playAndOpen(app); // "Трек 1" has a cover
+      await playAndOpen(app); // У "Трек 1" есть обложка
       await page.waitForTimeout(150);
       const colour = await page.evaluate(() => document.querySelector(".np").style.getPropertyValue("--np-a"));
       if (typeof expected === "string") assert.equal(colour, expected);
@@ -1050,7 +1055,7 @@ test("full screen: reduced motion starts with the visualizer off", async () => {
   } finally { await app.close(); }
 });
 
-// ------------------------------------------------------------------ lyrics
+// ------------------------------------------------------------------ тексты песен
 
 const at = (page, position) =>
   page.evaluate((p) => window.__mock.emit("pm-event", { type: "state", ...window.__mock.state.player, position: p }), position);
@@ -1059,7 +1064,7 @@ test("lyrics: timed lines follow the song, click to jump, gaps show a note", asy
   const app = await openApp({ config: { signedIn: true } });
   try {
     const { page } = app;
-    await playAndOpen(app); // "Трек 1": timed
+    await playAndOpen(app); // "Трек 1": по времени
     await page.waitForFunction(() => document.querySelectorAll(".ly-line").length === 40);
     assert.equal(await page.locator(".ly-line.gap").innerText(), "♪");
     assert.match(await page.locator(".ly-source").innerText(), /LRCLIB/);
@@ -1102,7 +1107,7 @@ test("lyrics: text from the service is shown as text, plain lyrics have no timin
     await page.waitForFunction(() => document.querySelectorAll(".ly-line").length === 40);
     assert.equal(await page.locator(".ly-line").first().innerText(), hostile);
     assert.equal(await page.locator(".ly img").count(), 0);
-    await page.click(".np-controls .np-btn:nth-child(4)"); // next: "Трек 2" has plain lyrics
+    await page.click(".np-controls .np-btn:nth-child(4)"); // следующий: У "Трек 2" простые тексты
     await page.waitForSelector(".ly-text");
     assert.match(await page.locator(".ly-text").innerText(), /вторая <b>строка<\/b>/);
     assert.equal(await page.locator(".ly b").count(), 0);
@@ -1116,8 +1121,8 @@ test("lyrics: 'not found' and failures are different messages, and a failure can
   let app = await openApp({ config: { signedIn: true } });
   try {
     const { page } = app;
-    await playAndOpen(app, { index: 4 }); // "Трек 5": none exist
-    // The same element shows "Ищем текст…" while the request is in flight.
+    await playAndOpen(app, { index: 4 }); // "Трек 5": ничего не существует
+    // Тот же элемент отображает "Ищем текст…" во время выполнения запроса.
     await page.waitForFunction(() => document.querySelector(".ly-message")?.textContent === "Текст не найден.");
   } finally { await app.close(); }
 
@@ -1131,7 +1136,7 @@ test("lyrics: 'not found' and failures are different messages, and a failure can
     await page.waitForFunction(() => window.__mock.count("lyrics") === 2);
   } finally { await app.close(); }
 
-  // Other kinds of failure keep the generic message, and can still be retried.
+  // Другие виды сбоев сохраняют общее сообщение и могут быть повторены.
   app = await openApp({ config: { signedIn: true, lyricsFail: "http" } });
   try {
     const { page } = app;
@@ -1169,7 +1174,7 @@ test("lyrics: L toggles the panel and the choice sticks; hidden lyrics are not f
   } finally { await app.close(); }
 });
 
-// ------------------------------------------------------------------- hearts
+// ---------------------------------------------------------------------------------- сердечки
 
 async function searchFor(page, query) {
   await page.click(".nav button[data-view=search]");
@@ -1239,7 +1244,7 @@ test("hearts: a refused change says why and leaves the heart as it was", async (
   } finally { await app.close(); }
 });
 
-// ------------------------------------------------------------- review fixes
+// ------------------------------------------------------------- исправления исправлений
 
 test("arrow keys on the focused volume slider change the volume, not the position", async () => {
   const app = await openApp({ config: { signedIn: true } });
@@ -1287,7 +1292,7 @@ test("hearts wait until My music is known, so a click cannot add a duplicate", a
   } finally { await app.close(); }
 });
 
-// ---------------------------------------------------------------- settings
+// ---------------------------------------------------------------- Настройки
 
 test("settings: output device, tray, full screen defaults, all applied and remembered", async () => {
   const app = await openApp({ config: { signedIn: true } });
@@ -1308,7 +1313,7 @@ test("settings: output device, tray, full screen defaults, all applied and remem
     const saved = JSON.parse(await page.evaluate(() => localStorage.getItem("pm.settings.v1")));
     assert.deepEqual([saved.outputDevice, saved.closeToTray, saved.visualizer, saved.lyrics], ["Наушники", false, "radial", false]);
 
-    // The full-screen view follows the new defaults.
+    // Полноэкранный режим соответствует новым настройкам по умолчанию.
     await page.click(".nav button[data-view=library]");
     await rows(page).first().dblclick();
     await page.keyboard.press("f");
@@ -1334,7 +1339,7 @@ test("settings: the saved output is used at the next start, and a desktop withou
   } finally { await app.close(); }
 });
 
-// ------------------------------------------------------------------ for you
+// ------------------------------------------------------------------ для тебя
 
 test("for you: the mix and recommendations load on first look, play, and refresh", async () => {
   const app = await openApp({ config: { signedIn: true } });
@@ -1353,7 +1358,7 @@ test("for you: the mix and recommendations load on first look, play, and refresh
     await page.click(".main > .view:not([hidden]) .view-header .btn.primary");
     await page.waitForFunction(() => window.__mock.last("play_radio")?.args.tracks.length === 100);
     assert.equal(await page.evaluate(() => window.__mock.count("play_tracks")), 0, "a mix plays as a radio, not as a fixed list");
-    await page.click(".main > .view:not([hidden]) .view-header .set-inline .btn");
+    await page.getByRole("button", { name:"Обновить", exact:true }).click();
     await page.waitForFunction(() => window.__mock.count("mix") === 2);
     assert.deepEqual(app.problems, []);
   } finally { await app.close(); }
@@ -1417,7 +1422,7 @@ test("for you: an empty new-releases shelf is hidden, a failing one is a single 
     await page.click(".new-releases .status.error .retry-link");
     await page.waitForFunction(() => window.__mock.count("new_releases") === 2);
     await page.waitForSelector(".new-releases .status.error .retry-link:not([disabled])");
-    // The mixes below it are not affected.
+    // Миксы ниже него не затрагиваются.
     await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .title")?.textContent === "Микс 1");
   } finally { await failing.close(); }
 });
@@ -1459,7 +1464,7 @@ test("a mix plays as an endless radio: the source travels with the queue and the
     await waitForLibrary(page);
     await page.click(".nav button[data-view=forYou]");
     await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .title")?.textContent === "Микс 1");
-    // The personal mix: the list on screen becomes the first part of the radio.
+    // Персональный микс: список на экране становится первой частью радио.
     await page.locator(".main > .view:not([hidden]) .row").nth(2).dblclick();
     await page.waitForFunction(() => window.__mock.last("play_radio"));
     let call = await page.evaluate(() => window.__mock.last("play_radio").args);
@@ -1470,7 +1475,7 @@ test("a mix plays as an endless radio: the source travels with the queue and the
     await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .radio-note:not([hidden])"));
     assert.match(await page.locator(".main > .view:not([hidden]) .radio-note").innerText(), /из вашего микса/);
 
-    // A catalogue mix tile: the mix id and its tuning are what the radio refills with.
+    // Плитка микса в каталоге: идентификатор микса и его настройка — это то, чем пополняется радио.
     await page.click(".nav button[data-view=forYou]");
     await page.waitForSelector(".mix-tile");
     assert.deepEqual(await page.locator(".mix-tile .mix-tile-title").allInnerTexts(), ["Selena", "Спокойный вечер"], "the personal mix leads the shelf");
@@ -1482,7 +1487,8 @@ test("a mix plays as an endless radio: the source travels with the queue and the
     await page.click(".nav button[data-view=queue]");
     await page.waitForFunction(() => /из этого микса/.test(document.querySelector(".main > .view:not([hidden]) .radio-note")?.textContent ?? ""));
 
-    // Playing a plain list ends it: no note, and the engine was asked for a fixed queue.
+    // Воспроизведение простого списка завершает его: никаких заметок, и движок запросил фиксированную
+    // очередь.
     await page.click(".nav button[data-view=library]");
     await waitForLibrary(page);
     await rows(page).nth(3).dblclick();
@@ -1528,7 +1534,7 @@ test("similar tracks: the row button plays the track followed by VK's radio from
     assert.equal(call.tracks[0].title, "Трек 2");
     assert.equal(call.tracks[1].title, "Похожий 1");
     assert.equal(call.index, 0);
-    // The radio is seeded with the track it started from and keeps refilling.
+    // Радио заполняется треком, с которого оно началось, и продолжает пополняться.
     assert.equal(call.source.kind, "similar");
     assert.equal(call.source.seed.title, "Трек 2");
   } finally { await app.close(); }
@@ -1558,7 +1564,7 @@ test("equaliser: presets and sliders reach the engine, off sends nothing, and it
     await page.waitForFunction(() => JSON.stringify(window.__mock.state.eq) === JSON.stringify([7, 6, 4, 2, 0, 0, 0, 0, 0, 0]));
     assert.equal(await page.isChecked("#eq-on"), true, "picking a preset turns it on");
 
-    // Drag the 1 kHz slider up with the keyboard: a custom curve.
+    // Перетащите ползунок 1 kHz вверх с помощью клавиатуры: пользовательская кривая.
     await page.focus(".eq-slider >> nth=5");
     await page.keyboard.press("ArrowUp");
     await page.keyboard.press("ArrowUp");
@@ -1582,7 +1588,7 @@ test("equaliser: presets and sliders reach the engine, off sends nothing, and it
   } finally { await app.close(); }
 });
 
-// ---------------------------------------------------------------- downloads
+// ------------------------------------------------------------------ загрузки
 
 test("downloads: a row button saves the track, shows it everywhere, lists it with its size, and removes it", async () => {
   const app = await openApp({ config: { signedIn: true, downloadDelay: 200 } });
@@ -1622,14 +1628,14 @@ test("downloads: a failed download says why and leaves the button ready", async 
   } finally { await app.close(); }
 });
 
-// ---------------------------------------------------------------- playlists
+// ---------------------------------------------------------------- плейлисты
 
 test("playlists: create one, add a track to it from the menu, rename it, remove the track, delete it", async () => {
   const app = await openApp({ config: { signedIn: true } });
   try {
     const { page } = app;
     await waitForLibrary(page);
-    // Add to a new playlist straight from a library row.
+    // Добавьте в новый плейлист прямо из строки библиотеки.
     await rows(page).nth(2).click({ button: "right" });
     await page.click(".menu [data-action=add-to-playlist]");
     await page.waitForSelector(".menu .menu-item[data-action=add-to]");
@@ -1681,7 +1687,7 @@ test("playlists: someone else's playlist cannot be edited, and the menu closes w
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => !document.querySelector(".menu"));
-    // Cancelling a new playlist creates nothing.
+    // Отмена нового плейлиста ничего не создает.
     await page.click(".view-header .btn.primary >> nth=0").catch(() => {});
   } finally { await app.close(); }
 });
@@ -1704,7 +1710,7 @@ test("playlists: an empty name cannot be submitted, and cancel leaves things as 
   } finally { await app.close(); }
 });
 
-// ------------------------------------------------------ artists and albums
+// -------------------------------------- Исполнители и альбомы
 
 const visibleView = ".main > .view:not([hidden])";
 
@@ -1722,7 +1728,7 @@ test("artist page: opens from a track row's artist, plays its tracks with the vi
     assert.equal(await page.locator(".artist-view h1").innerText(), "Исполнитель 1");
     assert.equal((await page.evaluate(() => window.__mock.last("artist_tracks"))).args.artistId, "art1");
     await page.waitForFunction(() => document.querySelectorAll(".artist-view .row").length > 5);
-    // The catalogue's photo and the albums grid arrive with the albums.
+    // Вместе с альбомами поставляется фотография каталога и сетка альбомов.
     await page.waitForSelector(".artist-view .page-art img");
     await page.waitForFunction(() => document.querySelectorAll(".artist-view .artist-albums .card").length === 4);
     assert.equal(await page.locator(".nav button[aria-current=page]").getAttribute("data-view"), "library", "the sidebar keeps the screen it came from");
@@ -1746,7 +1752,7 @@ test("artist page: an artist known only by name is looked up, and an unknown one
   try {
     const { page } = app;
     await waitForLibrary(page);
-    // Track 13 links no artist: "Исполнитель 0" is not known to the mock.
+    // В треке 13 нет ссылки на исполнителя: "Исполнитель 0" неизвестен моку.
     await page.fill(`${visibleView} input[type=search]`, "Трек 13");
     await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .row .title")?.textContent === "Трек 13");
     await rows(page).first().locator(".artist").click();
@@ -1803,11 +1809,11 @@ test("album page: a refused follow leaves the button as it was; an album VK will
   try {
     const { page } = app;
     await waitForLibrary(page);
-    await rows(page).nth(1).click({ button: "right" }); // track 2 names its album
+    await rows(page).nth(1).click({ button: "right" }); // трек 2 называет свой альбом
     await page.click(".menu [data-action=go-album]");
     await page.waitForSelector(".album-view:not([hidden])");
     await page.waitForFunction(() => document.querySelectorAll(".album-view .row").length >= 5);
-    // The engine found the key the track did not carry.
+    // Двигатель нашел ключ, которого не было на гусенице.
     assert.equal((await page.evaluate(() => window.__mock.last("album_tracks"))).args.album.access_key, null);
     await page.click(".album-view .follow");
     await page.waitForSelector(".toast.error");
@@ -1830,11 +1836,11 @@ test("track menu: go to artist and album only when the track has them; several a
   try {
     const { page } = app;
     await waitForLibrary(page);
-    await rows(page).first().click({ button: "right" }); // track 1: an artist, no album
+    await rows(page).first().click({ button: "right" }); // трек 1: исполнитель, без альбома
     assert.equal(await page.locator(".menu [data-action=go-artist]").count(), 1);
     assert.equal(await page.locator(".menu [data-action=go-album]").count(), 0);
     await page.keyboard.press("Escape");
-    await rows(page).nth(3).click({ button: "right" }); // track 4: two artists and an album
+    await rows(page).nth(3).click({ button: "right" }); // трек 4: два исполнителя и альбом
     await page.click(".menu [data-action=go-artist]");
     assert.deepEqual(await page.locator(".menu [data-action=go-artist-item] .menu-label").allInnerTexts(), ["Исполнитель 4", "Гость"]);
     await page.click(".menu [data-action=go-artist-item] >> nth=1");
@@ -1930,11 +1936,12 @@ test("artist page: opens from the player bar and from the full-screen view", asy
   } finally { await app.close(); }
 });
 
-// ------------------------------------------------- friends, history, statistics
+// ------------------------------------------------- друзья, история, статистика
 
 const view = ".main > .view:not([hidden])";
 
-// Nested screens keep hidden siblings in the DOM: count what is really on screen.
+// Вложенные экраны содержат скрытых одноуровневых элементов в DOM: подсчитайте, что на самом деле
+// отображается на экране.
 const shown = (page, selector) => page.locator(`.main ${selector}:visible`);
 const waitShown = (page, selector, n) =>
   page.waitForFunction(([sel, count]) => [...document.querySelectorAll(`.main ${sel}`)].filter((e) => e.offsetParent !== null).length === count, [selector, n]);
@@ -1969,13 +1976,13 @@ test("friends: the list shows names and photos, and a friend opens into tracks t
     assert.ok(play.args.tracks.every((t) => t.owner_id === 11));
     await page.waitForFunction(() => document.querySelector(".player .title")?.textContent === "Друг 11: трек 3");
 
-    // The heart adds to My music, as everywhere else.
+    // Сердце добавляет Моей музыки, как и везде.
     await shown(page, ".row").nth(1).hover();
     await shown(page, ".row").nth(1).locator("[data-action=like]").click();
     await page.waitForFunction(() => window.__mock.count("add_to_library") === 1);
     assert.equal(await page.evaluate(() => window.__mock.last("add_to_library").args.track.title), "Друг 11: трек 2");
 
-    // The track menu is the usual one.
+    // Меню треков обычное.
     await shown(page, ".row").nth(3).click({ button: "right" });
     await page.waitForSelector(".menu [data-action=play-next]");
     assert.ok(await page.locator(".menu [data-action=add-to-playlist]").count() > 0);
@@ -2003,17 +2010,17 @@ test("friends: playlists open into tracks, with Back at every step", async () =>
     assert.ok((await shown(page, ".row .title").first().innerText()).startsWith("Плейлист друга:"));
     const opened = await page.evaluate(() => window.__mock.last("playlist_tracks").args.playlist);
     assert.deepEqual([opened.owner_id, opened.playlist_id, opened.access_key], [11, 1, "fk"]);
-    // Playing from here queues the playlist.
+    // Воспроизведение отсюда ставит список воспроизведения в очередь.
     await shown(page, ".row").first().dblclick();
     assert.equal((await page.evaluate(() => window.__mock.last("play_tracks"))).args.tracks.length, 3);
-    // Someone else's playlist offers no editing.
+    // Чужой плейлист не подлежит редактированию.
     assert.equal(await shown(page, ".pl-owner .btn").count(), 0);
 
     await shown(page, ".icon-btn[aria-label=Назад]").click();
     await shown(page, "[role=tab][data-tab=playlists][aria-selected=true]").waitFor();
     await shown(page, ".icon-btn[aria-label='К друзьям']").click();
     await waitShown(page, ".friend", 3);
-    // Another friend starts on Tracks again.
+    // Другой друг снова запускает треки.
     await page.click(".friend >> nth=2");
     await shown(page, "[role=tab][data-tab=tracks][aria-selected=true]").waitFor();
     assert.deepEqual(app.problems.filter((p) => !p.includes("Failed to load resource")), []);
@@ -2053,7 +2060,7 @@ test("friends: a network failure is shown as such, and a long list loads complet
     await waitForLibrary(page);
     await openSection(page, "friends");
     await shown(page, ".status.error").first().waitFor();
-    // The message comes first; a connection failure also carries the VPN hint (network.js).
+    // Сообщение приходит первым; ошибка соединения также сопровождается подсказкой VPN (network.js).
     assert.ok((await shown(page, ".status.error").first().innerText()).startsWith("Нет подключения к интернету."));
   } finally { await app.close(); }
   const long = await openApp({ config: { signedIn: true, friendsTotal: 450 } });
@@ -2130,7 +2137,7 @@ test("history: a track counted while another plays shows up when the track chang
     await openSection(page, "history");
     await page.waitForFunction(() => document.querySelectorAll(".main > .view:not([hidden]) .row").length === 1);
     const before = await page.evaluate(() => window.__mock.count("history"));
-    // The engine counts the second track while the first one plays.
+    // Движок считает второй трек, пока играет первый.
     await page.evaluate(() => {
       window.__mock.state.history.unshift({ track: { ...window.__mock.state.history[0].track, track_id: 77, title: "Новый в истории" }, played_at: 1 });
     });
@@ -2173,7 +2180,7 @@ test("statistics: totals, tops, busiest times, and the period filter", async () 
     assert.match(await text(".page-note"), /не отправляются в VK/);
     assert.match(await text(".stat-controls"), /март 2026/);
 
-    // Two months have data: the chooser lists them, newest first.
+    // Имеются данные за два месяца: выбирающий перечисляет их, начиная с самых новых.
     assert.deepEqual(await page.locator(`${view} .stat-controls select option`).evaluateAll((o) => o.map((e) => e.value)), ["2026-03", "2026-02"]);
     await page.selectOption(`${view} .stat-controls select`, "2026-02");
     await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) [data-stat=plays]")?.textContent === "25");
@@ -2267,7 +2274,7 @@ test("the sidebar still fits the smallest window with the new sections", async (
     });
     assert.equal(fits.overflow, false);
     assert.ok(fits.accountBottom <= fits.sidebarBottom + 1);
-    // The last entry can be reached.
+    // До последней записи можно добраться.
     await page.locator(".nav button[data-view=settings]").scrollIntoViewIfNeeded();
     await page.click(".nav button[data-view=settings]");
     await page.waitForSelector(".settings:not([hidden])");
@@ -2293,7 +2300,7 @@ test("the sidebar starts a screen over: a click on Playlists or Friends while on
   } finally { await app.close(); }
 });
 
-// ------------------------------------------------------------------ design polish
+// ------------------------------------------------------------------ Дизайн полировки
 
 test("theme picker: previews show a mini UI, labels keep their width, arrows move the radio group, hit areas are 44px+", async () => {
   const app = await openApp({ config: { signedIn: true } });
@@ -2303,7 +2310,8 @@ test("theme picker: previews show a mini UI, labels keep their width, arrows mov
     await page.click(".nav button[data-view=settings]");
     const options = page.locator(".theme-opt");
     assert.equal(await options.count(), 3);
-    // Every option previews the real UI: a sidebar, lines and a bar; "system" shows both themes in one swatch.
+    // Каждая опция отображает настоящий UI: боковую панель, линии и панель; "system" показывает обе
+    // темы в одном образце.
     for (const value of ["system", "light", "dark"]) {
       const layers = await page.locator(`.theme-opt[data-v=${value}] .tp-ui`).count();
       assert.equal(layers, value === "system" ? 2 : 1, value);
@@ -2311,7 +2319,7 @@ test("theme picker: previews show a mini UI, labels keep their width, arrows mov
     }
     const clip = await page.locator(".theme-swatch.sys .tp-ui.dk").evaluate((el) => getComputedStyle(el).clipPath);
     assert.match(clip, /polygon/, "the split is a clipped diagonal, anti-aliased, not a hard gradient stop");
-    // Constant weight and constant width whichever one is selected.
+    // Постоянный вес и постоянная ширина в зависимости от выбранного варианта.
     const metrics = async () => page.evaluate(() => [...document.querySelectorAll(".theme-opt")].map((el) => ({
       width: el.getBoundingClientRect().width, label: el.querySelector(".theme-label").getBoundingClientRect().width,
       weight: getComputedStyle(el.querySelector(".theme-label")).fontWeight, height: el.getBoundingClientRect().height })));
@@ -2321,7 +2329,7 @@ test("theme picker: previews show a mini UI, labels keep their width, arrows mov
       assert.deepEqual(await metrics(), before, `selecting ${value} must not change any width, weight or height`);
     }
     for (const m of before) assert.ok(m.width >= 44 && m.height >= 44, "44px hit area");
-    // Radio group semantics: one tab stop (the checked one), arrows move and select.
+    // Семантика группы радио: одна позиция табуляции (отмеченная), стрелки перемещаются и выбираются.
     assert.equal(await page.locator(".theme-opt[tabindex='0']").count(), 1);
     assert.equal(await page.locator(".theme-opt[aria-checked=true]").getAttribute("tabindex"), "0");
     await page.focus(".theme-opt[aria-checked=true]");
@@ -2392,7 +2400,7 @@ test("heroes: artist and album headers pick up the cover's colours as an ambienc
     const vars = await page.locator(".artist-view .page-head").evaluate((el) => [el.style.getPropertyValue("--amb-a"), el.style.getPropertyValue("--amb-b")]);
     assert.match(vars[0], /^#[0-9a-f]{6}$/i);
     assert.match(vars[1], /^#[0-9a-f]{6}$/i);
-    // Gradients only: no blur and no filter on the header.
+    // Только градиенты: без размытия и фильтров в заголовке.
     const css = await page.locator(".artist-view .page-head").evaluate((el) => { const s = getComputedStyle(el, "::before"); return [s.backgroundImage, s.filter, s.backdropFilter]; });
     assert.match(css[0], /radial-gradient/);
     assert.deepEqual(css.slice(1), ["none", "none"]);
@@ -2418,7 +2426,7 @@ test("for you: mix cards are colourful gradients with readable white text, and t
       const bg = await tile.evaluate((el) => getComputedStyle(el).backgroundImage);
       assert.match(bg, /radial-gradient/);
     }
-    // Every colour family: both stops keep 4.5:1 against the white label.
+    // Любая цветовая гамма: оба упора сохраняют соотношение 4,5:1 по отношению к белой этикетке.
     const stops = await page.evaluate(() => {
       const out = [];
       for (let i = 0; i < 5; i++) {
@@ -2432,7 +2440,7 @@ test("for you: mix cards are colourful gradients with readable white text, and t
       return out;
     });
     for (const [a, b] of stops) for (const stop of [a, b]) assert.ok(contrast(hexColor(stop), [255, 255, 255]) >= 4.5, `${stop} under white text`);
-    // The release captions are not cut off by the shelf: each card fits inside the scroller.
+    // Подписи к выпуску не отсекаются полкой: каждая карточка помещается внутри скроллера.
     const clipped = await page.evaluate(() => {
       const shelf = document.querySelector(".fy-shelves").getBoundingClientRect();
       const cards = [...document.querySelectorAll(".release-row .card")].map((c) => c.getBoundingClientRect().bottom);
@@ -2484,7 +2492,7 @@ test("tooltips: a resting mouse shows the title with its shortcut, and the title
     await page.waitForFunction(() => !document.querySelector(".tooltip"));
     assert.equal(await play.getAttribute("title"), title);
     assert.equal(await play.getAttribute("aria-label"), title);
-    // Pressing hides it at once.
+    // Нажатие скрывает его сразу.
     await play.hover();
     await page.waitForSelector(".tooltip");
     await play.click();
@@ -2551,7 +2559,8 @@ test("narrow windows: header controls tidy into rows at 420px, and nothing overf
       assert.deepEqual(overflow.bad.filter((b) => !/theme|accent|tp-|swatch/.test(b)), [], id);
       assert.equal(overflow.scroll, false, `${id}: no horizontal page scroll`);
     }
-    // The For you header is two or three tidy rows: the segmented control spans the width.
+    // Заголовок «Для вас» состоит из двух или трех аккуратных строк: сегментированный элемент
+    // управления занимает всю ширину.
     await openSection(page, "forYou");
     const tabs = await page.locator(`${view} .view-header .tabs`).boundingBox();
     const header = await page.locator(`${view} .view-header`).boundingBox();
@@ -2948,5 +2957,45 @@ test("refinement: pin belongs to its moving card and does not trigger playback",
   assert.equal(await page.evaluate(()=>window.__mock.count('play_radio')),0);
   await pin.click();assert.equal(await page.locator('.pinned-shelf').isVisible(),false);
   assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test("refinement: discovery header groups controls into two aligned rows",async()=>{
+ for(const width of [780,1120,1920]) {
+  const app=await openApp({config:{signedIn:true},viewport:{width,height:800}});
+  try {
+   const {page}=app;await waitForLibrary(page);await page.click('.nav button[data-view=forYou]');
+   await page.waitForFunction(()=>document.querySelector('.discovery-view .meta')?.textContent.trim());
+   const boxes=await page.evaluate(()=>{const box=el=>{const r=el.getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left,right:r.right};};const header=document.querySelector('.discovery-view .view-header');return {header:box(header),heading:box(header.querySelector('.fy-heading-row')),toolbar:box(header.querySelector('.fy-toolbar')),controls:[...header.querySelectorAll('.fy-toolbar .btn:not([hidden]),.fy-toolbar summary')].filter(el=>el.getBoundingClientRect().width).map(box)};});
+   assert.ok(boxes.heading.bottom<boxes.toolbar.top);assert.ok(boxes.controls[0].left<=boxes.header.left+32,JSON.stringify({width,boxes}));assert.ok(boxes.controls.every(r=>r.left>=boxes.header.left && r.right<=boxes.header.right));
+   assert.ok(new Set(boxes.controls.map(r=>Math.round(r.top))).size<=1,JSON.stringify({width,boxes}));
+   assert.deepEqual(app.problems,[]);
+  }finally{await app.close();}
+ }
+});
+
+test("refinement: mixes grow beyond one hundred without scrolling back and radio keeps the cursor",async()=>{
+ const app=await openApp({config:{signedIn:true}});
+ try {
+  const {page}=app;await waitForLibrary(page);
+  await page.evaluate(async()=>{const {api}=await import('/js/api.js');window.mixOffsets=[];api.mix=async(options,offset=0)=>{window.mixOffsets.push(offset);return Array.from({length:100},(_,i)=>({track_id:offset+i+1,owner_id:7,title:`Микс ${offset+i+1}`,artist:'A',duration:100,artists:[]}));};});
+  await page.click('.nav button[data-view=forYou]');await page.waitForFunction(()=>document.querySelector('.discovery-view .meta').textContent.includes('100'));
+  await page.locator('.mix-continuation .btn').scrollIntoViewIfNeeded();
+  await page.waitForFunction(()=>document.querySelector('.discovery-view .meta').textContent.includes('200'));
+  const scroll=await page.locator('.discovery-view > .list').evaluate(el=>el.scrollTop);assert.ok(scroll>0);
+  await page.locator('.discovery-view .view-header .btn.primary').click();
+  await page.waitForFunction(()=>window.__mock.last('play_radio')?.args.tracks.length===200);
+  assert.equal((await page.evaluate(()=>window.__mock.last('play_radio'))).args.nextOffset,800);
+  assert.deepEqual(await page.evaluate(()=>window.mixOffsets),[0,400]);
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test("refinement: holding Space sends one playback toggle",async()=>{
+ const app=await openApp({config:{signedIn:true}});
+ try {
+  const {page}=app;await waitForLibrary(page);await rows(page).first().click();await page.locator('.list').first().focus();
+  await page.keyboard.down('Space');await page.keyboard.down('Space');await page.keyboard.down('Space');await page.keyboard.up('Space');
+  assert.equal(await page.evaluate(()=>window.__mock.count('toggle')),1);assert.deepEqual(app.problems,[]);
  }finally{await app.close();}
 });

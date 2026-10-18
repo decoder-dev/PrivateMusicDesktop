@@ -1,8 +1,8 @@
-//! Differential test for the media module: MPEG-TS demux, ISO box walking,
-//! CMAF fragment/initialization parsing, VK unmasking and the loaded-ahead
-//! fold are compared with the original C on well-formed, mutated and random
-//! input. AES is checked against OpenSSL-generated vectors instead (the C
-//! version calls CommonCrypto, which does not exist on Linux).
+//! Дифференциальный тест для медиа-модуля: демультиплексирование MPEG-TS, обход блока ISO,
+//! синтаксический анализ CMAF fragment/initialization, демаскировка VK и упреждающая загрузка
+//! сравниваются с исходным C на правильно сформированном, мутированном и случайном вводе. Вместо этого
+//! AES проверяется по векторам, сгенерированным OpenSSL (версия C вызывает CommonCrypto, которого нет в
+//! Linux).
 
 use pm_native::media::*;
 use std::ffi::c_void;
@@ -14,7 +14,8 @@ fn rng_bytes(rng: &mut Rng, n: usize) -> Vec<u8> {
     (0..n).map(|_| rng.u32() as u8).collect()
 }
 
-/// Flip, overwrite or truncate a few bytes so parsers see near-valid input.
+/// Переверните, перезапишите или усеките несколько байтов, чтобы анализаторы видели почти
+/// действительные входные данные.
 fn mutate(rng: &mut Rng, mut v: Vec<u8>) -> Vec<u8> {
     if v.is_empty() {
         return v;
@@ -59,7 +60,7 @@ fn ts_packet(pid: u16, start: bool, payload: &[u8], counter: u8) -> Vec<u8> {
     let mut body = payload.to_vec();
     body.truncate(room);
     if body.len() < room {
-        // Stuff with an adaptation field.
+        // Штуки с полем адаптации.
         let pad = room - body.len();
         p[3] = 0x30 | (counter & 0xF);
         p.push((pad - 1) as u8);
@@ -225,7 +226,7 @@ fn matches_the_c_reference() {
     }
     assert!(ts_cases > 150, "TS generator should usually produce audio, got {ts_cases}");
 
-    // ---- ISO walk / contains --------------------------------------------
+    // ---- ISO прогулка/содержит --------------------------------------------
     let kinds: [&[u8; 4]; 6] = [b"ftyp", b"moov", b"moof", b"mdat", b"free", b"trak"];
     for _ in 0..1500 {
         let mut data = Vec::new();
@@ -262,7 +263,7 @@ fn matches_the_c_reference() {
         }
     }
 
-    // ---- CMAF fragments ----------------------------------------------------
+    // ---- Фрагменты CMAF ----------------------------------------------------
     let mut fragments_ok = 0;
     for round in 0..4000 {
         let track = 1 + rng.below(2) as u32;
@@ -278,7 +279,7 @@ fn matches_the_c_reference() {
         trun.extend(be32(samples as u32));
         let mut sizes = Vec::new();
         let default_size = 20 + rng.below(30) as u32;
-        // moof size is fixed below; data_offset is patched after assembly.
+        // размер мофа фиксирован ниже; data_offset прошивается после сборки.
         let data_offset_at = trun.len();
         if trun_flags & 1 != 0 {
             trun.extend(be32(0));
@@ -394,7 +395,7 @@ fn matches_the_c_reference() {
     }
     assert!(fragments_ok > 400, "fragment generator should usually succeed, got {fragments_ok}");
 
-    // ---- CMAF initialization ----------------------------------------------
+    // ---- Инициализация CMAF ----------------------------------------------
     let mut inits_ok = 0;
     for round in 0..4000 {
         let version = rng.below(2) as u8;
@@ -478,7 +479,7 @@ fn matches_the_c_reference() {
     }
     assert!(inits_ok > 800, "init generator should usually succeed, got {inits_ok}");
 
-    // ---- VK unmask -----------------------------------------------------------
+    // ---- VK снять маску -----------------------------------------------------------
     let alphabet = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN0PQRSTUVWXYZO123456789+/=";
     let encode = |bytes: &[u8]| -> Vec<u8> {
         let std_b64 = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -532,7 +533,7 @@ fn matches_the_c_reference() {
     }
     assert!(unmask_ok > 400, "unmask generator should usually succeed, got {unmask_ok}");
 
-    // ---- loaded ahead ----------------------------------------------------------
+    // ---- загружено вперед ----------------------------------------------------------
     for _ in 0..500 {
         let n = rng.below(8);
         let ends: Vec<f64> = (0..n)

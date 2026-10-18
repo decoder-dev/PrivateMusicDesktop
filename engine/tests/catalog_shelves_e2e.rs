@@ -1,8 +1,7 @@
-//! The "For you" shelves against a fake VK, with payloads shaped like the
-//! ones the iOS client's own tests carry (`MixTuningTests`, `AlbumSupportTests`,
-//! `VKCatalogArtistTests`): mixes under `blocks[].audio_stream_mixes`, a
-//! section list under `catalog.sections`, release albums with a grid cover,
-//! and thin root answers that only the sections fill in.
+//! "For you" противопоставляется поддельному VK с полезными нагрузками, имеющими форму тех, которые
+//! несут собственные тесты клиента iOS (`MixTuningTests`, `AlbumSupportTests`, `VKCatalogArtistTests`):
+//! миксы под `blocks[].audio_stream_mixes`, список разделов под `catalog.sections`, выпуск альбомов с
+//! сеткой обложки и тонкие корневые ответы, которые заполняются только разделами.
 
 mod common;
 
@@ -39,7 +38,7 @@ fn ids(mixes: &[pm_engine::vk::MusicMix]) -> Vec<String> {
     mixes.iter().map(|m| format!("{}{}", m.id, m.options.as_deref().map(|o| format!("#{o}")).unwrap_or_default())).collect()
 }
 
-/// iOS `MixTuningTests`: tuned tiles share the `common` id.
+/// iOS `MixTuningTests`: настроенные плитки имеют одинаковый идентификатор `common`.
 const TUNED: &str = r#"{"blocks":[{"audio_stream_mixes":[
     {"mix_id":"common","title":"Грустное","options":{"mood":"sad"}},
     {"mix_id":"common","title":"Бодрое","options":{"mood":"energetic"}},
@@ -93,7 +92,7 @@ fn a_tile_without_a_title_still_counts_and_covers_are_found_in_every_shape() {
 
 #[test]
 fn a_thin_root_is_filled_in_from_the_sections_that_look_like_mix_shelves() {
-    // The section list of iOS `VKCatalogArtistTests`, plus shelves that are not mixes.
+    // Список разделов iOS `VKCatalogArtistTests`, а также полки, не являющиеся миксами.
     let api = FakeApi::start(|url, body, _| match method(url) {
         "catalog.getAudio" => (200, r#"{"response":{"catalog":{"default_section":"sec-home","sections":[
                 {"id":"sec-mix","title":"mixes","url":"https://vk.com/audios1?section=mixes"},
@@ -113,8 +112,9 @@ fn a_thin_root_is_filled_in_from_the_sections_that_look_like_mix_shelves() {
         other => panic!("unexpected {other}"),
     });
     let mixes = app(&api.base).catalog_mixes().unwrap();
-    // "new_releases" matches the broad mix markers too ("нов" is for releases only,
-    // but "mixes" and the url do the job); the numeric id is never asked.
+    // "new_releases" также соответствует маркерам широкого микса ("нов" предназначен только для
+    // выпусков, но "mixes" и URL-адрес выполняют свою работу); числовой идентификатор никогда не
+    // запрашивается.
     assert!(ids(&mixes).starts_with(&["common".to_string(), "calm".to_string()]), "{:?}", ids(&mixes));
     assert_eq!(mixes[0].title, "Мой микс", "VK's own wording for it is replaced");
     assert_eq!(mixes[1].section_title.as_deref(), Some("mixes"));
@@ -154,8 +154,7 @@ fn a_failing_section_loses_only_itself_and_a_dead_session_is_reported() {
     assert_eq!(ids(&app(&api.base).catalog_mixes().unwrap()), ["common", "ok"]);
 }
 
-/// A release as `playlists` carries it in a real answer, cover in a grid
-/// (iOS `AlbumSupportTests`).
+/// Релиз под названием `playlists` содержит реальный ответ, покрытый сеткой (iOS `AlbumSupportTests`).
 fn release(id: i64, title: &str) -> String {
     format!(
         r#"{{"id":{id},"owner_id":-8,"title":"{title}","year":2024,"main_artists":[{{"name":"Decoder"}}],"photo":[],
@@ -196,8 +195,8 @@ fn a_thin_root_gets_its_releases_from_sections_named_in_any_of_the_usual_ways() 
 
 #[test]
 fn an_unreadable_root_does_not_hide_the_releases_the_sections_have() {
-    // A VK error on the root is not fatal: hydration is still attempted from nothing,
-    // and an empty result is an empty shelf, not an error.
+    // Ошибка VK в корне не является фатальной: попытка гидратации все равно производится из ничего, а
+    // пустой результат — это пустая полка, а не ошибка.
     let api = FakeApi::start(|_, _, _| (200, r#"{"error":{"error_code":100,"error_msg":"bad"}}"#.into()));
     assert!(app(&api.base).new_releases().unwrap().is_empty());
 }

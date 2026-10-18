@@ -8,7 +8,7 @@
 const uint64_t pm_hash_fnv1a64_basis = 0xcbf29ce484222325ULL;
 
 static const uint64_t pm_hash_fnv1a64_prime = 0x100000001b3ULL;
-/// Stand-in for a hash that lands on 0, keeping 0 free as the empty sentinel.
+/// Заменяет хэш, который достигает 0, оставляя 0 свободным в качестве пустого стража.
 static const uint64_t pm_hash_zero_replacement = 0x9e3779b97f4a7c15ULL;
 
 uint64_t pm_hash_fnv1a64_value(uint64_t hash, uint64_t value) {
@@ -43,9 +43,9 @@ uint64_t pm_text_identity_hash(const uint8_t *bytes, int32_t length) {
 
 #pragma mark - Text folding and search
 
-/// Fold one Cyrillic scalar the way the platform folder does for Russian:
-/// lowercase, then strip the marks that decompose out of `ё` and `й`.
-/// Returns false for the extended Cyrillic letters this fast path declines.
+/// Сложите один кириллический скаляр так, как это делается в папке платформы для русского языка: нижний
+/// регистр, затем уберите знаки, которые распадаются на `ё` и `й`. Возвращает false для расширенных
+/// букв кириллицы. Этот быстрый путь отклоняется.
 static bool pm_fold_cyrillic_scalar(uint32_t scalar, uint32_t *folded) {
     if (scalar == 0x0401 || scalar == 0x0451) {
         *folded = 0x0435;
@@ -277,8 +277,8 @@ static bool pm_mix_history_contains(
     return false;
 }
 
-/// Penalize an artist that just played, which is what stopped mix radio from
-/// looping the same handful of picks.
+/// Наказать исполнителя, который только что играл, и именно это помешало микс-радио зациклить одну и ту
+/// же горстку медиаторов.
 static double pm_mix_spacing_bonus(
     uint64_t artist_hash,
     const uint64_t *recent_hashes,
@@ -346,8 +346,8 @@ double pm_mix_score_candidate(
         if (seed_artist != 0 && artist != seed_artist) {
             value += 4.0;
         }
-        // Mild spacing only — affinity to the seed artist must still win the
-        // first pick after the current track.
+        // Только небольшой интервал — близость к исходному исполнителю все равно должна выиграть первый
+        // выбор после текущего трека.
         value += pm_mix_spacing_bonus(
             artist,
             recent_hashes,
@@ -423,8 +423,8 @@ int32_t pm_mix_select_best(
 
 #pragma mark - Buffer health estimator
 
-/// Ticks closer together than this (or non-monotonic) are dropped instead of
-/// dividing by a near-zero interval.
+/// Тики, расположенные ближе друг к другу (или немонотонно), отбрасываются вместо деления на
+/// околонулевой интервал.
 static const double pm_buffer_health_min_interval = 1e-6;
 
 void pm_buffer_health_reset(pm_buffer_health *state) {
@@ -453,9 +453,9 @@ void pm_buffer_health_observe(
 
     const double elapsed = now_seconds - state->previous_timestamp;
     if (elapsed <= pm_buffer_health_min_interval) {
-        // Non-monotonic or duplicate tick: keep the latest reading for
-        // predicted-underrun purposes, but do not fold it into the rolling
-        // rate — the previous tick stays the basis for the next real delta.
+        // Немонотонный или повторяющийся тик: сохраняйте последние показания для целей прогнозирования
+        // отставания, но не добавляйте их в скорость вращения — предыдущий тик остается основой для
+        // следующей реальной дельты.
         state->latest_loaded_ahead = loaded_ahead_seconds;
         return;
     }

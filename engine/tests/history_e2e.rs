@@ -1,6 +1,6 @@
-//! The app object's side of the local history: it follows the signed-in
-//! account, validates what the window sends and keeps the file out of reach
-//! of anyone else's data.
+//! Сторона локальной истории, принадлежащая объекту приложения: она следует за учетной записью,
+//! вошедшей в систему, проверяет то, что отправляет окно, и сохраняет файл вне досягаемости чьих-либо
+//! данных.
 
 mod common;
 

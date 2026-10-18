@@ -1,12 +1,12 @@
-//! Prints the same normalized dump as tools/hls_oracle's Swift program so the
-//! two parsers can be diffed: `cargo run --example hls_dump -- files...`.
+//! Печатает тот же нормализованный дамп, что и программа Swift tools/hls_oracle, поэтому можно сравнить
+//! два парсера: `cargo run --example hls_dump -- files...`.
 
 use pm_native::hls::*;
 
 const BASE: &str = "https://h/p/";
 
 fn resolve(s: &str) -> String {
-    // Absolute iff it starts with a URL scheme (letter, then letters, digits, + - .).
+    // Абсолютно, если оно начинается со схемы URL (буква, затем буквы, цифры, + - .).
     let scheme = s.find(':').is_some_and(|i| {
         let head = &s[..i];
         head.chars().next().is_some_and(|c| c.is_ascii_alphabetic())

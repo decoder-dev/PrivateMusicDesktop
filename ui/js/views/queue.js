@@ -13,7 +13,7 @@ export function createQueueView() {
     playable: false,
     hooks: {
       emptyText: t("queue.empty"), art: "queue",
-      pinLiked: false, // hearts show on hover; a column of marks on every row says nothing
+      pinLiked: false, // сердечки показываются при наведении; столбец отметок в каждой строке ни о чем не говорит
       headerExtra: clear,
       rowActions: [["move-up", "up", t("queue.up")], ["move-down", "down", t("queue.down")], ["close", "remove", t("remove")]],
       isSelected: (_track, index) => index === store.queue.current,
@@ -26,7 +26,7 @@ export function createQueueView() {
     },
   });
 
-  // A queue started from a mix says so: it keeps refilling while it plays.
+  // Очередь, запущенная из микса, говорит об этом: она продолжает пополняться во время воспроизведения.
   const note = h("div", { class: "radio-note", role: "note", hidden: true });
   screen.element.insertBefore(note, screen.list.element);
   const noteKeys = { personal: "queue.radio.personal", catalog: "queue.radio.catalog", similar: "queue.radio.similar" };
@@ -39,8 +39,8 @@ export function createQueueView() {
   subscribe("player", renderNote);
   renderNote(store.player);
 
-  // The queue can be thousands of tracks long and changes on every skip, so
-  // it is only drawn while it is on screen.
+  // Очередь может состоять из тысяч треков и изменяться при каждом пропуске, поэтому она рисуется
+  // только пока находится на экране.
   let visible = false;
   let dirty = true;
 

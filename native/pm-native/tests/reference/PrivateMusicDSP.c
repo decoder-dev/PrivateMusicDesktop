@@ -3,8 +3,8 @@
 #include <Accelerate/Accelerate.h>
 #include <math.h>
 
-/// Inlinable twin of `pm_biquad_process` so the per-sample loops below do not
-/// pay a call for every frame.
+/// Встроенный двойник `pm_biquad_process`, поэтому приведенные ниже циклы для каждой выборки не
+/// выполняют вызов для каждого кадра.
 static inline float pm_biquad_step(
     float input,
     const PMBiquadCoeffs *coeffs,
@@ -143,9 +143,8 @@ static inline float pm_spatial_clamp_intensity(float intensity) {
     return intensity;
 }
 
-/// Mid/side recombination shared by the single-sample and buffer entry points.
-/// `side_gain` / `headroom` only depend on the intensity, so the loops hoist
-/// them out and call this per frame.
+/// Рекомбинация Mid/side, общая для точек входа с одной выборкой и буфером. `side_gain`/`headroom`
+/// зависят только от интенсивности, поэтому циклы поднимают их и вызывают это для каждого кадра.
 static inline void pm_spatial_apply(
     float left,
     float right,

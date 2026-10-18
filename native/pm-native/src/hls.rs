@@ -1,10 +1,10 @@
-//! HLS playlist parsing: audio rendition / variant selection from a master
-//! playlist and segment, key and map extraction from a media playlist.
+//! Анализ плейлиста HLS: воспроизведение аудио/выбор варианта из основного плейлиста и сегмента,
+//! извлечение ключа и карты из медиаплейлиста.
 //!
-//! The behaviour (including its quirks) follows the Swift parser it replaces
-//! and is compared with it on generated playlists. Strings never cross the
-//! boundary: results point into the caller's UTF-8 text as byte offsets, and
-//! URL resolution (Foundation, RFC 3986) stays on the Swift side.
+//! Поведение (включая его особенности) соответствует парсеру Swift, который он заменяет, и сравнивается
+//! с ним в сгенерированных плейлистах. Строки никогда не пересекают границу: результаты указывают на
+//! текст UTF-8 вызывающего объекта в виде смещений байтов, а разрешение URL (Foundation, RFC 3986)
+//! остается на стороне Swift.
 
 use core::slice;
 use std::collections::HashMap;
@@ -22,7 +22,7 @@ pub const PM_HLS_CHOOSE_MEDIA_PLAYLIST: i32 = 0;
 pub const PM_HLS_CHOOSE_FOUND: i32 = 1;
 pub const PM_HLS_CHOOSE_NONE: i32 = 2;
 
-/// Byte range inside the parsed text. `length < 0` means absent.
+/// Диапазон байтов внутри анализируемого текста. `length < 0` означает отсутствие.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct pm_hls_slice {
@@ -50,7 +50,7 @@ pub struct pm_hls_map {
     pub range_length: i64,
     pub has_range_offset: bool,
     pub range_offset: i64,
-    /// Index into the key table, or -1.
+    /// Индекс в ключевую таблицу или -1.
     pub key_index: i32,
 }
 
@@ -75,11 +75,11 @@ pub struct pm_hls_media_info {
     pub segment_count: i32,
     pub key_count: i32,
     pub map_count: i32,
-    /// For `PM_HLS_UNSUPPORTED_ENCRYPTION_METHOD`: the method text.
+    /// Для `PM_HLS_UNSUPPORTED_ENCRYPTION_METHOD`: текст метода.
     pub detail: pm_hls_slice,
 }
 
-// ------------------------------------------------------------------ text
+// ------------------------------------------------------------------ текст
 
 /// `CharacterSet.newlines`: U+000A–U+000D, U+0085, U+2028, U+2029.
 fn is_newline(c: char) -> bool {
@@ -94,8 +94,8 @@ fn slice_of(base: &str, part: &str) -> pm_hls_slice {
     pm_hls_slice { offset: offset_in(base, part), length: part.len() as i32 }
 }
 
-/// Swift `dropFirst(n)` counts Characters; for the ASCII prefixes used here
-/// counting chars is equivalent apart from combining marks right after them.
+/// Swift `dropFirst(n)` считает символы; для используемых здесь префиксов ASCII подсчет символов
+/// эквивалентен, за исключением объединения знаков сразу после них.
 fn drop_chars(s: &str, n: usize) -> &str {
     match s.char_indices().nth(n) {
         Some((i, _)) => &s[i..],
@@ -107,8 +107,8 @@ fn int(s: &str) -> Option<i64> {
     s.parse::<i64>().ok()
 }
 
-/// Quote-aware attribute list; later duplicates win, keys are upper-cased,
-/// values trimmed and unquoted.
+/// Список атрибутов с учетом кавычек; более поздние дубликаты выигрывают, ключи имеют верхний регистр,
+/// значения обрезаются и не заключаются в кавычки.
 fn attribute_list(raw: &str) -> HashMap<String, &str> {
     let mut tokens: Vec<&str> = Vec::new();
     let mut inside = false;
@@ -137,7 +137,7 @@ fn attribute_list(raw: &str) -> HashMap<String, &str> {
     result
 }
 
-/// `value.split("@")` with empty parts dropped, then Int() of the first two.
+/// `value.split("@")` с отброшенными пустыми частями, затем Int() первых двух.
 fn byte_range_parts(value: &str) -> (Option<i64>, Option<i64>) {
     let mut parts = value.split('@').filter(|s| !s.is_empty());
     let first = parts.next();
@@ -146,7 +146,7 @@ fn byte_range_parts(value: &str) -> (Option<i64>, Option<i64>) {
     (length, offset)
 }
 
-// ----------------------------------------------------------- master playlist
+// ----------------------------------------------------------- основной плейлист
 
 struct Variant<'a> {
     uri: &'a str,
@@ -210,8 +210,8 @@ fn parse_renditions(text: &str) -> Vec<Rendition<'_>> {
     out
 }
 
-/// Selection order: DEFAULT rendition, AUTOSELECT rendition, first rendition
-/// in a group some variant references, then the best audio-only variant.
+/// Порядок выбора: исполнение DEFAULT, исполнение AUTOSELECT, сначала исполнение в группе с некоторыми
+/// ссылками на варианты, затем лучший вариант, содержащий только аудио.
 pub fn choose_audio(text: &str) -> (i32, pm_hls_slice) {
     let renditions = parse_renditions(text);
     let variants = parse_variants(text);
@@ -240,7 +240,7 @@ pub fn choose_audio(text: &str) -> (i32, pm_hls_slice) {
         if !(audio && !video) {
             continue;
         }
-        // `max(by:)` keeps the first of equal elements.
+        // `max(by:)` сохраняет первый из равных элементов.
         if best.map_or(true, |b| b.bandwidth < v.bandwidth) {
             best = Some(v);
         }
@@ -251,7 +251,7 @@ pub fn choose_audio(text: &str) -> (i32, pm_hls_slice) {
     }
 }
 
-// ----------------------------------------------------------- media playlist
+// -------------------------------------------- Медиа-плейлист
 
 pub struct MediaPlaylist {
     pub code: i32,
@@ -391,8 +391,8 @@ unsafe fn text_of<'a>(ptr: *const u8, len: i32) -> Option<&'a str> {
     core::str::from_utf8(slice::from_raw_parts(ptr, len as usize)).ok()
 }
 
-/// Picks the audio playlist URI out of a master playlist. Returns
-/// `PM_HLS_CHOOSE_*`; `uri` points into `text` when found.
+/// Выбирает список воспроизведения аудио URI из основного списка воспроизведения. Возвращает
+/// `PM_HLS_CHOOSE_*`; `uri` при обнаружении указывает на `text`.
 #[no_mangle]
 pub unsafe extern "C" fn pm_hls_choose_audio(text: *const u8, length: i32, uri: *mut pm_hls_slice) -> i32 {
     let Some(t) = text_of(text, length) else { return PM_HLS_INVALID_TEXT };
@@ -403,9 +403,9 @@ pub unsafe extern "C" fn pm_hls_choose_audio(text: *const u8, length: i32, uri: 
     code
 }
 
-/// Parses a media playlist. Tables are filled up to their capacities while
-/// `info` always reports the full counts, so a first call with null tables
-/// sizes the second. Returns `info.code`.
+/// Анализирует медиа-плейлист. Таблицы заполняются до предела, в то время как `info` всегда сообщает
+/// полные значения, поэтому первый вызов с нулевыми таблицами определяет размер второго. Возвращает
+/// `info.code`.
 #[no_mangle]
 pub unsafe extern "C" fn pm_hls_parse_media(
     text: *const u8,
@@ -505,7 +505,7 @@ mod tests {
         let (a, b) = (&m.segments[0], &m.segments[1]);
         assert_eq!((a.has_range, a.range_length, a.has_range_offset, a.range_offset), (true, 100, true, 200));
         assert_eq!((a.key_index, a.map_index, a.discontinuity), (0, 0, false));
-        // The map persists, the key was cleared, the discontinuity flag applies once.
+        // Карта сохраняется, ключ очищен, флаг разрыва применяется один раз.
         assert_eq!((b.key_index, b.map_index, b.discontinuity, b.has_range), (-1, 0, true, false));
         assert!(m.maps[0].has_range && m.maps[0].has_range_offset);
         assert_eq!(m.maps[0].key_index, 0);
@@ -519,7 +519,7 @@ mod tests {
         assert_eq!(code("#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"k\"\n"), PM_HLS_UNSUPPORTED_ENCRYPTION_METHOD);
         assert_eq!(code("#EXT-X-MAP:BYTERANGE=\"5\"\n"), PM_HLS_INVALID_INITIALIZATION_SECTION);
         assert_eq!(code("#EXT-X-MAP:URI=\"i\",BYTERANGE=\"x\"\n"), PM_HLS_INVALID_BYTE_RANGE);
-        // Encrypted map without an explicit IV.
+        // Зашифрованная карта без явного IV.
         let t = "#EXT-X-KEY:METHOD=AES-128,URI=\"k\"\n#EXT-X-MAP:URI=\"i\"\n";
         assert_eq!(code(t), PM_HLS_ENCRYPTED_INIT_NEEDS_IV);
         assert_eq!(code("a.ts\nb.ts\nc.ts\nd.ts\n"), PM_HLS_TOO_MANY_SEGMENTS);
@@ -551,7 +551,7 @@ mod tests {
             };
             1
         ];
-        // A short table is filled as far as it goes; the counts stay complete.
+        // Короткая таблица заполнена до предела; подсчеты остаются полными.
         unsafe {
             pm_hls_parse_media(
                 t.as_ptr(), t.len() as i32, 100, &mut info,

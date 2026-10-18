@@ -1,6 +1,6 @@
-//! Differential test for the core module: hashing, text folding/search,
-//! artwork tint, mix ranking and the buffer-health estimator are compared
-//! against the original C implementation on random and edge-case inputs.
+//! Дифференциальный тест для основного модуля: хеширование, текст folding/search, оттенок графического
+//! изображения, ранжирование микса и средство оценки работоспособности буфера сравниваются с исходной
+//! реализацией C на случайных входных данных и в крайнем случае.
 
 use pm_native::core::*;
 use std::ffi::c_void;
@@ -62,9 +62,9 @@ fn matches_the_c_reference() {
     let mut rng = Rng(0xD1B54A32D192ED03);
 
     for round in 0..3000 {
-        // ---- text: fold / normalize / find / hashes
+        // ---- текст: свернуть/нормализовать/найти/хэши
         let text = bytes(&mut rng, 24, ALPHABET);
-        // Occasionally corrupt the bytes so the unsupported/invalid paths run.
+        // Иногда повреждают байты, поэтому выполняются пути unsupported/invalid.
         let mut text = text;
         if round % 7 == 0 && !text.is_empty() {
             let at = round % text.len();
@@ -120,7 +120,7 @@ fn matches_the_c_reference() {
             );
         }
 
-        // ---- artwork tint
+        // ---- оттенок произведения искусства
         if round % 3 == 0 {
             let pixels = (round % 40) + 1;
             let data: Vec<u8> = (0..pixels * 4).map(|_| ((rng.next() + 1.0) * 127.5) as u8).collect();
@@ -135,7 +135,7 @@ fn matches_the_c_reference() {
             assert_eq!((a.red.to_bits(), a.green.to_bits(), a.blue.to_bits()), (b.red.to_bits(), b.green.to_bits(), b.blue.to_bits()));
         }
 
-        // ---- mix ranking
+        // ---- рейтинг микса
         let pool: Vec<u64> = (0..6).map(|i| 100 + i).collect();
         let pick = |r: &mut Rng| -> u64 {
             let k = ((r.next() + 1.0) * 0.5 * 7.0) as usize;
@@ -169,7 +169,7 @@ fn matches_the_c_reference() {
         }
     }
 
-    // ---- buffer health: identical state after long random tick sequences
+    // ---- Состояние буфера: идентичное состояние после длинных случайных последовательностей тиков
     for run in 0..40 {
         let mut a: pm_buffer_health = unsafe { std::mem::zeroed() };
         let mut b: pm_buffer_health = unsafe { std::mem::zeroed() };
@@ -179,7 +179,7 @@ fn matches_the_c_reference() {
         }
         let (mut now, mut loaded) = (1000.0f64, 12.0f64);
         for tick in 0..(80 + run) {
-            // Mostly forward ticks; some duplicate or backwards ones.
+            // В основном вперед тики; некоторые дубликаты или наоборот.
             now += match tick % 13 {
                 5 => 0.0,
                 9 => -0.4,

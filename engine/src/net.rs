@@ -1,18 +1,17 @@
-//! Living with a network that changes under the app (a VPN switched on or
-//! off, Wi-Fi to cable, a laptop waking up elsewhere).
+//! Жизнь в сети, которая меняется под действием приложения (VPN включается или выключается, Wi-Fi
+//! подключается к кабелю, ноутбук просыпается в другом месте).
 //!
-//! VK ties tokens, stream URLs and cookies to the network the client was on,
-//! and a pooled keep-alive connection that was opened before the change is a
-//! dead socket afterwards. Three small pieces cope with that:
+//! VK связывает токены, поток URLs и файлы cookie с сетью, в которой находился клиент, а пуловое
+//! соединение поддержания активности, которое было открыто до изменения, впоследствии становится
+//! неработающим сокетом. С этой задачей справляются три небольших кусочка:
 //!
-//! * [`Pool`]: a shared `reqwest` client that is rebuilt (dropping every
-//!   pooled connection) the next time it is used after [`drop_connections`];
-//! * [`Tracker`] + [`NetworkMonitor`]: notice that the machine's route to the
-//!   internet changed. No packet is sent: connecting a UDP socket only asks
-//!   the OS which local address it would use, so the check is a few
-//!   microseconds and the monitor thread sleeps for good when nothing plays
-//!   and the window is not focused;
-//! * [`backoff`]: bounded exponential delays with jitter.
+//! * [`Pool`]: общий клиент `reqwest`, который перестраивается (отбрасывается каждое соединение в пуле)
+//!   при следующем использовании после [`drop_connections`];
+//! * [`Tracker`] + [`NetworkMonitor`]: обратите внимание, что маршрут компьютера к Интернету изменился.
+//!   Пакет не отправляется: при подключении к сокету UDP OS только запрашивается, какой локальный адрес
+//!   он будет использовать, поэтому проверка занимает несколько микросекунд, и поток монитора засыпает
+//!   навсегда, когда ничего не воспроизводится и окно не сфокусировано;
+//! * [`backoff`]: ограниченные экспоненциальные задержки с джиттером.
 
 use std::net::{IpAddr, Ipv6Addr, SocketAddr, UdpSocket};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -24,27 +23,27 @@ use serde::Serialize;
 
 use crate::{Error, Result};
 
-// ------------------------------------------------------------ connections
+// ------------------------------------------------------------ соединения
 
-/// Bumped by [`drop_connections`]; every [`Pool`] and every stream download
-/// compares it with the value it was built under.
+/// Натолкнулся на [`drop_connections`]; каждая [`Pool`] и каждая загрузка потока сравнивают его со
+/// значением, на котором он был создан.
 static EPOCH: AtomicU64 = AtomicU64::new(0);
 
-/// The current connection generation.
+/// Текущее поколение соединения.
 pub fn epoch() -> u64 {
     EPOCH.load(Ordering::Acquire)
 }
 
-/// Makes every shared HTTP client start over: the next request opens fresh
-/// connections (new DNS lookup, new TLS session) instead of reusing a socket
-/// that belongs to the old network. Cheap: nothing is rebuilt until used.
+/// Заставляет каждого общего клиента HTTP начинать заново: следующий запрос открывает новые соединения
+/// (новый поиск DNS, новый сеанс TLS) вместо повторного использования сокета, принадлежащего старой
+/// сети. Дешево: ничего не восстанавливается, пока не будет использовано.
 pub fn drop_connections() {
     EPOCH.fetch_add(1, Ordering::AcqRel);
 }
 
 type Build = dyn Fn() -> Result<Client> + Send + Sync;
 
-/// A `reqwest` client that can be thrown away and rebuilt, shared by clones.
+/// Клиент `reqwest`, который можно выбросить и пересобрать, которым пользуются клоны.
 pub struct Pool {
     build: Box<Build>,
     current: Mutex<(u64, Client)>,
@@ -56,7 +55,7 @@ impl Pool {
         Ok(Self { build: Box::new(build), current: Mutex::new((epoch(), client)) })
     }
 
-    /// The client to use now; a clone of it is a cheap handle on one pool.
+    /// Клиент, который нужно использовать сейчас; его клон — дешевая ручка на одном пуле.
     pub fn get(&self) -> Client {
         let mut slot = self.current.lock().unwrap_or_else(|p| p.into_inner());
         let now = epoch();
@@ -65,11 +64,11 @@ impl Pool {
                 Ok(fresh) => {
                     let old = std::mem::replace(&mut slot.1, fresh);
                     slot.0 = now;
-                    // Dropping a blocking client joins its runtime thread:
-                    // keep that off the caller's (possibly async) thread.
+                    // Удаление блокирующего клиента присоединяется к его потоку времени выполнения:
+                    // держите его подальше от потока вызывающего (возможно, асинхронного).
                     let _ = std::thread::Builder::new().name("pm-net-drop".into()).spawn(move || drop(old));
                 }
-                // Keep the old client; try again at the next request.
+                // Оставьте старый клиент; попробуйте еще раз при следующем запросе.
                 Err(error) => log::warn!("could not rebuild the HTTP client: {}", error.kind()),
             }
         }
@@ -77,19 +76,17 @@ impl Pool {
     }
 }
 
-/// `Pool::new` for the usual case: a shared pool behind an `Arc`.
+/// `Pool::new` для обычного случая: общий пул за `Arc`.
 pub fn shared_pool(build: impl Fn() -> Result<Client> + Send + Sync + 'static) -> Result<Arc<Pool>> {
     Pool::new(build).map(Arc::new)
 }
 
-/// True for failures that say "the connection or the route is bad", as
-/// opposed to "the server answered no".
+/// Верно для ошибок с надписью "the connection or the route is bad", а не "the server answered no".
 pub fn is_connectivity(error: &Error) -> bool {
     matches!(error, Error::Timeout | Error::Offline | Error::Transport(_))
 }
 
-/// An I/O error while reading a response body, with nothing from the request
-/// (a signed URL) in its text.
+/// Ошибка I/O при чтении тела ответа, в тексте которого нет ничего из запроса (со знаком URL).
 pub fn read_error(error: &std::io::Error) -> Error {
     if error.kind() == std::io::ErrorKind::TimedOut {
         Error::Timeout
@@ -98,38 +95,37 @@ pub fn read_error(error: &std::io::Error) -> Error {
     }
 }
 
-/// Seconds to wait before retry number `attempt` (0-based): `base · 2^attempt`
-/// capped at `cap`, spread by ±`spread` (a fraction) with `unit` in 0…1, and
-/// never below 0.
+/// Число секунд ожидания перед повторной попыткой `attempt` (от 0): `base · 2^attempt` ограничено
+/// значением `cap`, с разбросом на ±`spread` (доля) с `unit` в диапазоне 0…1 и никогда не ниже 0.
 pub fn backoff(attempt: u32, base: f64, cap: f64, spread: f64, unit: f64) -> f64 {
     let unit = if unit.is_finite() { unit.clamp(0.0, 1.0) } else { 0.5 };
     let raw = (base * 2f64.powi(attempt.min(16) as i32)).min(cap);
     (raw * (1.0 - spread + 2.0 * spread * unit)).clamp(0.0, cap)
 }
 
-/// A random 0…1 for jitter.
+/// Случайное значение 0…1 для джиттера.
 pub fn jitter_unit() -> f64 {
     use rand::Rng;
     rand::thread_rng().gen::<f64>()
 }
 
-// ---------------------------------------------------------------- change
+// ------------------------------------------------------------------ изменить
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum NetState {
-    /// Connectivity is there and stable (also: it just came back).
+    /// Соединение есть и стабильное (также: оно только что вернулось).
     Ok,
-    /// The route to the internet changed; pooled connections were dropped.
+    /// Маршрут к Интернету изменился; объединенные соединения были удалены.
     Changed,
-    /// There is no route at all.
+    /// Маршрута нет вообще.
     Unreachable,
 }
 
-/// Which local addresses the OS would use to reach the internet. Two probes
-/// for IPv4 (a generic address and a VK one, since split-tunnel VPNs route
-/// VK's ranges separately) and one for IPv6, where only the /64 counts:
-/// privacy addresses rotate within it without any network change.
+/// Какие локальные адреса OS будет использовать для выхода в Интернет. Два зонда для IPv4 (общий адрес
+/// и VK, поскольку разделенный туннель VPNs маршрутизирует диапазоны VK отдельно) и один для IPv6, где
+/// учитывается только /64: конфиденциальные адреса меняются внутри него без каких-либо изменений в
+/// сети.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Fingerprint {
     pub v4: Option<IpAddr>,
@@ -143,12 +139,12 @@ impl Fingerprint {
     }
 }
 
-/// Where fingerprints come from; tests inject their own.
+/// Откуда берутся отпечатки пальцев; тесты вводят свои собственные.
 pub trait AddressSource: Send + Sync {
     fn read(&self) -> Fingerprint;
 }
 
-/// The operating system, through UDP `connect` (which sends nothing).
+/// Операционная система через UDP `connect` (которая ничего не отправляет).
 pub struct SystemAddresses;
 
 impl SystemAddresses {
@@ -172,17 +168,18 @@ impl AddressSource for SystemAddresses {
         });
         Fingerprint {
             v4: Self::local_for("0.0.0.0:0", "1.1.1.1:443"),
-            // Inside VK's own range; only used to ask which route would apply.
+            // Внутри собственного диапазона VK; используется только для того, чтобы спросить, какой
+            // маршрут подойдет.
             v4_vk: Self::local_for("0.0.0.0:0", "87.240.137.164:443"),
             v6,
         }
     }
 }
 
-/// The state machine behind the monitor: feed it fingerprints, it says what
-/// to tell the window. A change is announced at once (`Changed`) and only
-/// called `Ok` when the next look finds it unchanged, so a VPN that flaps for
-/// a few seconds while connecting does not trigger a retry per flap.
+/// Конечная машина за монитором: дайте ей отпечатки пальцев, она скажет, что сказать окну. Об изменении
+/// объявляется сразу (`Changed`) и оно называется `Ok` только тогда, когда при следующем просмотре оно
+/// обнаруживается без изменений, поэтому VPN, который изменяется в течение нескольких секунд во время
+/// подключения, не вызывает повторную попытку для каждого изменения.
 #[derive(Debug, Default)]
 pub struct Tracker {
     last: Option<Fingerprint>,
@@ -192,7 +189,7 @@ pub struct Tracker {
 impl Tracker {
     pub fn observe(&mut self, now: Fingerprint) -> Vec<NetState> {
         let Some(previous) = self.last.replace(now) else {
-            // First look: a baseline, not a change.
+            // Первый взгляд: базовый уровень, а не изменение.
             return if now.reachable() { Vec::new() } else { vec![NetState::Unreachable] };
         };
         if previous == now {
@@ -207,7 +204,7 @@ impl Tracker {
         }
     }
 
-    /// A change was announced and its confirmation is due soon.
+    /// Было объявлено об изменении, и его подтверждение должно быть скоро.
     pub fn awaiting_stable(&self) -> bool {
         self.awaiting_stable
     }
@@ -215,9 +212,9 @@ impl Tracker {
 
 #[derive(Debug, Clone, Copy)]
 pub struct MonitorConfig {
-    /// Between looks while something plays or the window is focused.
+    /// Между взглядами, пока что-то воспроизводится или окно сфокусировано.
     pub poll: Duration,
-    /// Between a change and the look that confirms it.
+    /// Между изменением и взглядом, который его подтверждает.
     pub confirm: Duration,
 }
 
@@ -240,13 +237,13 @@ struct Shared {
     wake: Condvar,
 }
 
-/// Looks at the route every few seconds, but only while it matters.
+/// Просматривает маршрут каждые несколько секунд, но только пока это важно.
 pub struct NetworkMonitor {
     handle: MonitorHandle,
     thread: Mutex<Option<std::thread::JoinHandle<()>>>,
 }
 
-/// What callers use to steer the monitor; cheap to clone.
+/// Чем звонящие управляют монитором; дешево клонировать.
 #[derive(Clone)]
 pub struct MonitorHandle {
     shared: Arc<Shared>,
@@ -281,7 +278,7 @@ impl MonitorHandle {
         self.shared.wake.notify_all();
     }
 
-    /// Audio is playing (or loading): keep watching.
+    /// Звук воспроизводится (или загружается): продолжайте смотреть.
     pub fn set_playing(&self, playing: bool) {
         let mut flags = self.shared.flags.lock().unwrap_or_else(|p| p.into_inner());
         if flags.playing != playing {
@@ -290,7 +287,7 @@ impl MonitorHandle {
         }
     }
 
-    /// The window has the user's attention: keep watching.
+    /// Окно привлекает внимание пользователя: продолжайте смотреть.
     pub fn set_focused(&self, focused: bool) {
         let mut flags = self.shared.flags.lock().unwrap_or_else(|p| p.into_inner());
         if flags.focused != focused {
@@ -299,7 +296,7 @@ impl MonitorHandle {
         }
     }
 
-    /// Look right now, even if nothing is playing (the user pressed Retry).
+    /// Посмотрите прямо сейчас, даже если ничего не воспроизводится (пользователь нажал «Повторить»).
     pub fn check_now(&self) {
         self.update(|f| f.force = true);
     }
@@ -325,13 +322,13 @@ fn run(shared: &Shared, source: &dyn AddressSource, config: MonitorConfig, on_st
         }
         let active = flags.playing || flags.focused;
         if !active && !flags.force {
-            // Nothing to watch for: sleep until told otherwise, no wake-ups.
+            // Не за чем следить: спите, пока не скажут иначе, никаких пробуждений.
             was_active = false;
             flags = shared.wake.wait(flags).unwrap_or_else(|p| p.into_inner());
             continue;
         }
         if active && !was_active {
-            // The network may have changed while nobody was looking.
+            // Сеть могла измениться, пока никто не смотрел.
             was_active = true;
             flags.force = true;
         }
@@ -459,7 +456,7 @@ mod tests {
         let config = MonitorConfig { poll: Duration::from_millis(20), confirm: Duration::from_millis(10) };
         let monitor = NetworkMonitor::spawn(source.clone(), config, move |state| log.lock().unwrap().push(state));
 
-        // Neither playing nor focused: not a single look.
+        // Ни играя, ни сосредоточенно: ни единого взгляда.
         std::thread::sleep(Duration::from_millis(150));
         assert_eq!(source.reads.load(Ordering::SeqCst), 0);
 
@@ -467,14 +464,14 @@ mod tests {
         wait_for("the change and its confirmation", || seen.lock().unwrap().len() >= 2);
         assert_eq!(*seen.lock().unwrap(), vec![NetState::Changed, NetState::Ok]);
 
-        // Idle again: the looking stops.
+        // Опять бездействие: взгляд прекращается.
         monitor.set_playing(false);
         std::thread::sleep(Duration::from_millis(60));
         let reads = source.reads.load(Ordering::SeqCst);
         std::thread::sleep(Duration::from_millis(200));
         assert_eq!(source.reads.load(Ordering::SeqCst), reads);
 
-        // An explicit check works even when idle.
+        // Явная проверка работает даже в режиме ожидания.
         monitor.check_now();
         wait_for("a forced look", || source.reads.load(Ordering::SeqCst) > reads);
     }
@@ -499,7 +496,7 @@ mod tests {
 
     #[test]
     fn the_system_source_gives_a_fingerprint_without_sending_anything() {
-        // Works with or without a network; it must simply not panic or hang.
+        // Работает с сетью или без нее; он просто не должен паниковать или зависать.
         let print = SystemAddresses.read();
         let _ = print.reachable();
     }

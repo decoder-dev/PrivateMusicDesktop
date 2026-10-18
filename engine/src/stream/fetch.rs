@@ -1,12 +1,12 @@
-//! Downloads a VK stream into a [`SharedBuffer`] as one elementary stream.
+//! Загружает поток VK в [`SharedBuffer`] как один элементарный поток.
 //!
-//! * a plain audio file is copied through;
-//! * an HLS playlist is walked segment by segment: AES-128 decrypted with
-//!   `pm_native`, MPEG-TS demuxed with `pm_native`, ID3 tags stripped.
+//! * копируется простой аудиофайл;
+//! * список воспроизведения HLS обрабатывается сегмент за сегментом: AES-128 расшифровывается с помощью
+//!   `pm_native`, MPEG-TS демультиплексируется с удаленными тегами `pm_native`, ID3.
 //!
-//! Every URL that comes out of a playlist is attacker-influenced data, so each
-//! one must be https (loopback http only for tests), carry no credentials and
-//! stay under the size limits below.
+//! Каждый URL, который выходит из списка воспроизведения, представляет собой данные, находящиеся под
+//! влиянием злоумышленника, поэтому каждый из них должен быть https (loopback http только для тестов),
+//! не содержать учетных данных и не превышать ограничения по размеру, указанные ниже.
 
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
@@ -32,8 +32,8 @@ const MAX_PLAYLIST_BYTES: usize = 2 * 1024 * 1024;
 const MAX_SEGMENT_BYTES: usize = 48 * 1024 * 1024;
 const MAX_SEGMENTS: i32 = 4000;
 const MAX_PLAYLIST_DEPTH: usize = 3;
-/// Tries per playlist, key or segment request (the first plus two more, each
-/// on a fresh connection when the last one failed in transport).
+/// Попытки для каждого списка воспроизведения, ключа или запроса сегмента (первая плюс еще две, каждая
+/// при новом соединении, если при транспортировке последнего произошел сбой).
 const REQUEST_ATTEMPTS: u32 = 3;
 
 pub const MAX_STREAM_BYTES: usize = 150 * 1024 * 1024;
@@ -41,11 +41,10 @@ pub const MAX_STREAM_BYTES: usize = 150 * 1024 * 1024;
 #[derive(Clone, Debug)]
 pub struct FetchConfig {
     pub user_agent: String,
-    /// Tests serve from 127.0.0.1 over plain http. Never true in the app.
+    /// Тесты выполняются с адреса 127.0.0.1 по простому http. Никогда не правда в приложении.
     pub allow_loopback_http: bool,
     pub max_stream_bytes: usize,
-    /// Where downloaded tracks live; `offline:<file>` addresses resolve here
-    /// and nowhere else.
+    /// Где живут скачанные треки; Адреса `offline:<file>` разрешаются здесь и больше нигде.
     pub offline_dir: Option<std::path::PathBuf>,
 }
 
@@ -55,11 +54,11 @@ impl FetchConfig {
     }
 }
 
-/// The scheme of a downloaded track's address: `offline:<file name>`.
+/// Схема адреса скачанного трека: `offline:<file name>`.
 pub const OFFLINE_SCHEME: &str = "offline:";
 
-/// A downloaded file's name: letters, digits, `_`, `-` and one extension.
-/// Nothing that could step outside the downloads folder.
+/// Имя загруженного файла: буквы, цифры, `_`, `-` и одно расширение. Ничего, что могло бы выйти за
+/// пределы папки загрузок.
 pub(crate) fn safe_offline_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 100
@@ -76,7 +75,7 @@ pub(crate) fn kind_for_name(name: &str) -> Option<ElementaryKind> {
     }
 }
 
-/// Plays a downloaded file: same buffer, no network.
+/// Воспроизводит загруженный файл: тот же буфер, нет сети.
 fn run_offline(name: &str, config: &FetchConfig, buffer: &SharedBuffer) -> Result<()> {
     let dir = config.offline_dir.as_ref().ok_or(Error::InvalidRequest)?;
     if !safe_offline_name(name) {
@@ -100,11 +99,11 @@ fn run_offline(name: &str, config: &FetchConfig, buffer: &SharedBuffer) -> Resul
     }
 }
 
-/// Downloads a whole stream (HLS or progressive) and returns the audio, ready
-/// to be saved: decrypted and demuxed exactly as for playback.
+/// Загружает весь поток (HLS или прогрессивный) и возвращает аудио, готовое к сохранению:
+/// расшифрованное и демультиплексированное точно так же, как и при воспроизведении.
 pub fn fetch_to_end(url: &str, config: &FetchConfig) -> Result<(ElementaryKind, Vec<u8>)> {
     if url.starts_with(OFFLINE_SCHEME) {
-        return Err(Error::InvalidRequest); // already downloaded
+        return Err(Error::InvalidRequest); // уже загружен
     }
     let buffer = SharedBuffer::new(config.max_stream_bytes);
     run(url, config, &buffer)?;
@@ -112,8 +111,8 @@ pub fn fetch_to_end(url: &str, config: &FetchConfig) -> Result<(ElementaryKind, 
     buffer.completed_bytes().ok_or_else(|| Error::Stream("the stream held no audio".into()))
 }
 
-/// Starts the download on its own thread. The buffer is finished, failed or
-/// cancelled when the thread ends; callers never need to join it.
+/// Начинает загрузку в отдельном потоке. Буфер завершается, завершается с ошибкой или отменяется, когда
+/// поток завершается; вызывающим абонентам никогда не нужно присоединяться к нему.
 pub fn spawn_fetch(url: String, config: FetchConfig, buffer: SharedBuffer) -> JoinHandle<()> {
     std::thread::Builder::new()
         .name("pm-fetch".into())
@@ -130,7 +129,7 @@ pub fn spawn_fetch(url: String, config: FetchConfig, buffer: SharedBuffer) -> Jo
 }
 
 struct Fetcher<'a> {
-    /// The client and the connection generation it was built under.
+    /// Клиент и генерация соединения, в рамках которой он был построен.
     http: RefCell<(u64, Client)>,
     config: &'a FetchConfig,
     buffer: &'a SharedBuffer,
@@ -167,8 +166,8 @@ fn is_loopback(url: &Url) -> bool {
     matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]" | "::1"))
 }
 
-/// Loopback, private, link-local, unique-local, unspecified and broadcast
-/// addresses: the user's own machine and network.
+/// Шлейфовые, частные, локальные, уникальные локальные, неуказанные и широковещательные адреса:
+/// собственная машина и сеть пользователя.
 pub(crate) fn is_local_ip(ip: std::net::IpAddr) -> bool {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
     fn v4(a: Ipv4Addr) -> bool {
@@ -178,8 +177,8 @@ pub(crate) fn is_local_ip(ip: std::net::IpAddr) -> bool {
         let first = a.segments()[0];
         a.is_loopback()
             || a.is_unspecified()
-            || first & 0xfe00 == 0xfc00 // unique local
-            || first & 0xffc0 == 0xfe80 // link local
+            || first & 0xfe00 == 0xfc00 // уникальный местный
+            || first & 0xffc0 == 0xfe80 // ссылка локальная
             || a.to_ipv4_mapped().is_some_and(v4)
     }
     match ip {
@@ -188,9 +187,9 @@ pub(crate) fn is_local_ip(ip: std::net::IpAddr) -> bool {
     }
 }
 
-/// Literal local addresses and `localhost`: a stream address handed over by
-/// the window must not be able to make the engine knock on the user's own
-/// machine or network. Names are checked again after DNS ([`PublicResolver`]).
+/// Буквальные локальные адреса и `localhost`: адрес потока, передаваемый окном, не должен позволять
+/// движку стучать на собственной машине или в сети пользователя. Имена проверяются еще раз после DNS
+/// ([`PublicResolver`]).
 pub(crate) fn is_local_host(url: &Url) -> bool {
     match url.host() {
         Some(url::Host::Domain(d)) => {
@@ -203,8 +202,8 @@ pub(crate) fn is_local_host(url: &Url) -> bool {
     }
 }
 
-/// DNS that refuses names resolving to local addresses (`127.0.0.1.nip.io`,
-/// DNS rebinding), so the literal-address check cannot be walked around.
+/// DNS, который отказывается от разрешения имен в локальные адреса (перепривязка `127.0.0.1.nip.io`,
+/// DNS), поэтому проверку буквального адреса невозможно обойти.
 pub(crate) struct PublicResolver {
     pub allow_loopback: bool,
 }
@@ -250,8 +249,8 @@ impl Fetcher<'_> {
         if self.buffer.is_cancelled() { Err(Error::Cancelled) } else { Ok(()) }
     }
 
-    /// The client for the next request: rebuilt first if the network changed
-    /// since it was made, so no request goes out on a socket from the old one.
+    /// Клиент для следующего запроса: сначала пересобирается, если сеть менялась с момента его
+    /// создания, чтобы ни один запрос на сокет из старого не отправлялся.
     fn http(&self) -> Client {
         let mut slot = self.http.borrow_mut();
         let now = net::epoch();
@@ -262,7 +261,7 @@ impl Fetcher<'_> {
         slot.1.clone()
     }
 
-    /// Sleeps `seconds`, waking early (with `Cancelled`) if playback moved on.
+    /// Спит `seconds`, рано просыпается (с `Cancelled`), если воспроизведение продолжается.
     fn nap(&self, seconds: f64) -> Result<()> {
         let end = std::time::Instant::now() + Duration::from_secs_f64(seconds);
         while std::time::Instant::now() < end {
@@ -272,11 +271,10 @@ impl Fetcher<'_> {
         self.check_cancel()
     }
 
-    /// Runs one network step up to [`REQUEST_ATTEMPTS`] times. A bad connection
-    /// (reset, timeout, DNS, TLS) or a busy server (408/429/5xx) is retried
-    /// with a short jittered back-off, the former on brand-new connections.
-    /// 401/403/404/410 are not: the address has expired, and only a fresh one
-    /// from VK (the controller's job) helps.
+    /// Выполняет один шаг сети до [`REQUEST_ATTEMPTS`] раз. Плохое соединение (сброс, тайм-аут, DNS,
+    /// TLS) или занятый сервер (408/429/5xx) повторяется с короткими резкими задержками, причем первый
+    /// вариант - при совершенно новых соединениях. 401/403/404/410 нет: срок действия адреса истек, и
+    /// помогает только свежий от VK (задание контроллера).
     fn retrying<T>(&self, step: impl Fn() -> Result<T>) -> Result<T> {
         let mut attempt = 0;
         loop {
@@ -315,7 +313,7 @@ impl Fetcher<'_> {
         }
     }
 
-    /// Whole body, capped.
+    /// Все тело, в шапке.
     fn read_all(&self, mut response: Response, cap: usize) -> Result<Vec<u8>> {
         let mut out = Vec::new();
         let mut chunk = [0u8; 16 * 1024];
@@ -333,8 +331,8 @@ impl Fetcher<'_> {
     }
 
     fn get_bytes(&self, url: &Url, range: Option<(u64, u64)>, cap: usize) -> Result<Vec<u8>> {
-        // The request and the reading of its body are one step: a connection
-        // that drops in the middle of a segment fetches that segment again.
+        // Запрос и чтение его тела составляют один шаг: соединение, разрывающееся в середине сегмента,
+        // снова извлекает этот сегмент.
         let body = self.retrying(|| {
             let response = self.send_once(url, range)?;
             let status = response.status().as_u16();
@@ -347,7 +345,7 @@ impl Fetcher<'_> {
                 if status == 206 {
                     if body.len() as u64 == length { Ok(body) } else { Err(Error::Stream("short range response".into())) }
                 } else {
-                    // The server ignored Range and sent the whole file.
+                    // Сервер проигнорировал Range и отправил файл целиком.
                     let start = start as usize;
                     let end = start.checked_add(length as usize).ok_or_else(|| Error::Stream("bad byte range".into()))?;
                     body.get(start..end).map(<[u8]>::to_vec).ok_or_else(|| Error::Stream("range outside response".into()))
@@ -358,7 +356,7 @@ impl Fetcher<'_> {
 
     fn run(&self, start: Url) -> Result<()> {
         let mut response = self.send(&start, None)?;
-        // Sniff: a playlist starts with #EXTM3U, a plain stream with audio.
+        // Sniff: список воспроизведения начинается с #EXTM3U, обычного потока со звуком.
         let mut head = vec![0u8; 4096];
         let mut filled = 0;
         while filled < 16 {
@@ -441,7 +439,7 @@ impl Fetcher<'_> {
         check_url(joined, self.config)
     }
 
-    /// One segment's bytes: ranged, downloaded and decrypted.
+    /// Байты одного сегмента: ранжированы, загружены и расшифрованы.
     fn segment_bytes(
         &self,
         base: &Url,
@@ -549,7 +547,7 @@ impl Fetcher<'_> {
         Ok(())
     }
 
-    /// Downloads, decrypts and parses one `EXT-X-MAP` initialization section.
+    /// Загружает, расшифровывает и анализирует один раздел инициализации `EXT-X-MAP`.
     fn load_init(
         &self,
         base: &Url,
@@ -564,8 +562,7 @@ impl Fetcher<'_> {
             .ok_or_else(|| Error::Stream("segment has no initialization section".into()))?;
         let uri = slice_text(text, map.uri).ok_or_else(|| Error::Stream("bad initialization address".into()))?;
         let url = self.resolve(base, uri)?;
-        // A map range without an offset starts at byte 0, never at the
-        // media-segment cursor.
+        // Диапазон карты без смещения начинается с байта 0, а не с курсора медиасегмента.
         let range = if map.has_range {
             if map.range_length <= 0 {
                 return Err(Error::Stream("invalid byte range".into()));
@@ -581,7 +578,7 @@ impl Fetcher<'_> {
                 .keys
                 .get(map.key_index as usize)
                 .ok_or_else(|| Error::Stream("initialization refers to a missing key".into()))?;
-            // RFC 8216: an encrypted init section needs an explicit IV.
+            // RFC 8216: для зашифрованного раздела инициализации требуется явный IV.
             if !key_info.has_iv {
                 return Err(Error::Stream("encrypted initialization section has no IV".into()));
             }
@@ -637,8 +634,8 @@ fn slice_text(text: &str, slice: pm_hls_slice) -> Option<&str> {
     text.get(start..end).filter(|s| !s.is_empty())
 }
 
-/// RFC 8216 §5.2: the default IV is the media sequence number as a 128-bit
-/// big-endian integer.
+/// RFC 8216 §5.2: IV по умолчанию — это порядковый номер мультимедиа в виде 128-битного целого числа с
+/// прямым порядком байтов.
 fn sequence_iv(sequence: i64) -> [u8; 16] {
     let mut iv = [0u8; 16];
     iv[8..].copy_from_slice(&(sequence.max(0) as u64).to_be_bytes());
@@ -652,8 +649,8 @@ fn decrypt(data: &[u8], key: &[u8; 16], iv: &[u8; 16]) -> Result<Vec<u8>> {
     let capacity = data.len() + 16;
     let mut out = vec![0u8; capacity];
     let mut out_length: i32 = 0;
-    // SAFETY: every pointer is valid for the length passed with it; key and
-    // iv are 16 bytes as the native function requires.
+    // SAFETY: каждый указатель действителен для переданной с ним длины; key и iv имеют размер 16 байт,
+    // как того требует встроенная функция.
     let status = unsafe {
         pm_aes128_cbc_decrypt(
             data.as_ptr(),
@@ -673,7 +670,7 @@ fn decrypt(data: &[u8], key: &[u8; 16], iv: &[u8; 16]) -> Result<Vec<u8>> {
 }
 
 fn detect_container(data: &[u8]) -> Option<ContainerKind> {
-    // MPEG-TS: 0x47 sync byte repeating every 188 bytes.
+    // MPEG-TS: байт синхронизации 0x47, повторяющийся каждые 188 байт.
     for offset in 0..data.len().min(16) {
         if data[offset] == 0x47 && (data.len() <= 188 || data.get(offset + 188) == Some(&0x47)) {
             return Some(ContainerKind::MpegTs);
@@ -685,14 +682,14 @@ fn detect_container(data: &[u8]) -> Option<ContainerKind> {
     })
 }
 
-/// ADTS AAC or MP3, after an optional ID3v2 tag.
+/// ADTS AAC или MP3 после дополнительного тега ID3v2.
 fn sniff_elementary(data: &[u8]) -> Option<ElementaryKind> {
     let start = id3_length(data).unwrap_or(0);
     let head = data.get(start..)?;
     if head.len() < 2 || head[0] != 0xFF {
         return None;
     }
-    // ADTS: syncword 0xFFF, layer bits 00. MPEG audio: syncword 0xFFE, layer != 00.
+    // ADTS: синхронное слово 0xFFF, биты уровня 00. Звук MPEG: синхрослово 0xFFE, уровень != 00.
     match (head[1] & 0xF6, head[1] & 0xE0) {
         (0xF0, _) => Some(ElementaryKind::AdtsAac),
         (_, 0xE0) if head[1] & 0x06 != 0 => Some(ElementaryKind::Mp3),
@@ -700,7 +697,7 @@ fn sniff_elementary(data: &[u8]) -> Option<ElementaryKind> {
     }
 }
 
-/// Total size of a leading ID3v2 tag (header included), if there is one.
+/// Общий размер ведущего тега ID3v2 (включая заголовок), если он есть.
 fn id3_length(data: &[u8]) -> Option<usize> {
     if data.len() < 10 || &data[..3] != b"ID3" {
         return None;
@@ -727,7 +724,7 @@ fn demux_ts(data: &[u8]) -> Result<(ElementaryKind, Vec<u8>)> {
     let mut out = vec![0u8; data.len()];
     let mut scratch = vec![0u8; data.len()];
     let mut produced: i32 = 0;
-    // SAFETY: all buffers are valid for the capacities passed.
+    // SAFETY: все буферы действительны для переданных мощностей.
     let kind = unsafe {
         pm_mpegts_extract_audio(
             data.as_ptr(),
@@ -752,7 +749,7 @@ fn demux_ts(data: &[u8]) -> Result<(ElementaryKind, Vec<u8>)> {
 
 #[cfg(test)]
 mod tests {
-    /// The resolver's future does its work synchronously; poll it once.
+    /// Будущее преобразователя выполняет свою работу синхронно; опросите его один раз.
     fn resolve_now(resolver: &PublicResolver, host: &str) -> std::result::Result<Vec<std::net::SocketAddr>, String> {
         use reqwest::dns::Resolve;
         use std::str::FromStr;
@@ -771,7 +768,7 @@ mod tests {
         let strict = PublicResolver { allow_loopback: false };
         let error = resolve_now(&strict, "localhost").unwrap_err();
         assert!(error.contains("public address"), "{error}");
-        // Tests (and only tests) may talk to a local server.
+        // Тесты (и только тесты) могут взаимодействовать с локальным сервером.
         let lab = PublicResolver { allow_loopback: true };
         assert!(resolve_now(&lab, "localhost").unwrap().iter().all(|a| a.ip().is_loopback()));
     }
@@ -824,7 +821,7 @@ mod tests {
         data.extend_from_slice(&[0xFF, 0xF1, 0x50]);
         strip_id3_prefix(&mut data);
         assert_eq!(data, vec![0xFF, 0xF1, 0x50]);
-        // A tag that claims more than the data holds leaves nothing.
+        // Тег, который заявляет больше, чем содержит данные, ничего не оставляет.
         let mut lying = b"ID3\x04\x00\x00\x00\x00\x7f\x7fxx".to_vec();
         strip_id3_prefix(&mut lying);
         assert!(lying.is_empty());
@@ -851,7 +848,7 @@ mod tests {
     fn slices_are_bounds_checked() {
         let text = "héllo";
         assert_eq!(slice_text(text, pm_hls_slice { offset: 0, length: 1 }), Some("h"));
-        // Inside the two-byte é: not a char boundary.
+        // Внутри двухбайтового é: не граница символов.
         assert_eq!(slice_text(text, pm_hls_slice { offset: 2, length: 1 }), None);
         assert_eq!(slice_text(text, pm_hls_slice { offset: 0, length: 99 }), None);
         assert_eq!(slice_text(text, pm_hls_slice { offset: 0, length: -1 }), None);

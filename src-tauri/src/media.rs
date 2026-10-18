@@ -1,5 +1,5 @@
-//! Media keys and the "Now Playing" surface of each OS (MPRIS on Linux,
-//! SMTC on Windows, MediaRemote on macOS), driven by `media_sync`.
+//! Мультимедийные клавиши и поверхность "Now Playing" каждого OS (MPRIS в Linux, SMTC в Windows,
+//! MediaRemote в macOS), управляемые `media_sync`.
 
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -22,8 +22,8 @@ pub struct Media {
 }
 
 impl Media {
-    /// `None` when the OS refuses (no session bus, no window handle): the
-    /// player works without media keys.
+    /// `None` при отказе OS (нет сессионной шины, нет дескриптора окна): плеер работает без
+    /// медиа-клавиш.
     pub fn new(handle: &AppHandle) -> Option<Self> {
         #[cfg(target_os = "windows")]
         let hwnd = {
@@ -91,7 +91,7 @@ fn set_metadata(controls: &mut MediaControls, m: &Metadata) -> Result<(), souvla
         title: Some(&m.title),
         artist: Some(&m.artist),
         album: m.album.as_deref(),
-        // Only https artwork: the OS fetches this URL itself.
+        // Только https-изображение: OS сам извлекает этот URL.
         cover_url: m.cover_url.as_deref().filter(|u| u.starts_with("https://")),
         duration: (m.duration.is_finite() && m.duration > 0.0).then(|| Duration::from_secs_f64(m.duration)),
     })

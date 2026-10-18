@@ -22,7 +22,7 @@ export const PRESETS = {
 const presetFor = (gains) =>
   Object.entries(PRESETS).find(([, values]) => values.every((v, i) => v === gains[i]))?.[0] ?? "custom";
 
-/** On/off, presets and ten sliders; changes reach the engine as you drag. */
+/** Включение и выключение, пресеты и десять ползунков; изменения достигают движка при перетаскивании. */
 export function createEqualizerPanel({ settings, onSettingsChange }) {
   let eq = { ...settings.eq, gains: settings.eq.gains.slice() };
   let timer = 0;
@@ -100,7 +100,7 @@ export function createEqualizerPanel({ settings, onSettingsChange }) {
     eq = { ...eq, ...patch };
     render();
     onSettingsChange({ eq: { ...eq, gains: eq.gains.slice() } });
-    // Dragging fires many events; the engine needs only the latest.
+    // Перетаскивание пожаров многих событий; двигателю нужно только самое последнее.
     clearTimeout(timer);
     if(immediate)send();else timer = setTimeout(send, 60);
   }

@@ -14,8 +14,8 @@ function dismiss(element = current, { immediate = false } = {}) {
 }
 
 /**
- * A short message in a glass capsule above the player bar. An `action`
- * ({ label, run }) makes it an undo banner that stays longer.
+ * Короткое сообщение в стеклянной капсуле над панелью игрока. `action` ({ label, run }) делает баннер
+ * отмены действия более продолжительным.
  */
 export function toast(message, { error = false, action = null } = {}) {
   dismiss(current, { immediate: true });

@@ -1,4 +1,5 @@
-//! Native update commands. All HTTP, hashing and secret-store work stays off the UI thread.
+//! Собственные команды обновления. Вся работа по HTTP, хешированию и секретному хранению остается за
+//! пределами потока UI.
 use pm_engine::update::{Snapshot, Updater};
 use std::sync::Arc;
 use tauri::{Emitter, State};
@@ -53,7 +54,7 @@ pub async fn update_open(state: State<'_, UpdateState>) -> Result<(), String> {
         let result = std::process::Command::new(path).spawn();
         #[cfg(target_os = "macos")]
         let result = std::process::Command::new("open").arg(path).spawn();
-        // Linux opens the containing folder: package installation belongs to the system.
+        // Linux открывает содержащую папку: установка пакета принадлежит системе.
         #[cfg(target_os = "linux")]
         let result = std::process::Command::new("xdg-open").arg(path.parent().ok_or("disk")?).spawn();
         result.map(|_| ()).map_err(|_| "installer".into())

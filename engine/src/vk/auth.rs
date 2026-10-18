@@ -1,5 +1,5 @@
-//! Turns a signed-in vk.ru web session (its cookies) into an API token, the
-//! same exchange the iOS app performs (`login.vk.ru/?act=web_token`).
+//! Превращает зарегистрированный веб-сеанс vk.ru (его файлы cookie) в токен API — тот же обмен, который
+//! выполняет приложение iOS (`login.vk.ru/?act=web_token`).
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -12,10 +12,10 @@ use super::client::{retry_delay, Session};
 use super::model::int;
 use crate::{Error, Result};
 
-/// VK's public web client id, the one the vk.ru web client itself uses.
+/// Идентификатор общедоступного веб-клиента VK, который использует сам веб-клиент vk.ru.
 const WEB_CLIENT_ID: &str = "6287487";
 const TOKEN_URL: &str = "https://login.vk.ru/?act=web_token";
-/// Audio methods answer differently depending on the mobile app user agent.
+/// Аудио-методы отвечают по-разному в зависимости от пользовательского агента мобильного приложения.
 pub const API_USER_AGENT: &str = "KateMobileAndroid/56 lite-460 (Android 4.4.2; SDK 19; x86; unknown Android SDK built for x86; ru)";
 
 pub fn exchange_web_session(cookie_header: &str, web_user_agent: &str) -> Result<Session> {
@@ -81,7 +81,7 @@ pub(crate) fn exchange_at(url: &str, cookie_header: &str, web_user_agent: &str, 
 
 fn decode(body: &Value, cookies: String, web_user_agent: &str, now: i64) -> Result<Session> {
     if body.get("type").and_then(Value::as_str) != Some("okay") {
-        // The page is not signed in (or VK refused): the user must sign in again.
+        // На странице не выполнен вход (или VK отказался): пользователю необходимо войти снова.
         return Err(Error::Unauthorized);
     }
     let data = body.get("data").ok_or_else(|| Error::Format("web_token data".into()))?;
@@ -92,7 +92,7 @@ fn decode(body: &Value, cookies: String, web_user_agent: &str, now: i64) -> Resu
         .filter(|t| t.len() >= 16)
         .ok_or_else(|| Error::Format("web_token access_token".into()))?;
     let expires_at = data.get("expires").and_then(int).filter(|raw| *raw > 0).map(|raw| {
-        // Current web_token returns Unix seconds; keep duration form working.
+        // Текущий web_token возвращает секунды Unix; сохраняйте форму продолжительности работающей.
         if raw > 1_000_000_000 { raw } else { now + raw }
     });
     Ok(Session {
@@ -105,7 +105,7 @@ fn decode(body: &Value, cookies: String, web_user_agent: &str, now: i64) -> Resu
     })
 }
 
-/// Original cookies overlaid with the names VK re-set in the response.
+/// Исходные файлы cookie, наложенные на имена VK, повторно заданные в ответе.
 pub(crate) fn merge_cookies(original: &str, set_cookie_headers: &[String]) -> String {
     let mut values: BTreeMap<String, String> = BTreeMap::new();
     for part in original.split(';') {
@@ -136,7 +136,7 @@ pub(crate) fn now_unix() -> i64 {
 }
 
 impl Session {
-    /// Refresh a little before the token dies.
+    /// Обновите немного, прежде чем токен умрет.
     pub fn needs_refresh(&self, now: i64) -> bool {
         self.expires_at.map(|at| at - now < 300).unwrap_or(false)
     }

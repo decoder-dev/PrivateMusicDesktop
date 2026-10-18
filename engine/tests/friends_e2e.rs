@@ -1,5 +1,5 @@
-//! Friends' music: the right VK calls, VK-shaped answers parsed into friends,
-//! tracks and playlists, and what the engine refuses before asking VK.
+//! Музыка друзей: правильные вызовы VK, ответы в форме VK, разобранные на друзей, треки и плейлисты, а
+//! также то, от чего движок отказывается перед запросом VK.
 
 mod common;
 
@@ -37,7 +37,7 @@ fn recording(answer: &'static str) -> (FakeApi, Arc<Mutex<Vec<String>>>) {
     (api, seen)
 }
 
-// Shape of a real `friends.get` answer with `fields=photo_200`.
+// Форма реального ответа `friends.get` с помощью `fields=photo_200`.
 const FRIENDS: &str = r#"{"response":{"count":4,"items":[
     {"id":11,"first_name":"Анна","last_name":"Смирнова","photo_200":"https://sun9-1.userapi.com/a.jpg","can_access_closed":true,"is_closed":false},
     {"id":12,"first_name":"DELETED","last_name":"","deactivated":"deleted"},
@@ -77,7 +77,7 @@ fn a_long_friend_list_pages_by_the_raw_count() {
     assert_eq!((second.items.len(), second.next_offset), (1, None));
 }
 
-// Shape of an `audio.get` answer for another user's page.
+// Форма ответа `audio.get` для страницы другого пользователя.
 const TRACKS: &str = r#"{"response":{"count":2,"items":[
     {"artist":"Кино","id":456239017,"owner_id":11,"title":"Группа крови","duration":284,"access_key":"abc123","is_explicit":false,"url":"https://cs1.vkuseraudio.net/s/v1/ac/x/index.m3u8","track_code":"tc1"},
     {"artist":"Нет ссылки","id":2,"owner_id":11,"title":"Без URL","duration":10}
@@ -105,13 +105,13 @@ fn private_audio_is_a_vk_error_the_window_can_explain() {
     assert!(matches!(error, Error::Vk { code: 201, .. }), "{error:?}");
     assert_eq!(error.kind(), "vk");
     assert_eq!(api.call_count("audio.get"), 1, "an answer is final, not retried");
-    // A friend with nothing public is an empty page, not an error.
+    // Друг, у которого нет публичного доступа, — это пустая страница, а не ошибка.
     let empty = FakeApi::start(|_, _, _| (200, r#"{"response":{"count":0,"items":[]}}"#.into()));
     let page = app(&empty.base).friend_tracks(11, 0, 100).unwrap();
     assert!(page.items.is_empty() && page.next_offset.is_none());
 }
 
-// Shape of an `audio.getPlaylists` answer: a plain playlist and a followed release.
+// Форма ответа `audio.getPlaylists`: простой плейлист и последующий релиз.
 const PLAYLISTS: &str = r#"{"response":{"count":2,"items":[
     {"id":5,"owner_id":11,"title":"Дорога","description":"в машину","count":3,"access_key":"pk","type":0,
      "photo":{"photo_300":"https://sun9-2.userapi.com/p.jpg"}},
@@ -130,7 +130,7 @@ fn a_friends_playlists_open_with_their_own_locator() {
     let call = seen.lock().unwrap()[0].clone();
     assert!(call.contains("/method/audio.getPlaylists") && call.contains("owner_id=11"), "{call}");
 
-    // Opening it asks for that owner's list with the playlist's key.
+    // При его открытии запрашивается список владельцев с ключом списка воспроизведения.
     let (api, seen) = recording(TRACKS);
     app(&api.base).playlist_tracks(playlist, 0, 100).unwrap();
     let call = seen.lock().unwrap()[0].clone();

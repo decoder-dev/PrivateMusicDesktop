@@ -2,22 +2,22 @@ use std::fmt;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Errors the UI can act on. `Unauthorized` means "sign in again".
+/// Ошибки, на которые может реагировать UI. `Unauthorized` означает "sign in again".
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
     Unauthorized,
     Offline,
     Timeout,
-    /// VK answered with an API error. `code` is VK's `error_code`.
+    /// VK ответил ошибкой API. `code` — это `error_code` VK.
     Vk { code: i64, message: String },
     Http(u16),
-    /// The response did not have the shape we rely on.
+    /// Ответ не имел той формы, на которую мы рассчитываем.
     Format(String),
     Transport(String),
-    /// A stream could not be fetched, decrypted or decoded.
+    /// Поток не удалось получить, расшифровать или декодировать.
     Stream(String),
-    /// VK knows the track but gives no stream for it (blocked by the rights
-    /// holder or in this region, or only for subscribers).
+    /// VK знает трек, но не дает по нему стрим (заблокировано правообладателем или в этом регионе, или
+    /// только для подписчиков).
     Unavailable,
     Cancelled,
     InvalidRequest,
@@ -52,15 +52,15 @@ impl From<reqwest::Error> for Error {
         } else if let Some(status) = err.status() {
             Error::Http(status.as_u16())
         } else {
-            // `reqwest::Error` Display can embed the request URL, which for
-            // stream hosts carries a signed token. Keep only the kind.
+            // `reqwest::Error` Display может встроить запрос URL, который для хостов потока содержит
+            // подписанный токен. Оставляйте только вид.
             Error::Transport(err.without_url().to_string())
         }
     }
 }
 
 impl Error {
-    /// Stable machine-readable category for the UI.
+    /// Стабильная машиночитаемая категория для UI.
     pub fn kind(&self) -> &'static str {
         match self {
             Error::Unauthorized => "unauthorized",

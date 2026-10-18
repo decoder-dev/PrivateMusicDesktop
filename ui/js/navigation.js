@@ -1,20 +1,20 @@
-// Artist and album pages open from anywhere: track rows, the track menu, the
-// player bar and the full-screen view. main.js supplies the router; this
-// module only knows what a track can lead to.
+// Страницы исполнителя и альбома открываются откуда угодно: строки треков, меню треков, панель
+// проигрывателя и полноэкранный режим. main.js поставляет маршрутизатор; этот модуль знает только то, к
+// чему может привести трек.
 
 let router = null;
 
 export function setRouter(next) { router = next; }
 
-/** Artists VK linked on the track (they carry an id). */
+/** Исполнители VK, связанные с треком (у них есть идентификатор). */
 export const linkedArtists = (track) => (track?.artists ?? []).filter((artist) => artist.id);
 
-/** Whether the track names an artist: linked, or at least by name. */
+/** Имя ли в треке исполнителя: по ссылке или хотя бы по имени. */
 export const hasArtist = (track) => linkedArtists(track).length > 0 || !!track?.artist?.trim();
 
 export const hasAlbum = (track) => !!track?.album;
 
-/** `{ id, name }`; a missing id is looked up by name on the artist page. */
+/** `{ id, name }`; отсутствующий идентификатор ищется по имени на странице исполнителя. */
 export function openArtist(artist) {
   if (artist?.id || artist?.name?.trim()) router?.openArtist({ id: artist.id ?? null, name: artist.name ?? "" });
 }
@@ -28,7 +28,7 @@ export function openAlbum(album) {
   if (album) router?.openAlbum(album);
 }
 
-/** The album a track belongs to, as far as the track knows it. */
+/** Альбом, которому принадлежит трек, насколько он известен. */
 export function albumOf(track) {
   const ref = track.album;
   return {

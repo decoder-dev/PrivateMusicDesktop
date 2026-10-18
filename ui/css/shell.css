@@ -1,10 +1,10 @@
-/* App shell: sidebar, main column, page headers, view transitions. */
+/* Оболочка приложения: боковая панель, основной столбец, заголовки страниц, переходы между видами. */
 
 .shell { display: grid; grid-template-columns: var(--sidebar) minmax(0, 1fr); height: 100%; }
 .main { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
 .view { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; min-width: 0; }
 
-/* Entering a screen: a short settle, never on the rows themselves. */
+/* Выход на экран: короткая позиция, никогда не в самих рядах. */
 .main > .view:not([hidden]) { animation: view-in var(--t-page) var(--ease-out) backwards; }
 .main[data-dir="push"] > .view:not([hidden]) { animation: view-push var(--t-push) var(--ease-ios) backwards; }
 .main[data-dir="back"] > .view:not([hidden]) { animation: view-back var(--t-push) var(--ease-ios) backwards; }
@@ -13,7 +13,7 @@
 @keyframes view-push { from { opacity: 0; transform: translateX(24px); } }
 @keyframes view-back { from { opacity: 0; transform: translateX(-24px); } }
 
-/* ---------- sidebar ---------- */
+/* ---------- боковая панель ---------- */
 .sidebar {
   display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 12px 8px;
   background: var(--surface); border-right: var(--hair) solid var(--line);
@@ -65,7 +65,7 @@
   .account .link .ico { display: inline-flex; }
 }
 
-/* ---------- page header ---------- */
+/* ---------- заголовок страницы ---------- */
 .view-header {
   position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; flex: none;
   padding: 20px var(--gutter) 12px;
@@ -94,7 +94,7 @@
   .view-header .search-field { flex-basis: 100%; max-width: none; order: 5; }
 }
 
-/* Screen sections inside scrolling pages. */
+/* Разделы экрана внутри прокручиваемых страниц. */
 .page-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; padding-bottom: var(--clear); }
 .page-scroll > .view { flex: none; }
 .page-scroll .list { flex: none; padding-bottom: 0; }

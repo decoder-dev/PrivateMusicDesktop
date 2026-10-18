@@ -1,33 +1,32 @@
-//! Offline-library policies that decide which saved audio to delete. The
-//! stores keep the files and the manifest; this module only answers "which of
-//! these records should go first", so the rule has a single, tested home.
+//! Политики автономной библиотеки, определяющие, какой сохраненный аудиофайл следует удалить. В
+//! магазинах хранятся файлы и манифест; этот модуль отвечает только на "which of these records should
+//! go first", поэтому правило имеет один проверенный дом.
 
 use core::slice;
 
-/// One saved track as the eviction policy sees it.
+/// Один сохраненный трек, как его видит политика выселения.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct pm_eviction_candidate {
-    /// Seconds since the reference date the app uses for `lastPlayedAt`.
+    /// Секунды с исходной даты, которую приложение использует для `lastPlayedAt`.
     pub last_played_at: f64,
     pub byte_count: i64,
-    /// Automatic-cache entry that is not the track playing right now.
-    /// Manually saved tracks and the protected track are never evictable.
+    /// Автоматически кэшируемая запись, которая не является воспроизводимой в данный момент дорожкой.
+    /// Сохраненные вручную треки и защищенные треки никогда не подлежат удалению.
     pub evictable: bool,
 }
 
-/// Picks evictable candidates, least recently played first, until at least
-/// `required_bytes` would be released. Ties keep input order. Writes the
-/// chosen candidate indices to `out` in eviction order (up to `out_capacity`)
-/// and returns how many were chosen. Nothing is chosen when `required_bytes`
-/// is not positive; if every evictable candidate is chosen and the target is
-/// still not met, that is the caller's "limit reached" case.
+/// Выбирает выселяемых кандидатов, которые, по крайней мере, недавно играли первыми, до тех пор, пока
+/// не будет выпущен хотя бы `required_bytes`. Связи сохраняют порядок ввода. Записывает выбранные
+/// индексы кандидатов в `out` в порядке вытеснения (до `out_capacity`) и возвращает количество
+/// выбранных. Ничего не выбирается, если `required_bytes` не ​​положителен; если выбраны все
+/// вытесняемые кандидаты, а цель все еще не достигнута, это случай "limit reached" вызывающей стороны.
 pub fn select_evictions(candidates: &[pm_eviction_candidate], required_bytes: i64) -> Vec<usize> {
     if required_bytes <= 0 {
         return Vec::new();
     }
     let mut order: Vec<usize> = (0..candidates.len()).filter(|&i| candidates[i].evictable).collect();
-    // `total_cmp` puts NaN last, so a corrupt timestamp is evicted last.
+    // `total_cmp` помещает NaN последним, поэтому поврежденная временная метка удаляется последней.
     order.sort_by(|&a, &b| candidates[a].last_played_at.total_cmp(&candidates[b].last_played_at));
     let mut released: i64 = 0;
     let mut chosen = Vec::new();
@@ -41,7 +40,7 @@ pub fn select_evictions(candidates: &[pm_eviction_candidate], required_bytes: i6
     chosen
 }
 
-/// C ABI wrapper; see [`select_evictions`].
+/// C оболочка ABI; см. [`select_evictions`].
 #[no_mangle]
 pub unsafe extern "C" fn pm_offline_select_evictions(
     candidates: *const pm_eviction_candidate,

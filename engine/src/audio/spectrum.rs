@@ -1,10 +1,10 @@
-//! What the visualizer shows: a short window of the audio that is playing
-//! right now, reduced to a few dozen logarithmic bands.
+//! Что показывает визуализатор: короткое окно звука, который сейчас воспроизводится, уменьшенное до
+//! нескольких десятков логарифмических полос.
 //!
-//! The player writes audio to the sound card a few tenths of a second ahead of
-//! the speakers. [`Tap`] keeps a copy of that audio (mono) so the analysis can
-//! look at the moment the device is actually playing, not the moment the data
-//! was queued. Nothing here runs unless the window asks for it.
+//! Плеер записывает звук на звуковую карту на несколько десятых секунды раньше динамиков. [`Tap`]
+//! сохраняет копию этого аудио (моно), поэтому анализ может учитывать момент фактического
+//! воспроизведения устройства, а не момент, когда данные были поставлены в очередь. Здесь ничего не
+//! запускается, если этого не попросит окно.
 
 use std::sync::Arc;
 
@@ -13,17 +13,17 @@ use realfft::{RealFftPlanner, RealToComplex};
 
 pub const BANDS: usize = 48;
 const WINDOW: usize = 2048;
-/// Roughly 1.5 s at 44.1 kHz: more than the player ever queues ahead.
+/// Примерно 1,5 секунды при 44,1 kHz: больше, чем когда-либо игрок стоял в очереди вперед.
 const RING: usize = 1 << 16;
 const LOW_HZ: f32 = 40.0;
 const HIGH_HZ: f32 = 16_000.0;
 const FLOOR_DB: f32 = -72.0;
 const CEILING_DB: f32 = -8.0;
 
-/// Mono copy of what was written to the sound card since the last flush.
+/// Монокопия того, что было записано на звуковую карту с момента последней прошивки.
 pub struct Tap {
     ring: Vec<f32>,
-    /// Frames written since the last reset.
+    /// Кадры записаны с момента последнего сброса.
     written: u64,
     pub enabled: bool,
 }
@@ -33,7 +33,7 @@ impl Tap {
         Self { ring: Vec::new(), written: 0, enabled }
     }
 
-    /// Follows the sink's flush: frame counting starts again at zero.
+    /// Далее следует очистка приемника: подсчет кадров снова начинается с нуля.
     pub fn reset(&mut self) {
         self.written = 0;
     }
@@ -52,8 +52,8 @@ impl Tap {
         }
     }
 
-    /// The `WINDOW` frames that end at `frame` (the device's played counter),
-    /// oldest first. `None` when that part is not (or no longer) in the ring.
+    /// Кадры `WINDOW`, заканчивающиеся на `frame` (счетчик воспроизведений устройства), сначала самые
+    /// старые. `None`, когда этой части нет (или больше нет) на ринге.
     fn window(&self, frame: u64) -> Option<[f32; WINDOW]> {
         let end = frame.min(self.written);
         if self.ring.is_empty() || end < WINDOW as u64 || self.written - end > (RING - WINDOW) as u64 {
@@ -73,7 +73,7 @@ pub struct Analyzer {
     input: Vec<f32>,
     output: Vec<Complex<f32>>,
     scratch: Vec<Complex<f32>>,
-    /// For each band, the FFT bins it covers.
+    /// Для каждой полосы охватываются ячейки FFT.
     edges: Vec<(usize, usize)>,
     levels: [f32; BANDS],
 }
@@ -107,9 +107,8 @@ impl Analyzer {
         }
     }
 
-    /// Bands in 0…1 for the audio playing at `frame`, smoothed over time:
-    /// quick to rise, slow to fall. Silence (or a window not available yet)
-    /// lets the bars sink.
+    /// Полосы 0…1 для звука, воспроизводимого на `frame`, сглаживаются с течением времени: быстрое
+    /// нарастание, медленное спад. Тишина (или окно еще не открыто) позволяет решетке тонуть.
     pub fn analyze(&mut self, tap: &Tap, frame: u64) -> [f32; BANDS] {
         let target = match tap.window(frame) {
             Some(window) => self.raw_bands(&window),
@@ -131,7 +130,7 @@ impl Analyzer {
         let mut bands = [0.0; BANDS];
         for (band, &(first, last)) in bands.iter_mut().zip(&self.edges) {
             let peak = self.output[first..last].iter().map(|c| c.norm()).fold(0.0f32, f32::max);
-            // A full-scale sine gives a bin of about WINDOW / 4 after the window.
+            // Полномасштабный синус дает бин около WINDOW/4 после окна.
             let db = 20.0 * (peak / (WINDOW as f32 / 4.0)).max(1e-9).log10();
             *band = ((db - FLOOR_DB) / (CEILING_DB - FLOOR_DB)).clamp(0.0, 1.0);
         }
@@ -174,7 +173,7 @@ mod tests {
         };
         let (low, mid, high) = (peak_band(110.0), peak_band(1000.0), peak_band(8000.0));
         assert!(low < mid && mid < high, "{low} {mid} {high}");
-        // Log spacing: 1 kHz sits around the middle of 40 Hz…16 kHz.
+        // Интервал журнала: 1 kHz находится примерно в середине 40 Гц…16 kHz.
         assert!((16..32).contains(&mid), "{mid}");
     }
 
@@ -205,12 +204,12 @@ mod tests {
     fn the_window_follows_what_is_played_not_what_was_queued() {
         let rate = 44_100;
         let mut tap = Tap::new(true);
-        // 0.3 s of 200 Hz, then 0.3 s of 5 kHz are queued...
+        // 0,3 с 200 Гц, затем 0,3 с 5 kHz — это queued...
         tap.push(&sine(200.0, rate, 13_000, 1), 1);
         tap.push(&sine(5000.0, rate, 13_000, 1), 1);
         let mut analyzer = Analyzer::new(rate);
         let band = |bands: [f32; BANDS]| bands.iter().enumerate().fold((0, 0.0), |a, (i, &l)| if l > a.1 { (i, l) } else { a }).0;
-        // ...but the device has only played the first part.
+        // ...но устройство сыграло только первую часть.
         let playing_low = band(settled(&mut analyzer, &tap, 10_000));
         let mut analyzer = Analyzer::new(rate);
         let playing_high = band(settled(&mut analyzer, &tap, 24_000));

@@ -325,8 +325,8 @@ static void pm_mpegts_consume(uint8_t *buffer, int32_t *length, int32_t count) {
     *length -= count;
 }
 
-/// Returns consumed bytes, 0 when the caller should stop draining, -1 when
-/// more payload is required.
+/// Возвращает использованные байты, 0, когда вызывающая сторона должна прекратить слив, -1, когда
+/// требуется дополнительная полезная нагрузка.
 static int32_t pm_mpegts_drain_pes(
     uint8_t *buffer,
     int32_t *buffer_length,
@@ -2202,8 +2202,8 @@ int32_t pm_vk_unmask(
     memcpy(out, url_bytes, (size_t)url_decoded);
     const int32_t character_length = url_decoded;
     int32_t state = (int32_t)parsed_key ^ user_id;
-    // Reject oversized URLs before the fixed-size scratch buffer exists so
-    // the allocation never sits ahead of its own bounds check.
+    // Отклоняйте слишком большой размер URLs до того, как появится рабочий буфер фиксированного
+    // размера, чтобы выделение никогда не превышало собственную проверку границ.
     if (character_length > 4096) {
         return PM_VK_UNMASK_OVERFLOW;
     }

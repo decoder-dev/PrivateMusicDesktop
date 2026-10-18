@@ -10,22 +10,22 @@ import { enter } from "../motion.js";
 const fullName = (friend) => `${friend.first_name} ${friend.last_name}`.trim();
 
 /**
- * VK refuses a friend's audio when they keep it private: that is a "vk"
- * error, and it gets a plain explanation instead of VK's wording.
+ * VK отклоняет звук друга, когда он сохраняет его конфиденциальным: это ошибка "vk", и он получает
+ * простое объяснение вместо формулировки VK.
  */
 const friendError = (error) => (error?.kind === "vk" ? t("friends.restricted") : errorText(error));
 
 function avatar(friend) {
   if (!friend.photo_url) return h("span", { class: "avatar empty" }, icon("artist", 22));
   const image = h("img", { class: "avatar", src: friend.photo_url, alt: "", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" });
-  // A photo that fails to load falls back to the placeholder.
+  // Фотография, которая не загружается, возвращается в заполнитель.
   image.addEventListener("error", () => image.replaceWith(h("span", { class: "avatar empty" }, icon("artist", 22))));
   return image;
 }
 
 /**
- * Friends' music: the friends, then one friend's tracks and playlists, then a
- * playlist's tracks. Each step has its own Back; playing works from every list.
+ * Музыка друзей: друзья, затем треки и плейлисты одного друга, затем треки плейлиста. У каждого шага
+ * есть своя спина; проигрывание произведений из каждого списка.
  */
 export function createFriendsView({ play, onTrackAction, toast }) {
   let friends = [];
@@ -34,10 +34,10 @@ export function createFriendsView({ play, onTrackAction, toast }) {
   let friend = null;
   let tab = "tracks";
   let friendGeneration = 0;
-  let playlistsFor = null; // the friend whose playlists are on screen
+  let playlistsFor = null; // друг, чьи плейлисты на экране
   let playlistGeneration = 0;
 
-  // -------------------------------------------------------------- the friends
+  // ------------------------------------------------------------- друзья
   const status = h("div", { class: "status", role: "status", hidden: true });
   const list = h("div", { class: "friend-list", role: "list" });
   const listScreen = h("section", { class: "view" },
@@ -82,7 +82,7 @@ export function createFriendsView({ play, onTrackAction, toast }) {
     }
   }
 
-  // --------------------------------------------------------------- one friend
+  // -------------------------------------------------------------- один друг
   const backToFriends = backButton(t("friends.back"), () => showList());
   const friendPhoto = h("span", { class: "hero-art page-art round friend-photo" });
   const friendName = h("h1");
@@ -167,7 +167,7 @@ export function createFriendsView({ play, onTrackAction, toast }) {
     }
   }
 
-  // ------------------------------------------------------------ one playlist
+  // ----------------------------------------------------------- один плейлист
   let playlistToken = 0;
   const playlistTracks = createTracksScreen({
     title: "",
@@ -234,7 +234,7 @@ export function createFriendsView({ play, onTrackAction, toast }) {
     show() {
       if (!loaded) load();
     },
-    /** A sidebar click while a friend is open goes back to the friends. */
+    /** Щелчок на боковой панели, когда друг открыт, возвращает его друзьям. */
     root() { if (friend) showList(); },
     reset() {
       generation++;

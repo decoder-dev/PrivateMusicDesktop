@@ -1,11 +1,10 @@
-//! Audio DSP: biquad filters, the equalizer cascade with optional
-//! compressor and loudness gain, mid/side stereo widening, and the silence
-//! gate's peak meter. Behaviour mirrors the C implementation it replaces,
-//! sample for sample.
+//! Аудио DSP: биквадратные фильтры, каскад эквалайзера с дополнительным компрессором и усилением
+//! громкости, стереорасширение mid/side и пиковый измеритель гейта тишины. Поведение отражает
+//! реализацию C, которую она заменяет, образец за образцом.
 
 use core::ffi::c_int;
 
-/// Direct-form IIR coefficients (`PMBiquadCoeffs`).
+/// Коэффициенты IIR прямой формы (`PMBiquadCoeffs`).
 #[repr(C)]
 #[derive(Clone, Copy, Default, Debug, PartialEq)]
 pub struct PMBiquadCoeffs {
@@ -16,7 +15,7 @@ pub struct PMBiquadCoeffs {
     pub a2: f32,
 }
 
-/// One filter step. `state` is exactly four floats: x1, x2, y1, y2.
+/// Один шаг фильтра. `state` — это ровно четыре числа с плавающей запятой: x1, x2, y1, y2.
 #[inline(always)]
 unsafe fn biquad_step(input: f32, c: &PMBiquadCoeffs, state: *mut f32) -> f32 {
     let x1 = *state;
@@ -48,8 +47,8 @@ pub unsafe extern "C" fn pm_biquad_process(
     coeffs: *const PMBiquadCoeffs,
     state: *mut f32,
 ) -> f32 {
-    // The C version dereferenced unconditionally; a null here is a caller
-    // bug, answered with the input untouched rather than a crash.
+    // Версия C разыменовывается безоговорочно; ноль здесь — это ошибка вызывающего абонента, на которую
+    // ответили нетронутыми входными данными, а не сбоем.
     if coeffs.is_null() || state.is_null() {
         return input;
     }
@@ -300,15 +299,15 @@ pub unsafe extern "C" fn pm_buffer_peak_magnitude(samples: *const f32, count: i3
     peak
 }
 
-// ------------------------------------------------- filter design (RBJ cookbook)
+// ------------------------------------------------- конструкция фильтра (поваренная книга RBJ)
 
 fn to_coeffs(b0: f64, b1: f64, b2: f64, a1: f64, a2: f64) -> PMBiquadCoeffs {
     PMBiquadCoeffs { b0: b0 as f32, b1: b1 as f32, b2: b2 as f32, a1: a1 as f32, a2: a2 as f32 }
 }
 
 fn max_f64(a: f64, b: f64) -> f64 {
-    // Swift's `max`/`min` return the second operand unless the first wins
-    // outright, which matters only for NaN; mirror that.
+    // `max`/`min` Swift возвращает второй операнд, если только первый не выиграет сразу, что имеет
+    // значение только для NaN; отразите это.
     if b > a { b } else { a }
 }
 
@@ -316,7 +315,7 @@ fn min_f64(a: f64, b: f64) -> f64 {
     if b < a { b } else { a }
 }
 
-/// Peaking equalizer section (Q = 1.15), frequency capped at 0.45 * rate.
+/// Секция пикового эквалайзера (Q = 1,15), частота ограничена 0,45 * коэффициент.
 #[no_mangle]
 pub extern "C" fn pm_eq_peaking_coefficients(frequency: f64, gain_db: f64, sample_rate: f64) -> PMBiquadCoeffs {
     let safe_frequency = min_f64(frequency, sample_rate * 0.45);
@@ -334,7 +333,7 @@ pub extern "C" fn pm_eq_peaking_coefficients(frequency: f64, gain_db: f64, sampl
     )
 }
 
-/// Low shelf with slope 1, frequency clamped to 20 Hz ... 0.45 * rate.
+/// Низкая полка с наклоном 1, частота зажата до 20 Гц...0,45*скорость.
 #[no_mangle]
 pub extern "C" fn pm_eq_low_shelf_coefficients(frequency: f64, gain_db: f64, sample_rate: f64) -> PMBiquadCoeffs {
     let safe_frequency = min_f64(max_f64(frequency, 20.0), sample_rate * 0.45);
@@ -353,7 +352,7 @@ pub extern "C" fn pm_eq_low_shelf_coefficients(frequency: f64, gain_db: f64, sam
     )
 }
 
-/// Second-order Butterworth high-pass, frequency clamped like the shelf.
+/// ВЧ-частоты Баттерворта второго порядка, частота ограничена, как на полке.
 #[no_mangle]
 pub extern "C" fn pm_eq_high_pass_coefficients(frequency: f64, sample_rate: f64) -> PMBiquadCoeffs {
     let safe_frequency = min_f64(max_f64(frequency, 20.0), sample_rate * 0.45);

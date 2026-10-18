@@ -1,11 +1,11 @@
-// Connection trouble, the way the iOS app handles it (VPNHelpPolicy,
-// VPNWarningCard): when VK cannot be reached, say so, suggest checking the VPN
-// (a suggestion, never a claim that one was detected), offer a retry, and try
-// again by itself when the network comes back.
+// Проблема с подключением, способ решения проблемы приложением iOS (VPNHelpPolicy, VPNWarningCard):
+// когда VK не может быть достигнут, скажите так, предложите проверить VPN (предложение, никогда не
+// утверждайте, что он был обнаружен), предложите повторную попытку и повторите попытку самостоятельно,
+// когда сеть восстановится.
 //
-// Everything here is opt-in from a few hook points: `decorateStatus` (called
-// when a screen paints an error), `handleBackendEvent` (engine events),
-// `setReloader` (how to reload the current screen) and `initNetwork`.
+// Здесь все зависит от нескольких точек перехвата: `decorateStatus` (вызывается, когда на экране
+// отображается ошибка), `handleBackendEvent` (события механизма), `setReloader` (как перезагрузить
+// текущий экран) и `initNetwork`.
 
 import { h } from "./dom.js";
 import { t, addStrings } from "./i18n.js";
@@ -48,23 +48,24 @@ addStrings({
   },
 });
 
-// The stylesheet comes with this module, so nothing else has to list it.
+// Таблица стилей поставляется вместе с этим модулем, поэтому больше ничего не нужно указывать.
 if (typeof document !== "undefined" && !document.querySelector("link[data-net-css]")) {
   document.head.append(h("link", { rel: "stylesheet", href: new URL("../css/network.css", import.meta.url).href, "data-net-css": "" }));
 }
 
 /**
- * Only timeouts and transport failures suggest the connection (VPNHelpPolicy):
- * never a sign-in problem, a refused request or a track that cannot be played.
+ * Только тайм-ауты и сбои транспорта предполагают наличие соединения (VPNHelpPolicy): никогда не
+ * возникает проблем со входом в систему, не отклоняется запрос или не воспроизводится трек, который
+ * невозможно воспроизвести.
  */
 const NETWORK_KINDS = new Set(["offline", "timeout", "network"]);
 export const isNetworkError = (error) => Boolean(error) && NETWORK_KINDS.has(error.kind);
 
 const networkTexts = () => new Set([t("error.offline"), t("error.timeout"), t("error.network")]);
 
-// ----------------------------------------------------------------- the card
+// ------------------------------------------------------------------ карта
 
-/** How to check a VPN, per platform, as a plain dialog. */
+/** Как проверить VPN для каждой платформы в виде простого диалогового окна. */
 export function openHowTo() {
   const close = h("button", { class: "btn primary", type: "button", text: t("net.close") });
   const platform = (name, key) => h("li", {}, h("strong", { text: `${name}: ` }), t(key));
@@ -88,7 +89,7 @@ export function openHowTo() {
   close.focus();
 }
 
-/** The compact card: what happened, the hint, Retry, and the instructions. */
+/** Компактная карточка: что произошло, подсказка, повтор и инструкции. */
 export function vpnHint({ onRetry }) {
   return h("div", { class: "net-hint", role: "group", "aria-label": t("net.failed") },
     h("p", { class: "net-hint-title" }, icon("alert", 16), h("span", { text: t("net.failed") })),
@@ -98,10 +99,10 @@ export function vpnHint({ onRetry }) {
       h("button", { class: "net-how", type: "button", text: t("net.how"), onclick: openHowTo })));
 }
 
-// ------------------------------------------------------- failed list loads
+// ------------------------------------------------------- Не удалось загрузить список
 
 let reloader = null;
-/** How to reload the screen that is showing (for errors that have no retry of their own). */
+/** Как перезагрузить отображаемый экран (для ошибок, не требующих повторной попытки). */
 export function setReloader(fn) { reloader = fn; }
 
 const pending = new Set();
@@ -112,7 +113,7 @@ async function retryStatus(element, { check = true } = {}) {
   if (check) await api.networkCheck().catch(() => {});
   const own = element.querySelector(":scope > .retry");
   if (own) {
-    // Clicking the panel's own button is not the user asking again.
+    // Нажатие собственной кнопки панели не означает повторного запроса пользователя.
     automatic = !check;
     own.click();
     automatic = false;
@@ -120,15 +121,14 @@ async function retryStatus(element, { check = true } = {}) {
 }
 
 /**
- * Called whenever a screen paints an error into a status panel. A connection
- * failure (recognised by its text, which only those kinds produce) gets the
- * VPN card under the message, and the panel is remembered so it reloads by
- * itself when the network is back.
+ * Вызывается всякий раз, когда экран отображает ошибку на панели состояния. При сбое соединения
+ * (распознаваемом по тексту, который выдают только эти типы) под сообщением появляется карта VPN, и
+ * панель запоминается, поэтому она перезагружается сама, когда сеть восстанавливается.
  */
 export function decorateStatus(element, text) {
   if (!networkTexts().has(text)) return;
   if (element.classList.contains("inline")) {
-    // A one-line note: just the way to the instructions, the hint as its tooltip.
+    // Примечание в одну строку: только путь к инструкции, подсказка в виде ее всплывающей подсказки.
     element.append(h("button", { class: "net-how", type: "button", title: t("net.hint"), text: t("net.how"), onclick: openHowTo }));
   } else {
     element.append(vpnHint({ onRetry: () => retryStatus(element) }));
@@ -140,7 +140,7 @@ export function decorateStatus(element, text) {
 
 const watched = new WeakSet();
 
-/** A panel's own Retry button also drops the connections first. */
+/** Собственная кнопка панели «Повторить» также сначала отменяет соединения. */
 function watchRetry(element) {
   if (watched.has(element)) return;
   watched.add(element);
@@ -149,7 +149,7 @@ function watchRetry(element) {
   }, { capture: true });
 }
 
-// ------------------------------------------------------------ playback etc.
+// -------------------------------------------- Воспроизведение и т. д.
 
 let trouble = false;
 let float = null;
@@ -184,7 +184,7 @@ function hideBanner() {
   banner = null;
 }
 
-/** Playback stopped on a connection problem: the same card, above the player bar. */
+/** Воспроизведение остановилось из-за проблемы с подключением: та же карта, над панелью плеера. */
 function showBanner() {
   hideChip();
   trouble = true;
@@ -200,7 +200,7 @@ function showBanner() {
   floating().append(banner);
 }
 
-/** The connection is back: reload what failed to load, and say so once. */
+/** Соединение восстановлено: перезагрузите то, что не удалось загрузить, и скажите об этом один раз. */
 function connectivityBack() {
   hideChip();
   hideBanner();
@@ -213,7 +213,10 @@ function connectivityBack() {
   }
 }
 
-/** Engine events (`pm-event`). Returns nothing; the caller still handles its own. */
+/**
+ * События механизма (`pm-event`). Ничего не возвращает; вызывающий объект по-прежнему обрабатывает
+ * свои собственные запросы.
+ */
 export function handleBackendEvent(event) {
   switch (event.type) {
     case "network":
@@ -233,13 +236,13 @@ export function handleBackendEvent(event) {
       if (isNetworkError(event)) showBanner();
       break;
     case "state":
-      // Playing again: nothing to apologise for any more.
+      // Играю снова: больше не за что извиняться.
       if (event.status === "playing" && chipKind === "retrying") hideChip();
       break;
   }
 }
 
-/** Reports the window's focus to the engine, and listens to the browser's own connectivity events. */
+/** Сообщает движку о фокусе окна и прослушивает собственные события подключения браузера. */
 export function initNetwork() {
   const report = () => api.networkFocus(document.hasFocus() && !document.hidden).catch(() => {});
   window.addEventListener("focus", report);

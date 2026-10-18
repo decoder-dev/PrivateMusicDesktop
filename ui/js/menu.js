@@ -8,10 +8,10 @@ export function closeMenu() {
 }
 
 /**
- * A small pop-up menu at a point. items: { label, action, icon?, items? (a
- * sub-menu), disabled?, destructive? } or "-" for a separator. Arrow keys,
- * Enter and Escape work; a click outside closes it. A sub-menu opens beside its
- * parent, on the left when the right side is full, and never covers it.
+ * Небольшое всплывающее меню в точке. элементы: { метка, действие, значок?, элементы? (подменю),
+ * отключено?, разрушительно? } или "-" для разделителя. Клавиши со стрелками, Enter и Escape работают;
+ * щелчок снаружи закрывает его. Подменю открывается рядом со своим родительским элементом слева, когда
+ * правая часть заполнена, и никогда не закрывает его.
  */
 export function openMenu({ x, y }, items, { label } = {}) {
   closeMenu();
@@ -41,8 +41,9 @@ export function openMenu({ x, y }, items, { label } = {}) {
         return button;
       }));
     document.body.append(element);
-    // Keep the menu on screen; a sub-menu flips to the parent's left side.
-    // Layout size, not the painted box: the pop-in animation scales the menu while it is measured.
+    // Держите меню на экране; подменю переворачивается на левую сторону родительского элемента. Размер
+    // макета, а не нарисованного прямоугольника: анимация всплывающего окна масштабирует меню во время
+    // его измерения.
     const box = { width: element.offsetWidth, height: element.offsetHeight };
     const margin = 8;
     let left = at.x;
@@ -51,7 +52,7 @@ export function openMenu({ x, y }, items, { label } = {}) {
     const top = Math.max(margin, Math.min(at.y, window.innerHeight - box.height - margin));
     element.style.left = `${left}px`;
     element.style.top = `${top}px`;
-    // The pop-up grows from the point it was opened at.
+    // Всплывающее окно растет с того места, где оно было открыто.
     element.style.setProperty("--ox", `${Math.max(0, Math.min(box.width, at.x - left))}px`);
     element.style.setProperty("--oy", `${Math.max(0, Math.min(box.height, at.y - top))}px`);
     const level = { element, buttons };

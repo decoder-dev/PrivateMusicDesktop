@@ -1,18 +1,17 @@
 <#
 .SYNOPSIS
-  Installs Private Music on Windows from the latest GitHub release.
+Устанавливает Private Music в Windows из последней версии GitHub.
 
 .DESCRIPTION
-  .\install.ps1              install or update (the normal installer window opens)
-  .\install.ps1 -Silent      install without any window
-  .\install.ps1 -Uninstall   remove it
+.\install.ps1 установить или обновить (откроется обычное окно установщика) .\install.ps1 - Тихая
+установка без каких-либо окон .\install.ps1 -Удалить удалить
 
-  Public releases need no token. For private releases, set $env:GITHUB_TOKEN,
-  or sign in with the GitHub CLI (gh auth login).
-  Optional: $env:PM_REPO, $env:PM_VERSION (for example v0.2.0), $env:PM_API (for tests).
+Публичным релизам не нужен токен. Для частных выпусков установите $env:GITHUB_TOKEN или войдите в
+систему с помощью GitHub CLI (вход с аутентификацией gh). Необязательно: $env:PM_REPO,
+$env:PM_VERSION (например, v0.2.0), $env:PM_API (для тестов).
 
-  A file downloaded by this script is not marked as "from the internet", so
-  Windows SmartScreen does not stop the (unsigned) installer.
+Файл, загруженный этим сценарием, не помечен как "from the internet", поэтому Windows SmartScreen не
+останавливает (неподписанный) установщик.
 #>
 [CmdletBinding()]
 param(
@@ -21,7 +20,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'   # Invoke-WebRequest is much faster without its progress bar
+$ProgressPreference = 'SilentlyContinue'   # Invoke-WebRequest работает намного быстрее без индикатора выполнения.
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
 
 $Repo = if ($env:PM_REPO) { $env:PM_REPO } else { 'decoder-dev/PrivateMusicDesktop' }
@@ -32,7 +31,7 @@ $AppName = 'Private Music'
 function Say($text) { Write-Host "==> $text" -ForegroundColor Cyan }
 function Fail($text) { Write-Host "error: $text" -ForegroundColor Red; exit 1 }
 
-# ---------------------------------------------------------------- uninstall
+# ------------------------------------------------------------------ удалить
 if ($Uninstall) {
   $roots = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall', 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
   $entry = foreach ($root in $roots) {
@@ -49,7 +48,7 @@ if ($Uninstall) {
   exit 0
 }
 
-# --------------------------------------------------------------------- token
+# --------------------------------------- токен
 $Token = if ($env:GITHUB_TOKEN) { $env:GITHUB_TOKEN } elseif ($env:GH_TOKEN) { $env:GH_TOKEN } else { $null }
 if (-not $Token -and (Get-Command gh -ErrorAction SilentlyContinue)) {
   try { $Token = (& gh auth token 2>$null) } catch { $Token = $null }
@@ -57,7 +56,7 @@ if (-not $Token -and (Get-Command gh -ErrorAction SilentlyContinue)) {
 $Headers = @{ 'User-Agent' = 'PrivateMusicInstaller'; 'Accept' = 'application/vnd.github+json' }
 if ($Token) { $Headers['Authorization'] = "Bearer $Token" }
 
-# ------------------------------------------------------------------- release
+# ----------------------------------------------------------------------------
 Say "looking up the release ($Version)"
 $url = if ($Version -eq 'latest') { "$Api/repos/$Repo/releases/latest" } else { "$Api/repos/$Repo/releases/tags/$Version" }
 try {

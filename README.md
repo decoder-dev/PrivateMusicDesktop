@@ -1,302 +1,299 @@
-# Private Music for desktop
+# Private Music для компьютера
 
-The desktop twin of the iOS app: an unofficial VK Music player for Windows,
-Linux and macOS. Rust engine + [Tauri](https://tauri.app) shell + a small web UI
-that looks like the iOS app and moves softly. It reuses the iOS app's `native/` crate (HLS parsing, AES-128, MPEG-TS
-and CMAF demuxing, VK stream unmasking), so both clients play streams the same
-way. `native/` is a copy of the one in decoder-dev/PrivateMusic2: keep them in sync.
+Неофициальный клиент VK Музыки для Windows, Linux и macOS — настольная версия
+приложения для iOS. Движок написан на Rust, оболочка работает на [Tauri](https://tauri.app),
+интерфейс собран из обычных веб-модулей и использует оформление мобильного клиента.
 
-## Features
+Библиотека `native/` взята из `decoder-dev/PrivateMusic2`: она разбирает HLS,
+расшифровывает AES-128, извлекает аудио из MPEG-TS и CMAF и восстанавливает адреса
+потоков VK. Оба клиента используют одинаковую обработку потоков; изменения этой
+библиотеки следует синхронизировать между проектами.
 
-- VK sign-in in an isolated window; the token lives in the OS keyring and is
-  renewed from the session cookie when it expires.
-  If the VK page is signed in but the player is still waiting, use **I'm signed
-  in — check again** in the player to request completion without losing the web session.
-- Single-click playback, My music, playlists, search, a queue with shuffle and repeat; the queue and
-  position survive a restart.
-- Hearts: add any track to My music or take it out, from lists, the player bar
-  or the full-screen view.
-- Artist and album pages: click an artist in any row, the player bar or the
-  full-screen view (or use *Go to artist* / *Go to album* in a track's menu) to
-  see their popular tracks and albums, with more loaded as you scroll; an album page plays the release and
-  saves it to your albums. Search has Artists and Albums tabs, and followed
-  albums are listed under Playlists. Community albums whose access key VK
-  withholds are resolved the way the iOS app does it (search for the key, and
-  failing that, rebuild the album from public search results).
-- For you: a single scroll surface, per-account pinned mixes, distinct genre cards, and Selena personal and catalogue mixes; mobile mood cards with the original
-  artwork and server-provided mood filters, plus recommendations; "similar tracks" on any row
-  plays VK's radio seeded with that track; the personal mix can be tuned by
-  mood, activity or genre. A "New releases" shelf shows VK's fresh albums as
-  cards that open the album page.
-- Endless radio: a queue started from the personal mix, a catalogue mix or
-  "similar tracks" keeps filling from the same source while it plays. When six
-  tracks or fewer are left, the next page is fetched (the next stream window,
-  or recommendations seeded with a track the radio queued), tracks already
-  queued or played are skipped, and at most 80 are kept ahead of the current
-  one. A source that fails or has nothing new is given up on after three
-  attempts in a row, and the queue then simply ends. The Queue view says when it
-  is a mix. Playing anything else turns the radio off.
-- Open a VK playlist URL directly, including community playlists and access keys;
-  follow a shared playlist into your collection.
-- Search remembers recent queries, which can be reused, removed or cleared.
-- One shared batch-download job with cancellation, progress, failed-file retry and
-  offline cache cleanup; changing screens keeps the same job.
-- Settings → Updates checks the latest GitHub release and downloads its installer
-  in the app, with progress, cancellation and SHA-256 verification. Partial or
-  mismatched files cannot be opened; the checksum is checked again before opening.
-  Public releases require no token. Optional private-release access uses a GitHub
-  token with repository Contents: Read stored in the OS keyring separately from VK.
-- Fixed medium and maximized window presets, plus borderless fullscreen (F11,
-  Escape to leave). Window edges cannot be freely resized.
-- Friends' music: the friends list with photos; open a friend to see their tracks and
-  playlists (a playlist opens into its tracks), play from there, and use the hearts and
-  the track menu as anywhere else. A friend who keeps their audio private gets a plain
-  message instead of VK's error.
-- History and statistics, kept on this computer only: a track lands in **History**
-  (the last 250, newest first, filterable, removable one by one or all at once) once
-  30 % of it has really been listened to, as in the iOS app (seeking and pausing do
-  not count). **Statistics** shows time listening, plays and days with music, top
-  artists and tracks, and when you listen (hour of the day, favourite weekday, busiest
-  day) for a month, a year or all time, with a reset button. Nothing is sent to VK
-  (the iOS app's optional "report playback to VK" setting is not ported).
-- Downloads: any track can be saved to the app's folder and then plays with no
-  internet (the file is the decrypted audio, not VK's encrypted stream). Lists can
-  be downloaded in a batch; a native save dialog exports individual audio files.
-- A sleep timer pauses after a chosen duration or at the end of the current track.
-- Upcoming tracks can be reordered or cleared while preserving the current track.
-- A ten-band equaliser with presets.
-- Full-screen "now playing": blurred cover backdrop in the cover's colours, a
-  live spectrum of what is actually playing (bars, mirror, wave, radial), and
-  synced lyrics (LRCLIB, VK text, then Genius fallback) that follow the song; click a line to
-  jump there, pause auto-scroll or return to the current line.
-- OS integration: media keys and Now Playing (MPRIS / SMTC / MediaRemote), a
-  tray icon with controls, keep-running-in-the-tray on close, one instance only,
-  window size and position remembered.
-- Settings: sound output device (switches without losing the place), equaliser,
-  tray, full-screen defaults, seven mobile palettes, nine accent colours and keyboard shortcuts.
+## Возможности
 
-## Mobile parity and validation limits
+- **Вход в VK.** Отдельное изолированное окно входа. Токен и cookie хранятся
+  в защищённом хранилище операционной системы; токен обновляется при истечении срока.
+  Если страница VK уже открыла аккаунт, а приложение ещё ждёт, кнопка
+  **«Я вошёл — проверить снова»** повторяет проверку без потери веб-сессии.
+- **Воспроизведение одним нажатием.** Моя музыка, плейлисты, поиск, очередь,
+  перемешивание и повтор. Очередь и позиция воспроизведения восстанавливаются
+  после перезапуска без автоматического запуска музыки.
+- **Избранное.** Сердечко добавляет трек в «Мою музыку» или удаляет его оттуда.
+  Доступно в списках, панели плеера и развёрнутом плеере; в нижней панели находится
+  последним в ряду управления, после повтора.
+- **Исполнители и альбомы.** Переход по имени исполнителя в строке трека или
+  плеере, а также через меню трека. Страницы показывают популярные треки и альбомы
+  с подгрузкой при прокрутке. Альбом можно воспроизвести и сохранить в коллекцию.
+  В поиске есть вкладки исполнителей и альбомов; сохранённые альбомы доступны
+  в разделе плейлистов. Если VK не сообщает ключ доступа к альбому сообщества,
+  клиент ищет его по правилам мобильной версии, а затем пробует собрать альбом
+  из результатов открытого поиска.
+- **«Для вас» и Selena.** Единая вертикальная прокрутка, персональная подборка,
+  каталог миксов, рекомендации, карточки жанров и настроений с иллюстрациями
+  мобильной версии. Настройки настроения, занятия и жанра используют значения,
+  полученные от VK. Есть полная сетка «Все миксы», управление каруселями с
+  клавиатуры и закрепления, отдельные для каждого аккаунта. Кнопка закрепления
+  принадлежит карточке, двигается вместе с ней и не запускает воспроизведение.
+  Полка новых релизов открывает страницы свежих альбомов. Список микса не ограничен
+  80 или 100 треками: прокрутка и «Показать ещё» загружают следующие страницы,
+  сохраняя положение и правильный курсор продолжения радио.
+- **Бесконечное радио.** Личная подборка, микс каталога и «Похожие треки»
+  продолжают очередь из того же источника. Когда остаётся не больше шести треков,
+  загружается следующая порция. Уже добавленные и прослушанные треки исключаются;
+  фоновое пополнение оставляет впереди текущего не больше 80 новых треков. После трёх неудачных или пустых
+  пополнений источник отключается, и очередь доигрывает оставшееся. В разделе
+  очереди показан активный источник; запуск обычного списка завершает радио.
+- **Плейлисты по ссылке.** Открытие ссылок VK, в том числе плейлистов сообществ
+  с ключом доступа, и добавление общей подборки в свою коллекцию.
+- **Поиск.** Недавние запросы можно повторять, удалять по одному или очищать.
+  Устаревшие ответы отбрасываются сразу при изменении ввода. Лишние пробелы
+  объединяются; результаты треков, исполнителей и альбомов подгружаются страницами,
+  дубликаты исключаются, а не продвигающаяся пагинация останавливается.
+- **Музыка друзей.** Список друзей с фотографиями, их треки и плейлисты.
+  Работают воспроизведение, избранное и обычное меню трека. Закрытые аудиозаписи
+  объясняются понятным сообщением вместо технической ошибки VK.
+- **История и итоги.** Хранятся только на этом компьютере. Трек попадает в историю
+  после фактического прослушивания 30 % длительности; паузы и перемотки не
+  учитываются. История содержит последние 250 треков, поддерживает поиск,
+  удаление отдельных записей и полную очистку. Итоги показывают время,
+  воспроизведения, дни с музыкой, любимые треки и исполнителей, часы и дни
+  прослушивания за месяц, год или всё время. Есть сброс статистики. Данные не
+  отправляются в VK; необязательная отправка сведений о прослушивании из iOS
+  пока не перенесена.
+- **Загрузки и экспорт.** Треки сохраняются в папку приложения и воспроизводятся
+  без интернета. Хранится расшифрованное аудио, а не зашифрованный поток VK.
+  Одна общая задача пакетной загрузки сохраняется при переходе между экранами,
+  показывает прогресс, поддерживает остановку и повтор неудачных файлов.
+  Можно очистить кэш или экспортировать отдельный трек через системное окно сохранения.
+- **Таймер сна.** Пауза через выбранное время либо в конце текущего трека.
+- **Очередь.** Перестановка и очистка следующих треков с сохранением текущего.
+- **Эквалайзер.** Десять полос, десять пресетов, график уровней, собственная
+  сохранённая кривая, сброс отдельной полосы и управление с клавиатуры.
+  Движок учитывает перекрытие фильтров, автоматически оставляет запас громкости,
+  связывает ограничение пиков между стереоканалами и плавно переключает настройки
+  за 30 мс. Выбор пресета не удаляет последнюю собственную кривую.
+- **Развёрнутый плеер.** Фон и цвета обложки, живой спектр фактического звука
+  в четырёх режимах: полосы, зеркало, волна и круг. Синхронизированный текст
+  ищется через LRCLIB, VK и затем Genius. Нажатие на строку перематывает трек;
+  автопрокрутку можно остановить и вернуть к текущей строке.
+- **Интеграция с системой.** Медиаклавиши и системная панель воспроизведения
+  через MPRIS, SMTC или MediaRemote; значок в трее с управлением; продолжение
+  работы в трее при закрытии; один экземпляр приложения; сохранение положения
+  и состояния окна. Выходное устройство меняется без потери позиции.
+- **Оформление.** Семь палитр мобильной версии, девять акцентных цветов,
+  упрощённое оформление, настройки плеера и горячие клавиши.
+- **Размер окна.** Фиксированное среднее окно и развёрнутое окно; отдельно доступен
+  полноэкранный режим без рамок. F11 переключает полный экран, Esc выводит из него.
+  Свободное растягивание краёв отключено.
+- **Обновления внутри приложения.** Раздел настроек проверяет последний релиз
+  GitHub и загружает установщик без браузера. Есть прогресс, отмена и проверка
+  SHA-256, в том числе повторная непосредственно перед открытием. Неполный файл
+  или файл с неверной суммой не открывается. Для публичных релизов токен не нужен.
+  Необязательный доступ к приватным релизам использует отдельный токен GitHub
+  с правом `Contents: Read`, сохранённый в системном хранилище отдельно от VK.
 
-The desktop uses the mobile PM icon, palette values and mood artwork. Selena is
-product branding for VK mix sources. Mood cards use IDs returned by VK's mix
-settings; when a mood is unavailable, a notice accompanies the personal mix.
-Apple-only system integrations remain platform-specific. Bulk file import, audio upload, recommendation bans, crossfade and playback speed are not ported.
+## Соответствие мобильной версии и границы проверок
 
-Playback, queue, retries and UI are tested with simulated audio, local HTTP
-fixtures and a mock UI backend. These checks do not certify a real VK account,
-a physical sound driver or every VPN provider. The native audio smoke test needs
-an output device and is skipped in headless environments.
+Иконка PM, значения палитр и иллюстрации настроений взяты из мобильного клиента.
+Selena — название подборок на основе источников VK. Карточки используют
+идентификаторы настроений из настроек VK; если нужное настроение недоступно,
+приложение сообщает об этом и запускает персональную подборку.
 
-## Install
+Системные возможности Apple остаются зависимыми от платформы. Массовый импорт
+файлов, загрузка аудио в VK, исключения из рекомендаций, плавное сведение между
+треками и изменение скорости пока не перенесены.
 
-Installers are built by CI and attached to GitHub releases. The easiest way is
-the install script for your system: it downloads the latest release, checks its
-SHA-256, installs it and (on macOS) clears the quarantine flag, so the unsigned
-build opens without warnings. Windows' SmartScreen does not stop a file that a
-script downloaded either.
+Воспроизведение, очередь, восстановление соединения и интерфейс проверяются
+на имитаторе аудиоустройства, локальных HTTP-серверах и тестовой реализации
+команд приложения. Эти проверки не подтверждают работу конкретного аккаунта VK,
+физического звукового драйвера или каждого VPN. Проверка настоящего аудиовыхода
+требует устройства и пропускается в среде без него.
 
-The repository is public. If it is made private, set `GITHUB_TOKEN` or sign in
-with `gh auth login` for the install scripts. The in-app updater has its own
-optional access field and never reads tokens from the browser or GitHub CLI.
+## Установка и обновление
 
-| System | Command |
+Установщики собираются в CI и прикрепляются к опубликованным релизам GitHub.
+Скрипт для нужной системы скачивает последний релиз, проверяет SHA-256 и
+устанавливает приложение. На macOS скрипт также снимает атрибут карантина.
+
+Репозиторий публичный. Если доступ к нему будет ограничен, скриптам понадобится
+`GITHUB_TOKEN` или вход через `gh auth login`. Встроенное обновление имеет
+собственное необязательное поле доступа и не читает токены браузера или GitHub CLI.
+
+| Система | Команда |
 | --- | --- |
-| Windows (PowerShell) | `.\install.ps1` (`-Silent` for no window, `-Uninstall` to remove) |
-| macOS | `./install.sh` (`--uninstall` to remove) |
-| Linux | `./install.sh` (`.deb` through apt on Debian/Ubuntu, otherwise an AppImage in `~/.local`) |
+| Windows, PowerShell | `.\install.ps1`; `-Silent` — без окна, `-Uninstall` — удаление |
+| macOS | `./install.sh`; `--uninstall` — удаление |
+| Linux | `./install.sh`; на Debian/Ubuntu устанавливается `.deb` через apt, иначе AppImage в `~/.local` |
 
-Installing by hand works too (download from the release page), but the builds
-are not code-signed: on Windows choose *More info → Run anyway*, on macOS
-right-click the app and choose *Open*.
+Можно скачать установщик вручную со страницы релиза. Сборки не подписаны:
+Windows может потребовать «Подробнее → Выполнить в любом случае», а macOS —
+открытие через контекстное меню приложения. Поведение системных проверок
+зависит от настроек компьютера.
 
-Windows installs per user (no administrator rights), in Russian or English
-depending on the system language, with a Start menu entry and an uninstaller.
+В Windows установка выполняется для текущего пользователя без прав
+администратора. Язык установщика — русский или английский в зависимости от
+системы; создаются пункт меню «Пуск» и средство удаления.
 
-**Updating** is the same as installing: run the new installer (or `install.ps1`)
-over the old version. It replaces the program in place; the saved sign-in (it
-lives in Windows Credential Manager, not in the install folder) and the app's
-data stay, so you are still signed in. CI proves this on Windows for every build
-and every release: it installs the last release, plants a sign-in and data
-files, installs the new installer over it and fails if anything is gone
-(`scripts/upgrade-check.ps1`).
+Для обновления запустите новый установщик или `install.ps1` поверх старой версии.
+Программа заменяется в той же папке, а вход и данные сохраняются. Учётные данные
+находятся в Credential Manager, отдельно от папки установки. CI проверяет
+сохранность на Windows: устанавливает предыдущий релиз, добавляет тестовые
+учётные данные и файлы, затем устанавливает новую сборку и проверяет результат
+через `scripts/upgrade-check.ps1`. Это проверка сохранности данных, а не входа
+в настоящий аккаунт VK.
 
-### Making a release
+### Выпуск релиза
 
-1. Raise `version` in `Cargo.toml` and `src-tauri/tauri.conf.json` (they must match).
-2. Push a tag (`git tag v0.2.0 && git push origin v0.2.0`), or run the *Release*
-   workflow by hand on GitHub with the tag name: it creates the tag itself.
-3. The workflow builds Windows (`-setup.exe`), macOS (universal `.dmg`) and Linux
-   (`.deb`, `.AppImage`) installers and publishes them with `SHA256SUMS.txt` as
-   the latest release, which is what the install scripts download.
+1. Измените `version` в `Cargo.toml` и `src-tauri/tauri.conf.json`: значения должны совпадать.
+2. Отправьте тег, например `git tag v0.4.1 && git push origin v0.4.1`, либо запустите
+   процесс `Release` на GitHub вручную с именем тега: он создаст тег самостоятельно.
+3. Процесс собирает установщики Windows (`-setup.exe`), macOS (универсальный `.dmg`)
+   и Linux (`.deb`, `.AppImage`), публикует их вместе с `SHA256SUMS.txt` и помечает
+   релиз последним. Именно его используют скрипты и встроенная проверка обновлений.
 
-Installer artwork is generated by `scripts/make-installer-art.py` from the app icon.
-The mobile app icon and mood covers are synced with
-`scripts/sync-ios-assets.py --source ../PrivateMusic2` (requires Pillow).
+Оформление установщиков генерирует `scripts/make-installer-art.py` из иконки
+приложения. Иконка и обложки настроений синхронизируются командой
+`scripts/sync-ios-assets.py --source ../PrivateMusic2`; требуется Pillow.
 
-## Layout
+## Структура проекта
 
-| Path | What |
+| Путь | Содержимое |
 | --- | --- |
-| `engine/` | Everything except pixels: VK client, stream fetch/decrypt/demux, decode (symphonia), resample (rubato), output (cpal), queue and playback policy (`controller`), sign-in/token refresh (`app`), secret store (OS keyring). No UI or Tauri dependency; fully testable headless. |
-| `src-tauri/` | The shell: window, IPC commands, isolated VK sign-in window, media keys (`souvlaki`). |
-| `ui/` | Plain ES modules, no framework, no build step. Looks like the iOS app; short, system-like motion that stops under reduced motion (see *UI design*). |
-| `ui-tests/` | Playwright tests of the UI against a mock backend. |
+| `engine/` | Клиент VK, загрузка, расшифровка и разбор потоков, декодирование через symphonia, изменение частоты через rubato, вывод через cpal, очередь и правила воспроизведения, вход, обновление токенов и системное хранилище. Не зависит от интерфейса или Tauri, проверяется без окон. |
+| `src-tauri/` | Окно, команды IPC, изолированный вход в VK, системное управление мультимедиа через souvlaki. |
+| `ui/` | Обычные модули JavaScript без фреймворка и отдельного этапа сборки интерфейса. |
+| `ui-tests/` | Проверки интерфейса через Playwright и тестовую реализацию команд. |
+| `native/` | Общая с мобильной версией обработка HLS и аудиоданных. |
 
-## UI design
+## Дизайн интерфейса
 
-The look follows the iOS app: seven palettes, nine accent colours with a
-readable label on each (black on the dark-theme accents, white on the light
-ones), the same radii and elevations. The tokens are in `ui/css/tokens.css`
-(each group names the iOS file it comes from).
+Основой служит мобильная версия: палитры, акценты с читаемым текстом, радиусы
+и уровни поверхностей. Значения находятся в `ui/css/tokens.css`; у групп указаны
+исходные файлы iOS.
 
-- **Motion is soft and short**: fades on hover and press, a settle when a screen,
-  menu or dialog appears, a slide when an artist or album page is pushed, the
-  full-screen view rising like a sheet. Nothing moves on its own while idle; the
-  live spectrum in the full-screen view is the only continuous animation.
-  Everything stops under the system's *reduce motion* (read live, not once).
-- **Track lists never animate**: they are virtualised and recreate rows while
-  scrolling, so a row or anything in it never has a transition.
-- **Blur is for chrome only**: the player bar, menus, dialogs and toasts are glass.
-  It turns into an opaque surface under *reduce transparency* and *increased
-  contrast*, with the *Simplified look* switch in Settings, when the window has
-  been in the background for a few seconds, and where `backdrop-filter` is missing.
-- **Heroes have atmosphere, not boxes**: artist, album and playlist headers
-  stand on two soft washes taken from the cover's palette (the engine already
-  extracts it), drawn as radial gradients, so there is no blur to repaint. If the
-  palette cannot be read the header stays plain. The full-screen player keeps its
-  single small blurred raster backdrop, and its cover steps back when paused.
-- **Rhythm and type**: a 4/8 pt scale, tabular numerals for times and counts,
-  `text-wrap: balance` on headings and `pretty` on notes, one weight per control
-  (selection never changes a width: see the theme picker), and header controls that
-  fold into tidy full-width rows in narrow windows instead of wrapping one by one.
-- **Depth**: layered soft shadows with a hairline top highlight, concentric radii,
-  accent-tinted selection, focus rings with a soft halo; glass only on chrome.
-- **Entrances are one-shot and capped**: shelves and cards rise one after another
-  (eight steps, about half a second in all), cards lift on hover (transform and
-  shadow only), the play/pause and heart glyphs pop when they change, slider
-  thumbs grow while pointed at, bars and share bars grow once in Statistics.
-  Skeletons sweep once while loading. All of it is finite, removed by
-  *reduce motion*, and the tests assert that an idle screen has no running animation.
-- **States**: empty and failed panels show a small theme- and accent-aware
-  illustration (inline SVG) near the top of the area, never a big blank panel; a
-  shelf that fails is one line with a retry.
-- **Components**: the theme picker previews the real UI (sidebar, rows, player bar)
-  in each theme, with "system" split along the true diagonal by a clipped layer
-  (anti-aliased), a constant label weight, a check badge, 44 px hit areas and
-  radio-group keyboard behaviour (arrows, one tab stop). Tooltips (`ui/js/tooltip.js`)
-  replace the native `title` bubble after a short rest of the mouse and show
-  shortcut hints (`data-kbd`). Buttons have primary, secondary, tertiary and
-  destructive forms, a small size and a loading state (`aria-busy`); scrollbars are
-  thin and appear only while the pointer is over the scroller.
-- **Fonts**: SF on macOS, Segoe UI (Variable) on Windows; Linux uses the bundled
-  Inter (`ui/fonts`, SIL Open Font License, Latin and Cyrillic subsets).
-- Nothing inline: styles come from classes (and `style.setProperty` from code),
-  so the strict `style-src 'self'` policy holds.
+- **Короткие плавные переходы.** Наведение, нажатие, появление экранов, меню,
+  диалогов и развёрнутого плеера. В покое элементы не двигаются; постоянное
+  движение есть только у спектра. Системное уменьшение движения учитывается
+  сразу, включая изменение настройки во время работы.
+- **Списки без анимации строк.** Виртуализация пересоздаёт видимые строки при
+  прокрутке, поэтому переходов нет ни у строки, ни у её внутренних элементов.
+- **Ограниченное размытие.** Стеклянные поверхности используются у панели плеера,
+  меню, диалогов и уведомлений. Они становятся непрозрачными при упрощённом
+  оформлении, повышенном контрасте, уменьшении прозрачности, уходе окна в фон
+  или отсутствии поддержки `backdrop-filter`.
+- **Цвет обложки.** Заголовки исполнителей, альбомов и плейлистов используют два
+  мягких градиента из палитры обложки. Если получить цвета не удалось, фон
+  остаётся обычным. Развёрнутый плеер использует один небольшой размытый фон.
+- **Типографика и ритм.** Шаг отступов 4/8, табличные цифры для времени и счётчиков,
+  сбалансированные заголовки, стабильная ширина подписей, перенос групп кнопок
+  в узком окне. Для кириллицы оставлен запас по высоте строки.
+- **Глубина и доступность.** Мягкие тени, тонкие границы, акцентное выделение,
+  видимый фокус клавиатуры и управление группами переключателей стрелками.
+  Подсказки показывают сочетания клавиш; кнопки имеют состояния загрузки
+  и недоступности. Полосы прокрутки тонкие.
+- **Конечные эффекты появления.** Карточки появляются с ограниченной задержкой;
+  обложки, значки и графики анимируются только при изменении состояния.
+  Учитывается уменьшение движения; тесты проверяют отсутствие работающих
+  анимаций у неподвижного экрана.
+- **Шрифты.** SF на macOS, Segoe UI или Segoe UI Variable на Windows,
+  включённый в приложение Inter на Linux. Файлы `ui/fonts` содержат латиницу
+  и кириллицу и распространяются по SIL Open Font License.
+- **Строгая политика стилей.** Используются классы и `style.setProperty` из кода;
+  встроенные стили и скрипты не требуются при `style-src 'self'`.
 
-## Run and test
+Настольный дизайн дополняет мобильный фирменный стиль орбитальным мотивом Selena,
+отдельной панелью плеера, каруселями и сеткой миксов. В качестве общих ориентиров
+компоновки изучались [Feishin](https://github.com/jeffvli/feishin),
+[Tauon](https://github.com/Taiko2k/Tauon) и
+[Harmonoid](https://github.com/harmonoid/harmonoid). Их код и изображения не копировались.
 
-Linux needs `libwebkit2gtk-4.1-dev libgtk-3-dev libasound2-dev libdbus-1-dev libssl-dev`; the
-tests also need `ffmpeg` (they generate HLS fixtures).
+## Запуск и проверки
+
+На Linux нужны `libwebkit2gtk-4.1-dev libgtk-3-dev libasound2-dev libdbus-1-dev libssl-dev`.
+Для тестовых HLS-потоков требуется `ffmpeg`.
 
 ```sh
-
-cargo run -p private-music-desktop                    # debug app
+cargo run -p private-music-desktop                    # запуск отладочной версии
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace                                # uses a simulated sound card
-cargo test --release --test cpu_cost -- --nocapture   # CPU / wake-up budget
+cargo test --workspace                              # имитатор аудиоустройства
+cargo test --release --test cpu_cost -- --nocapture  # расход процессора и пробуждения
 (cd ui-tests && npm install && npx playwright install chromium && npm test)
-PM_SCREENSHOTS=/tmp/shots npm test --prefix ui-tests   # also saves screenshots
-cd src-tauri && cargo tauri build                     # installers
+PM_SCREENSHOTS=/tmp/shots npm test --prefix ui-tests  # сохранение снимков экрана
+cd src-tauri && cargo tauri build                    # сборка установщиков
 ```
 
-Optional tests: `live_vk` (real VK endpoints, needs network) and `cpal_smoke`
-(real audio backend, e.g. ALSA null device) are `#[ignore]`d by default.
+`live_vk` обращается к настоящему VK и требует сети; `cpal_smoke` проверяет
+реальный звуковой выход, например устройство ALSA null. По умолчанию они
+помечены `#[ignore]`. Проверка настоящей загрузки обновления также запускается отдельно.
 
-## VPN and network changes
+## VPN и смена сети
 
-VK ties API tokens, signed stream URLs and cookies to the network the client was on,
-so switching a VPN on or off (or Wi-Fi to cable) while the app runs leaves stale
-connections and stream addresses behind. The app heals itself, as far as it can:
+VK может связывать токены, подписанные адреса потоков и cookie с сетью клиента.
+Переключение VPN, Wi-Fi или кабеля оставляет устаревшие соединения и адреса.
+Приложение восстанавливает их в пределах доступных возможностей сервиса.
 
-- **Network watcher.** While audio plays or the window is focused (and never otherwise:
-  the thread sleeps without wake-ups) the engine compares, every 8 s, the local addresses
-  the OS would use to reach the internet (a UDP `connect`, no packet is sent; IPv4 to a
-  generic and to a VK address, IPv6 by /64). A change drops every pooled connection,
-  marks all cached stream URLs stale and tells the window (`network`: `changed`, then `ok`
-  once it holds still for ~2.5 s, or `unreachable`).
-- **Playback.** A stream that fails (403/404/410/401, connection reset, timeout, DNS, TLS,
-  or audio that stays dry for 20 s) is resumed at the same position from a fresh
-  `audio.getById` URL on new connections, with exponential back-off and jitter
-  (connection problems: 6 attempts, 0.4 s then 1.2 s doubling to 20 s; dead addresses:
-  3 attempts, the first immediate; iOS rules: one `getById` per attempt, no extra
-  retries inside it). A connection problem never skips tracks: after the last attempt
-  playback pauses with an error and **Try again**, and starts by itself when the network
-  settles. A dead track is skipped as before (at most three in a row). Downloaded tracks
-  are never touched. The queue and position are kept throughout.
-- **API calls.** After a transport error the pooled connections are dropped. Reads are
-  retried (3 tries, back-off with jitter); writes (likes, playlist changes, follow) are
-  never retried. A session VK stops accepting (error 5, 28, or "validation required",
-  17) is renewed once from the cookie and the call repeated once; no loops. Lyrics and
-  cover requests retry once and otherwise fail silently.
-- **Window.** A network failure (timeout, transport) on a screen, in playback or in the
-  sign-in window shows "Не удаётся подключиться к VK" with the hint to try the VPN off (or
-  on), **Try again** and "How to check your VPN" (Windows/macOS/Linux). It is a
-  suggestion, never a claim that a VPN was detected, and it is not shown for sign-in,
-  refused-request or track errors. Failed loads repeat by themselves when the network
-  returns, and "Connection restored" is shown once. If VK's login page does not load
-  within 25 s the sign-in window reports it and Try again reloads it (same restrictions:
-  VK hosts over https only).
-- **Logs** name each step without URLs or tokens: `stream 403 → refreshing url (attempt
-  2/3)`, `network changed: dropping connections`, `recovered after 3.2 s`.
+- **Наблюдение за сетью.** Пока играет музыка или окно активно, движок каждые
+  8 секунд сравнивает локальные адреса маршрута в интернет. Используется UDP
+  `connect` без отправки пакетов; для IPv4 проверяются обычное направление и VK,
+  для IPv6 — префикс /64. В остальное время поток ждёт без пробуждений.
+  Изменение сбрасывает пул соединений и устаревшие адреса аудио. Интерфейс получает
+  `network: changed`, затем `ok` после примерно 2,5 секунды стабильности либо `unreachable`.
+- **Восстановление музыки.** После ошибок 401/403/404/410, обрыва соединения,
+  тайм-аута, DNS, TLS или 20 секунд без аудио поток возобновляется с сохранённой
+  позиции через свежий адрес `audio.getById` и новые соединения. Сетевые ошибки
+  допускают шесть попыток с задержками 0,4 секунды, затем 1,2 секунды и удвоением
+  до 20 секунд со случайной добавкой. Устаревшие адреса допускают три попытки,
+  первая — сразу. Внутри каждой попытки выполняется один `getById` без вложенных
+  повторов. Сетевая ошибка не переключает трек: после исчерпания попыток
+  воспроизведение приостанавливается с кнопкой повтора и возобновляется при
+  стабилизации сети. Недоступные треки пропускаются, не больше трёх подряд.
+  Загруженные треки не затрагиваются; очередь и позиция сохраняются.
+- **Запросы API.** После транспортной ошибки пул соединений сбрасывается.
+  Чтение повторяется до трёх раз с задержкой, записи — избранное, плейлисты
+  и подписки — автоматически не повторяются. Ошибки сессии VK 5, 28 или 17
+  допускают одно обновление токена через cookie и один повтор запроса.
+  Для обложек и текстов предусмотрен один повтор.
+- **Сообщения интерфейса.** При проблеме соединения показываются понятное
+  объяснение, кнопка повтора и инструкция проверки VPN. Приложение не утверждает,
+  что обнаружило VPN. После восстановления сети загрузки экранов повторяются,
+  а уведомление о восстановлении показывается один раз. Если страница входа
+  не загрузилась за 25 секунд, окно предлагает повторить загрузку.
+- **Журнал.** Содержит этапы восстановления без адресов с токенами и без cookie.
 
-## Security model
+## Защита данных и сохранение сессии
 
-- **Tokens** live only in the OS keyring (Secret Service / Credential Manager /
-  Keychain). If it is unavailable the sign-in is kept in memory for the run and
-  the UI says it will not persist; no credentials are written to disk in clear.
-  Long sessions use two checksum-verified banks: the manifest changes only after
-  all new parts have been read back. Recovery copies are restricted to the same
-  known account. Legacy credentials migrate on the next save. Explicit logout
-  writes a nonsecret `session.signed-out` marker before clearing credentials;
-  temporary keyring failures retry on session checks, API use and normal exit.
-  Late token exchanges cannot overwrite or sign out a newly selected account.
-- **Sign-in** happens on vk.ru in a separate, incognito webview whose
-  navigation is restricted to VK hosts over https; only the `web_token` exchange
-  result leaves it. The main window cannot be navigated away from the bundled UI.
-- **CSP** is strict (`default-src 'self'`, no inline script, no `eval`);
-  capabilities grant the main window only the app's own commands.
-- **IPC** arguments are validated in the engine (numbers finite and in range,
-  artist ids and album locators/keys plain tokens before they are sent to VK,
-  stream URLs https-only and never loopback, private or link-local addresses (also across redirects); no redirects on VK API calls, where a
-  token is attached).
-- Logs never contain tokens or cookies.
-- **Listening history** is one small JSON file per VK account in the app data folder
-  (`history/listening-<VK user id>.json`): the last 250 tracks (title, artist, cover
-  address and the ids VK uses for them, plus a track's access key where VK gave one,
-  which is needed to play it again), and per-month counters. It never holds a token, a
-  cookie or a stream address, it is bounded in size, it is never sent anywhere, and
-  *Clear* (History) and *Reset statistics* remove their parts of it. A damaged or hand-edited file is
-  set aside or repaired on load.
+- Токен и cookie VK находятся только в Secret Service, Credential Manager
+  или Keychain. Если хранилище временно недоступно, текущий вход остаётся
+  в памяти, а приложение сообщает о невозможности его сохранить.
+- Длинная сессия записывается в два набора частей с контрольными суммами.
+  Указатель на новый набор меняется только после полной записи и проверки
+  чтением. Предыдущая копия восстанавливается только для того же известного
+  аккаунта. Старый формат переносится при следующем сохранении.
+- При явном выходе создаётся несекретный маркер `session.signed-out`, затем
+  очищаются учётные данные. Сбой хранилища повторно проверяется при запросе
+  состояния сессии, обращении к API и обычном завершении приложения.
+  Запоздалый ответ обновления токена не может заменить или отключить новый аккаунт.
+- Вход открывается в отдельном окне с приватным веб-контекстом; переходы
+  разрешены только на HTTPS-узлы VK. Основное окно не может перейти с локального
+  интерфейса на постороннюю страницу.
+- CSP использует `default-src 'self'`, запрещает встроенные скрипты и `eval`.
+  Возможности IPC ограничены командами приложения. Числа, идентификаторы,
+  ключи альбомов и адреса потоков проверяются. Адреса аудио требуют HTTPS;
+  локальные, частные и link-local адреса запрещены, включая перенаправления.
+  Запросы API с токеном не следуют перенаправлениям.
+- Журналы не содержат токенов или cookie.
+- История хранится отдельно для аккаунтов в `history/listening-<VK user id>.json`:
+  последние 250 треков и помесячные счётчики. Есть названия, исполнители,
+  обложки, идентификаторы и необходимые ключи доступа к трекам. Токенов,
+  cookie и адресов потоков там нет. Файл ограничен по размеру и никуда не
+  отправляется; очистка истории и сброс итогов удаляют соответствующие данные.
+  Повреждённые файлы откладываются либо исправляются при загрузке.
 
-## Known limits
+## Что ещё требует проверки
 
-- CI checks page loading and private cookie access on Windows, macOS and Linux.
-  Signing in to a real account and OS media controls still need manual verification.
-- CMAF streams with encryption are untested against real VK data.
-- `install.ps1` has not been run on a real Windows machine yet.
-
-## Desktop design
-
-The desktop layout uses the mobile palettes, mood artwork and PM identity, with
-Selena's orbital motif, a dedicated playback dock, keyboard-accessible carousel
-controls, a full mix grid and per-account pinning. Broad layout references were
-[Feishin](https://github.com/jeffvli/feishin),
-[Tauon](https://github.com/Taiko2k/Tauon) and
-[Harmonoid](https://github.com/harmonoid/harmonoid); their code and artwork were not copied.
-
-The ten-band equalizer includes a live control curve, ten presets, a remembered
-custom curve, per-band reset and keyboard adjustment. The audio engine fits the
-combined filter response to the selected band levels, adds automatic headroom,
-links transient peak protection across channels and crossfades retunes over 30 ms.
-Search invalidates stale answers as soon as typing changes, normalizes whitespace,
-paginates artists and albums, deduplicates results and stops nonadvancing pages.
+- CI проверяет загрузку страницы входа и доступ к cookie на Windows, macOS
+  и Linux. Вход в настоящий аккаунт и системное управление мультимедиа требуют
+  отдельной ручной проверки.
+- Зашифрованные потоки CMAF ещё не проверены на настоящих данных VK.
+- `install.ps1` отдельно не проверялся на пользовательском компьютере;
+  проверка установщиков в CI выполняется другим сценарием.

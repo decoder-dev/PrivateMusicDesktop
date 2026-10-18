@@ -1,5 +1,5 @@
-// Linux stand-in for the one vDSP call the C reference makes, so the C
-// implementation can be compiled here and compared with the Rust one.
+// Альтернатива Linux для одного вызова vDSP, который делает ссылка на C, поэтому реализацию C можно
+// скомпилировать здесь и сравнить с версией Rust.
 #pragma once
 #include <math.h>
 typedef unsigned long vDSP_Length;

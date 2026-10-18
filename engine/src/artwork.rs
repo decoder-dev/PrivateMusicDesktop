@@ -1,8 +1,8 @@
-//! Picks two colours out of a cover so the full-screen view can wear them.
+//! Выбирает два цвета из обложки, чтобы их можно было носить в полноэкранном режиме.
 //!
-//! The web view cannot read pixels of a cross-origin image, so the engine
-//! downloads the cover (https only, never a local address, size-capped),
-//! shrinks it and looks at the colours that are both common and vivid.
+//! Веб-представление не может считывать пиксели изображения из разных источников, поэтому движок
+//! загружает обложку (только https, никогда не локальный адрес, с ограничением по размеру), сжимает ее
+//! и смотрит на цвета, которые являются как общими, так и яркими.
 
 use std::io::Read;
 use std::time::Duration;
@@ -18,9 +18,9 @@ const MAX_BYTES: u64 = 3 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Palette {
-    /// The most prominent vivid colour, as `#rrggbb`.
+    /// Самый заметный яркий цвет, например `#rrggbb`.
     pub primary: String,
-    /// A second colour that differs clearly from the first.
+    /// Второй цвет, явно отличающийся от первого.
     pub secondary: String,
 }
 
@@ -85,8 +85,8 @@ fn hex((r, g, b): (u8, u8, u8)) -> String {
     format!("#{r:02x}{g:02x}{b:02x}")
 }
 
-/// Colour buckets (4 bits a channel), each weighted by how vivid and bright
-/// its pixels are, so a grey or black border cannot win over the artwork.
+/// Цветовые сегменты (4 бита на канал), каждый из которых взвешивается по тому, насколько яркими и
+/// яркими являются его пиксели, поэтому серая или черная рамка не может превзойти изображение.
 fn pick(pixels: impl Iterator<Item = (u8, u8, u8)>) -> Palette {
     struct Bucket {
         weight: f32,
@@ -128,7 +128,8 @@ fn pick(pixels: impl Iterator<Item = (u8, u8, u8)>) -> Palette {
             saturation > 0.25 && value > 0.25 && (hue_distance(hue, primary_hue) > 35.0 || primary_saturation < 0.2)
         })
         .unwrap_or_else(|| {
-            // A single-colour cover: use the cover's average, which is still on theme.
+            // Одноцветная обложка: используйте средний цвет обложки, который все еще соответствует
+            // теме.
             let average = ((all[0] / total) as u8, (all[1] / total) as u8, (all[2] / total) as u8);
             if average == primary { (primary.2, primary.0, primary.1) } else { average }
         });
@@ -157,7 +158,7 @@ mod tests {
 
     #[test]
     fn a_vivid_colour_beats_a_big_grey_border() {
-        // Grey frame around a red centre.
+        // Серая рамка вокруг красного центра.
         let cover = png(96, 96, |x, y| if (24..72).contains(&x) && (24..72).contains(&y) { [220, 30, 40] } else { [120, 120, 120] });
         let palette = palette_from_image(&cover).unwrap();
         let (hue, saturation, _) = hsv(rgb(&palette.primary));

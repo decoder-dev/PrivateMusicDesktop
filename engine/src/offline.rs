@@ -1,9 +1,9 @@
-//! Downloaded tracks: audio files in the app's own folder plus an index.
+//! Загруженные треки: аудиофайлы в собственной папке приложения плюс индекс.
 //!
-//! A file holds the elementary stream the player would have built from the
-//! network (decrypted, demuxed), so playing it needs no VK and no internet.
-//! The window never names a file: tracks are looked up by id, and file names
-//! are made here from digits only.
+//! Файл содержит элементарный поток, который плеер мог бы создать из сети (расшифровать,
+//! демультиплексировать), поэтому для его воспроизведения не требуется ни VK, ни Интернета. Окно
+//! никогда не называет файл: треки ищутся по идентификатору, а имена файлов здесь составляются только
+//! из цифр.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -24,7 +24,7 @@ pub struct OfflineTrack {
     pub track: Track,
     pub file: String,
     pub bytes: u64,
-    /// Unix seconds.
+    /// Unix-секунды.
     pub added: u64,
 }
 
@@ -39,7 +39,7 @@ fn now() -> u64 {
 }
 
 impl OfflineStore {
-    /// Opens (or creates) the folder. A damaged index is set aside, not fatal.
+    /// Открывает (или создает) папку. Поврежденный индекс откладывается, это не фатально.
     pub fn open(dir: impl Into<PathBuf>) -> Result<Self> {
         let dir = dir.into();
         fs::create_dir_all(&dir).map_err(|e| Error::Stream(format!("downloads folder: {e}")))?;
@@ -51,7 +51,7 @@ impl OfflineStore {
             }),
             Err(_) => Vec::new(),
         };
-        // Keep only entries whose file is really there and safely named.
+        // Сохраняйте только те записи, файлы которых действительно существуют и имеют безопасное имя.
         let index = index
             .into_iter()
             .filter(|e| safe_offline_name(&e.file) && dir.join(&e.file).is_file())
@@ -68,7 +68,7 @@ impl OfflineStore {
         self.index.lock().unwrap_or_else(|p| p.into_inner())
     }
 
-    /// Newest first.
+    /// Сначала самые новые.
     pub fn list(&self) -> Vec<OfflineTrack> {
         let mut all: Vec<OfflineTrack> = self.lock().values().cloned().collect();
         all.sort_by(|a, b| b.added.cmp(&a.added).then(a.file.cmp(&b.file)));
@@ -79,7 +79,7 @@ impl OfflineStore {
         self.lock().contains_key(track_id)
     }
 
-    /// The `offline:` address the player understands, if downloaded.
+    /// Адрес `offline:` понятен плееру, если он скачан.
     pub fn address(&self, track_id: &str) -> Option<String> {
         self.lock().get(track_id).map(|e| format!("{OFFLINE_SCHEME}{}", e.file))
     }
@@ -88,8 +88,8 @@ impl OfflineStore {
         self.lock().values().map(|e| e.bytes).sum()
     }
 
-    /// Writes the audio and records it. The file appears atomically, so a
-    /// crash mid-write never leaves a half file in the index.
+    /// Записывает звук и записывает его. Файл отображается атомарно, поэтому сбой в середине записи
+    /// никогда не оставляет в индексе половину файла.
     pub fn save(&self, track: &Track, kind: ElementaryKind, audio: &[u8]) -> Result<OfflineTrack> {
         let _write = self.writes.lock().unwrap_or_else(|p| p.into_inner());
         if track.track_id <= 0 || track.owner_id == 0 || audio.is_empty() {
@@ -193,7 +193,7 @@ mod tests {
         assert!(store.remove("7_1").unwrap());
         assert!(!dir.path().join("7_1.mp3").exists());
         assert!(!store.remove("7_1").unwrap());
-        std::fs::remove_file(dir.path().join("7_2.mp3")).unwrap(); // deleted by hand
+        std::fs::remove_file(dir.path().join("7_2.mp3")).unwrap(); // удалено вручную
         assert!(OfflineStore::open(dir.path()).unwrap().list().is_empty());
     }
 

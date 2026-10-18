@@ -1,6 +1,6 @@
-// The VPN / connection-trouble hint: shown for network failures only, with a
-// retry that works, an automatic retry when the engine says the network is
-// back, and instructions in both languages.
+// Подсказка VPN / проблемы с подключением: отображается только при сбоях в сети, с успешной повторной
+// попыткой, автоматической повторной попыткой, когда движок сообщает, что сеть восстановлена, и
+// инструкциями на обоих языках.
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -25,7 +25,7 @@ test("a failed library load by a network error shows the VPN card, Retry and the
     assert.equal(await card.locator(".net-hint-title").innerText(), "Не удаётся подключиться к VK");
     assert.equal(await card.locator(".net-hint-text").innerText(), HINT_RU);
     assert.equal(await card.getByRole("button", { name: "Как проверить VPN" }).count(), 1);
-    // The panel keeps its own Retry button, so the card does not add a second one.
+    // На панели сохраняется собственная кнопка «Повторить», поэтому карта не добавляет вторую.
     assert.equal(await libraryStatus(page).getByRole("button", { name: "Повторить" }).count(), 1);
     assert.equal(await libraryStatus(page).locator(".retry").isVisible(), true);
     assert.deepEqual(app.problems.filter((p) => !p.includes("Failed to load resource")), []);
@@ -39,7 +39,7 @@ test("timeouts get the card too, but sign-in, refused and playback errors do not
       const { page } = app;
       await page.waitForSelector(".main > .view:not([hidden]) .status.error");
       assert.equal(await page.locator(".net-hint").count(), expected ? 1 : 0, `kind ${failKind}`);
-      // A refused request keeps its ordinary retry.
+      // Отклоненный запрос сохраняет обычную повторную попытку.
       if (!expected) assert.equal(await libraryStatus(page).locator(".retry").isVisible(), true);
     } finally { await app.close(); }
   }
@@ -65,7 +65,7 @@ test("when the engine reports the network back, the failed load repeats by itsel
   try {
     const { page } = app;
     await page.waitForSelector(".net-hint");
-    // Still failing: "changed" alone does nothing.
+    // Все еще терпит неудачу: сам по себе "changed" ничего не делает.
     await page.evaluate(() => window.__mock.emit("pm-event", { type: "network", state: "changed" }));
     assert.equal(await page.locator(".net-hint").count(), 1);
     await page.evaluate(() => {
@@ -194,7 +194,7 @@ test("an unreachable network is a chip that clears when it is back", async () =>
     await waitForLibrary(page);
     await page.evaluate(() => window.__mock.emit("pm-event", { type: "network", state: "unreachable" }));
     await page.waitForFunction(() => document.querySelector(".net-chip")?.textContent === "Нет подключения к сети");
-    // Playing from downloads does not hide it.
+    // Игра из загрузок этого не скрывает.
     await page.evaluate(() => window.__mock.emit("pm-event", { type: "state", status: "playing" }));
     assert.equal(await page.locator(".net-chip").count(), 1);
     await page.evaluate(() => window.__mock.emit("pm-event", { type: "network", state: "ok" }));
@@ -213,7 +213,7 @@ test("sign-in: a login page that does not load shows the card; Retry asks for th
     await page.locator(".login .net-hint").getByRole("button", { name: "Повторить" }).click();
     assert.equal(await page.evaluate(() => window.__mock.count("login_start")), 2);
     assert.equal(await page.locator(".login .net-hint").count(), 0);
-    // It loaded after all.
+    // Ведь оно загрузилось.
     await page.evaluate(() => window.__mock.emit("pm-login", "loadfailed"));
     await page.waitForSelector(".login .net-hint");
     await page.evaluate(() => window.__mock.emit("pm-login", "loadok"));

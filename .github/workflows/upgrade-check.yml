@@ -1,7 +1,7 @@
 name: Upgrade check
 
-# Installs a published release, then another installer over it, and checks that
-# the sign-in and the app data survive. Run it by hand on any two releases.
+# Устанавливает опубликованный выпуск, затем поверх него другой установщик и проверяет, сохранились ли
+# данные входа и данные приложения. Запустите его вручную на любых двух выпусках.
 on:
   workflow_dispatch:
     inputs:

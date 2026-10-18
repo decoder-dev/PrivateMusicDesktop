@@ -20,7 +20,8 @@ export function startServer() {
       response.writeHead(404).end();
       return;
     }
-    // Same policy the real app is served with: inline script/style would fail here too.
+    // Та же политика, по которой обслуживается реальное приложение: встроенный script/style здесь тоже
+    // не сработает.
     response.writeHead(200, { "content-type": types[path.extname(file)] ?? "application/octet-stream", "content-security-policy": csp });
     response.end(fs.readFileSync(file));
   });
@@ -38,7 +39,7 @@ export async function openApp({ config = {}, viewport = { width: 1120, height: 7
   page.on("console", (message) => {
     if (message.type() === "error") problems.push(`console: ${message.text()}`);
   });
-  // Artwork URLs are fake: answer them with a 1x1 image, never the network.
+  // Иллюстрации URLs являются фейковыми: отвечайте им изображением 1x1, а не сетью.
   const pixel = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64");
   await context.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.fulfill({ status: 200, contentType: "image/png", body: pixel }));
   await page.addInitScript(`window.__mockConfig = ${JSON.stringify(config)};`);

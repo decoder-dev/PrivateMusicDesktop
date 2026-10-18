@@ -6,16 +6,19 @@ import { artBox } from "./ui-parts.js";
 
 export const ROW_HEIGHT = 56;
 
-/** The current-track mark: four static capsules while playing, a pause glyph when paused. */
+/**
+ * Метка текущего трека: четыре статических капсулы во время воспроизведения, символ паузы во время
+ * паузы.
+ */
 function indicator(paused) {
   if (paused) return h("span", { class: "pbars paused", "aria-hidden": "true" }, icon("pause", 12));
   return h("span", { class: "pbars", "aria-hidden": "true" }, h("i"), h("i"), h("i"), h("i"));
 }
 
 /**
- * One track line. `actions` is an optional list of [iconName, action, label]
- * overriding the default hover actions. Rows are recreated while the list
- * scrolls, so nothing here may animate or transition.
+ * Одна путевая линия. `actions` — это необязательный список [iconName, действие, метка],
+ * переопределяющий действия при наведении по умолчанию. Строки воссоздаются при прокрутке списка,
+ * поэтому здесь ничего не может анимироваться или переходить.
  */
 export function trackRow(track, { selected = false, paused = false, actions, liked = false, busy = false, pinLiked = true, downloaded = false, downloading = false } = {}) {
   const likeLabel = liked ? t("like.remove") : t("like.add");

@@ -2,19 +2,19 @@ use rubato::{FftFixedIn, Resampler};
 
 use crate::{Error, Result};
 
-/// Channel layout and sample-rate conversion between a decoded stream and the
-/// device. Input and output are interleaved f32.
+/// Расположение каналов и преобразование частоты дискретизации между декодированным потоком и
+/// устройством. Вход и выход чередуются f32.
 pub struct Converter {
     in_channels: usize,
     out_channels: usize,
     resampler: Option<FftFixedIn<f32>>,
-    /// Per-channel samples waiting for a full resampler chunk.
+    /// Поканальные семплы ожидают полного фрагмента ресемплера.
     pending: Vec<Vec<f32>>,
 }
 
 const CHUNK_FRAMES: usize = 1024;
 
-/// Maps one interleaved frame of `input` onto `out_channels`.
+/// Сопоставляет один чередующийся кадр `input` с `out_channels`.
 fn map_channels(input: &[f32], in_channels: usize, out_channels: usize, out: &mut Vec<f32>) {
     if in_channels == out_channels {
         out.extend_from_slice(input);
@@ -25,7 +25,7 @@ fn map_channels(input: &[f32], in_channels: usize, out_channels: usize, out: &mu
             (1, n) => out.extend(std::iter::repeat_n(frame[0], n)),
             (_, 1) => out.push(frame.iter().take(2).sum::<f32>() / frame.len().min(2) as f32),
             (_, n) => {
-                // Keep front left/right, silence anything the device has more of.
+                // Держите переднюю часть left/right, выключите все, чего у устройства больше.
                 out.extend((0..n).map(|channel| if channel < 2 { frame[channel] } else { 0.0 }));
             }
         }
@@ -48,7 +48,7 @@ impl Converter {
         Ok(Self { in_channels, out_channels, resampler, pending: vec![Vec::new(); out_channels] })
     }
 
-    /// Forget buffered samples (after a seek).
+    /// Забудьте о буферизованных выборках (после поиска).
     pub fn reset(&mut self) {
         for channel in &mut self.pending {
             channel.clear();
@@ -58,8 +58,8 @@ impl Converter {
         }
     }
 
-    /// Converts `input` and appends the result to `out`. Output may lag the
-    /// input by up to one resampler chunk.
+    /// Преобразует `input` и добавляет результат в `out`. Выходные данные могут отставать от входных до
+    /// одного фрагмента ресэмплера.
     pub fn process(&mut self, input: &[f32], out: &mut Vec<f32>) -> Result<()> {
         let usable = input.len() - input.len() % self.in_channels;
         let mut mapped = Vec::with_capacity(usable / self.in_channels * self.out_channels);
@@ -135,7 +135,7 @@ mod tests {
         }
         let seconds = out.len() as f64 / 2.0 / 48_000.0;
         assert!((seconds - 2.0).abs() < 0.05, "length {seconds}");
-        // Skip the filter warm-up, then count cycles: 1000 Hz -> 2000 crossings/s.
+        // Пропускаем прогрев фильтра, затем считаем циклы: 1000 Гц -> 2000 crossings/s.
         let body = &out[2 * 4800..];
         let rate = crossings(body, 2) as f64 / (body.len() as f64 / 2.0 / 48_000.0);
         assert!((rate - 2000.0).abs() < 20.0, "crossings/s {rate}");

@@ -28,7 +28,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
   let loaded = false;
   let generation = 0;
   let detailGeneration = 0;
-  let current = null; // the open playlist
+  let current = null; // открытый плейлист
   let tracks = [];
   let sharedAlbum = null;
 
@@ -37,7 +37,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
   const header = h("header", { class: "view-header" }, h("div", { class: "vh-text" }, h("h1", { text: t("playlists.title") })),
     h("button", { class: "btn", type: "button", onclick: openLink, text: t("pl.openLink") }),
     h("button", { class: "btn primary", type: "button", onclick: () => newPlaylist() }, icon("plus", 14), t("pl.new")));
-  // Followed releases, below the playlists.
+  // Следящие релизы ниже плейлистов.
   const albumsStatus = h("div", { class: "status", role: "status", hidden: true });
   const albumsGrid = h("div", { class: "grid followed-albums" });
   const shelves = h("div", { class: "page-scroll" }, status, grid,
@@ -230,7 +230,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
     }
   }
 
-  /** The undo banner: puts the track back (VK may append it) and says so. */
+  /** Баннер отмены: возвращает трек (VK может добавить его) и сообщает об этом. */
   async function undoRemove(playlist, track, index) {
     try {
       await api.addToPlaylist(playlist, track);
@@ -266,7 +266,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
       if (!loaded) load();
       if (!albumsLoaded) loadAlbums();
     },
-    /** A sidebar click while a playlist is open goes back to the list. */
+    /** Щелчок на боковой панели, когда список воспроизведения открыт, позволяет вернуться к списку. */
     root() { if (current) showList(); },
     reset() {
       generation++;

@@ -1,6 +1,6 @@
-//! The VK client and the app layer when the network changes under them:
-//! dead pooled connections, retries that stay bounded, writes that are never
-//! repeated, a session VK stops accepting on a new IP, the change detector.
+//! Клиент VK и уровень приложения, когда сеть изменяется под ними: мертвые соединения в пуле, повторные
+//! попытки, которые остаются ограниченными, записи, которые никогда не повторяются, сеанс VK перестает
+//! принимать новый IP, детектор изменений.
 
 mod common;
 
@@ -19,8 +19,8 @@ use pm_engine::store::MemoryStore;
 use pm_engine::vk::{Session, VkClient};
 use pm_engine::Error;
 
-/// Connection counts are only meaningful when no other test is dropping the
-/// process-wide pooled connections at the same time.
+/// Подсчеты подключений имеют смысл только в том случае, если никакой другой тест одновременно не
+/// удаляет соединения из пула всего процесса.
 fn serial() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: Mutex<()> = Mutex::new(());
     LOCK.lock().unwrap_or_else(|p| p.into_inner())
@@ -37,9 +37,9 @@ fn session(token: &str) -> Session {
     }
 }
 
-/// A VK stand-in on plain sockets with keep-alive, so connections can be
-/// counted and cut: the first `cut` requests are read and then the connection
-/// is closed without an answer (what a VPN switch does to a pooled socket).
+/// Альтернатива VK на простых сокетах с поддержкой активности, поэтому соединения можно подсчитывать и
+/// отключать: считываются первые запросы `cut`, а затем соединение закрывается без ответа (что
+/// коммутатор VPN делает с сокетом в пуле).
 struct RawVk {
     base: String,
     accepted: Arc<AtomicUsize>,
@@ -101,7 +101,7 @@ fn serve(mut stream: TcpStream, requests: &AtomicUsize, cut: &AtomicUsize) {
         requests.fetch_add(1, Ordering::SeqCst);
         if cut.load(Ordering::SeqCst) > 0 {
             cut.fetch_sub(1, Ordering::SeqCst);
-            return; // dropped: the socket closes without a word
+            return; // упал: сокет закрывается без слов
         }
         let json = r#"{"response":[{"id":7,"first_name":"A","last_name":"B","photo_200":""}]}"#;
         let reply = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{json}", json.len());
@@ -120,7 +120,7 @@ fn connections_are_pooled_and_a_network_change_makes_the_next_call_dial_again() 
     client.call(&s, "users.get", &[]).unwrap();
     client.call(&s, "users.get", &[]).unwrap();
     assert_eq!(vk.accepted.load(Ordering::SeqCst), 1, "keep-alive: one connection for two calls");
-    pm_engine::net::drop_connections(); // what the detector does on a change
+    pm_engine::net::drop_connections(); // что делает детектор при изменении
     client.call(&s, "users.get", &[]).unwrap();
     assert_eq!(vk.accepted.load(Ordering::SeqCst), 2, "a fresh connection after the change");
 }
@@ -159,7 +159,7 @@ fn a_write_is_never_repeated_after_a_dead_connection() {
     let error = client.call_once(&s, "audio.add", &[("audio_id", "1".into()), ("owner_id", "-3".into())]).unwrap_err();
     assert!(matches!(error, Error::Transport(_) | Error::Offline), "{error:?}");
     assert_eq!(vk.requests.load(Ordering::SeqCst), 1, "a retried write could be applied twice");
-    // The failure still cleaned up: the next call starts on a new connection.
+    // Сбой все-таки устранили: следующий звонок начнется по новому соединению.
     client.call(&s, "users.get", &[]).unwrap();
     assert_eq!(vk.accepted.load(Ordering::SeqCst), 2);
 }
@@ -252,7 +252,7 @@ fn a_failed_renewal_for_a_validation_error_keeps_the_original_answer() {
     assert!(app.session_state().signed_in, "a validation error is not a sign-out");
 }
 
-/// A scripted source of local addresses.
+/// Скриптовый источник локальных адресов.
 struct Script(Mutex<Vec<Fingerprint>>);
 
 impl AddressSource for Script {
@@ -285,7 +285,7 @@ fn the_app_tells_the_window_when_the_network_changes_and_settles() {
             ..AppOptions::default()
         },
     );
-    // Nothing plays and the window is not focused: nobody looks.
+    // Ничего не играет и окно не сфокусировано: никто не смотрит.
     std::thread::sleep(Duration::from_millis(150));
     assert!(!events.lock().unwrap().iter().any(|e| matches!(e, UiEvent::Network { .. })));
 

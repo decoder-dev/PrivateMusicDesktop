@@ -11,10 +11,10 @@ import { albumKey, ensureAlbums, isFollowed, toggleFollow } from "../my-albums.j
 const PAGE = 100;
 
 /**
- * A release: cover, title, artists (each opens its page), year and size,
- * a follow button, and the tracks. The engine finds the access key a
- * community album needs; the album it answers with (cover, year, follow
- * state, key) replaces what the page was opened with.
+ * Релиз: обложка, название, исполнители (каждый открывает свою страницу), год и размер, кнопка
+ * «подписаться» и треки. Движок находит ключ доступа, необходимый альбому сообщества; альбом, на
+ * который он отвечает (обложка, год, состояние подписки, ключ), заменяет то, с чем была открыта
+ * страница.
  */
 export function createAlbumView({ play, onTrackAction, toast, back }) {
   let album = null;
@@ -88,13 +88,13 @@ export function createAlbumView({ play, onTrackAction, toast, back }) {
 
   async function open(opened) {
     const key = albumKey(opened);
-    if (key === loadedKey) return; // back to the page as it was
+    if (key === loadedKey) return; // вернуться на страницу, как это было
     loadedKey = key;
     album = opened;
     busy = false;
     const mine = ++generation;
     render();
-    ensureAlbums().catch(() => {}); // the follow state; the album's own flag covers a failure
+    ensureAlbums().catch(() => {}); // следующее состояние; собственный флаг альбома означает провал
     tracks.setTracks([]);
     tracks.setStatus(t("loading"));
     listenButton.hidden = shuffleButton.hidden = true;
@@ -104,7 +104,7 @@ export function createAlbumView({ play, onTrackAction, toast, back }) {
       for (;;) {
         const result = await api.albumTracks(album, offset, PAGE);
         if (mine !== generation) return;
-        // Later pages are asked for with the key that opened the first.
+        // Последующие страницы запрашиваются с помощью ключа, открывающего первую.
         album = { ...result.album, title: result.album.title || album.title };
         render();
         collected = collected.concat(result.tracks.items);

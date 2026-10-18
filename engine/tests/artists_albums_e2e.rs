@@ -1,6 +1,6 @@
-//! Artist and album pages against a fake VK: the same calls the iOS app
-//! makes, its fallbacks when VK refuses or answers thinly, and nothing sent
-//! for ids the window should never have produced.
+//! Страницы исполнителя и альбома против поддельного VK: те же вызовы, которые делает приложение iOS,
+//! его запасные варианты, когда VK отказывается или отвечает тонко, и ничего, отправленное для
+//! идентификаторов, которые окно никогда не должно было выдавать.
 
 mod common;
 
@@ -30,7 +30,7 @@ fn method(url: &str) -> &str {
     url.rsplit('/').next().unwrap_or("")
 }
 
-/// One `audio` item the way VK sends it.
+/// Один элемент `audio` в том виде, в котором его отправляет VK.
 fn audio(id: i64, title: &str, album: Option<(i64, i64, &str)>) -> String {
     let album = album
         .map(|(id, owner, title)| format!(r#","album":{{"id":{id},"owner_id":{owner},"title":"{title}","access_key":"ak"}}"#))
@@ -223,7 +223,7 @@ fn sessions_without_execute_use_audio_get() {
         }
         other => panic!("unexpected {other}"),
     });
-    // A person's playlist needs no key, so nothing is resolved first.
+    // Плейлисту пользователя не нужен ключ, поэтому сначала ничего не решается.
     let album = Album { album_id: 5, owner_id: 7, ..release(7) };
     let found = app(&api.base).album_tracks(&album, 0, 100).unwrap();
     assert_eq!(found.tracks.items.len(), 1);

@@ -1,4 +1,4 @@
-// One small observable store. Views subscribe to the topics they draw.
+// Один небольшой заметный магазин. Просмотры подписываются на темы, которые они рисуют.
 
 const listeners = new Map();
 
@@ -12,17 +12,17 @@ export const store = {
   view: "library",
 };
 
-// Everything a signed-in screen hooks up (subscriptions, document listeners)
-// is collected while it is built, so signing out can undo all of it at once.
+// Все, что подключается экран входа в систему (подписки, прослушиватели документов), собирается во
+// время его создания, поэтому выход из системы может отменить все это сразу.
 let scope = null;
 
-/** Registers a clean-up with the scope being built, if any. */
+/** Регистрирует очистку в создаваемой области, если таковая имеется. */
 export function own(dispose) {
   scope?.push(dispose);
   return dispose;
 }
 
-/** Runs `build`, returning its value and a `dispose` for what it hooked up. */
+/** Запускает `build`, возвращая его значение и `dispose` для того, что он подключил. */
 export function withScope(build) {
   const previous = scope;
   const owned = [];
@@ -49,5 +49,5 @@ export function set(topic, value) {
   publish(topic);
 }
 
-/** For tests: how many handlers listen to a topic. */
+/** Для тестов: сколько обработчиков слушают тему. */
 export const listenerCount = (topic) => listeners.get(topic)?.size ?? 0;

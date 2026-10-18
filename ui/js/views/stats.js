@@ -7,7 +7,7 @@ import { artBox, watchSegmented, paintStatus, fillPanel } from "../ui-parts.js";
 
 const SCOPES = ["month", "year", "all"];
 
-/** "1 h 5 min" / "4 min 7 s": hours and minutes from an hour on, else minutes and seconds. */
+/** "1 h 5 min" / "4 min 7 s": часы и минуты, начиная с часа, иначе минуты и секунды. */
 export function formatListening(seconds) {
   const total = Math.max(0, Math.round(seconds));
   const hours = Math.floor(total / 3600);
@@ -22,7 +22,7 @@ const monthTitle = (key) => {
   const [year, month] = key.split("-").map(Number);
   return new Date(year, month - 1, 1).toLocaleDateString(locale, { month: "long", year: "numeric" });
 };
-// 2023-01-01 was a Sunday, and the engine counts weekdays from Sunday.
+// 01 января 2023 г. было воскресенье, и движок отсчитывает дни недели с воскресенья.
 const weekdayName = (index) => new Date(2023, 0, 1 + index).toLocaleDateString(locale, { weekday: "long" });
 const dayTitle = (key) => {
   const [year, month, day] = key.split("-").map(Number);
@@ -30,10 +30,10 @@ const dayTitle = (key) => {
 };
 const hourText = (hour) => `${String(hour).padStart(2, "0")}:00`;
 
-/** A thin capsule showing how this entry compares with the most played one. */
+/** Тонкая капсула, показывающая, чем эта запись отличается от самой популярной. */
 function shareBar(share) {
   const bar = h("span", { class: "stat-share", "aria-hidden": "true" }, h("i"));
-  bar.firstChild.style.width = `${Math.max(4, Math.round(share * 100))}%`; // CSSOM: allowed under the CSP
+  bar.firstChild.style.width = `${Math.max(4, Math.round(share * 100))}%`; // CSSOM: разрешено под номером CSP.
   return bar;
 }
 
@@ -53,8 +53,8 @@ function topList(title, entries, { artwork }) {
 }
 
 /**
- * Listening statistics kept on this computer: totals, top artists and tracks
- * and when the listening happens, for a month, a year or all time.
+ * Статистика прослушивания хранится на этом компьютере: общее количество, лучшие исполнители и треки,
+ * а также время прослушивания: за месяц, год или за все время.
  */
 export function createStatsView({ toast }) {
   let scope = "month";
@@ -116,7 +116,7 @@ export function createStatsView({ toast }) {
           summary.hour_seconds.map((seconds, hour) => {
             const bar = h("span", { class: `hour-bar${hour === summary.peak_hour ? " peak" : ""}`, "data-hour": String(hour),
               title: `${hourText(hour)} · ${formatListening(seconds)}` });
-            bar.style.height = `${Math.max(3, Math.round(64 * seconds / peak))}px`; // CSSOM: the CSP forbids style attributes
+            bar.style.height = `${Math.max(3, Math.round(64 * seconds / peak))}px`; // CSSOM: CSP запрещает атрибуты стиля.
             return bar;
           })),
         h("div", { class: "hour-axis", "aria-hidden": "true" }, [0, 6, 12, 18].map((hour) => h("span", { text: String(hour).padStart(2, "0") }))),
@@ -129,7 +129,7 @@ export function createStatsView({ toast }) {
     const period = view.summary.period;
     const options = scope === "month" ? view.months : scope === "year" ? view.years.map(String) : [];
     const current = scope === "month" ? period.key : scope === "year" ? String(period.year) : "";
-    // Several periods with data: pick one. One or none: just say which.
+    // Несколько периодов с данными: выберите один. Один или ни один: просто скажите какой.
     const pickable = options.length > 1;
     chooser.hidden = !pickable;
     periodTitle.hidden = pickable || scope === "all";
@@ -150,7 +150,7 @@ export function createStatsView({ toast }) {
       resetButton.hidden = view.months.length === 0;
     } catch (error) {
       if (mine !== generation) return;
-      // A remembered month that no longer exists falls back to the newest.
+      // Запомнившийся месяц, которого больше нет, возвращается к самому новому.
       chosen[scope] = null;
       body.replaceChildren(h("div", { class: "status error", role: "status", text: errorText(error) }));
     }

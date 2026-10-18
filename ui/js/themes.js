@@ -1,4 +1,4 @@
-// Colours and defaults ported from PrivateMusic2/App/AppPalette.swift.
+// Цвета и настройки по умолчанию перенесены из PrivateMusic2/App/AppPalette.swift..
 import { addStrings } from "./i18n.js";
 export const PALETTES = ["classic", "banana", "midnight", "forest", "rose", "mocha", "halloween"];
 export const PALETTE_ACCENT = { classic: "blue", banana: "banana", midnight: "indigo", forest: "green", rose: "pink", mocha: "orange", halloween: "orange" };

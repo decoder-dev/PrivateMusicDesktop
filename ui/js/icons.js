@@ -1,4 +1,4 @@
-// Flat stroke/fill icons, 24x24, drawn with currentColor so themes just work.
+// Плоские значки stroke/fill, 24x24, нарисованные с помощью currentColor, поэтому темы просто работают.
 const NS = "http://www.w3.org/2000/svg";
 
 const ICONS = {
@@ -90,9 +90,9 @@ const svgEl = (tag, attrs) => {
 const ILLUSTRATIONS = { music: "note", error: "alert", download: "download", search: "search", friends: "friends", history: "history", playlist: "playlist", queue: "queue", chart: "chart", album: "album", artist: "artist" };
 
 /**
- * A small empty-state picture: a soft accent wash behind two tilted cards with a
- * glyph on the front one. Drawn with CSS classes (il-*), so it follows the theme
- * and the accent; static, decorative (aria-hidden).
+ * Небольшое пустое изображение: мягкий акцент позади двух наклоненных карт с глифом на передней
+ * стороне. Нарисовано с использованием классов CSS (il-*), поэтому соответствует теме и акценту;
+ * статичный, декоративный (скрытый арией).
  */
 export function illustration(kind = "music") {
   const svg = svgEl("svg", { class: "il", viewBox: "0 0 120 88", width: 120, height: 88, "aria-hidden": "true", focusable: "false" });

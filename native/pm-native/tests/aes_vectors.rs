@@ -1,5 +1,5 @@
-//! AES-128-CBC/PKCS#7 against vectors produced by OpenSSL, through both the
-//! exported C ABI and the portable implementation.
+//! AES-128-CBC/PKCS#7 против векторов, созданных OpenSSL, как через экспортированный C ABI, так и через
+//! переносимую реализацию.
 
 use pm_native::media::*;
 
@@ -29,7 +29,7 @@ fn rejects_bad_input() {
     let mut out = vec![0u8; cipher.len() + 16];
     let mut len = -1;
     unsafe {
-        // Corrupt the last block so the padding no longer validates.
+        // Повредите последний блок, чтобы заполнение больше не проверялось.
         let mut bad = cipher.to_vec();
         let last = bad.len() - 1;
         bad[last] ^= 0x55;

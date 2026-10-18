@@ -1,5 +1,5 @@
-// Product naming and generated mix colours ported from the mobile
-// Models/MusicMix.swift and Models/MixBackdrop.swift.
+// Названия продуктов и сгенерированные смешанные цвета, перенесенные с мобильных устройств
+// Models/MusicMix.swift и Models/MixBackdrop.swift..
 export function mixName(raw = "") {
   if (["мой микс","my mix","vk микс","вк микс","vk mix","микс vk","микс вк","mix vk"].includes(raw.trim().toLowerCase())) return "Selena";
   return raw.replace(/(^|[^\p{L}\d])(?:VK|ВК)(?=$|[^\p{L}\d])/giu, "$1Selena");
@@ -17,7 +17,10 @@ export function mixColors(id) {
 }
 
 
-/** A tuned stream has the same VK id as its siblings; options form its identity. */
+/**
+ * Настроенный поток имеет тот же идентификатор VK, что и его родственные потоки; варианты формируют
+ * его индивидуальность.
+ */
 export function mixKey(mix) {
   let options = mix.options ?? "";
   try {
@@ -28,7 +31,7 @@ export function mixKey(mix) {
       return Object.fromEntries(Object.keys(value).sort().map(key => [key,stable(value[key],depth+1)]));
     };
     options=JSON.stringify(stable(parsed));
-  } catch { /* opaque VK options remain part of the key */ }
+  } catch { /* непрозрачные опции VK остаются частью ключа */ }
   return `${mix.id}#${options}`;
 }
 

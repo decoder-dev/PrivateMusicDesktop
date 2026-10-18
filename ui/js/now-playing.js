@@ -15,7 +15,7 @@ import { artBox, bindRange, syncRange } from "./ui-parts.js";
 const IDLE_MS = 3000;
 const QUEUE_ROWS = 100;
 
-/** Colours for a track without a usable cover: stable, from its name. */
+/** Цвета для трека без обложки: стабильные, судя по названию. */
 function fallbackColors(track) {
   const text = `${track?.artist ?? ""}${track?.title ?? ""}`;
   let hash = 0;
@@ -25,8 +25,8 @@ function fallbackColors(track) {
 }
 
 function toHex(color) {
-  // The canvas and CSS both accept hsl(); the visualizer wants #rrggbb, so
-  // resolve through a throwaway canvas pixel.
+  // Canvas и CSS принимают hsl(); визуализатору нужен #rrggbb, поэтому разрешите его с помощью
+  // одноразового пикселя холста.
   if (color.startsWith("#")) return color;
   const probe = document.createElement("canvas").getContext("2d");
   probe.fillStyle = color;
@@ -34,8 +34,8 @@ function toHex(color) {
 }
 
 /**
- * The full-screen "now playing" view: the cover as a blurred backdrop, big
- * artwork, transport, and a live spectrum drawn from what is really playing.
+ * Полноэкранный вид "now playing": обложка в виде размытого фона, большие иллюстрации, транспорт и
+ * живой спектр, взятый из того, что действительно играет.
  */
 export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu }) {
   let open = false;
@@ -49,7 +49,8 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   let lyricsOn = settings.lyrics !== false;
   let mode = MODES.includes(settings.visualizer) ? settings.visualizer : motionOk() ? "bars" : "off";
 
-  // Two stacked copies of the cover, 240 px each, blurred small and scaled up; they cross-fade on a track change.
+  // Две сложенные друг на друга копии обложки размером 240 пикселей каждая, размытые и увеличенные; они
+  // плавно исчезают при смене трека.
   const layers = [0, 1].map(() => h("img", { class: "np-bd", alt: "", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" }));
   let frontLayer = 0;
   let backdropToken = 0;
@@ -102,7 +103,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   });
   bindRange(seek);
 
-  // Quick actions under the transport: lyrics, queue, and the track's menu.
+  // Быстрые действия под транспортом: тексты песен, очередь и меню трека.
   const quick = (name, label, onclick, pressed) => {
     const button = h("button", { type: "button", onclick, ...(pressed === undefined ? {} : { "aria-pressed": String(pressed) }) },
       h("span", { class: "q-ico" }, icon(name, 18)), h("span", { text: label }));
@@ -150,7 +151,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     return { x:cover.left+cover.width/2-frame.left,y:cover.top+cover.height/2-frame.top,radius:cover.width/2,bounds };
   });
 
-  // ---------------------------------------------------------------- modes
+  // -------------------------------------------------- Режимы
 
   function renderMode() {
     const label = t("np.mode", { mode: t(`np.mode.${mode}`) });
@@ -160,7 +161,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   }
 
   function syncEngine() {
-    // The engine analyses audio only while someone is looking at the result.
+    // Движок анализирует звук только тогда, когда кто-то смотрит на результат.
     api.setVisualizer(open && mode !== "off" && !document.hidden).catch(() => {});
   }
 
@@ -173,7 +174,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     syncEngine();
   }
 
-  /** Lyrics and the queue share one side panel; the queue wins while it is open. */
+  /** Тексты песен и очередь находятся на одной боковой панели; очередь выигрывает, пока она открыта. */
   function renderSide() {
     const side = queueOpen ? "queue" : lyricsOn ? "lyrics" : "none";
     element.dataset.side = side;
@@ -224,7 +225,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     if (upcoming.length) queueList.append(h("div", { class: "nq-label", text: t("np.queue.next") }), ...upcoming.map((track, i) => row(track, current + 1 + i)));
   }
 
-  // -------------------------------------------------------------- palette
+  // -------------------------------------------------------------- Палитра
 
   function applyColors(primary, secondary) {
     element.style.setProperty("--np-a", primary);
@@ -236,7 +237,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     backdrop.style.setProperty("--bd-scale", String(Math.max(window.innerWidth, window.innerHeight) / 240 * 1.3));
   }
 
-  /** Fades the new cover in over the old one. */
+  /** Новая обложка затеняется поверх старой. */
   async function setBackdrop(url) {
     const mine = ++backdropToken;
     if (!url) {
@@ -260,7 +261,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     if (url) {
       const image = h("img", { src: url, alt: "", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" });
       image.addEventListener("error", () => image.replaceWith(h("div", { class: "np-placeholder" }, icon("note", 96))));
-      // The old cover stays until the new one has decoded.
+      // Старая обложка остается до тех пор, пока не раскодируется новая.
       const swap = () => { if (token === paletteToken) coverBox.replaceChildren(image); };
       if (coverBox.firstChild) image.decode().catch(() => {}).finally(swap); else swap();
     } else {
@@ -275,11 +276,11 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
       if (token !== paletteToken) return;
       applyColors(palette.primary, palette.secondary);
     } catch {
-      // Keep the colours made from the name.
+      // Сохраняйте цвета, сделанные из названия.
     }
   }
 
-  // --------------------------------------------------------------- render
+  // -------------------------------------------------------------- рендеринг
 
   function render(player) {
     const track = player.track;
@@ -337,9 +338,9 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     renderQueuePanel();
   }
 
-  // ----------------------------------------------------------- idle, keys
+  // ----------------------------------------------------------- Простой, ключи
 
-  /** Controls hide while music plays and the pointer is still. */
+  /** Элементы управления скрываются во время воспроизведения музыки, а указатель неподвижен. */
   function wake() {
     clearTimeout(idleTimer);
     element.classList.remove("idle");
@@ -425,7 +426,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     lyrics.forget();
     syncEngine();
     if (isWindowFullscreen()) toggleWindowFullscreen(false);
-    // The sheet settles away; with motion off this runs at once.
+    // Простыня оседает; при выключении движения он запускается сразу.
     element.classList.add("closing");
     afterAnimation(element, () => {
       if (open) return;
@@ -443,7 +444,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   own(()=>window.removeEventListener("pm-window-mode",onWindowMode));
   const onResize = () => { if (open) layoutBackdrop(); };
   window.addEventListener("resize", onResize);
-  // Reduce motion can be switched on while the app runs: stop the spectrum then.
+  // Уменьшение движения можно включить во время работы приложения: затем остановите спектр.
   const stopWatching = onMotionChange((ok) => {
     if (ok || mode === "off" || userChoseMode) return;
     mode = "off";
@@ -463,7 +464,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     close,
     toggle: () => (open ? close() : show()),
     isOpen: () => open,
-    /** The settings screen changed a default. */
+    /** Экран настроек изменил значение по умолчанию. */
     applySettings(patch) {
       if (patch.visualizer && MODES.includes(patch.visualizer) && patch.visualizer !== mode) {
         mode = patch.visualizer;
@@ -474,7 +475,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
       }
       if (typeof patch.lyrics === "boolean" && patch.lyrics !== lyricsOn) setLyrics(patch.lyrics);
     },
-    /** From the engine, ~30 times a second while open. */
+    /** От двигателя ~30 раз в секунду при открытом состоянии. */
     feed(bands) { if (open && mode !== "off" && Array.isArray(bands)) visualizer.feed(bands); },
   };
 }

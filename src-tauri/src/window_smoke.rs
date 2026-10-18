@@ -1,4 +1,4 @@
-//! Native window-mode verification used by the Windows installer build.
+//! Встроенная проверка оконного режима, используемая сборкой установщика Windows.
 use tauri::Manager;
 pub fn start(handle: &tauri::AppHandle, report: std::path::PathBuf) {
     let handle = handle.clone();

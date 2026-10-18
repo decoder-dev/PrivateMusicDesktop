@@ -2,11 +2,11 @@ import { own } from "./store.js";
 import { h } from "./dom.js";
 
 /**
- * A list that only keeps the rows on screen in the DOM, so a library of tens
- * of thousands of tracks scrolls as smoothly as ten.
+ * Список, который в DOM сохраняет на экране только строки, поэтому библиотека из десятков тысяч треков
+ * прокручивается так же плавно, как десять.
  *
- * `renderRow(item, index)` returns the row element. Clicks are handled by one
- * delegated listener; rows carry `data-index`.
+ * `renderRow(item, index)` возвращает элемент строки. Клики обрабатываются одним делегированным
+ * прослушивателем; строки содержат `data-index`.
  */
 export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
   const spacer = h("div", { class: "spacer" });
@@ -19,8 +19,8 @@ export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
 
   function render() {
     scheduled = false;
-    // A list that is not on screen (display: none) draws nothing; the
-    // ResizeObserver below redraws it the moment it becomes visible.
+    // Список, которого нет на экране (отображение: нет), ничего не рисует; ResizeObserver ниже
+    // перерисовывает его в тот момент, когда он становится видимым.
     if (!root.offsetParent) return;
     const viewport = root.clientHeight || 600;
     const offset = header?.offsetHeight ?? 0;
@@ -72,11 +72,11 @@ export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
     setItems(next) {
       items = next;
       render();
-      // Empty/loading panels can hide and reveal the list in the same frame.
-      // ResizeObserver coalesces that change, so it may never report it.
+      // Панели пустого списка и загрузки могут скрыть и снова показать список за один кадр.
+      // ResizeObserver объединяет такие изменения и может не уведомить о них.
       if (!root.offsetParent) schedule();
     },
-    /** Re-renders visible rows (selection or data changed). */
+    /** Повторно отображает видимые строки (выбор или данные изменены). */
     refresh: render,
     scrollToTop() {
       root.scrollTop = 0;

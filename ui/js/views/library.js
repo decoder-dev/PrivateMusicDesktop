@@ -16,7 +16,7 @@ export function createLibraryView({ play, onTrackAction, toast }) {
       emptyText: t("library.empty"),
       onPlay: play,
       onAction: onTrackAction,
-      pinLiked: false, // everything here is liked; the heart shows on hover only
+      pinLiked: false, // здесь все нравится; сердце отображается только при наведении
       onRetry: () => { loaded = false; loading = false; load(); },
     },
   });
@@ -38,7 +38,7 @@ export function createLibraryView({ play, onTrackAction, toast }) {
       const all = await loadAllPages((offset, count) => api.library(offset, count), {
         isCancelled: () => mine !== generation,
         onProgress: (n, total, items) => {
-          // Show the first page at once; later pages extend the same list.
+          // Показать первую страницу сразу; последующие страницы расширяют тот же список.
           if (mine === generation) screen.setProgress(items.slice(), total);
         },
       });

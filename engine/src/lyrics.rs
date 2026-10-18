@@ -1,10 +1,10 @@
-//! Song lyrics, time-synced when a source has them.
+//! Тексты песен синхронизируются по времени, если они есть у источника.
 //!
-//! Sources, in order: LRCLIB (public, matches artist, title and duration, and
-//! has timestamps), then VK's own text for the track's `lyrics_id` (plain),
-//! then whatever plain text LRCLIB had. A synced result is trusted only when
-//! the recording's length agrees: an edit or a live take shares the words but
-//! not the timeline.
+//! Источники по порядку: LRCLIB (публичный, соответствует исполнителю, названию и продолжительности,
+//! имеет метки времени), затем собственный текст VK для `lyrics_id` трека (обычный), затем любой
+//! простой текст, который был у LRCLIB. Синхронизированному результату можно доверять только в том
+//! случае, если длина записи совпадает: при редактировании или живом дублировании используются слова,
+//! но не временная шкала.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -18,7 +18,7 @@ use crate::{Error, Result};
 
 pub const LRCLIB_BASE: &str = "https://lrclib.net/";
 pub const GENIUS_BASE: &str = "https://genius.com/";
-/// How far the recording's length may differ from the lyrics' timeline.
+/// Насколько продолжительность записи может отличаться от временной шкалы текста.
 const SYNC_TOLERANCE_SECONDS: f64 = 3.0;
 const MAX_BODY: u64 = 2 * 1024 * 1024;
 const GENIUS_BODY_LIMIT: u64 = 2 * 1024 * 1024;
@@ -33,13 +33,13 @@ pub struct Line {
 pub struct Lyrics {
     pub source: String,
     pub text: String,
-    /// Empty when the lyrics are not synced.
+    /// Пусто, если тексты песен не синхронизированы.
     pub lines: Vec<Line>,
 }
 
-/// Parses LRC: `[mm:ss.xx] words`, several stamps per line allowed, `[ar:…]`
-/// style tags ignored. Result is sorted by time; empty lyric lines are kept
-/// (they are the instrumental gaps) but a leading run of them is dropped.
+/// Разбирает LRC: `[mm:ss.xx] words`, допускается несколько штампов в строке, теги стиля `[ar:…]`
+/// игнорируются. Результат сортируется по времени; пустые лирические строки сохранены (это
+/// инструментальные пробелы), но основная их часть опущена.
 pub fn parse_lrc(raw: &str) -> Vec<Line> {
     let mut lines = Vec::new();
     for source in raw.lines() {
@@ -49,7 +49,7 @@ pub fn parse_lrc(raw: &str) -> Vec<Line> {
             let Some(end) = stripped.find(']') else { break };
             match parse_stamp(&stripped[..end]) {
                 Some(time) => stamps.push(time),
-                None if stamps.is_empty() => break, // a tag such as [ar:Name]
+                None if stamps.is_empty() => break, // тег, например [ar:Name]
                 None => {}
             }
             rest = stripped[end + 1..].trim_start();
@@ -76,9 +76,9 @@ fn parse_stamp(text: &str) -> Option<f64> {
     Some(f64::from(minutes) * 60.0 + seconds)
 }
 
-/// Lower-case words of a title, without "(…)"/"[…]" parts, a " - Remastered"
-/// style suffix or a "feat." tail. Punctuation inside the title is kept as a
-/// word break: "Mr. Brightside" is "mr brightside", not "mr".
+/// Слова заголовка в нижнем регистре, без частей "(…)"/"[…]", суффикса стиля " - Remastered" или хвоста
+/// "feat.". Пунктуация внутри заголовка сохраняется в виде разрыва слов: "Mr. Brightside" — это "mr
+/// brightside", а не "mr".
 fn normalize(text: &str) -> String {
     let mut plain = String::new();
     let mut depth = 0u32;
@@ -115,7 +115,7 @@ fn artists(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// How well a candidate fits the track: `None` when it is a different song.
+/// Насколько хорошо кандидат соответствует треку: `None`, когда это другая песня.
 fn score(track: &Track, candidate: &Candidate) -> Option<u32> {
     let wanted = normalize(&track.title);
     let found = normalize(candidate.track_name.as_deref().unwrap_or(""));
@@ -171,7 +171,7 @@ fn best(track: &Track, candidates: Vec<Candidate>) -> Option<Lyrics> {
             Some((fit, gap, c))
         })
         .collect();
-    // Best fit first; among equals the one whose length is closest.
+    // Лучше всего подходит в первую очередь; среди равных тот, длина которого ближе всего.
     ranked.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.total_cmp(&b.1)));
     let (_, gap, chosen) = ranked.into_iter().next()?;
     let synced = chosen.synced_lyrics.as_deref().map(parse_lrc).unwrap_or_default();
@@ -200,9 +200,9 @@ pub struct LrcLib {
     base: Url,
 }
 
-/// Public Genius fallback. Search results are accepted only when both the
-/// title and lead artist match the requested track; URLs are restricted to
-/// `genius.com` and redirects are disabled.
+/// Запасной вариант Public Genius. Результаты поиска принимаются только в том случае, если название и
+/// ведущий исполнитель соответствуют запрошенному треку; URLs ограничены `genius.com`, а
+/// перенаправления отключены.
 pub struct GeniusLyrics {
     http: Arc<Pool>,
     base: Url,
@@ -213,7 +213,8 @@ impl GeniusLyrics {
         Self::with_base(GENIUS_BASE)
     }
 
-    /// https only; plain http for a loopback host so tests can use a local server.
+    /// только https; простой http для хоста обратной связи, чтобы тесты могли использовать локальный
+    /// сервер.
     pub fn with_base(base: &str) -> Result<Self> {
         let base = Url::parse(base).map_err(|_| Error::InvalidRequest)?;
         let loopback = matches!(base.host_str(), Some("127.0.0.1" | "localhost"));
@@ -273,10 +274,10 @@ impl GeniusLyrics {
     }
 }
 
-/// One GET against an optional source (lyrics, covers): if the connection is
-/// bad, the pool is rebuilt and the request made once more after a short
-/// pause. A source that is still down after that is simply skipped by the
-/// caller; nothing here is ever worth more than two quick tries.
+/// Один GET против дополнительного источника (тексты песен, каверы): если соединение плохое, пул
+/// перестраивается и запрос делается еще раз после небольшой паузы. Источник, который после этого все
+/// еще недоступен, просто пропускается вызывающей стороной; ничто здесь не стоит больше, чем две
+/// быстрые попытки.
 fn soft_get<T>(pool: &Pool, source: &str, attempt: impl Fn(&reqwest::blocking::Client) -> Result<T>) -> Result<T> {
     match attempt(&pool.get()) {
         Err(error) if net::is_connectivity(&error) => {
@@ -362,8 +363,8 @@ fn same_artist(wanted: &str, found: &str) -> bool {
 }
 
 fn extract_genius_lyrics(html: &str) -> Option<String> {
-    // A legacy outer wrapper can contain contributor/translation headers as
-    // well as the real containers. Prefer the explicit lyric blocks.
+    // Устаревшая внешняя оболочка может содержать заголовки contributor/translation, а также настоящие
+    // контейнеры. Предпочитайте явные лирические блоки.
     extract_genius_blocks(html, true).or_else(|| extract_genius_blocks(html, false))
 }
 
@@ -461,7 +462,8 @@ impl LrcLib {
         Self::with_base(LRCLIB_BASE)
     }
 
-    /// https only; plain http for a loopback host so tests can use a local server.
+    /// только https; простой http для хоста обратной связи, чтобы тесты могли использовать локальный
+    /// сервер.
     pub fn with_base(base: &str) -> Result<Self> {
         let base = Url::parse(base).map_err(|_| Error::InvalidRequest)?;
         let loopback = matches!(base.host_str(), Some("127.0.0.1" | "localhost"));
@@ -473,7 +475,8 @@ impl LrcLib {
                 .connect_timeout(Duration::from_secs(6))
                 .timeout(Duration::from_secs(10))
                 .pool_idle_timeout(Duration::from_secs(20))
-                // A fixed host: nothing it says may send us elsewhere.
+                // Фиксированный хост: ничто из того, что он говорит, не может отправить нас куда-либо
+                // еще.
                 .redirect(reqwest::redirect::Policy::none())
                 .user_agent("PrivateMusicDesktop (https://github.com/decoder-dev/PrivateMusicDesktop)")
                 .build()
@@ -507,11 +510,10 @@ impl LrcLib {
         serde_json::from_slice::<Candidate>(&body).map(|c| Some(vec![c])).map_err(|_| Error::Format("lyrics response".into()))
     }
 
-    /// `Ok(None)` when LRCLIB has nothing that fits this track. A 404 or an
-    /// empty list is "nothing"; any other failure is an error only when no
-    /// query found text. A query that fails with an HTTP status does not stop
-    /// the next one; a transport failure (offline, timeout) concerns the host
-    /// and ends the lookup at once.
+    /// `Ok(None)`, когда у LRCLIB нет ничего подходящего для этого трека. Ошибка 404 или пустой список
+    /// — это "nothing"; любой другой сбой является ошибкой только в том случае, если ни один запрос не
+    /// нашел текст. Запрос, который завершился неудачей со статусом HTTP, не останавливает следующий;
+    /// сбой транспорта (оффлайн, тайм-аут) касается хоста и немедленно прекращает поиск.
     pub fn lookup(&self, track: &Track) -> Result<Option<Lyrics>> {
         if track.title.trim().is_empty() {
             return Ok(None);
@@ -523,8 +525,8 @@ impl LrcLib {
                 Ok(None) => {}
                 Ok(Some(found)) => {
                     let Some(lyrics) = best(track, found) else { continue };
-                    // Timed lyrics end the search; a plain result is kept in
-                    // case no query finds better.
+                    // Синхронизированные тексты завершают поиск; простой результат сохраняется на
+                    // случай, если ни один запрос не найдет лучшего.
                     if !lyrics.lines.is_empty() {
                         return Ok(Some(lyrics));
                     }
@@ -552,11 +554,10 @@ impl LrcLib {
 
 type Query = (&'static str, Vec<(&'static str, String)>);
 
-/// What to ask LRCLIB, in order: the exact record (artist, title, length),
-/// then searches by the title as given, and by the title cleaned of
-/// "(speed up)", "[Live]", "feat. X" and the like, with and without the lead
-/// artist. Candidates are matched locally, so a loose query cannot return a
-/// different song.
+/// Что спрашивать у LRCLIB, по порядку: точную запись (исполнитель, название, длина), затем поиск по
+/// названию как задано, и по названию очищенное от "(speed up)", "[Live]", "feat. X" и т.п., с ведущим
+/// исполнителем и без него. Кандидаты сопоставляются локально, поэтому свободный запрос не может
+/// вернуть другую песню.
 fn lookup_queries(track: &Track) -> Vec<Query> {
     let mut queries: Vec<Query> = Vec::new();
     if track.duration > 0 {
@@ -591,7 +592,7 @@ fn find_chars(haystack: &[char], marker: &str) -> Option<usize> {
 }
 
 fn lower_chars(text: &str) -> Vec<char> {
-    // One char per char, so positions in the result are positions in `text`.
+    // Один символ на символ, поэтому позиции в результате — это позиции в `text`.
     text.chars().map(|c| c.to_lowercase().next().unwrap_or(c)).collect()
 }
 
@@ -600,8 +601,8 @@ const SUFFIX_MARKERS: [&str; 15] = [
     "instrumental", "radio", "ремикс", "версия",
 ];
 
-/// The title as people say it: without "(…)"/"[…]" parts, a "- Remastered"
-/// style tail or a "feat." tail. Case and letters are kept.
+/// Название так, как его называют люди: без деталей "(…)"/"[…]", хвост в стиле "- Remastered" или хвост
+/// "feat.". Дело и буквы сохранены.
 fn display_title(text: &str) -> String {
     let mut plain = String::new();
     let mut depth = 0u32;
@@ -632,7 +633,7 @@ fn display_title(text: &str) -> String {
     chars[..cut].iter().collect::<String>().split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// First of several credited artists: "A, B feat. C" is "A".
+/// Первый из нескольких признанных исполнителей: "A, B feat. C" — "A".
 fn lead_artist(text: &str) -> String {
     let lowered = lower_chars(text);
     let chars: Vec<char> = text.chars().collect();
@@ -646,8 +647,7 @@ fn lead_artist(text: &str) -> String {
     if lead.is_empty() { text.trim().to_string() } else { lead }
 }
 
-/// Short, secret-free description of a failure for the log: the source and
-/// the kind or status, never a URL.
+/// Краткое, не секретное описание сбоя в журнале: источник, тип или статус, но не URL.
 pub fn describe(source: &str, error: &Error) -> String {
     match error {
         Error::Timeout => format!("{source}: timeout"),
@@ -736,7 +736,7 @@ mod tests {
         assert!(score(&t, &candidate("Niman & Other", "это ЛЮБОВЬ - Remastered", 200.0, Some("x"), None)).is_some());
         assert!(score(&t, &candidate("Другой", "Это любовь", 200.0, Some("x"), None)).is_none());
         assert!(score(&t, &candidate("Скриптонит", "Совсем другая песня", 200.0, Some("x"), None)).is_none());
-        // Exact beats partial.
+        // Точные удары частичные.
         let exact = score(&t, &candidate("Скриптонит", "Это любовь", 200.0, Some("x"), None)).unwrap();
         let partial = score(&t, &candidate("Скриптонит", "Это любовь (live)", 200.0, Some("x"), None));
         assert!(partial.is_none_or(|p| p <= exact));
@@ -780,7 +780,7 @@ mod tests {
         let queries = lookup_queries(&t);
         assert_eq!(queries[0].0, "api/get");
         assert!(queries.iter().any(|(p, q)| *p == "api/search" && q.len() == 1 && q[0].1 == "Дорога в ад"));
-        // No duplicate queries for a plain title.
+        // Никаких повторяющихся запросов для простого заголовка.
         let plain = lookup_queries(&track("A", "B", 0));
         assert_eq!(plain.len(), 2, "{plain:?}");
     }

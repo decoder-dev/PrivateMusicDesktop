@@ -1,8 +1,8 @@
 name: Release
 
-# Builds the installers and publishes them as a GitHub release, either from a
-# pushed tag (v0.2.0) or by running the workflow by hand with the tag name:
-# then the tag is created on the commit the run is for.
+# Собирает установщики и публикует их как выпуск GitHub либо из отправленного тега (v0.2.0), либо путем
+# запуска рабочего процесса вручную с именем тега: затем тег создается в фиксации, для которой
+# предназначен запуск.
 on:
   push:
     tags: ["v*"]
@@ -73,10 +73,10 @@ jobs:
       - name: Build
         shell: bash
         working-directory: src-tauri
-        # The npm package ships a prebuilt CLI: no ten-minute `cargo install`.
+        # В пакет npm входит готовый CLI: никакого десятиминутного `cargo install`.
         run: npx --yes @tauri-apps/cli@2 build --bundles ${{ matrix.bundles }} ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
 
-      # The VK sign-in window must load on every system, from the real build.
+      # Окно входа VK должно загружаться в каждой системе, начиная с реальной сборки.
       - name: Sign-in window loads (Linux, macOS)
         if: runner.os != 'Windows'
         shell: bash
@@ -104,7 +104,7 @@ jobs:
         shell: pwsh
         run: scripts\smoke-window.ps1 -Binary 'target\release\private-music-desktop.exe'
 
-      # An update installs over the old version and must keep the sign-in and data.
+      # Обновление устанавливается поверх старой версии и должно сохранить данные для входа и данные.
       - name: Installing over the last release keeps the sign-in (Windows)
         if: runner.os == 'Windows'
         shell: pwsh

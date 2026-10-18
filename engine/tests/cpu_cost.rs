@@ -1,6 +1,6 @@
-//! How much processor the player burns while a track plays. A music player
-//! should be nearly idle: the work is one decode pass per few hundred
-//! milliseconds of audio and a handful of wake-ups per second.
+//! Сколько процессора сжигает плеер при воспроизведении трека. Музыкальный проигрыватель должен почти
+//! бездействовать: работа состоит из одного прохода декодирования на несколько сотен миллисекунд звука
+//! и нескольких пробуждений в секунду.
 
 #![cfg(target_os = "linux")]
 
@@ -12,23 +12,23 @@ use std::time::{Duration, Instant};
 use common::*;
 use pm_engine::audio::{PlayerEvent, PlayerHandle, SimulatedSink, Sink};
 
-/// utime + stime of this process, in seconds.
+/// utime + время этого процесса в секундах.
 fn process_cpu_seconds() -> f64 {
     let stat = std::fs::read_to_string("/proc/self/stat").unwrap();
     let after_comm = &stat[stat.rfind(')').unwrap() + 2..];
     let fields: Vec<&str> = after_comm.split_whitespace().collect();
     let ticks: f64 = fields[11].parse::<f64>().unwrap() + fields[12].parse::<f64>().unwrap();
-    ticks / 100.0 // _SC_CLK_TCK is 100 on Linux
+    ticks / 100.0 // _SC_CLK_TCK — 100 в Linux.
 }
 
-/// Voluntary context switches of every thread: one per wake-up from sleep.
+/// Добровольное переключение контекста каждого потока: одно при выходе из сна.
 fn wakeups() -> u64 {
     let mut total = 0;
     for task in std::fs::read_dir("/proc/self/task").unwrap().flatten() {
         let status = std::fs::read_to_string(task.path().join("status")).unwrap_or_default();
         let name = status.lines().next().unwrap_or("");
-        // Only the player's own threads; the test harness and the HTTP
-        // server thread are not part of the cost being measured.
+        // Только собственные темы игрока; тестовый пакет и серверный поток HTTP не ​​являются частью
+        // измеряемой стоимости.
         if !(name.contains("pm-audio") || name.contains("pm-decode") || name.contains("pm-fetch")) {
             continue;
         }
@@ -67,7 +67,8 @@ fn playing_a_track_in_real_time_is_nearly_free() {
         assert!(wait.elapsed() < Duration::from_secs(10));
         std::thread::sleep(Duration::from_millis(5));
     }
-    // Let startup work (download, probe) settle, then measure steady playback.
+    // Дайте стабилизироваться при запуске (загрузка, проверка), затем измерьте устойчивое
+    // воспроизведение.
     std::thread::sleep(Duration::from_secs(2));
     let cpu_before = process_cpu_seconds();
     let wake_before = wakeups();
@@ -84,13 +85,14 @@ fn playing_a_track_in_real_time_is_nearly_free() {
         thread_count()
     );
     assert!(wake_rate < 40.0, "the player thread wakes {wake_rate:.0} times per second");
-    // Debug build, so generous: an optimised build is several times cheaper.
+    // Отладочная сборка такая щедрая: оптимизированная сборка стоит в несколько раз дешевле.
     assert!(share < 0.05, "playback uses {:.1}% of a core", share * 100.0);
     drop(player);
 }
 
-/// The network watcher only looks while audio plays or the window is focused:
-/// each look is three UDP `connect`s (nothing is sent), and idle it never wakes.
+/// Наблюдатель за сетью смотрит только во время воспроизведения звука или во время фокусировки окна:
+/// каждый просмотр состоит из трех UDP `connect` (ничего не отправляется), и в режиме ожидания он
+/// никогда не просыпается.
 #[test]
 fn the_network_watcher_costs_nothing_idle_and_next_to_nothing_while_playing() {
     use pm_engine::net::{MonitorConfig, NetworkMonitor, SystemAddresses};
@@ -110,8 +112,8 @@ fn the_network_watcher_costs_nothing_idle_and_next_to_nothing_while_playing() {
         total
     }
 
-    /// utime + stime of the watcher thread alone (the other test in this
-    /// binary plays audio at the same time).
+    /// utime + stime только потока-наблюдателя (другой тест в этом двоичном файле одновременно
+    /// воспроизводит звук).
     fn watcher_cpu_seconds() -> f64 {
         let mut ticks = 0.0;
         for task in std::fs::read_dir("/proc/self/task").unwrap().flatten() {
@@ -126,7 +128,7 @@ fn the_network_watcher_costs_nothing_idle_and_next_to_nothing_while_playing() {
         ticks / 100.0
     }
 
-    // One look per second: eight times the real rate (8 s), so the cost is visible.
+    // Один просмотр в секунду: в восемь раз больше реальной ставки (8 с), поэтому стоимость видна.
     let config = MonitorConfig { poll: Duration::from_secs(1), confirm: Duration::from_millis(500) };
     let monitor = NetworkMonitor::spawn(Arc::new(SystemAddresses), config, |_| {});
     std::thread::sleep(Duration::from_millis(300));
@@ -143,8 +145,8 @@ fn the_network_watcher_costs_nothing_idle_and_next_to_nothing_while_playing() {
     let rate = (watcher_wakeups() - wake_before) as f64 / seconds;
     println!("network watcher at one look per second: {:.4} % of one core, {rate:.2} wake-ups/s (real rate is 8x lower)", share * 100.0);
     assert!(share < 0.005, "{:.3} %", share * 100.0);
-    // Each of the three UDP route probes can itself yield to the kernel in
-    // WSL/virtual machines. Those context switches are not extra polling.
+    // Каждый из трех зондов маршрута UDP сам может передаваться ядру WSL/виртуальных машин. Эти
+    // переключения контекста не являются дополнительным опросом.
     assert!(rate < 8.0, "{rate:.2} context switches/s");
     monitor.set_playing(false);
 }

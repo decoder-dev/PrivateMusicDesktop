@@ -1,6 +1,6 @@
-// Draws the spectrum on a canvas. The engine sends about 30 pictures a second
-// only while the full-screen view is open; between them the last one is held,
-// and when playback stops the bars sink on their own.
+// Рисует спектр на холсте. Движок отправляет около 30 картинок в секунду только тогда, когда открыт
+// полноэкранный режим; между ними удерживается последний, а при остановке воспроизведения такты
+// опускаются сами.
 
 export const MODES = ["bars", "mirror", "wave", "radial", "off"];
 
@@ -12,7 +12,7 @@ function channels(hex) {
   return [1, 3, 5].map((i) => parseInt(value.slice(i, i + 2), 16));
 }
 
-/** Fit every radial stroke inside the cover's reserved stage, including its cap. */
+/** Установите каждый радиальный штрих внутрь зарезервированной части крышки, включая ее колпачок. */
 export function radialGeometry(spot, width, height, count) {
   if (!spot || !Number.isFinite(spot.radius) || spot.radius <= 0 || count <= 0) return null;
   const b=spot.bounds ?? {left:0,top:0,right:width,bottom:height};
@@ -30,7 +30,7 @@ export function createVisualizer(canvas) {
   let colors = ["#3385fa", "#1a6be0"];
   let bands = [];
   let target = [];
-  let anchor = () => null; // centre and size of the cover, for the radial mode
+  let anchor = () => null; // центр и размер крышки, для радиального режима
   let running = false;
   let frame = 0;
   let width = 0;
@@ -104,7 +104,7 @@ export function createVisualizer(canvas) {
       context.globalAlpha = 1;
     } else if (mode === "radial") {
       const spot = anchor() ?? { x: width / 2, y: height / 2, radius: Math.min(width, height) * 0.2 };
-      const total = count * 2; // mirrored left/right so the ring is symmetric
+      const total = count * 2; // зеркально отразил left/right, чтобы кольцо было симметричным
       const geometry=radialGeometry(spot,width,height,count);
       if (!geometry) return;
       const {inner,reach,line}=geometry;
@@ -131,7 +131,7 @@ export function createVisualizer(canvas) {
     frame = 0;
     if (!running) return;
     let moving = false;
-    // Without fresh data (paused, stopped) the bars settle to zero.
+    // Без свежих данных (приостановлено, остановлено) столбцы обнуляются.
     bands = bands.map((value, i) => {
       const goal = target[i] ?? 0;
       if (value === goal) return value;
@@ -152,13 +152,13 @@ export function createVisualizer(canvas) {
     setMode(next) { mode = MODES.includes(next) ? next : "bars"; paint(); },
     setColors(primary, secondary) { colors = [primary, secondary]; paint(); },
     setAnchor(fn) { anchor = fn; },
-    /** A fresh picture from the engine: drawn right away. */
+    /** Свежая картинка с движка: нарисовано сразу. */
     feed(levels) {
       target = levels.slice(0,128).map(value => Number.isFinite(value) ? Math.max(0,Math.min(1,value)) : 0);
       bands = target.slice();
       paint();
     },
-    /** Playback stopped: let the bars sink instead of freezing. */
+    /** Воспроизведение остановлено: пусть полоски осядут, а не замерзнут. */
     settle() {
       target = target.map(() => 0);
       if (running && !frame) frame = requestAnimationFrame(tick);

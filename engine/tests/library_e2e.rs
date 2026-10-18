@@ -1,5 +1,5 @@
-//! Adding to and removing from "My music": the right parameters, the user's
-//! copy comes back, and a change is never sent twice.
+//! Добавление и удаление из «Моя музыка»: правильные параметры, пользовательская копия возвращается, а
+//! изменение никогда не отправляется дважды.
 
 mod common;
 

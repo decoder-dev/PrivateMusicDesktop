@@ -1,4 +1,4 @@
-/** Parse a VK playlist locator; never fetch an arbitrary pasted URL. */
+/** Разобрать локатор плейлиста VK; никогда не извлекайте произвольный вставленный URL. */
 export function playlistLink(raw) {
   const text=String(raw).trim();
   if (!text || text.length > 2048) throw new Error("invalid playlist link");

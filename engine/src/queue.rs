@@ -1,9 +1,8 @@
-//! The play queue: order, shuffle, repeat.
+//! Очередь воспроизведения: порядок, перемешивание, повтор.
 //!
-//! `tracks` is the list as the user sees it; `order` is the play order (the
-//! identity, or a shuffle that always keeps the current track first). Track
-//! identity is `Track::id()`, not position, so edits never lose the current
-//! track.
+//! `tracks` — список, каким его видит пользователь; `order` — это порядок воспроизведения (идентичность
+//! или перемешивание, при котором текущая дорожка всегда остается первой). Идентификатор трека —
+//! `Track::id()`, а не позиция, поэтому при редактировании текущий трек никогда не теряется.
 
 use rand::seq::SliceRandom;
 use rand::Rng;
@@ -58,7 +57,7 @@ impl Queue {
         self.repeat = repeat;
     }
 
-    /// Index into `tracks()` of the current track.
+    /// Индекс `tracks()` текущего трека.
     pub fn current_index(&self) -> Option<usize> {
         self.cursor.and_then(|c| self.order.get(c)).copied()
     }
@@ -67,8 +66,8 @@ impl Queue {
         self.current_index().and_then(|i| self.tracks.get(i))
     }
 
-    /// Replaces the queue and starts at `start`. With shuffle on, the chosen
-    /// track plays first and the rest follow in random order.
+    /// Заменяет очередь и начинается с `start`. При включенном случайном порядке выбранный трек
+    /// воспроизводится первым, а остальные следуют в случайном порядке.
     pub fn replace<R: Rng>(&mut self, tracks: Vec<Track>, start: usize, rng: &mut R) {
         self.tracks = tracks;
         if self.tracks.is_empty() {
@@ -102,9 +101,9 @@ impl Queue {
         }
     }
 
-    /// The track after the current one. `auto` is true when the previous
-    /// track ended by itself (repeat-one then repeats it); a Next press
-    /// passes false. `None` means the queue is over.
+    /// Трек после текущего. `auto` имеет значение true, когда предыдущая дорожка закончилась сама по
+    /// себе (повторение одной дорожки затем повторяет ее); Следующее нажатие пропускает ложь. `None`
+    /// означает, что очередь закончилась.
     pub fn advance(&mut self, auto: bool) -> Option<&Track> {
         let cursor = self.cursor?;
         if auto && self.repeat == Repeat::One {
@@ -131,14 +130,14 @@ impl Queue {
         self.current()
     }
 
-    /// Jumps to a position in `tracks()`.
+    /// Переходит на позицию в `tracks()`.
     pub fn jump(&mut self, index: usize) -> Option<&Track> {
         let cursor = self.order.iter().position(|i| *i == index)?;
         self.cursor = Some(cursor);
         self.current()
     }
 
-    /// Inserts right after the current track.
+    /// Вставляется сразу после текущей дорожки.
     pub fn play_next(&mut self, track: Track) {
         let Some(cursor) = self.cursor else {
             self.tracks.push(track);
@@ -159,7 +158,7 @@ impl Queue {
         }
     }
 
-    /// Tracks still to come after the current one, in play order.
+    /// Треки, которые будут следовать после текущего, в порядке воспроизведения.
     pub fn upcoming(&self) -> usize {
         match self.cursor {
             Some(cursor) => self.order.len().saturating_sub(cursor + 1),
@@ -167,10 +166,10 @@ impl Queue {
         }
     }
 
-    /// Appends tracks the queue does not hold yet (by track id), at most
-    /// `room` of them, to the end of the play order. Returns what was added.
-    /// An empty queue takes nothing: an endless source must not revive a
-    /// queue the user has emptied.
+    /// Добавляет треки, которые еще не имеются в очереди (по идентификатору трека), не более `room` из
+    /// них, в конец порядка воспроизведения. Возвращает то, что было добавлено. Пустая очередь ничего
+    /// не требует: бесконечный источник не должен восстанавливать очередь, которую очистил
+    /// пользователь.
     pub fn append_unique(&mut self, tracks: Vec<Track>, room: usize) -> Vec<Track> {
         if self.cursor.is_none() {
             return Vec::new();
@@ -190,18 +189,18 @@ impl Queue {
         added
     }
 
-    /// True when the current track is the last one in play order.
+    /// Истинно, если текущая дорожка является последней в порядке воспроизведения.
     pub fn at_last(&self) -> bool {
         self.cursor.is_some_and(|c| c + 1 == self.order.len())
     }
 
-    /// Makes the first track in play order current (repeat-all wrap).
+    /// Делает первый трек в порядке воспроизведения текущим (перенос с повторением всех).
     pub fn rewind(&mut self) {
         self.cursor = if self.order.is_empty() { None } else { Some(0) };
     }
 
-    /// Removes a track by `tracks()` index. Returns true when it was the
-    /// current one (the caller must start the next track or stop).
+    /// Удаляет трек по индексу `tracks()`. Возвращает true, если это была текущая дорожка (вызывающая
+    /// сторона должна начать следующую дорожку или остановиться).
     pub fn remove(&mut self, index: usize) -> bool {
         if index >= self.tracks.len() {
             return false;
@@ -225,16 +224,16 @@ impl Queue {
             if position < cursor {
                 self.cursor = Some(cursor - 1);
             } else if position == cursor && cursor >= self.order.len() {
-                // The current track was the last: the cursor now points at the
-                // new last one, and `was_current` tells the caller to stop.
+                // Текущая дорожка была последней: курсор теперь указывает на новую последнюю дорожку, и
+                // `was_current` приказывает вызывающему объекту остановиться.
                 self.cursor = Some(self.order.len() - 1);
             }
         }
         was_current
     }
 
-    /// Swaps in a refreshed copy of a track (new stream URL) everywhere it
-    /// appears. Position and order are untouched.
+    /// Заменяет обновленную копию трека (новый поток URL) везде, где он появляется. Позиция и порядок
+    /// не тронуты.
     pub fn replace_track(&mut self, fresh: &Track) {
         let id = fresh.id();
         for slot in self.tracks.iter_mut().filter(|t| t.id() == id) {
@@ -246,7 +245,7 @@ impl Queue {
         *self = Self { shuffle: self.shuffle, repeat: self.repeat, ..Self::default() };
     }
 
-    /// Remove only tracks still to come, keeping history and the current item.
+    /// Удалите только предстоящие треки, сохранив историю и текущий элемент.
     pub fn clear_upcoming(&mut self) {
         let Some(cursor) = self.cursor else { return };
         let mut remove = self.order[cursor + 1..].to_vec();
@@ -254,8 +253,8 @@ impl Queue {
         for index in remove { self.remove(index); }
     }
 
-    /// Reorder upcoming tracks by their displayed indices. Neither played
-    /// tracks nor the current one may be moved, including under shuffle.
+    /// Измените порядок предстоящих треков по отображаемым индексам. Ни проигрываемые треки, ни текущий
+    /// нельзя перемещать, в том числе в случайном порядке.
     pub fn move_upcoming(&mut self, from: usize, to: usize) -> bool {
         let Some(cursor) = self.cursor else { return false };
         let (Some(a), Some(b)) = (self.order.iter().position(|i| *i == from), self.order.iter().position(|i| *i == to)) else { return false };

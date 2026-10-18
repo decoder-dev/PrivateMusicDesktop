@@ -1,6 +1,5 @@
-// Tiny DOM builder. Text is always set with textContent / setAttribute, never
-// with innerHTML: titles, artists and playlist names come from VK and are not
-// trusted.
+// Крошечный строитель DOM. Текст всегда задается с помощью textContent/setAttribute, но никогда с
+// помощью innerHTML: названия, исполнители и имена плейлистов берутся из VK и не заслуживают доверия.
 
 export function h(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
@@ -31,7 +30,7 @@ export function formatTime(seconds) {
   return hours > 0 ? `${hours}:${String(minutes).padStart(2, "0")}:${secs}` : `${minutes}:${secs}`;
 }
 
-/** Lower-case, ё→е, for forgiving local filtering. */
+/** Строчная буква ё→е, позволяющая исключить локальную фильтрацию. */
 export function fold(text) {
   return String(text ?? "").toLowerCase().replaceAll("ё", "е");
 }

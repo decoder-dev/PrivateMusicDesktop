@@ -1,9 +1,10 @@
-//! A ten-band graphic equaliser on the device's audio, before the volume.
+//! Десятиполосный эквалайзер обрабатывает звук перед регулировкой громкости.
 //!
-//! Peaking biquads (RBJ cookbook) at the usual octave centres. A boost would
-//! clip loud music, so the whole signal is lowered by the largest boost
-//! (preamp). A linked stereo peak guard handles transients; retuning crossfades
-//! complete filter banks instead of abruptly resetting their coefficients.
+//! Используются параметрические фильтры второго порядка по формулам RBJ.
+//! Перекрытие полос учитывается при подборе коэффициентов. Предусиление оставляет
+//! запас по максимальному подъёму частот, а общий для стереоканалов ограничитель
+//! защищает от кратковременных пиков. При смене настроек выполняется плавный
+//! переход между наборами фильтров, без резкого сброса коэффициентов.
 
 pub const BANDS: [f32; 10] = [31.0, 62.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0];
 pub const MAX_GAIN_DB: f32 = 12.0;
@@ -19,7 +20,7 @@ struct Coefficients {
 }
 
 impl Coefficients {
-    /// Gain in dB at `hz`.
+    /// Прибыль в dB на `hz`.
     fn response_db(&self, rate: f64, hz: f64) -> f64 {
         let w = 2.0 * std::f64::consts::PI * hz / rate;
         let (c1, s1, c2, s2) = (w.cos(), w.sin(), (2.0 * w).cos(), (2.0 * w).sin());
@@ -56,7 +57,7 @@ struct State {
 
 pub struct Equalizer {
     filters: Vec<Coefficients>,
-    /// One state per band per channel.
+    /// Одно состояние на полосу на канал.
     states: Vec<State>,
     channels: usize,
     preamp: f32,
@@ -69,7 +70,7 @@ pub struct Equalizer {
 }
 
 impl Equalizer {
-    /// `None` when every gain is (about) zero: nothing to do.
+    /// `None`, когда каждый выигрыш равен (около) нулю: делать нечего.
     pub fn new(gains_db: &[f32; 10], rate: u32, channels: usize) -> Option<Self> {
         let gains: Vec<f32> =
             gains_db.iter().map(|g| if g.is_finite() { g.clamp(-MAX_GAIN_DB, MAX_GAIN_DB) } else { 0.0 }).collect();
@@ -83,9 +84,9 @@ impl Equalizer {
             .filter(|(centre, _)| f64::from(**centre) < rate_f / 2.0 * 0.9)
             .map(|(centre, gain)| (f64::from(*centre), f64::from(*gain)))
             .collect();
-        // Neighbouring bands overlap, so their boosts and cuts add up. Adjust
-        // the filter gains until the combined curve passes through what the
-        // user set at every band centre (a few rounds are plenty).
+        // Соседние полосы перекрываются, поэтому их усиление и понижение суммируются. Регулируйте
+        // усиление фильтра до тех пор, пока объединенная кривая не пройдет через то, что пользователь
+        // установил в центре каждой полосы (несколько раундов будет достаточно).
         let mut applied: Vec<f64> = usable.iter().map(|(_, g)| *g).collect();
         let build = |applied: &[f64]| -> Vec<Coefficients> {
             usable.iter().zip(applied).map(|((centre, _), g)| Coefficients::peaking(rate_f, *centre, *g)).collect()
@@ -99,9 +100,9 @@ impl Equalizer {
             }
         }
         let filters = build(&applied);
-        // Lower everything by the loudest point of the curve, so no boost clips.
+        // Опустите все в самой громкой точке кривой, чтобы не было скачков усиления.
         let peak = (0..1025)
-            .map(|i| 10.0 * (rate_f * 0.049).powf(f64::from(i) / 1024.0)) // 10 Hz … 98% of Nyquist
+            .map(|i| 10.0 * (rate_f * 0.049).powf(f64::from(i) / 1024.0)) // 10 Гц… 98% Найквиста
             .filter(|hz| *hz < rate_f / 2.0)
             .map(|hz| total(&filters, hz))
             .fold(0.0f64, f64::max);
@@ -120,7 +121,7 @@ impl Equalizer {
         })
     }
 
-    /// Crossfade over 30 ms, including enabling and bypassing the equalizer.
+    /// Кроссфейд более 30 мс, включая включение и обход эквалайзера.
     pub fn transition(previous: Option<Self>, gains: Option<&[f32; 10]>, rate: u32, channels: usize) -> Option<Self> {
         if rate == 0 || channels == 0 {
             return None;
@@ -145,7 +146,7 @@ impl Equalizer {
         let mut next = next.unwrap_or_else(identity);
         let mut old = previous.unwrap_or_else(identity);
         next.limiter_gain = old.limiter_gain;
-        old.previous = None; // rapid retunes cannot accumulate filter banks
+        old.previous = None; // быстрые перенастройки не могут накапливать банки фильтров
         next.fade_frames = (rate as usize * 30 / 1000).max(1);
         next.fade_remaining = next.fade_frames;
         next.previous = Some(Box::new(old));
@@ -178,7 +179,7 @@ impl Equalizer {
         }
     }
 
-    /// Filters interleaved samples without allocation in the audio path.
+    /// Фильтрует чередующиеся сэмплы без распределения по аудиотракту.
     pub fn process(&mut self, samples: &mut [f32]) {
         for frame in samples.chunks_exact_mut(self.channels) {
             let mix = 1.0 - self.fade_remaining as f32 / self.fade_frames as f32;
@@ -224,7 +225,7 @@ mod tests {
             .collect()
     }
 
-    /// Gain in dB of the equaliser at `hz`, measured on the settled half.
+    /// Прирост dB эквалайзера на `hz`, измеренный на расчетной половине.
     fn response(gains: [f32; 10], hz: f32) -> f32 {
         let rate = 48_000;
         let mut eq = Equalizer::new(&gains, rate, 2).unwrap();
@@ -237,13 +238,13 @@ mod tests {
 
     #[test]
     fn the_curve_passes_through_the_settings_even_when_bands_overlap() {
-        // All bands down 6 dB: about 6 dB quieter everywhere, not 10.
+        // На всех диапазонах ниже 6 dB: везде тише примерно на 6 dB, а не на 10.
         for hz in [62.0, 250.0, 1000.0, 4000.0] {
             let got = response([-6.0; 10], hz);
             assert!((got + 6.0).abs() < 1.0, "{hz} Hz: {got:.1} dB");
         }
-        // A smile: low and high up, middle flat; after the preamp the middle
-        // sits the boost below the ends.
+        // Улыбка: низкая и высокая, средняя плоская; после предусилителя середина находится под
+        // усилением ниже концов.
         let smile = [8.0, 6.0, 3.0, 0.0, 0.0, 0.0, 0.0, 3.0, 6.0, 8.0];
         let (low, mid) = (response(smile, 31.0), response(smile, 1000.0));
         assert!((low - mid - 8.0).abs() < 1.5, "low {low:.1} mid {mid:.1}");
@@ -286,7 +287,7 @@ mod tests {
     #[test]
     fn bands_above_the_rate_limit_are_skipped() {
         let mut gains = [0.0; 10];
-        gains[9] = 6.0; // 16 kHz cannot be filtered at 22.05 kHz
+        gains[9] = 6.0; // 16 kHz не может быть отфильтрован в 22.05 kHz
         let mut eq = Equalizer::new(&gains, 22_050, 1).unwrap();
         let mut samples = vec![0.1f32; 1000];
         eq.process(&mut samples);

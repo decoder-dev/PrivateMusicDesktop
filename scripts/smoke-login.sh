@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Starts the built app in its CI smoke mode: it opens the VK sign-in window
-# exactly as the button does and quits once VK's page has loaded. Fails when
-# the page never loads (as WebView2 did when the window came from a
-# synchronous command). Usage: scripts/smoke-login.sh <path to the app binary>
+# Проверяет настоящее окно входа VK в собранном приложении и завершает его
+# после загрузки страницы. Если страница не появилась, проверка завершается ошибкой.
+# Так обнаруживается, например, блокировка WebView2 при синхронном открытии окна.
+# Запуск: scripts/smoke-login.sh <путь к исполняемому файлу приложения>
 set -euo pipefail
 binary="$1"
 report="$(mktemp -d)/smoke.txt"
@@ -11,7 +11,7 @@ case "$(uname -s)" in
   Linux) runner=(dbus-run-session -- xvfb-run -a) ;;
   *) runner=() ;;
 esac
-# macOS has no `timeout`, so a background watchdog stops a hung app.
+# У macOS нет `timeout`, поэтому фоновый сторожевой таймер останавливает зависшее приложение.
 set +e
 "${runner[@]+"${runner[@]}"}" "$binary" &
 app=$!

@@ -1,5 +1,5 @@
-// Small shared building blocks: artwork with a placeholder, search field,
-// slider fill, status/skeleton states, segmented control, hero header.
+// Небольшие общие строительные блоки: графическое изображение с заполнителем, поле поиска, заливка
+// ползунка, состояния status/skeleton, сегментированный элемент управления, главный заголовок.
 
 import { h } from "./dom.js";
 import { icon, illustration } from "./icons.js";
@@ -8,9 +8,9 @@ import { coverPalette } from "./palette.js";
 import { decorateStatus } from "./network.js";
 
 /**
- * Artwork. The placeholder (accent gradient and a glyph) sits behind the image,
- * so a missing, slow or broken cover never leaves an empty square. No fade: the
- * lists that use it recreate their rows while scrolling.
+ * Произведение искусства. Заполнитель (градиент акцента и глиф) находится позади изображения, поэтому
+ * отсутствующая, медленная или сломанная обложка никогда не оставляет пустого квадрата. Нет затухания:
+ * списки, которые его используют, воссоздают свои строки при прокрутке.
  */
 export function artBox(url, { glyph = "note", size = 18, className = "", eager = false } = {}) {
   const box = h("span", { class: `art-box${className ? ` ${className}` : ""}` }, h("span", { class: "art-ph" }, icon(glyph, size)));
@@ -23,9 +23,8 @@ export function artBox(url, { glyph = "note", size = 18, className = "", eager =
 }
 
 /**
- * Puts a new cover in `slot` only once it has decoded, so the old cover stays
- * until then (no flash of the placeholder between tracks). `current` tells
- * whether the request is still the latest.
+ * Помещает новую обложку в `slot` только после ее декодирования, поэтому старая обложка остается до
+ * тех пор (без мигания заполнителя между треками). `current` сообщает, является ли запрос последним.
  */
 export function swapArt(slot, url, options, current) {
   const next = artBox(url, { ...options, eager: true });
@@ -34,7 +33,7 @@ export function swapArt(slot, url, options, current) {
   image.decode().catch(() => {}).finally(() => { if (current()) slot.replaceChildren(next); });
 }
 
-/** A search field with a leading glyph and a clear button. Returns { element, input }. */
+/** Поле поиска с ведущим глифом и кнопкой очистки. Возвращает {элемент, ввод}. */
 export function searchField({ placeholder, label, className = "", ...handlers }) {
   const input = h("input", { class: "field", type: "search", placeholder, "aria-label": label ?? placeholder, ...handlers });
   const clear = h("button", { class: "clear", type: "button", hidden: true, title: t("field.clear"), "aria-label": t("field.clear"),
@@ -45,12 +44,12 @@ export function searchField({ placeholder, label, className = "", ...handlers })
   return { element, input, sync };
 }
 
-/** Keeps the filled part of a slider's track in step with its value. */
+/** Сохраняет заполненную часть дорожки ползунка в соответствии с его значением. */
 export function syncRange(input) {
   const min = Number(input.min || 0);
   const max = Number(input.max || 100);
   const share = max > min ? ((Number(input.value) - min) / (max - min)) * 100 : 0;
-  input.style.setProperty("--fill", `${Math.max(0, Math.min(100, share))}%`); // CSSOM: allowed under the CSP
+  input.style.setProperty("--fill", `${Math.max(0, Math.min(100, share))}%`); // CSSOM: разрешено под номером CSP.
 }
 
 export function bindRange(input) {
@@ -75,9 +74,9 @@ function skeleton(kind) {
 }
 
 /**
- * The one way a screen shows "loading", an error or an empty note in its status
- * element: loading becomes a static skeleton (the text stays for screen
- * readers), anything else a status panel. Empty text hides the element.
+ * В одном случае на экране отображается "loading", ошибка или пустое примечание в элементе состояния:
+ * загрузка становится статическим скелетом (текст остается для программ чтения с экрана), все
+ * остальное - панелью состояния. Пустой текст скрывает элемент.
  */
 export function paintStatus(element, text, { error = false, kind = "rows", extra = "", art = null } = {}) {
   if (!text) {
@@ -96,11 +95,14 @@ export function paintStatus(element, text, { error = false, kind = "rows", extra
   element.removeAttribute("aria-busy");
   element.className = `status${error ? " error" : ""}${extra ? ` ${extra}` : ""}`;
   fillPanel(element, text, error ? "error" : art);
-  // A failed connection gets the VPN hint and a retry (see network.js).
+  // Неудачное соединение получает подсказку VPN и повторную попытку (см. network.js).
   if (error) decorateStatus(element, text);
 }
 
-/** Sets a panel's text, with the small illustration above it when the panel is a real one (not an inline line). */
+/**
+ * Устанавливает текст панели с небольшой иллюстрацией над ним, если панель настоящая (а не встроенная
+ * строка).
+ */
 export function fillPanel(element, text, art) {
   const panel = !/\b(inline|progress|radio-note)\b/.test(element.className);
   if (panel && art !== false) {
@@ -114,8 +116,8 @@ export function fillPanel(element, text, art) {
 }
 
 /**
- * Makes `.tabs` a segmented control whose thumb slides under the selected
- * button. The selection is read from aria-selected whenever it changes.
+ * Делает `.tabs` сегментированным элементом управления, большой палец которого перемещается под
+ * выбранную кнопку. Выбор считывается из aria-selected всякий раз, когда он изменяется.
  */
 export function watchSegmented(tabs) {
   const place = () => {
@@ -123,7 +125,7 @@ export function watchSegmented(tabs) {
     if (!selected || !selected.offsetWidth) return;
     tabs.style.setProperty("--seg-x", `${selected.offsetLeft}px`);
     tabs.style.setProperty("--seg-w", `${selected.offsetWidth}px`);
-    // The first placement must not slide in from nowhere.
+    // Первое размещение не должно появляться из ниоткуда.
     requestAnimationFrame(() => tabs.classList.add("ready"));
   };
   new MutationObserver(place).observe(tabs, { attributes: true, attributeFilter: ["aria-selected"], subtree: true });
@@ -133,8 +135,8 @@ export function watchSegmented(tabs) {
 }
 
 /**
- * A header with a hero card, for pages about one thing (artist, album,
- * playlist, friend): back button above, then art, text and actions.
+ * Заголовок с карточкой героя для страниц об одном (исполнитель, альбом, плейлист, друг): кнопка
+ * «Назад» вверху, затем рисунок, текст и действия.
  */
 export function pageHero({ back, art, body, actions }) {
   return h("header", { class: "view-header page-head" },
@@ -146,7 +148,7 @@ export function backButton(label, onclick) {
   return h("button", { class: "icon-btn back circle-btn", type: "button", title: label, "aria-label": label, onclick }, icon("back", 18));
 }
 
-/** Toggles a hairline under the header once the content below has scrolled. */
+/** Переключает линию волос под заголовком после прокрутки содержимого ниже. */
 export function headerOnScroll(header, scroller) {
   let frame = 0;
   scroller.addEventListener("scroll", () => {
@@ -159,10 +161,9 @@ export function headerOnScroll(header, scroller) {
 }
 
 /**
- * Colour ambience behind a hero header: two soft radial washes from the cover's
- * palette (the engine already extracts it), drawn as gradients, so there is no
- * blur and no raster to repaint. Without a cover, or when the palette cannot be
- * read, the header simply stays plain.
+ * Цветовая атмосфера за заголовком героя: два мягких радиальных оттенка из палитры обложки (движок уже
+ * извлекает их), нарисованные в виде градиентов, поэтому нет размытия и растра, который нужно
+ * перерисовывать. Без обложки или когда палитра не читается, заголовок просто остается простым.
  */
 export async function setAmbience(header, url) {
   const token = (header._ambience = (header._ambience ?? 0) + 1);

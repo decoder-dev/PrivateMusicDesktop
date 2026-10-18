@@ -1,4 +1,4 @@
-//! The window's entire view of the engine: thin, validated wrappers.
+//! Весь вид движка из окна: тонкие, проверенные обертки.
 
 use pm_engine::app::{RadioSource, SessionState};
 use pm_engine::controller::State;
@@ -25,7 +25,7 @@ impl From<Error> for CommandError {
 
 type CommandResult<T> = Result<T, CommandError>;
 
-/// Network calls block, so they run off the UI/IPC thread.
+/// Сетевые вызовы блокируются, поэтому они выполняются из потока UI/IPC.
 async fn blocking<T: Send + 'static>(work: impl FnOnce() -> Result<T, Error> + Send + 'static) -> CommandResult<T> {
     match tauri::async_runtime::spawn_blocking(work).await {
         Ok(result) => result.map_err(CommandError::from),
@@ -33,15 +33,15 @@ async fn blocking<T: Send + 'static>(work: impl FnOnce() -> Result<T, Error> + S
     }
 }
 
-// Controller operations can briefly wait on engine locks. Keep them off the
-// native window thread, including Pause/Next during recovery.
+// Операции контроллера могут ненадолго подождать блокировки двигателя. Держите их подальше от
+// собственного потока окна, включая Pause/Next во время восстановления.
 async fn control(state: TauriState<'_, AppState>, work: impl FnOnce(&pm_engine::controller::Controller) + Send + 'static) -> CommandResult<()> {
     let app = state.app.clone();
     blocking(move || { work(app.controller()); Ok(()) }).await
 }
 
-/// Upper bound for a queue handed over by the window; a runaway caller cannot
-/// make the engine hold millions of tracks.
+/// Верхняя граница очереди, переданной окном; неуправляемый абонент не может заставить движок хранить
+/// миллионы треков.
 const MAX_QUEUE: usize = 20_000;
 
 fn checked_queue(tracks: Vec<Track>) -> CommandResult<Vec<Track>> {
@@ -64,8 +64,8 @@ pub async fn profile(state: TauriState<'_, AppState>) -> CommandResult<Profile> 
 }
 
 #[tauri::command]
-// Async on purpose: on Windows, creating a window from a synchronous command
-// deadlocks WebView2 (the window opens but its page never loads).
+// Специальная асинхронность: в Windows создание окна из синхронной команды приводит к взаимоблокировке
+// WebView2 (окно открывается, но его страница никогда не загружается).
 pub async fn login_start(handle: AppHandle, state: TauriState<'_, AppState>) -> CommandResult<()> {
     crate::login::start(&handle, &state).map_err(|message| CommandError { kind: "login".into(), message })
 }
@@ -209,7 +209,7 @@ pub async fn artwork_palette(url: String) -> CommandResult<pm_engine::artwork::P
     blocking(move || pm_engine::artwork::palette_from_url(&url)).await
 }
 
-/// Full-screen for the whole window (the UI's own "full screen" view is separate).
+/// Полноэкранный режим для всего окна (собственный вид "full screen" у UI отдельный).
 #[tauri::command]
 pub fn set_fullscreen(window: tauri::WebviewWindow, on: bool) -> CommandResult<()> {
     window.set_fullscreen(on).map_err(|e| CommandError { kind: "window".into(), message: e.to_string() })
@@ -238,21 +238,21 @@ pub fn set_close_to_tray(state: TauriState<'_, AppState>, on: bool) {
     state.close_to_tray.store(on, std::sync::atomic::Ordering::Relaxed);
 }
 
-/// The window gained or lost the user's attention: the engine watches the
-/// network (cheaply) only while it has it or while audio plays.
+/// Окно привлекало или теряло внимание пользователя: движок наблюдает за сетью (дешево) только пока она
+/// у нее есть или пока воспроизводится звук.
 #[tauri::command]
 pub fn network_focus(state: TauriState<'_, AppState>, focused: bool) {
     state.app.set_window_focused(focused);
 }
 
-/// "Retry" after a connection failure: drop pooled connections and look at
-/// the network now. The window then repeats the failed load itself.
+/// «Повторить» после сбоя соединения: удалите соединения из пула и посмотрите на сеть сейчас. Затем окно
+/// повторяет саму неудачную загрузку.
 #[tauri::command]
 pub fn network_check(state: TauriState<'_, AppState>) {
     state.app.check_network();
 }
 
-/// "Retry" for playback that stopped on a connection problem.
+/// «Повторить» для воспроизведения, остановленного из-за проблемы с подключением.
 #[tauri::command]
 pub async fn retry_playback(state: TauriState<'_, AppState>) -> CommandResult<()> {
     let app = state.app.clone();
@@ -262,7 +262,7 @@ pub async fn retry_playback(state: TauriState<'_, AppState>) -> CommandResult<()
 #[derive(Serialize)]
 pub struct AppInfo {
     version: String,
-    /// False when the desktop has no tray: "close to tray" cannot work there.
+    /// Ложь, если на рабочем столе нет лотка: "close to tray" не может там работать.
     has_tray: bool,
 }
 
@@ -274,13 +274,13 @@ pub fn app_info(handle: AppHandle, state: TauriState<'_, AppState>) -> AppInfo {
     }
 }
 
-/// Sound outputs, default first. Asking the audio system can take a moment.
+/// Звуковые выходы, по умолчанию в первую очередь. Запрос аудиосистемы может занять некоторое время.
 #[tauri::command]
 pub async fn output_devices() -> Vec<String> {
     tauri::async_runtime::spawn_blocking(pm_engine::audio::output_devices).await.unwrap_or_default()
 }
 
-/// `None` follows the system default. Playback continues on the new output.
+/// `None` соответствует системному значению по умолчанию. Воспроизведение продолжится на новом выходе.
 #[tauri::command]
 pub async fn set_output_device(state: TauriState<'_, AppState>, name: Option<String>) -> CommandResult<()> {
     if name.as_ref().is_some_and(|n| n.is_empty() || n.len() > 512) {
@@ -297,9 +297,9 @@ pub async fn set_output_device(state: TauriState<'_, AppState>, name: Option<Str
 }
 
 #[tauri::command]
-pub async fn mix(state: TauriState<'_, AppState>, options: Option<String>) -> CommandResult<Vec<Track>> {
+pub async fn mix(state: TauriState<'_, AppState>, options: Option<String>, offset: Option<u32>) -> CommandResult<Vec<Track>> {
     let app = state.app.clone();
-    blocking(move || app.mix_with_options(options.as_deref())).await
+    blocking(move || app.stream_mix_at("common", options.as_deref(), offset.unwrap_or(0))).await
 }
 
 #[tauri::command]
@@ -315,9 +315,9 @@ pub async fn catalog_mixes(state: TauriState<'_, AppState>) -> CommandResult<Vec
 }
 
 #[tauri::command]
-pub async fn stream_mix(state: TauriState<'_, AppState>, mix_id: String, options: Option<String>) -> CommandResult<Vec<Track>> {
+pub async fn stream_mix(state: TauriState<'_, AppState>, mix_id: String, options: Option<String>, offset: Option<u32>) -> CommandResult<Vec<Track>> {
     let app = state.app.clone();
-    blocking(move || app.stream_mix(&mix_id, options.as_deref())).await
+    blocking(move || app.stream_mix_at(&mix_id, options.as_deref(), offset.unwrap_or(0))).await
 }
 
 #[tauri::command]
@@ -326,12 +326,13 @@ pub async fn new_releases(state: TauriState<'_, AppState>) -> CommandResult<Vec<
     blocking(move || app.new_releases()).await
 }
 
-/// Plays a queue that keeps refilling from the mix, stream or seed it came from.
+/// Воспроизводит очередь, которая продолжает пополняться из микса, потока или начального числа, из
+/// которого она пришла.
 #[tauri::command]
-pub async fn play_radio(state: TauriState<'_, AppState>, source: RadioSource, tracks: Vec<Track>, index: usize) -> CommandResult<()> {
+pub async fn play_radio(state: TauriState<'_, AppState>, source: RadioSource, tracks: Vec<Track>, index: usize, next_offset: Option<u32>) -> CommandResult<()> {
     let tracks = checked_queue(tracks)?;
     let app = state.app.clone();
-    blocking(move || app.play_radio(source, tracks, index)).await
+    blocking(move || app.play_radio_from(source, tracks, index, next_offset)).await
 }
 
 #[tauri::command]
@@ -346,7 +347,7 @@ pub async fn similar(state: TauriState<'_, AppState>, track: Track) -> CommandRe
     blocking(move || app.similar(&track)).await
 }
 
-/// Equaliser gains in dB for the ten bands; `None` turns it off.
+/// Усиление эквалайзера dB для десяти полос; `None` выключает его.
 #[tauri::command]
 pub fn set_equalizer(state: TauriState<'_, AppState>, gains: Option<[f32; 10]>) {
     state.app.controller().set_equalizer(gains);
@@ -370,7 +371,7 @@ pub async fn download(state: TauriState<'_, AppState>, track: Track) -> CommandR
     blocking(move || app.download(&track).map(|d| d.track)).await
 }
 
-/// `track_id` is "owner_trackid", as the window knows it.
+/// `track_id` — это "owner_trackid", как его знает окно.
 #[tauri::command]
 pub async fn remove_download(state: TauriState<'_, AppState>, track_id: String) -> CommandResult<bool> {
     if track_id.len() > 64 || !track_id.chars().all(|c| c.is_ascii_digit() || c == '_' || c == '-') { return Err(Error::InvalidRequest.into()); }
@@ -413,8 +414,8 @@ pub async fn remove_from_playlist(state: TauriState<'_, AppState>, playlist: Pla
     blocking(move || app.remove_from_playlist(&playlist, &track)).await
 }
 
-// Artist and album pages. Ids, offsets and the album locator are checked by
-// the engine before anything reaches VK.
+// Страницы исполнителя и альбома. Идентификаторы, смещения и локатор альбома проверяются движком,
+// прежде чем что-либо достигнет VK.
 
 #[tauri::command]
 pub async fn search_artists(state: TauriState<'_, AppState>, query: String, offset: u32, count: u32) -> CommandResult<Vec<Artist>> {
@@ -474,7 +475,7 @@ pub async fn follow_album(state: TauriState<'_, AppState>, album: Album, follow:
     blocking(move || app.follow_album(&album, follow)).await
 }
 
-// Friends' music.
+// Музыка друзей.
 
 #[tauri::command]
 pub async fn friends(state: TauriState<'_, AppState>, offset: u32, count: u32) -> CommandResult<Page<Profile>> {
@@ -494,7 +495,7 @@ pub async fn friend_playlists(state: TauriState<'_, AppState>, owner_id: i64, of
     blocking(move || app.friend_playlists(owner_id, offset, count)).await
 }
 
-// Listening history and statistics: local to this computer.
+// История прослушивания и статистика: локально для этого компьютера.
 
 #[tauri::command]
 pub async fn history(state: TauriState<'_, AppState>) -> CommandResult<Vec<HistoryEntry>> {
@@ -527,7 +528,7 @@ pub async fn reset_listening_stats(state: TauriState<'_, AppState>) -> CommandRe
     blocking(move || { app.reset_listening_stats(); Ok(()) }).await
 }
 
-/// The window's UTC offset in minutes east, so hours follow the user's clock.
+/// Смещение UTC окна в минутах на восток, поэтому часы следуют за часами пользователя.
 #[tauri::command]
 pub async fn set_utc_offset(state: TauriState<'_, AppState>, minutes: i32) -> CommandResult<()> {
     let app = state.app.clone();
@@ -569,7 +570,7 @@ pub async fn export_track(handle: AppHandle, state: TauriState<'_, AppState>, tr
         let Some(target) = handle.dialog().file().set_file_name(format!("{title}.{extension}"))
             .add_filter("Audio", &[extension]).blocking_save_file() else { return Ok(false) };
         let target = target.into_path().map_err(|_| Error::InvalidRequest)?;
-        // The destination comes only from the native save dialog.
+        // Пункт назначения указывается только в собственном диалоговом окне сохранения.
         if target != source {
             std::fs::copy(source, target).map_err(|e| Error::Stream(format!("saving audio: {e}")))?;
         }
@@ -583,7 +584,7 @@ pub async fn playlist_by_id(state: TauriState<'_, AppState>, album: Album) -> Co
     blocking(move || app.playlist_by_id(&album)).await
 }
 
-/// Fixed normal preset, desktop maximization, or borderless fullscreen.
+/// Исправлены обычные настройки, максимизация рабочего стола или полноэкранный режим без полей.
 #[tauri::command]
 pub fn set_window_mode(window: tauri::WebviewWindow, mode: String) -> CommandResult<()> {
     let apply = || -> tauri::Result<()> {

@@ -1,4 +1,4 @@
-// Which tracks are on this computer, for the download buttons everywhere.
+// Какие треки есть на этом компьютере, везде кнопки скачать.
 
 import { api, trackKey } from "./api.js";
 import { publish } from "./store.js";
@@ -24,12 +24,12 @@ export async function refreshDownloads() {
     keys.clear();
     for (const track of tracks) keys.add(trackKey(track));
   } catch {
-    // Downloads unavailable: everything shows as not downloaded.
+    // Загрузки недоступны: все отображается как не загруженное.
   }
   publish("downloads");
 }
 
-/** Resolves to "added" / "removed"; rejects with the API error. */
+/** Разрешается как "added" / "removed"; отклоняется с ошибкой API. */
 export async function toggleDownload(track) {
   const key = trackKey(track);
   if (pending.has(key)) return null;
@@ -54,7 +54,7 @@ export function formatSize(value) {
   return `${Math.max(1, Math.round(value / 1024))} ${t("unit.kb")}`;
 }
 
-/** Downloads one item at a time; cancellation stops scheduling new requests. */
+/** Загружает по одному элементу за раз; отмена останавливает планирование новых запросов. */
 export async function downloadAll(items, { isCancelled = () => false, onProgress = () => {} } = {}) {
   if (job?.running) return null;
   const unique = [...new Map(items.map(track => [trackKey(track),track])).values()].slice(0,20000);

@@ -1,14 +1,14 @@
-// Injected into the page before the UI loads. It stands in for the Tauri
-// backend: a library of 1234 tracks, playlists, search, and a player that
-// behaves like the real controller closely enough to drive the UI.
+// Внедряется на страницу до загрузки UI. Он заменяет бэкэнд Tauri: библиотеку из 1234 треков,
+// плейлистов, поиска и проигрывателя, который ведет себя как настоящий контроллер, достаточно близко
+// для управления UI.
 (() => {
   const calls = [];
   const handlers = new Map();
   const delay = (ms) => new Promise((r) => setTimeout(r, ms));
   const config = window.__mockConfig || {};
 
-  // Artists are linked by id, except every 13th track (named only, found by
-  // name); every 10th+4 has a guest too. Even tracks name their album.
+  // Исполнители связаны по id, кроме каждого 13-го трека (только по названию, найден по названию); у
+  // каждого 10+4 тоже есть гость. Даже треки называют свой альбом.
   const artistsOf = (n) => {
     if (n % 13 === 0) return [];
     const main = { id: `art${n % 13}`, name: `Исполнитель ${n % 13}` };
@@ -43,8 +43,8 @@
   ];
   const playlistTracks = new Map();
 
-  // Friends: Анна has music and playlists, Борис keeps his audio private (VK
-  // answers with an error), Ёлка has nothing. `friendsTotal` makes a long list.
+  // Друзья: У Анны есть музыка и плейлисты, Борис хранит аудио в тайне (VK отвечает с ошибкой), у Ёлки
+  // ничего нет. `friendsTotal` составляет длинный список.
   const friends = config.friendsTotal
     ? Array.from({ length: config.friendsTotal }, (_, i) => ({ id: 100 + i, first_name: `Друг${i + 1}`, last_name: "Тестов", photo_url: null }))
     : [
@@ -60,7 +60,7 @@
   ];
   const privateAudio = () => ({ kind: "vk", message: "VK error 201: Access denied: user hid his audio" });
 
-  // Listening history and statistics, as the engine would answer them.
+  // Прослушиваем историю и статистику, как на них ответит движок.
   const history = (config.history ?? []).map((n) => ({ track: makeTrack(n, { title: `Из истории ${n}` }), played_at: 1_772_620_200 - n }));
   const statsMonths = { "2026-03": { plays: 40, seconds: 5400 + 25, peak: 19, weekday: 3, days: 6 }, "2026-02": { plays: 25, seconds: 1800, peak: 8, weekday: 1, days: 3 } };
   const statsFor = (scope, choice) => {
@@ -165,8 +165,8 @@
     play_tracks: ({ tracks, index }) => {
       state.queue = tracks; state.player.queue_index = index; state.player.radio = null; startCurrent(); emitQueue(); emitState();
     },
-    // A queue that refills itself: the engine's own rules are tested in Rust,
-    // here the window only has to ask for it and show that it is a mix.
+    // Очередь, которая пополняется сама собой: на Rust тестируются собственные правила движка, тут
+    // окошку остаётся только запросить и показать, что это микс.
     play_radio: ({ source, tracks, index }) => {
       if (config.radioFails) throw { kind: "invalid", message: "Invalid request." };
       state.queue = tracks; state.player.queue_index = index; state.player.radio = source.kind; startCurrent(); emitQueue(); emitState();
@@ -331,7 +331,7 @@
     album_tracks: async ({ album, offset, count }) => {
       await delay(10);
       if (config.albumDenied) throw { kind: "vk", message: "VK error 15: Could not load this album's tracks." };
-      // Like the engine: a missing key is found, and VK describes the album.
+      // Как и движок: найден недостающий ключ, и VK описывает альбом.
       const described = { ...album, access_key: album.access_key ?? "resolved", count: 12, year: album.year ?? 2020,
         is_followed: state.followedAlbums.some((a) => sameAlbum(a, album)) };
       const tracks = Array.from({ length: 12 }, (_, i) => makeTrack(20000 + album.album_id * 100 + i, { title: `${album.title}: песня ${i + 1}` }));

@@ -1,19 +1,19 @@
-// What is in "My music", for the hearts everywhere. A track added from search
-// gets a new id in the library, so the copy is remembered under the key of the
-// track it came from, and either one shows as liked.
+// Что есть в «Моя музыка», для сердец повсюду. Трек, добавленный из поиска, получает новый идентификатор
+// в библиотеке, поэтому копия запоминается под ключом трека, из которого она взята, и любой из них
+// отображается как понравившийся.
 
 import { api, trackKey } from "./api.js";
 import { publish, own } from "./store.js";
 
-const inLibrary = new Map(); // key of a library track -> the track
-const copies = new Map(); // key of the source track -> its library copy
+const inLibrary = new Map(); // клавиша библиотечного трека -> трек
+const copies = new Map(); // тональность исходного трека -> его библиотечная копия
 const pending = new Map();
 let epoch = 0;
 const listeners = new Set();
-/** Until the library is loaded a heart cannot know whether a click adds a duplicate. */
+/** Пока библиотека не загружена, сердце не может знать, добавляет ли щелчок дубликат. */
 let known = false;
 
-/** The library view reports what it loaded. */
+/** Представление библиотеки сообщает, что оно загрузило. */
 export function setLibrary(tracks) {
   inLibrary.clear();
   for (const track of tracks) inLibrary.set(trackKey(track), track);
@@ -39,13 +39,13 @@ function libraryCopy(track) {
 export const isLiked = (track) => !!track && libraryCopy(track) !== null;
 export const isBusy = (track) => !known || (!!track && pending.has(trackKey(track)));
 
-/** `listener({ added } | { removed })` — the library view keeps its list in step. */
+/** `listener({ added } | { removed })` — представление библиотеки сохраняет свой список в порядке. */
 export function onLibraryChange(listener) {
   listeners.add(listener);
   return own(() => listeners.delete(listener));
 }
 
-/** Adds or removes; resolves to "added" / "removed", rejects with the API error. */
+/** Добавляет или удаляет; разрешается в "added"/"removed", отклоняется с ошибкой API. */
 export async function toggleLike(track) {
   const key = trackKey(track);
   if (!known || pending.has(key)) return null;

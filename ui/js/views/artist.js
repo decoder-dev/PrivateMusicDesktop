@@ -10,14 +10,14 @@ import { openAlbum } from "../navigation.js";
 
 const TRACKS = 50;
 const ALBUMS = 30;
-// Popular tracks show this many rows; the rest scroll inside the list.
+// В популярных треках показано такое количество строк; остальные прокручиваются внутри списка.
 const VISIBLE_ROWS = 8;
 
 /**
- * An artist: photo and name, popular tracks (playable, the visible list is
- * the queue) and the albums grid. Opened with `{ id, name }`; without an id
- * the artist is looked up by name, and if VK knows no such artist the page
- * shows plain search results for the name, as the iOS app does.
+ * Исполнитель: фото и имя, популярные треки (воспроизводимые, видимый список — очередь) и сетка
+ * альбомов. Открыт с помощью `{ id, name }`; без идентификатора артист ищется по имени, и если VK не
+ * ​​знает такого исполнителя, на странице отображаются простые результаты поиска по имени, как это
+ * делает приложение iOS.
  */
 export function createArtistView({ play, onTrackAction, toast, back }) {
   let current = null; // { id, name } as opened
@@ -58,9 +58,9 @@ export function createArtistView({ play, onTrackAction, toast, back }) {
   const element = h("section", { class: "view artist-view" }, head, scroller);
   headerOnScroll(head, scroller);
 
-  // Popular tracks have their own bounded scroller; album cards use the
-  // surrounding page scroller. Fetch another page only when the relevant
-  // viewport approaches its end.
+  // Популярные треки имеют собственный ограниченный скроллер; В карточках альбомов используется
+  // окружающая прокрутка страниц. Вызовите другую страницу только тогда, когда соответствующая область
+  // просмотра приближается к концу.
   tracks.list.element.addEventListener("scroll", () => {
     const el = tracks.list.element;
     if (el.scrollTop + el.clientHeight > el.scrollHeight - ROW_HEIGHT * 2) loadMoreTracks();
@@ -136,8 +136,8 @@ export function createArtistView({ play, onTrackAction, toast, back }) {
       if (id) {
         const result = await api.artistAlbums(id, 0, ALBUMS);
         if (mine !== generation) return;
-        // The catalogue names the artist with a photo; keep the name the
-        // user clicked if it gave none.
+        // В каталоге указан художник с фотографией; сохраните имя, на которое нажал пользователь, если
+        // оно не дало ни одного.
         if (result.artist) renderHeader({ ...result.artist, name: result.artist.name || current.name });
         albums = result.albums.items;
         albumNextOffset = result.albums.next_offset;
@@ -178,7 +178,7 @@ export function createArtistView({ play, onTrackAction, toast, back }) {
 
   async function open(artist) {
     const key = artist.id ? `id:${artist.id}` : `name:${artist.name}`;
-    if (key === loadedKey) return; // back to the page as it was
+    if (key === loadedKey) return; // вернуться на страницу, как это было
     loadedKey = key;
     current = artist;
     const mine = ++generation;

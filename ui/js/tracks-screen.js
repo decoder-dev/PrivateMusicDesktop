@@ -12,22 +12,20 @@ import { openArtistOf } from "./navigation.js";
 import { artBox, paintStatus, pageHero, searchField, headerOnScroll, setAmbience, fillPanel } from "./ui-parts.js";
 
 /**
- * The common screen for every list of tracks: header, optional filter,
- * status line and a virtual list.
+ * Общий экран для каждого списка треков: заголовок, дополнительный фильтр, строка состояния и
+ * виртуальный список.
  *
- * hooks:
- *   onPlay(visibleTracks, index, { shuffle })
- *   onAction(action, track, index)      hover buttons
- *   rowActions                           [[icon, action, label], …] or undefined for the default pair
- *   isSelected(track, index)             default: the playing track
- *   onRetry()                            a "try again" button under an error
- *   back, headerExtra                    elements for the header
+ * хуки: onPlay(visibleTracks, index, { shuffle }) onAction(action, track, index) кнопки наведения
+ * rowActions [[icon, action, label], …] или undefined для пары по умолчанию isSelected(track, index)
+ * по умолчанию: воспроизводимая дорожка onRetry() кнопка "try again" под ошибкой назад, элементы
+ * headerExtra для заголовок
  *
- * `heading` is the title's tag: "h2" when the list is a part of a page.
- * `hero` (with `kicker`) turns the header into a hero card with cover art.
- * `playable: false` leaves the Play and Shuffle buttons out.
+ * `heading` — это тег заголовка: "h2", если список является частью страницы. `hero` (вместе с
+ * `kicker`) превращает заголовок в карточку героя с обложкой. `playable: false` оставляет кнопки
+ * «Воспроизвести» и «Перемешать» отключенными.
  */
-// The track menu every list uses unless a screen brings its own (set by main).
+// Меню трека используется каждым списком, если только на экране нет собственного (устанавливается
+// основным).
 addStrings({ ru: { "batch.download": "Скачать все", "batch.cancel": "Остановить ({done}/{total})", "batch.done": "Обработано: {done}. Ошибок: {failed}" }, en: { "batch.download": "Download all", "batch.cancel": "Stop ({done}/{total})", "batch.done": "Processed: {done}. Failed: {failed}" } });
 let defaultMenu = null;
 export function setDefaultTrackMenu(fn) { defaultMenu = fn; }
@@ -128,16 +126,16 @@ export function createTracksScreen({ title, filterable = false, playable = true,
 
   const element = h("section", { class: "view" }, header, status, empty, list.element);
 
-  function applyFilter() {
+  function applyFilter({ reset = true } = {}) {
     visible = query
       ? all.filter((track) => fold(track.title).includes(query) || fold(track.artist).includes(query))
       : all;
     list.setItems(visible);
-    list.scrollToTop();
+    if (reset) list.scrollToTop();
     renderEmpty();
   }
 
-  /** Panels replace the (empty) list; the list is shown again once there is something to list. */
+  /** Панели заменяют (пустой) список; список отображается снова, как только есть что перечислить. */
   function renderState() {
     const panel = (!status.hidden && !status.classList.contains("progress")) || !empty.hidden;
     list.element.parentElement?.classList.toggle("state-on", panel);
@@ -147,12 +145,12 @@ export function createTracksScreen({ title, filterable = false, playable = true,
     const show = visible.length === 0 && !status.textContent;
     empty.hidden = !show;
     if (show) fillPanel(empty, all.length === 0 ? (hooks.emptyText ?? "") : t("library.noMatches"), all.length === 0 ? hooks.art : "search");
-    // No dead buttons: with nothing to play they are not shown at all.
+    // Никаких мертвых кнопок: когда не во что играть, они вообще не отображаются.
     for (const button of [playButton, shuffleButton, batchButton]) if (button) button.hidden = visible.length === 0;
     renderState();
   }
 
-  // Keep the "playing" highlight and the pause glyph current without rebuilding anything else.
+  // Сохраняйте подсветку "playing" и глиф паузы текущими, не перестраивая что-либо еще.
   let lastKey = null;
   subscribe("player", (player) => {
     const key = `${player.track ? trackKey(player.track) : ""}|${player.status === "paused"}`;
@@ -173,12 +171,12 @@ export function createTracksScreen({ title, filterable = false, playable = true,
     setKicker(text) { const node = header.querySelector(".kicker"); if (node) node.textContent = text; },
     setCover(url) { heroArt?.replaceChildren(artBox(url, { glyph: "playlist", size: 40 })); if (hero) setAmbience(header, url); },
     setNote(text) { if (note) { note.textContent = text ?? ""; note.hidden = !text; } },
-    setTracks(tracks) {
+    setTracks(tracks, { preserveScroll = false } = {}) {
       all = tracks;
-      applyFilter();
+      applyFilter({ reset: !preserveScroll });
       meta.textContent = tracks.length ? tn("library.count", tracks.length) : "";
     },
-    /** Shows progressive loading without throwing the list away. */
+    /** Показывает прогрессивную загрузку, не выбрасывая список. */
     setProgress(tracks, total) {
       all = tracks;
       visible = query ? all.filter((tr) => fold(tr.title).includes(query) || fold(tr.artist).includes(query)) : all;
@@ -188,7 +186,7 @@ export function createTracksScreen({ title, filterable = false, playable = true,
     },
     setStatus(text, { error = false } = {}) {
       paintStatus(status, text, { error });
-      // A failed load can be tried again; the button lives inside the panel.
+      // Неудачную загрузку можно повторить; кнопка живет внутри панели.
       if (error && text && retry) status.append(retry);
       renderEmpty();
     },

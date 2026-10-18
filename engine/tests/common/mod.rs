@@ -1,5 +1,5 @@
-//! Test fixtures: real HLS streams made by ffmpeg, a tiny range-capable HTTP
-//! server, and helpers to decode and measure what comes out.
+//! Тестовые приспособления: настоящие потоки HLS, созданные с помощью ffmpeg, крошечный сервер HTTP с
+//! поддержкой диапазона и помощники для декодирования и измерения того, что получается.
 
 #![allow(dead_code)]
 
@@ -17,7 +17,8 @@ pub fn ffmpeg_available() -> bool {
     Command::new("ffmpeg").arg("-version").output().map(|o| o.status.success()).unwrap_or(false)
 }
 
-/// CI sets `PM_REQUIRE_FFMPEG=1` so a missing ffmpeg fails instead of skipping.
+/// CI устанавливает `PM_REQUIRE_FFMPEG=1`, поэтому отсутствующий ffmpeg не пропускается, а выдает
+/// ошибку.
 pub fn require_ffmpeg() -> bool {
     if ffmpeg_available() {
         return true;
@@ -37,7 +38,7 @@ pub fn run_ffmpeg(dir: &Path, args: &[&str]) {
     assert!(output.status.success(), "ffmpeg failed: {}", String::from_utf8_lossy(&output.stderr));
 }
 
-/// 6 s of 440 Hz then 6 s of 880 Hz, stereo, 44.1 kHz.
+/// 6 с при 440 Гц, затем 6 с при 880 Гц, стерео, 44,1 kHz.
 pub const TONE_FILTER: &str = "[0][1]concat=n=2:v=0:a=1[a]";
 pub const TONE_INPUTS: [&str; 8] = ["-f", "lavfi", "-i", "sine=frequency=440:duration=6", "-f", "lavfi", "-i", "sine=frequency=880:duration=6"];
 
@@ -55,7 +56,7 @@ pub struct Server {
 }
 
 impl Server {
-    /// Serves `root` on 127.0.0.1 with Range support.
+    /// Обслуживает `root` на 127.0.0.1 с поддержкой диапазона.
     pub fn start(root: PathBuf) -> Self {
         let server = tiny_http::Server::http("127.0.0.1:0").expect("bind");
         let port = server.server_addr().to_ip().unwrap().port();
@@ -125,7 +126,7 @@ impl Pcm {
         self.samples.len() as f64 / self.channels as f64 / self.rate as f64
     }
 
-    /// Dominant frequency of channel 0 in `[from, to)` seconds, by zero crossings.
+    /// Доминирующая частота канала 0 в `[from, to)` секундах, при пересечении нуля.
     pub fn frequency(&self, from: f64, to: f64) -> f64 {
         let start = (from * self.rate as f64) as usize;
         let end = ((to * self.rate as f64) as usize).min(self.samples.len() / self.channels);
@@ -163,8 +164,8 @@ pub fn read_file(path: &Path) -> Vec<u8> {
     data
 }
 
-/// A scriptable fake HTTP API. The handler gets (path+query, body, headers as
-/// "name: value" lines) and returns (status, json body).
+/// Скриптовая подделка HTTP API. Обработчик получает (путь+запрос, тело, заголовки в виде строк "name:
+/// value") и возвращает (статус, тело json).
 pub struct FakeApi {
     pub base: String,
     pub calls: Arc<std::sync::Mutex<Vec<(String, String)>>>,
@@ -214,8 +215,8 @@ impl Drop for FakeApi {
     }
 }
 
-/// Deterministic transport failure: accept and close instead of depending on
-/// reserved closed ports, which firewalls can silently drop for a full timeout.
+/// Детерминированный транспортный сбой: принять и закрыть вместо зависимости от зарезервированных
+/// закрытых портов, которые брандмауэры могут молча отключить на полный таймаут.
 pub struct CutServer {
     pub base: String,
     stop: Arc<AtomicBool>,

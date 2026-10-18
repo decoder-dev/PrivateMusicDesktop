@@ -574,10 +574,10 @@ const dictionary = {
 
 const language = (navigator.language || "ru").toLowerCase().startsWith("ru") ? "ru" : "en";
 
-/** "ru" or "en": for dates and numbers that the browser formats itself. */
+/** "ru" или "en": для дат и чисел, которые браузер форматирует сам. */
 export const locale = language;
 
-/** Adds strings from a module that owns its own texts: `{ ru: {…}, en: {…} }`. */
+/** Добавляет строки из модуля, у которого есть собственные тексты: `{ ru: {…}, en: {…} }`. */
 export function addStrings(entries) {
   Object.assign(dictionary.ru, entries.ru);
   Object.assign(dictionary.en, entries.en);
@@ -591,8 +591,8 @@ export function t(key, values = {}) {
 const pluralRules = new Intl.PluralRules(language);
 
 /**
- * A count with its noun in the right form: `key.one`, `key.few`, `key.many`
- * or `key.other` (Russian: 1 трек, 2 трека, 5 треков, 21 трек, 11 треков).
+ * Счет с существительным в правильной форме: `key.one`, `key.few`, `key.many` или `key.other`
+ * (русские: 1 трек, 2 трека, 5 треков, 21 трек, 11 треков).
  */
 export function tn(key, n, values = {}) {
   const category = pluralRules.select(n);

@@ -1,5 +1,6 @@
-//! Controller policy against a fake VK API and a simulated sound card:
-//! auto-advance, expired-URL refresh, bounded skipping, queue edits.
+//! Политика контроллера против поддельного VK API и симулированной звуковой карты: автоматическое
+//! продвижение, обновление URL с истекшим сроком действия, ограниченный пропуск, редактирование
+//! очереди.
 
 mod common;
 
@@ -43,8 +44,8 @@ fn session() -> Session {
     }
 }
 
-/// A fake `api.vk.ru`: answers `audio.getById` with `fresh_base/index.m3u8`
-/// for every requested id, and records the calls.
+/// Поддельный `api.vk.ru`: отвечает на `audio.getById` `fresh_base/index.m3u8` на каждый запрошенный
+/// идентификатор и записывает звонки.
 struct FakeVk {
     base: String,
     calls: Arc<Mutex<Vec<String>>>,
@@ -187,7 +188,7 @@ fn an_expired_url_is_refreshed_once_and_then_plays() {
     let (_dir, media) = media_dir();
     let vk = FakeVk::start(media.base.clone(), true);
     let rig = rig(&vk.base, 20.0);
-    // The held URL 404s; audio.getById supplies a working one.
+    // Удерживаемые URL 404; audio.getById поставляет рабочий.
     rig.controller.play_tracks(vec![track(1, Some(format!("{}/expired.m3u8", media.base)))], 0);
     rig.wait("playback of the refreshed URL", |s| s.status == Status::Playing || (s.status == Status::Idle && s.position == 0.0 && vk_called(&vk)));
     rig.wait("end", |s| s.status == Status::Idle && s.track.as_ref().map(|t| t.title.clone()) == Some("Fresh".into()));
@@ -218,7 +219,7 @@ fn a_track_without_a_url_is_looked_up() {
 fn dead_tracks_are_skipped_but_only_a_few_in_a_row() {
     if !require_ffmpeg() { return; }
     let (_dir, media) = media_dir();
-    let vk = FakeVk::start(media.base.clone(), false); // refresh also fails
+    let vk = FakeVk::start(media.base.clone(), false); // обновить тоже не получается
     let rig = rig(&vk.base, 20.0);
     let dead = |n| track(n, Some(format!("{}/dead{n}.m3u8", media.base)));
     rig.controller.play_tracks((1..=8).map(dead).collect(), 0);
@@ -246,12 +247,12 @@ fn next_previous_repeat_and_jump() {
 
     rig.controller.next();
     rig.wait("second", |s| s.track.as_ref().map(|t| t.track_id) == Some(2));
-    // Within 4 s Previous goes to the previous track.
+    // В течение 4 с «Предыдущий» переходит к предыдущей дорожке.
     rig.controller.previous();
     rig.wait("back to first", |s| s.track.as_ref().map(|t| t.track_id) == Some(1));
     rig.controller.jump(2);
     rig.wait("third", |s| s.track.as_ref().map(|t| t.track_id) == Some(3));
-    // Next on the last track with repeat off does nothing.
+    // Дальше на последнем треке с выключенным повтором ничего не происходит.
     rig.controller.next();
     std::thread::sleep(Duration::from_millis(150));
     assert_eq!(rig.controller.state().track.unwrap().track_id, 3);
@@ -333,14 +334,14 @@ fn a_restored_queue_waits_and_then_starts_at_the_saved_position() {
     rig.wait("playing from the saved spot", |s| s.status == Status::Playing && s.position >= 9.0);
 }
 
-// ------------------------------------------------------------ play history
+// ------------------------------------------------------------ История игры
 
 #[test]
 fn a_track_listened_to_for_thirty_percent_lands_in_the_history() {
     if !require_ffmpeg() { return; }
     let (_dir, media) = media_dir();
     let vk = FakeVk::start(media.base.clone(), true);
-    // Four times real time: a report every quarter second is a one-second step.
+    // Четыре раза в режиме реального времени: отчет каждую четверть секунды — это шаг в одну секунду.
     let rig = rig(&vk.base, 4.0);
     let history = History::with_clock(None, || 1_772_620_200);
     history.set_account(Some(7));

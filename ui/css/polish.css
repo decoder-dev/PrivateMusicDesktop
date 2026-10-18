@@ -1,26 +1,34 @@
-/* Polish layer: rhythm, depth, motion and states that sit on top of the base styles.
-   Everything that moves is one-shot (finite) and removed by prefers-reduced-motion in base.css;
-   nothing animates while the app is idle. */
+/*
+ * Польский слой: ритм, глубина, движение и состояния, которые находятся поверх базовых стилей. Все, что
+ * движется, является одноразовым (конечным) и удаляется с помощью предпочтения уменьшенного движения в
+ * base.css; ничего не анимируется, пока приложение простаивает.
+ */
 
-/* ---------- typography ---------- */
+/* ---------- типографика ---------- */
 h1, h2, h3, .shelf-title, .kicker, .stat-empty strong { text-wrap: balance; }
 .meta, .page-note, .set-note, .status, .empty-state, .toast-text { text-wrap: pretty; }
 .meta, .time, .stat-count, .stat-big, .stat-medium, .seek, .count, .hour-axis, .dl-size, .tooltip kbd { font-variant-numeric: tabular-nums; }
 .view-header h1, .shelf-title, .set-section > h2 { font-feature-settings: "ss01", "cv11"; }
 
-/* The window has its own title bar above the page; give the first line of every screen a little more air under it. */
+/*
+ * Окно имеет собственную строку заголовка над страницей; дайте первой строке каждого экрана немного
+ * больше воздуха под ней.
+ */
 .view-header { padding-top: 24px; }
 .view-header.page-head { padding-top: 16px; }
 @media (max-width: 760px) { .view-header { padding-top: 18px; } }
 
-/* A narrow window: title and counts on one line, the controls tidy on a second line instead of wrapping one by one. */
+/*
+ * Узкое окно: заголовок и счетчики на одной строке, элементы управления аккуратно размещаются на второй
+ * строке, а не переносятся одно за другим.
+ */
 @media (max-width: 760px) {
   .view-header { row-gap: 10px; }
   .view-header .vh-actions { margin-left: auto; }
   .view-header > .tabs { flex: 0 0 auto; }
 }
 
-/* ---------- depth ---------- */
+/* ---------- глубина ---------- */
 .sidebar { box-shadow: inset -1px 0 0 transparent; }
 .player { box-shadow: var(--sh-bar), 0 24px 40px -24px rgb(0 0 0 / 0.35), inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent); }
 :root[data-theme="light"] .player { box-shadow: var(--sh-bar), 0 20px 36px -26px rgb(0 0 0 / 0.28), inset 0 1px 0 rgb(255 255 255 / 0.7); }
@@ -33,7 +41,7 @@ h1, h2, h3, .shelf-title, .kicker, .stat-empty strong { text-wrap: balance; }
 .controls .play { background-image: linear-gradient(180deg, color-mix(in srgb, #fff 16%, transparent), transparent 60%); box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 35%, transparent), inset 0 1px 0 rgb(255 255 255 / 0.25); }
 .menu, .tooltip { box-shadow: var(--sh-float), inset 0 1px 0 color-mix(in srgb, #fff 8%, transparent); }
 
-/* ---------- interaction: lifts, presses, thumbs ---------- */
+/* ---------- взаимодействие: подъемы, жимы, большие пальцы ---------- */
 .card { transition: opacity var(--t-release) var(--ease-std), transform var(--t-hover) var(--ease-out); }
 .card:hover { transform: translateY(-3px); }
 .card:active { transform: none; }
@@ -43,19 +51,22 @@ input[type="range"]::-webkit-slider-thumb { transition: transform 160ms var(--ea
 input[type="range"]:hover::-webkit-slider-thumb { transform: scale(1.15); }
 input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.35); }
 input[type="range"]::-webkit-slider-runnable-track { transition: block-size 140ms var(--ease-ios); }
-/* The bar's sliders: a thicker track while pointed at, like the iOS scrubber. */
+/* Ползунки планки: при наведении на них более толстая направляющая, как у скруббера iOS. */
 .icon-btn { transition: background-color var(--t-hover) var(--ease-std), color var(--t-hover) var(--ease-std), opacity var(--t-release) var(--ease-std), transform var(--t-hover) var(--ease-ios); }
 .icon-btn:not(:disabled):active { transform: scale(0.94); }
 .controls .play:not(:disabled):active { transform: scale(0.92); }
 .row .icon-btn, .row .icon-btn:active { transform: none; }
 
-/* A glyph swap (play/pause, like) pops in. */
+/* Появляется замена глифов (например, play/pause). */
 .morph { animation: glyph-morph 260ms var(--ease-ios) backwards; transform-origin: center; }
 @keyframes glyph-morph { from { opacity: 0; transform: scale(0.55) rotate(-24deg); } }
 .like.on .morph { animation-name: heart-pop; animation-duration: 340ms; }
 @keyframes heart-pop { 0% { transform: scale(0.6); } 55% { transform: scale(1.28); } 100% { transform: scale(1); } }
 
-/* Shelves and grids settle in one after another on first paint; eight steps at most, so the whole thing is over in about half a second. */
+/*
+ * Полки и решетки устанавливаются одна за другой при первой покраске; максимум восемь шагов, так что
+ * все закончится примерно за полсекунды.
+ */
 .release-row > *, .mix-grid > *, .grid > .card, .friend-list > .friend { animation: rise 340ms var(--ease-out) backwards; }
 .release-row > :nth-child(2), .mix-grid > :nth-child(2), .grid > .card:nth-child(2), .friend-list > .friend:nth-child(2) { animation-delay: 30ms; }
 .release-row > :nth-child(3), .mix-grid > :nth-child(3), .grid > .card:nth-child(3), .friend-list > .friend:nth-child(3) { animation-delay: 60ms; }
@@ -65,13 +76,16 @@ input[type="range"]::-webkit-slider-runnable-track { transition: block-size 140m
 .release-row > :nth-child(7), .mix-grid > :nth-child(7), .grid > .card:nth-child(7), .friend-list > .friend:nth-child(7) { animation-delay: 180ms; }
 .release-row > :nth-child(n+8), .mix-grid > :nth-child(n+8), .grid > .card:nth-child(n+8), .friend-list > .friend:nth-child(n+8) { animation-delay: 210ms; }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
-/* Opening a page from a card: the hero cover scales up from where the card's cover was. */
+/*
+ * Открытие страницы карты: обложка героя увеличивается по сравнению с тем местом, где была обложка
+ * карты.
+ */
 .main[data-dir="push"] .hero-art .art-box { animation: cover-in 420ms var(--ease-ios) backwards; }
 @keyframes cover-in { from { opacity: 0.2; transform: scale(0.86); } }
 .main > .view:not([hidden]) { animation-name: view-in; }
 @keyframes view-in { from { opacity: 0; transform: translateY(8px); } }
 
-/* ---------- states: illustrated, compact, never a big blank panel ---------- */
+/* ---------- указано: иллюстрировано, компактно, никогда не бывает большой пустой панели ---------- */
 .status.has-il::before, .empty-state.has-il::before { display: none; }
 .status, .empty-state { gap: 6px; }
 .view > .status:not(.progress):not(.loading), .view > .empty-state, .tab-pane > .status:not(.progress):not(.loading), .tab-pane > .empty-state {
@@ -94,10 +108,10 @@ input[type="range"]::-webkit-slider-runnable-track { transition: block-size 140m
 .stat-empty { padding: 16px 0 8px; }
 .status.compact.has-il .il { width: 84px; height: 62px; }
 .status.compact.has-il { padding: 8px 24px; }
-/* Statuses that live inside a shelf stay one tidy line. */
+/* Статусы, находящиеся внутри полки, выстраиваются в одну ровную линию. */
 .mix-catalog > .status.inline { padding: 4px var(--gutter) 8px; }
 
-/* Skeletons: a single soft sweep when they appear, then still (no looping shimmer, no idle work). */
+/* Скелеты: одно мягкое движение, когда они появляются, а затем еще (без мерцания, без праздной работы). */
 .sk-art, .sk-bar { position: relative; overflow: hidden; }
 .sk-art::after, .sk-bar::after {
   content: ""; position: absolute; inset: 0; transform: translateX(-100%);
@@ -111,7 +125,7 @@ input[type="range"]::-webkit-slider-runnable-track { transition: block-size 140m
 .sk-row:nth-child(n+5) .sk-art::after, .sk-row:nth-child(n+5) .sk-bar::after { animation-delay: 320ms; }
 .sk-tile { border-radius: var(--r-tile); }
 
-/* ---------- downloads: storage summary ---------- */
+/* ---------- загрузки: сводка хранилища ---------- */
 .dl-summary { display: flex; align-items: center; gap: 14px; margin: 4px var(--gutter) 12px; padding: 14px 16px; border-radius: var(--r-card); background: var(--surface); border: var(--hair) solid var(--line-card); box-shadow: var(--sh-card); }
 .dl-tile { flex: none; width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: linear-gradient(145deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000)); color: var(--on-accent); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25), 0 4px 12px color-mix(in srgb, var(--accent) 28%, transparent); }
 .dl-text { min-width: 0; }
@@ -119,7 +133,7 @@ input[type="range"]::-webkit-slider-runnable-track { transition: block-size 140m
 .dl-count { font-size: 13px; line-height: 18px; color: var(--text-2); }
 .view > .dl-summary + .status, .view > .dl-summary + .status + .empty-state { margin-top: 0; }
 
-/* ---------- statistics ---------- */
+/* ---------- статистика ---------- */
 .hour-chart {
   position: relative; display: flex; align-items: flex-end; gap: 4px; height: 96px; padding-top: 4px;
   background-image: repeating-linear-gradient(to top, var(--line) 0 var(--hair), transparent var(--hair) 25%);
@@ -139,7 +153,7 @@ input[type="range"]::-webkit-slider-runnable-track { transition: block-size 140m
 .stat-big { background: linear-gradient(180deg, var(--text), color-mix(in srgb, var(--text) 72%, var(--accent))); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 @media (forced-colors: active) { .stat-big { -webkit-text-fill-color: currentColor; background: none; } }
 
-/* ---------- tooltip ---------- */
+/* ---------- подсказка ---------- */
 .tooltip {
   position: fixed; z-index: 100; display: inline-flex; align-items: center; gap: 6px; max-width: 280px; padding: 6px 10px; border-radius: 10px; pointer-events: none;
   font: 500 12px/16px var(--font); letter-spacing: 0; color: var(--text); animation: tip-in 140ms var(--ease-out) backwards; transform-origin: bottom center;
@@ -150,7 +164,7 @@ input[type="range"]::-webkit-slider-runnable-track { transition: block-size 140m
 .tooltip.below { animation-name: tip-in-below; }
 @keyframes tip-in-below { from { opacity: 0; transform: translateY(-3px) scale(0.96); } }
 
-/* ---------- buttons: sizes and a loading state ---------- */
+/* ---------- кнопки: размеры и состояние загрузки ---------- */
 .btn.small { min-height: 30px; padding: 0 12px; font-size: 13px; border-radius: 12px; }
 .btn.tertiary { background: transparent; border-color: transparent; }
 .btn.tertiary:not(:disabled):hover { background: var(--hover); }
@@ -161,24 +175,30 @@ input[type="range"]::-webkit-slider-runnable-track { transition: block-size 140m
 .btn.primary[aria-busy="true"]::after, .btn.primary.busy::after { border-color: color-mix(in srgb, var(--on-accent) 30%, transparent); border-top-color: var(--on-accent); }
 .btn.busy svg, .btn[aria-busy="true"] svg { opacity: 0; }
 
-/* ---------- focus: a designed ring ---------- */
+/* ---------- фокус: дизайнерское кольцо ---------- */
 :focus-visible { outline-width: 2px; outline-offset: 2px; outline-color: var(--accent); }
 .btn:focus-visible, .field:focus-visible, .tabs button:focus-visible, .card:focus-visible { box-shadow: 0 0 0 4px var(--accent-soft); }
 .field:focus-visible, .search-field:focus-within { box-shadow: 0 0 0 4px var(--accent-soft); }
 .icon-btn:focus-visible { outline-offset: 1px; background: var(--hover); }
 .tabs button:focus-visible { outline-offset: -2px; }
 
-/* ---------- scrollbars: thin, and only visible while the pointer is over the scroller ---------- */
+/*
+ * ---------- полосы прокрутки: тонкие и видимые только тогда, когда указатель находится над прокруткой
+ * ----------
+ */
 * { scrollbar-color: transparent transparent; }
 *:hover { scrollbar-color: color-mix(in srgb, var(--text) 30%, transparent) transparent; }
 @media (prefers-contrast: more) { * { scrollbar-color: color-mix(in srgb, var(--text) 50%, transparent) transparent; } }
 
-/* ---------- sidebar and menus: details ---------- */
+/* ---------- боковая панель и меню: подробности ---------- */
 .nav button[aria-current="page"] { box-shadow: inset 0 0 0 var(--hair) color-mix(in srgb, var(--accent) 22%, transparent); }
 .menu-item .ico, .menu-item svg:first-child { color: var(--text-2); }
 .menu-item:hover svg:first-child, .menu-item:focus-visible svg:first-child { color: currentColor; }
 
-/* Phone-width window: each group of header controls gets its own full-width row. */
+/*
+ * Окно ширины телефона: каждая группа элементов управления заголовка получает собственную строку полной
+ * ширины.
+ */
 @media (max-width: 520px) {
   .view-header .set-inline { flex: 1 1 100%; }
   .view-header .set-inline > .tabs { flex: 1 1 100%; }
@@ -191,16 +211,16 @@ input[type="range"]::-webkit-slider-runnable-track { transition: block-size 140m
   .view-header .vh-text { flex-basis: 100%; }
 }
 
-/* ---------- full-screen player ---------- */
+/* ---------- полноэкранный плеер ---------- */
 .np-cover {
   border-radius: 24px; transition: transform 520ms var(--ease-ios);
   box-shadow: 0 30px 70px -18px color-mix(in srgb, var(--np-a) 55%, transparent), 0 14px 44px rgb(0 0 0 / 0.38), 0 0 0 var(--hair) color-mix(in srgb, var(--np-fg) 10%, transparent), inset 0 1px 0 rgb(255 255 255 / 0.16);
 }
-/* Paused: the cover steps back a little, like the iOS player. */
+/* Пауза: крышка немного отодвигается назад, как у плеера iOS. */
 .np[data-playing="false"] .np-cover { transform: scale(0.9); }
 .np-title { text-wrap: balance; }
 
-/* ---------- settings: leading icon tiles, grouped inset cards ---------- */
+/* ---------- настройки: ведущие плитки значков, сгруппированные вставки карточек ---------- */
 .set-label { display: flex; align-items: flex-start; gap: 12px; }
 .set-check > .set-label { flex: 1 1 auto; align-items: center; }
 .set-text { min-width: 0; flex: 1 1 auto; }
@@ -213,10 +233,13 @@ input[type="range"]::-webkit-slider-runnable-track { transition: block-size 140m
 .set-section > h2 { margin-left: 8px; }
 .set-keys kbd { min-width: 28px; text-align: center; }
 
-/* The current row carries a short accent marker on its leading edge (no transition: rows are recycled while scrolling). */
+/*
+ * Текущая строка имеет короткий маркер акцента на переднем крае (перехода нет: строки перезапускаются
+ * при прокрутке).
+ */
 .row[aria-selected="true"]::before { content: ""; position: absolute; left: 3px; top: 14px; bottom: 14px; width: 3px; border-radius: 2px; background: var(--accent); }
 
-/* Align the sidebar's brand with the page title, and tint text selection with the accent. */
+/* Совместите фирменный знак боковой панели с заголовком страницы и оттените выделение текста акцентом. */
 .sidebar { padding-top: 22px; }
 .brand { padding-top: 4px; }
 @media (max-width: 900px) { .sidebar { padding-top: 22px; } .brand { padding-top: 0; } }

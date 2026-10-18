@@ -1,9 +1,9 @@
-/* The player bar: a floating glass card inside the main column. */
+/* Панель игрока: плавающая стеклянная карта внутри главной колонны. */
 
 .player {
   position: absolute; z-index: 5; left: var(--bar-gap); right: var(--bar-gap); bottom: var(--bar-gap);
   height: var(--bar-h); border-radius: var(--r-compact); box-shadow: var(--sh-bar); overflow: hidden;
-  /* A tint from the cover over the glass; none until the palette arrives. */
+  /* Тонировка от чехла поверх стекла; нет, пока не прибудет палитра. */
   background-color: color-mix(in srgb, var(--tint, transparent) var(--tint-amt), var(--glass));
   transition: background-color 400ms var(--ease-std);
 }

@@ -1,4 +1,4 @@
-// Release builds on Windows should not open a console window.
+// Релизные сборки для Windows не должны открывать окно консоли.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
@@ -23,25 +23,24 @@ pub struct AppState {
     pub app: Arc<App>,
     pub login_running: Arc<AtomicBool>,
     pub login_check: Arc<AtomicBool>,
-    /// Closing the window hides it (music keeps playing) instead of quitting.
-    /// Only honoured when a tray icon exists to bring the window back.
+    /// Закрытие окна скрывает его (музыка продолжает играть), а не закрывается. Соблюдается только при
+    /// наличии значка на панели задач, позволяющего вернуть окно.
     pub close_to_tray: Arc<AtomicBool>,
     pub has_tray: Arc<AtomicBool>,
-    /// The sound output the user picked; `None` follows the system default.
+    /// Звуковой вывод, выбранный пользователем; `None` соответствует системному значению по умолчанию.
     pub output_device: Arc<std::sync::Mutex<Option<String>>>,
 }
 
-/// Hosts the main window is allowed to show: the bundled UI only. A link or
-/// a script must never be able to take the app window to another site.
+/// В главном окне хостов разрешено показывать: только UI в комплекте. Ссылка или скрипт ни в коем
+/// случае не должны переносить окно приложения на другой сайт.
 fn is_app_url(url: &url::Url) -> bool {
     matches!(url.scheme(), "tauri" | "asset")
         || matches!(url.host_str(), Some("tauri.localhost" | "localhost" | "127.0.0.1")) && cfg!(debug_assertions)
         || url.host_str() == Some("tauri.localhost")
 }
 
-/// Logs go to `<app log dir>/private-music.log` (rewritten at each start), so
-/// a problem on someone's machine can be read afterwards. `RUST_LOG` overrides
-/// the level.
+/// Логи идут в `<app log dir>/private-music.log` (перезаписываются при каждом запуске), так что о
+/// проблеме на чьей-то машине можно прочитать потом. `RUST_LOG` переопределяет уровень.
 fn init_logging(handle: &tauri::AppHandle) {
     let mut builder = env_logger::Builder::from_env(
         env_logger::Env::default().default_filter_or("warn,private_music_desktop=info,pm_engine=info"),
@@ -56,8 +55,8 @@ fn init_logging(handle: &tauri::AppHandle) {
     let _ = builder.try_init();
 }
 
-/// CI: open the sign-in window the way the button does (from the async
-/// runtime, never the main thread) and report whether VK's page loads.
+/// CI: откройте окно входа так же, как это делает кнопка (из асинхронной среды выполнения, а не из
+/// основного потока) и сообщите, загружается ли страница VK.
 fn start_login_smoke_test(handle: &tauri::AppHandle, report: std::path::PathBuf) {
     let _ = login::SMOKE_REPORT.set(report.clone());
     let opener = handle.clone();
@@ -82,12 +81,13 @@ fn start_login_smoke_test(handle: &tauri::AppHandle, report: std::path::PathBuf)
 
 fn main() {
     tauri::Builder::default()
-        // First: a second launch hands over to the running app and exits.
+        // Первый: второй запуск передает работающему приложению и завершает работу.
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| tray::show_main(app)))
         .plugin(
             tauri_plugin_window_state::Builder::default()
-                // Restore placement and desktop maximization, keeping the fixed preset and native frame.
+                // Восстановите размещение и максимизацию рабочего стола, сохранив фиксированные
+                // настройки и исходный кадр.
                 .with_state_flags(tauri_plugin_window_state::StateFlags::POSITION | tauri_plugin_window_state::StateFlags::MAXIMIZED)
                 .with_denylist(&["login"])
                 .build(),
@@ -185,7 +185,7 @@ fn main() {
                     }
                 });
             has_tray.store(tray::create(&handle), Ordering::Relaxed);
-            // After the window exists: Windows needs its handle.
+            // После того, как окно существует: Windows нужен его дескриптор.
             let _ = media.set(media::Media::new(&handle));
             if let Some(report) = std::env::var_os("PM_SMOKE_WINDOW") {
                 window_smoke::start(&handle, report.into());
@@ -285,13 +285,13 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("failed to build the application")
         .run(|app, event| {
-            // macOS: clicking the Dock icon after the window was closed.
+            // macOS: щелчок по значку в доке после закрытия окна.
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = event {
                 tray::show_main(app);
             }
             if let tauri::RunEvent::Exit = event {
-                // Whatever was played since the last timed save goes to disk.
+                // Все, что было воспроизведено с момента последнего сохранения, сохраняется на диске.
                 if let Some(state) = app.try_state::<AppState>() {
                     state.app.retry_session_storage();
                     state.app.flush_history();

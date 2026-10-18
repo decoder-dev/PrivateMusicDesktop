@@ -1,4 +1,4 @@
-/* Reset, typography, focus, buttons, fields, switches, sliders, scrollbars. */
+/* Сброс, типографика, фокус, кнопки, поля, переключатели, ползунки, полосы прокрутки. */
 
 *, *::before, *::after { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
@@ -26,7 +26,7 @@ img { -webkit-user-drag: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .tnum { font-variant-numeric: tabular-nums; }
 
-/* One focus ring for the whole app: the accent, or the text colour on accent fills. */
+/* Одно кольцо фокусировки для всего приложения: акцент или цвет текста на заливке акцента. */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -39,7 +39,10 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
   .btn, .field, .search-field { border-color: CanvasText; }
 }
 
-/* Glass: for chrome that content scrolls under. Opaque when blur is unavailable or unwanted. */
+/*
+ * Стекло: для Chrome, под которым прокручивается контент. Непрозрачный, когда размытие недоступно или
+ * нежелательно.
+ */
 .glass {
   background: var(--glass);
   border: var(--hair) solid var(--line-glass);
@@ -56,7 +59,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 }
 :root[data-chrome="flat"] .glass, :root[data-chrome="flat"] .glass.strong { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--surface); }
 
-/* ---------- buttons ---------- */
+/* ---------- кнопки ---------- */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   min-height: 36px; padding: 0 16px; border-radius: var(--r-control);
@@ -75,7 +78,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .btn.danger { background: var(--danger-fill); border-color: transparent; color: #fff; }
 .btn.danger:not(:disabled):hover { background-color: color-mix(in srgb, var(--danger-fill) 90%, #000); }
 .btn svg { flex: none; }
-/* The one main verb of a screen. */
+/* Единственный главный глагол экрана. */
 .cta { min-height: 44px; padding: 0 24px; border-radius: var(--r-pill); font-size: 15px; }
 .btn.busy { pointer-events: none; }
 
@@ -96,7 +99,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
   .btn { min-height: 44px; }
 }
 
-/* ---------- fields ---------- */
+/* ---------- поля ---------- */
 .field {
   min-width: 0; min-height: 40px; padding: 0 12px; border-radius: var(--r-control);
   background: color-mix(in srgb, var(--surface) 82%, transparent);
@@ -129,7 +132,7 @@ input[type="search"]::-webkit-search-cancel-button, input[type="search"]::-webki
 .search-field .clear { width: 28px; height: 28px; margin-right: 6px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--text-2); }
 .search-field .clear:hover { color: var(--text); background: var(--hover); }
 
-/* ---------- switch (iOS toggle) ---------- */
+/* ---------- переключатель (переключатель iOS) ---------- */
 input[type="checkbox"][role="switch"] {
   -webkit-appearance: none; appearance: none; flex: none; position: relative; margin: 0; cursor: pointer;
   width: 51px; height: 31px; border-radius: 16px; background: color-mix(in srgb, var(--text) 16%, transparent);
@@ -144,7 +147,7 @@ input[type="checkbox"][role="switch"]:checked::before { transform: translateX(20
 input[type="checkbox"][role="switch"]:disabled { opacity: 0.45; cursor: default; }
 input[type="checkbox"][role="switch"]:focus-visible { outline-offset: 3px; }
 
-/* ---------- sliders (seek, volume, equaliser) ---------- */
+/* ---------- ползунки (поиск, громкость, эквалайзер) ---------- */
 input[type="range"] {
   -webkit-appearance: none; appearance: none; width: 100%; height: 20px; margin: 0; background: transparent; cursor: pointer;
   --fill: 0%; --fill-dir: to right; --track: 4px; --thumb-scale: 1;
@@ -161,14 +164,17 @@ input[type="range"]::-webkit-slider-thumb {
 input[type="range"]::-moz-range-track { height: var(--track); border-radius: 2px; background: color-mix(in srgb, var(--accent) 18%, transparent); }
 input[type="range"]::-moz-range-progress { height: var(--track); border-radius: 2px; background: var(--accent); }
 input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; border: 0; background: var(--accent); box-shadow: 0 1px 3px rgb(0 0 0 / 0.28); }
-/* Slider thumbs in the bar appear on hover, focus or drag, like the iOS scrubber. */
+/*
+ * Ползунки на панели появляются при наведении курсора, фокусировке или перетаскивании, как скруббер
+ * iOS.
+ */
 input[type="range"].reveal::-webkit-slider-thumb { opacity: 0; transition: opacity 120ms var(--ease-std); }
 input[type="range"].reveal:hover::-webkit-slider-thumb, input[type="range"].reveal:focus-visible::-webkit-slider-thumb, input[type="range"].reveal:active::-webkit-slider-thumb { opacity: 1; }
 input[type="range"].reveal::-webkit-slider-runnable-track { transition: block-size 120ms var(--ease-std); }
 input[type="range"].reveal:hover, input[type="range"].reveal:active { --track: 6px; }
 input[type="range"]:focus-visible { outline-offset: 0; border-radius: 4px; }
 
-/* ---------- scrollbars ---------- */
+/* ---------- полосы прокрутки ---------- */
 * { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--text) 28%, transparent) transparent; }
 ::-webkit-scrollbar { width: 12px; height: 12px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -177,7 +183,7 @@ input[type="range"]:focus-visible { outline-offset: 0; border-radius: 4px; }
 ::-webkit-scrollbar-corner { background: transparent; }
 .list, .page-scroll, .set-body, .grid, .friend-list { scrollbar-gutter: stable; }
 
-/* ---------- small parts ---------- */
+/* ---------- мелкие детали ---------- */
 .spinner {
   display: inline-block; flex: none; width: 16px; height: 16px; border-radius: 50%;
   border: 2px solid color-mix(in srgb, currentColor 25%, transparent); border-top-color: currentColor;
@@ -189,7 +195,7 @@ kbd {
   border: var(--hair) solid var(--line); background: var(--surface); color: var(--text);
 }
 
-/* ---------- reduced motion: everything is instant ---------- */
+/* ---------- уменьшенное движение: все мгновенно ---------- */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

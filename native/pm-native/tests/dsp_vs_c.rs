@@ -1,7 +1,6 @@
-//! Differential test: the original C implementation (kept as a reference in
-//! `tests/reference/`, compiled here with a
-//! tiny Accelerate shim) and the Rust one must agree on random inputs.
-//! Skipped quietly when no C compiler is available.
+//! Дифференциальный тест: исходная реализация C (сохраненная в качестве ссылки в `tests/reference/`,
+//! скомпилированная здесь с крошечной прошивкой Accelerate) и Rust, необходимо согласовать случайные
+//! входные данные. Пропускается незаметно, когда компилятор C недоступен.
 
 use pm_native::dsp::*;
 use std::ffi::c_int;
@@ -50,7 +49,7 @@ fn matches_the_c_reference() {
         let src: Vec<f32> = (0..len).map(|_| rng.next() * 1.4).collect();
         let c0 = coeffs(&mut rng);
 
-        // single biquad channel, with and without clamping
+        // одиночный биквадратный канал, с зажимом и без него
         for clamp in [false, true] {
             let (mut a, mut b) = (src.clone(), src.clone());
             let (mut sa, mut sb) = ([0.1f32, -0.2, 0.3, 0.05], [0.1f32, -0.2, 0.3, 0.05]);
@@ -62,7 +61,7 @@ fn matches_the_c_reference() {
             same(&sa, &sb);
         }
 
-        // equalizer cascade
+        // каскад эквалайзера
         let bands: Vec<PMBiquadCoeffs> = (0..1 + round % 5).map(|_| coeffs(&mut rng)).collect();
         for (drc, loud) in [(false, false), (true, false), (true, true)] {
             let (mut a, mut b) = (src.clone(), src.clone());
@@ -84,7 +83,7 @@ fn matches_the_c_reference() {
             assert!((env_a - env_b).abs() <= 1e-6);
         }
 
-        // spatial widening (planar and interleaved), with and without the side filter
+        // пространственное расширение (плоское и чередующееся), с боковым фильтром и без него
         let intensity = rng.next();
         for filtered in [false, true] {
             let (mut la, mut ra) = (src[..frames].to_vec(), src[frames..2 * frames.min(len / 2)].to_vec());
@@ -112,7 +111,7 @@ fn matches_the_c_reference() {
             same(&sa, &sb);
         }
 
-        // single-sample widen and the peak meter
+        // расширение одной выборки и пиковый измеритель
         let (l, r, side) = (rng.next(), rng.next(), rng.next());
         for has_side in [false, true] {
             let (mut ol_a, mut or_a, mut ol_b, mut or_b) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);

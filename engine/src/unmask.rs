@@ -1,20 +1,18 @@
-//! VK sometimes answers `audio.get` with a masked stream URL
-//! (`…audio_api_unavailable…?extra=…#…`). The decoding lives in the shared
-//! native core; this is the safe wrapper around its C ABI.
+//! VK иногда отвечает на `audio.get` замаскированным потоком URL (`…audio_api_unavailable…?extra=…#…`).
+//! Декодирование находится в общем собственном ядре; это безопасная оболочка для его C ABI.
 
 use pm_native::media::{pm_vk_unmask, PM_VK_UNMASK_NOT_MASKED};
 
-/// Returns the playable URL, the input unchanged when it was never masked,
-/// or `None` when it is masked and cannot be decoded (for example without a
-/// user id).
+/// Возвращает воспроизводимый URL, ввод без изменений, если он никогда не был замаскирован, или `None`,
+/// когда он замаскирован и не может быть декодирован (например, без идентификатора пользователя).
 pub fn resolve(url: &str, user_id: Option<i64>) -> Option<String> {
     let bytes = url.as_bytes();
     if bytes.is_empty() || bytes.len() > i32::MAX as usize / 2 {
         return None;
     }
     let mut out = vec![0u8; bytes.len().max(16)];
-    // SAFETY: both slices are valid for the lengths passed; the native
-    // function never writes more than `out_capacity` bytes.
+    // SAFETY: оба фрагмента действительны для переданной длины; встроенная функция никогда не
+    // записывает более `out_capacity` байт.
     let written = unsafe {
         pm_vk_unmask(
             bytes.as_ptr(),
@@ -34,8 +32,8 @@ pub fn resolve(url: &str, user_id: Option<i64>) -> Option<String> {
     String::from_utf8(out).ok().and_then(|s| secure_remote_url(&s))
 }
 
-/// https only: `//host/…` gets a scheme, plain http is upgraded, anything
-/// else (file:, javascript:, custom schemes) is rejected.
+/// Только https: `//host/…` получает схему, простой http обновляется, все остальное (файл:,
+/// javascript:, пользовательские схемы) отклоняется.
 pub fn secure_remote_url(raw: &str) -> Option<String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -50,8 +48,8 @@ pub fn secure_remote_url(raw: &str) -> Option<String> {
     url.host_str()?;
     match url.scheme() {
         "https" => {}
-        // Loopback is left alone so tests can serve from 127.0.0.1. It is
-        // never fetched unless the fetcher was explicitly put in test mode.
+        // Loopback остается в покое, поэтому тесты могут выполняться с адреса 127.0.0.1. Он никогда не
+        // извлекается, если сборщик явно не переведен в тестовый режим.
         "http" if matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]")) => {}
         "http" => url.set_scheme("https").ok()?,
         _ => return None,

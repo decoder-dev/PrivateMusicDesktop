@@ -1,5 +1,5 @@
-// Linux stand-in so the C reference compiles; AES is verified separately
-// against OpenSSL-generated vectors, so this stub always reports failure.
+// Альтернатива Linux, поэтому ссылка на C компилируется; AES проверяется отдельно по векторам,
+// сгенерированным OpenSSL, поэтому эта заглушка всегда сообщает об ошибке.
 #pragma once
 #include <stddef.h>
 #include <stdint.h>

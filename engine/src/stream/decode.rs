@@ -10,14 +10,14 @@ use symphonia::core::units::Time;
 use super::buffer::{BufferReader, ElementaryKind};
 use crate::{Error, Result};
 
-/// Decodes the elementary stream in a [`BufferReader`] to interleaved f32.
+/// Декодирует элементарный поток в [`BufferReader`] в чередующийся f32.
 pub struct Decoder {
     format: Box<dyn FormatReader>,
     decoder: Box<dyn SymDecoder>,
     track_id: u32,
     pub sample_rate: u32,
     pub channels: usize,
-    /// Frames to throw away after a seek so it lands on the exact time.
+    /// Кадры, которые нужно выбросить после поиска, чтобы они попадали в точное время.
     skip_frames: u64,
     scratch: Option<SampleBuffer<f32>>,
 }
@@ -25,12 +25,13 @@ pub struct Decoder {
 fn stream_error(error: SymError) -> Error {
     match error {
         SymError::IoError(io) if super::buffer::is_cancelled_io(&io) => Error::Cancelled,
-        other => Error::Stream(other.to_string()),
+        other => Error::Stream(format!("decoder: {other}")),
     }
 }
 
 impl Decoder {
-    /// Blocks until enough of the stream has been downloaded to identify it.
+    /// Блокируется до тех пор, пока не будет загружено достаточное количество потока для его
+    /// идентификации.
     pub fn open(reader: BufferReader, kind: ElementaryKind) -> Result<Self> {
         let mut hint = Hint::new();
         hint.with_extension(match kind {
@@ -56,8 +57,7 @@ impl Decoder {
         Ok(Self { format, decoder, track_id, sample_rate, channels, skip_frames: 0, scratch: None })
     }
 
-    /// Appends the next block of interleaved samples to `out`. `Ok(false)`
-    /// is the end of the stream.
+    /// Добавляет следующий блок чередующихся выборок к `out`. `Ok(false)` — конец потока.
     pub fn next_block(&mut self, out: &mut Vec<f32>) -> Result<bool> {
         loop {
             let packet = match self.format.next_packet() {
@@ -95,7 +95,7 @@ impl Decoder {
                     out.extend_from_slice(samples);
                     return Ok(true);
                 }
-                // A corrupt frame costs a frame, not the track.
+                // Поврежденный кадр стоит кадра, а не дорожки.
                 Err(SymError::DecodeError(reason)) => {
                     log::debug!("skipping undecodable frame: {reason}");
                 }
@@ -105,7 +105,7 @@ impl Decoder {
         }
     }
 
-    /// Moves the stream to `seconds`. Blocks while the download catches up.
+    /// Перемещает поток на `seconds`. Блокируется, пока загрузка продолжается.
     pub fn seek(&mut self, seconds: f64) -> Result<()> {
         let seconds = if seconds.is_finite() { seconds.max(0.0) } else { 0.0 };
         let seeked = self

@@ -1,6 +1,5 @@
-//! New releases from the catalogue, and the endless radio: a queue started
-//! from a mix, the personal stream or "more like this" refills itself from
-//! the same source against a fake VK and a simulated sound card.
+//! Проверки новых релизов и бесконечного радио: выбранный источник пополняет
+//! очередь через тестовый API VK и имитатор звукового устройства.
 
 mod common;
 
@@ -18,7 +17,7 @@ use pm_engine::Error;
 fn app(vk: &str) -> App {
     let app = App::new(
         VkClient::with_base(vk).unwrap(),
-        // 12 s tracks, played 40 times faster than real time.
+        // 12-секундные треки, воспроизводимые в 40 раз быстрее реального времени.
         || Ok(Box::new(SimulatedSink::new(44_100, 2, 40.0)) as Box<dyn Sink>),
         Box::new(MemoryStore::default()),
         |_| {},
@@ -39,7 +38,7 @@ fn param<'a>(body: &'a str, name: &str) -> Option<&'a str> {
     body.split('&').find_map(|pair| pair.strip_prefix(name)?.strip_prefix('='))
 }
 
-// ------------------------------------------------------------ new releases
+// -------------------------------------------- новые выпуски
 
 fn release(id: i64, title: &str) -> String {
     format!(
@@ -49,7 +48,7 @@ fn release(id: i64, title: &str) -> String {
     )
 }
 
-/// An audio row has the same keys as a release plus a duration.
+/// Аудиострока имеет те же клавиши, что и релиз, плюс продолжительность.
 fn audio_row(id: i64) -> String {
     format!(r#"{{"id":{id},"owner_id":-5,"title":"Трек {id}","artist":"Артист","duration":200,"main_artists":[{{"name":"Артист"}}]}}"#)
 }
@@ -83,7 +82,7 @@ fn without_root_releases_only_release_looking_sections_are_hydrated() {
                 {"id":"sec_bad","title":"Премьеры","blocks":[]},
                 {"id":"2000123","title":"Новинки","url":"/x"}]}}}"#.into()),
         "catalog.getSection" => {
-            // The iOS client sends the section id alone.
+            // Клиент iOS отправляет только идентификатор раздела.
             assert!(!body.contains("need_blocks"), "{body}");
             match param(body, "section_id") {
                 Some("sec_rel") => (200, format!(r#"{{"response":{{"blocks":[{{"albums":[{},{}]}}]}}}}"#, release(1, "А"), release(2, "Б"))),
@@ -95,7 +94,7 @@ fn without_root_releases_only_release_looking_sections_are_hydrated() {
         other => panic!("unexpected {other}"),
     });
     let releases = app(&api.base).new_releases().unwrap();
-    // Section order, no repeats; the broken section and the mix shelf add nothing.
+    // Порядок разделов, никаких повторов; сломанная секция и полка для смешивания ничего не добавляют.
     assert_eq!(releases.iter().map(|a| a.album_id).collect::<Vec<_>>(), vec![1, 2, 3]);
     assert_eq!(api.call_count("catalog.getSection"), 3, "the mix shelf and the numeric id are not asked");
 }
@@ -111,7 +110,7 @@ fn a_refused_catalogue_gives_an_empty_shelf_and_unusable_albums_are_dropped() {
     assert_eq!(releases.iter().map(|a| a.album_id).collect::<Vec<_>>(), vec![5]);
 }
 
-// ------------------------------------------------------------------- radio
+// ------------------------------------------------------------------ Радио
 
 fn tracks_json(media: &str, ids: &[i64]) -> String {
     let rows: Vec<String> = ids
@@ -161,7 +160,7 @@ fn a_mix_radio_refills_from_the_same_mix_and_plays_every_track_once() {
         match param(body, "offset") {
             Some("0") => (200, tracks_json(&base, &[1, 2])),
             Some("100") => (200, tracks_json(&base, &[3, 4])),
-            // The first refill repeats two tracks the queue already holds.
+            // Первая заправка повторяет два трека, которые уже есть в очереди.
             Some("400") => (200, tracks_json(&base, &[3, 4, 5, 6, 7, 8, 9, 10])),
             Some("500") => (200, tracks_json(&base, &[10, 11, 12, 13, 14])),
             _ => (200, r#"{"response":{"items":[]}}"#.into()),
@@ -174,7 +173,7 @@ fn a_mix_radio_refills_from_the_same_mix_and_plays_every_track_once() {
     app.play_radio(RadioSource::Catalog { mix_id: "m1".into(), options: Some(options.into()) }, start, 0).unwrap();
     assert_eq!(app.controller().state().radio, Some(RadioKind::Catalog));
 
-    // Every track plays exactly once, in source order, then the queue ends.
+    // Каждый трек воспроизводится ровно один раз в исходном порядке, затем очередь заканчивается.
     let mut played = Vec::new();
     let deadline = Instant::now() + Duration::from_secs(60);
     loop {
@@ -192,7 +191,7 @@ fn a_mix_radio_refills_from_the_same_mix_and_plays_every_track_once() {
     }
     assert_eq!(played, (1..=14).collect::<Vec<i64>>());
     assert_eq!(app.controller().state().queue_len, 14, "repeats never entered the queue");
-    // The window moved on page by page, only forward.
+    // Окно перемещалось страница за страницей, только вперед.
     let offsets: Vec<String> = api
         .calls
         .lock()
@@ -200,7 +199,7 @@ fn a_mix_radio_refills_from_the_same_mix_and_plays_every_track_once() {
         .iter()
         .filter_map(|(_, body)| param(body, "offset").map(str::to_string))
         .collect();
-    // The four start-up pages go out together, so their order is not fixed.
+    // Четыре стартовые страницы открываются одновременно, поэтому их порядок не фиксирован.
     let mut window: Vec<&str> = offsets[..4].iter().map(String::as_str).collect();
     window.sort();
     assert_eq!(window, ["0", "100", "200", "300"]);
@@ -246,7 +245,7 @@ fn a_source_that_only_repeats_itself_is_given_up_on() {
     std::thread::sleep(Duration::from_millis(400));
     let state = app.controller().state();
     assert_eq!((state.status, state.queue_len), (Status::Idle, 4), "nothing new, so nothing was added");
-    // Four start-up pages, then at most three rounds of three requests.
+    // Четыре стартовые страницы, затем максимум три раунда по три запроса.
     let total = api.call_count("getStreamMixAudios");
     assert!(total <= 4 + 3 * 3, "the radio must not hammer a source with nothing new: {total} calls");
     std::thread::sleep(Duration::from_millis(300));
@@ -268,8 +267,8 @@ fn errors_count_as_bad_rounds_and_stop_after_three() {
     app.play_radio(RadioSource::Catalog { mix_id: "m1".into(), options: None }, start, 0).unwrap();
     wait(&app, "the queue to play out", |s| s.status == Status::Idle && s.track.as_ref().is_some_and(|t| t.track_id == 4));
     std::thread::sleep(Duration::from_millis(300));
-    // One failed request per round, a round per started track, three rounds at most;
-    // a failed request is asked again at the same offset, never skipped.
+    // Один неудавшийся запрос за раунд, раунд за запущенный трек, максимум три раунда; неудачный запрос
+    // запрашивается снова с тем же смещением и никогда не пропускается.
     let failed: Vec<String> = api
         .calls
         .lock()
@@ -293,7 +292,7 @@ fn more_like_this_rotates_seeds_and_adopts_new_tracks_as_seeds() {
         assert_eq!(param(body, "shuffle"), Some("1"), "radio refills are shuffled: {body}");
         let target = param(body, "target_audio").expect("seeded").replace("%5F", "_");
         let seed: i64 = target.rsplit('_').next().unwrap().parse().unwrap();
-        // Each seed knows the next two tracks and the seed itself.
+        // Каждое семя знает два следующих следа и само семя.
         let next: Vec<i64> = if seed < 9 { vec![seed, seed + 1, seed + 2] } else { vec![] };
         (200, tracks_json(&base, &next))
     });

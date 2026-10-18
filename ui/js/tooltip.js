@@ -1,14 +1,14 @@
-// Tooltips: one delegated listener turns the native `title` of a control into a
-// small glass label with an optional shortcut hint (`data-kbd`). It shows after
-// a short rest of the mouse, never for touch, and puts the title back when it
-// hides, so screen readers and the keyboard keep working as before.
+// Подсказки: один делегированный прослушиватель превращает собственный `title` элемента управления в
+// небольшую стеклянную метку с дополнительной подсказкой по ярлыку (`data-kbd`). Он отображается после
+// короткого нажатия мыши, а не при касании, и возвращает заголовок, когда он скрывается, поэтому
+// программы чтения с экрана и клавиатура продолжают работать, как и раньше.
 
 const DELAY = 450;
 let timer = 0;
 let active = null; // { target, text, bubble }
 
 const mac = /Mac|iPhone|iPad/.test(navigator.platform ?? "");
-/** "Ctrl+Right" written for this platform: Cmd on a Mac. */
+/** "Ctrl+Right" написан для этой платформы: Cmd на Mac. */
 export function shortcut(keys) {
   return keys.replace("Ctrl", mac ? "⌘" : "Ctrl").replace("Right", "→").replace("Left", "←").replace("Up", "↑").replace("Down", "↓");
 }
@@ -27,7 +27,7 @@ function show(target) {
   const text = target.getAttribute("title") || target.dataset.tip;
   if (!text) return;
   target.dataset.tip = text;
-  target.removeAttribute("title"); // no second, native tooltip
+  target.removeAttribute("title"); // нет второй, встроенная подсказка
   const bubble = document.createElement("div");
   bubble.className = "tooltip glass strong";
   bubble.setAttribute("role", "tooltip");
@@ -47,7 +47,7 @@ function show(target) {
   const margin = 8;
   const above = box.top - size.height - 8 >= margin;
   const left = Math.max(margin, Math.min(box.left + box.width / 2 - size.width / 2, window.innerWidth - size.width - margin));
-  bubble.style.left = `${Math.round(left)}px`; // CSSOM: allowed under the CSP
+  bubble.style.left = `${Math.round(left)}px`; // CSSOM: разрешено под номером CSP.
   bubble.style.top = `${Math.round(above ? box.top - size.height - 8 : box.bottom + 8)}px`;
   bubble.classList.toggle("below", !above);
   active = { target, text, bubble };

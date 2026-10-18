@@ -1,5 +1,5 @@
-// The releases the user follows, for the Albums shelf and the follow button
-// on album pages.
+// Релизы, за которыми следит пользователь, отображаются на полке «Альбомы» и кнопке «подписаться» на
+// страницах альбомов.
 
 import { api, loadAllPages } from "./api.js";
 import { publish } from "./store.js";
@@ -8,14 +8,14 @@ let all = [];
 let loaded = false;
 let loading = null;
 let epoch = 0;
-// Changes made here since the list was loaded: album key -> followed.
+// Изменения, внесенные здесь с момента загрузки списка: ключ альбома -> следовать.
 const decided = new Map();
 
 export const albumKey = (album) => `${album.owner_id}_${album.album_id}`;
 
 export function followedAlbums() { return all; }
 
-/** Loads once; later calls reuse it. */
+/** Загружается один раз; последующие вызовы повторно используют его. */
 export function ensureAlbums() {
   if (loaded) return Promise.resolve(all);
   if (loading) return loading;
@@ -33,7 +33,7 @@ export function isFollowed(album) {
   return all.some((a) => albumKey(a) === key) || !!album.is_followed;
 }
 
-/** Follows or unfollows; resolves to the new state, rejects as the API does. */
+/** Подписывается или отписывается; переходит в новое состояние, отклоняется, как это делает API. */
 export async function toggleFollow(album) {
   const mine = epoch;
   const follow = !isFollowed(album);

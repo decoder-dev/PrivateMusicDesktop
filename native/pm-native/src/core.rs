@@ -1,17 +1,17 @@
-//! Hashing, text folding and search, artwork tint, mix ranking and the
-//! buffer-health estimator. Behaviour mirrors the C implementation it
-//! replaces (kept under `tests/reference/` and compared bit for bit).
+//! Хеширование, свертывание текста и поиск, оттенок графического изображения, ранжирование микса и
+//! средство оценки работоспособности буфера. Поведение отражает реализацию C, которую она заменяет
+//! (оставлена ​​под `tests/reference/` и сравнивается бит за битом).
 
 use core::ffi::c_void;
 use core::slice;
 
-// ---------------------------------------------------------------- hashing
+// ------------------------------------------------------------------ хеширование
 
 #[no_mangle]
 pub static pm_hash_fnv1a64_basis: u64 = 0xcbf2_9ce4_8422_2325;
 
 const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
-/// Stand-in for a hash that lands on 0, keeping 0 free as the empty sentinel.
+/// Заменяет хэш, который достигает 0, оставляя 0 свободным в качестве пустого стража.
 const ZERO_REPLACEMENT: u64 = 0x9e37_79b9_7f4a_7c15;
 
 #[no_mangle]
@@ -51,13 +51,13 @@ pub unsafe extern "C" fn pm_text_identity_hash(bytes: *const u8, length: i32) ->
     }
 }
 
-// --------------------------------------------------- text folding and search
+// -------------------------------------------------- Сворачивание текста и поиск
 
 pub const PM_TEXT_FOLD_UNSUPPORTED: i32 = -1;
 pub const PM_TEXT_FOLD_OVERFLOW: i32 = -2;
 
-/// Fold one Cyrillic scalar the way the platform folder does for Russian:
-/// lowercase, then strip the marks that decompose out of `ё` and `й`.
+/// Сложите один кириллический скаляр так, как это делается в папке платформы для русского языка: нижний
+/// регистр, затем уберите знаки, которые распадаются на `ё` и `й`.
 fn fold_cyrillic_scalar(scalar: u32) -> Option<u32> {
     match scalar {
         0x0401 | 0x0451 => Some(0x0435),
@@ -177,7 +177,7 @@ pub unsafe extern "C" fn pm_text_normalize_identity(
     end - start
 }
 
-// ------------------------------------------------------------ artwork tint
+// ----------------------------------------------------------- оттенок произведения искусства
 
 #[repr(C)]
 #[derive(Clone, Copy, Default, Debug, PartialEq)]
@@ -256,7 +256,7 @@ pub unsafe extern "C" fn pm_artwork_extract_tint_rgba(
     true
 }
 
-// ------------------------------------------------------ mix queue ranking
+// --------------------------------------- Рейтинг очереди смешивания
 
 pub const PM_MIX_MODE_CLOSER_TO_SEED: i32 = 1;
 pub const PM_MIX_MODE_MORE_NOVEL: i32 = 2;
@@ -283,7 +283,7 @@ unsafe fn history_contains(history: *const u64, count: i32, artist_hash: u64) ->
         return false;
     }
     let sorted = slice::from_raw_parts(history, count as usize);
-    // Same binary search as the C code: the list is sorted ascending.
+    // Тот же двоичный поиск, что и код C: список отсортирован по возрастанию.
     let (mut low, mut high) = (0i32, count - 1);
     while low <= high {
         let middle = low + (high - low) / 2;
@@ -300,8 +300,8 @@ unsafe fn history_contains(history: *const u64, count: i32, artist_hash: u64) ->
     false
 }
 
-/// Penalize an artist that just played, which is what stopped mix radio from
-/// looping the same handful of picks.
+/// Наказать исполнителя, который только что играл, и именно это помешало микс-радио зациклить одну и ту
+/// же горстку медиаторов.
 unsafe fn spacing_bonus(
     artist_hash: u64,
     recent: *const u64,
@@ -364,8 +364,8 @@ pub unsafe extern "C" fn pm_mix_score_candidate(
         if seed_artist != 0 && artist != seed_artist {
             value += 4.0;
         }
-        // Mild spacing only: affinity to the seed artist must still win the
-        // first pick after the current track.
+        // Только небольшой интервал: близость к исходному исполнителю все равно должна выиграть первый
+        // выбор после текущего трека.
         value += spacing_bonus(artist, recent_hashes, recent_count, -16.0, -8.0, -3.0, 0.0);
     } else if context.mode == PM_MIX_MODE_MORE_NOVEL {
         if seed_artist != 0 && artist != seed_artist {
@@ -419,16 +419,16 @@ pub unsafe extern "C" fn pm_mix_select_best(
     best_index
 }
 
-// ------------------------------------------------- buffer health estimator
+// ------------------------------------------------- Оценщик работоспособности буфера
 
 pub const PM_BUFFER_HEALTH_WINDOW_CAPACITY: usize = 32;
 pub const PM_BUFFER_HEALTH_UNDERRUN_NONE: f64 = 1.0e9;
-/// Ticks closer together than this (or non-monotonic) are dropped instead of
-/// dividing by a near-zero interval.
+/// Тики, расположенные ближе друг к другу (или немонотонно), отбрасываются вместо деления на
+/// околонулевой интервал.
 const BUFFER_HEALTH_MIN_INTERVAL: f64 = 1e-6;
 
-/// Fixed-memory rolling estimator over `loadedTimeRanges` samples. Layout
-/// matches `pm_buffer_health` in `PrivateMusicCore.h`.
+/// Прокатывающийся оценщик с фиксированной памятью по выборкам `loadedTimeRanges`. Раскладка
+/// соответствует `pm_buffer_health` в `PrivateMusicCore.h`.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct pm_buffer_health {
@@ -471,8 +471,8 @@ pub unsafe extern "C" fn pm_buffer_health_observe(
 
     let elapsed = now_seconds - state.previous_timestamp;
     if elapsed <= BUFFER_HEALTH_MIN_INTERVAL {
-        // Non-monotonic or duplicate tick: keep the latest reading for the
-        // predicted underrun, but do not fold it into the rolling rate.
+        // Немонотонный или повторяющийся тик: сохраните последние показания прогнозируемого отставания,
+        // но не добавляйте их к скорости вращения.
         state.latest_loaded_ahead = loaded_ahead_seconds;
         return;
     }

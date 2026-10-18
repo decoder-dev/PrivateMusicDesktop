@@ -4,20 +4,23 @@ import { api, trackKey } from "./api.js";
 import { motionOk } from "./motion.js";
 
 const CACHE_LIMIT = 60;
-/** The line counts as current slightly before its stamp, so it lights as it is sung. */
+/** Строка считается текущей незадолго до ее отметки, поэтому она загорается во время пения. */
 const LEAD_SECONDS = 0.25;
-/** After the user scrolls by hand, the view stays put for this long. */
+/**
+ * После того, как пользователь прокручивает вручную, представление остается на месте в течение этого
+ * времени.
+ */
 const HAND_SCROLL_MS = 4000;
 
 /**
- * The lyrics column of the full-screen view: timed lines that follow the
- * song (click one to jump there), or plain text when no timing exists.
+ * Столбец текста в полноэкранном режиме: временные строки, следующие за песней (щелкните одну из них,
+ * чтобы перейти туда), или простой текст, если время не установлено.
  */
 export function createLyricsPanel() {
   const cache = new Map();
   let token = 0;
-  let current = null; // the track being shown
-  let lines = []; // [{ time, node }]
+  let current = null; // трек, который показывается
+  let lines = []; // [{ время, узел }]
   let active = -1;
   let handScrollUntil = 0;
   let autoFollow = readAutoFollow();
@@ -38,7 +41,7 @@ export function createLyricsPanel() {
 
   function setAutoFollow(on) {
     autoFollow = on;
-    try { localStorage.setItem("lyrics.autoFollow", String(on)); } catch { /* storage can be disabled */ }
+    try { localStorage.setItem("lyrics.autoFollow", String(on)); } catch { /* хранилище можно отключить */ }
     renderControls();
     if (on) snap(lastPosition);
   }
@@ -101,7 +104,7 @@ export function createLyricsPanel() {
     }
   }
 
-  /** Index of the line being sung at `position` (-1 before the first). */
+  /** Индекс исполняемой строки по адресу `position` (-1 перед первой). */
   function indexAt(position) {
     let low = 0;
     let high = lines.length - 1;
@@ -135,7 +138,7 @@ export function createLyricsPanel() {
 
   return {
     element,
-    /** Shows lyrics for `track` (or clears them when there is none). */
+    /** Показывает текст песни `track` (или удаляет его, если его нет). */
     setTrack(track) {
       if (!track) { token += 1; current = null; message(""); return; }
       if (current && trackKey(current) === trackKey(track)) return;
@@ -144,7 +147,7 @@ export function createLyricsPanel() {
     },
     setVisible(on) { element.hidden = !on; },
     update(position) { follow(position); },
-    /** After a seek or when the panel appears: jump without gliding. */
+    /** После поиска или появления панели: прыгайте, не планируя. */
     snap,
     forget() { current = null; token += 1; },
   };

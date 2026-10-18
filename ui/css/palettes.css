@@ -1,4 +1,4 @@
-/* Page and surface values from the mobile AppPalette, including system mode. */
+/* Значения страницы и поверхности с мобильного AppPalette, включая системный режим. */
 :root[data-palette] { --page-top: var(--pal-l-top); --page-bottom: var(--pal-l-bottom); --surface: var(--pal-l-surface); }
 :root[data-palette][data-theme="dark"] { --page-top: var(--pal-d-top); --page-bottom: var(--pal-d-bottom); --surface: var(--pal-d-surface); }
 @media (prefers-color-scheme: dark) {

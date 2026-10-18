@@ -18,7 +18,7 @@ function section(title, ...rows) {
   return h("section", { class: "set-section" }, h("h2", { text: title }), h("div", { class: "set-card" }, ...rows));
 }
 
-/** A small accent tile with a glyph: the leading icon of a settings row. */
+/** Небольшая акцентная плитка с глифом: ведущим значком строки настроек. */
 const tile = (glyph) => h("span", { class: "set-ico", "aria-hidden": "true" }, icon(glyph, 16));
 
 function row(label, control, note, glyph) {
@@ -27,9 +27,9 @@ function row(label, control, note, glyph) {
     h("div", { class: "set-control" }, control));
 }
 
-/** Preferences, shortcuts, account and version. Every change applies at once. */
+/** Настройки, ярлыки, учетная запись и версия. Каждое изменение применяется сразу. */
 export function createSettingsView({ settings, onSettingsChange, onSignOut, toast }) {
-  // Theme and accent apply at once, and the pickers follow.
+  // Тема и акцент применяются одновременно, а сборщики следуют за ними.
   const pick = (patch) => { onSettingsChange(patch); render(); };
   const deviceSelect = h("select", { class: "field", "aria-label": t("set.output"),
     onchange: () => chooseDevice(deviceSelect.value || null) });
@@ -47,7 +47,7 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
   const flatBox = h("input", { type: "checkbox", role: "switch", id: "set-flat",
     onchange: () => pick({ flatChrome: flatBox.checked }) });
 
-  // Theme: three circles; accent: a grid of colour dots (radio groups).
+  // Тема: три круга; акцент: сетка цветных точек (радиогруппы).
   const miniUi = (mode) => h("span", { class: `tp-ui ${mode}`, "aria-hidden": "true" },
     h("i", { class: "tp-side" }), h("i", { class: "tp-line a" }), h("i", { class: "tp-line b" }), h("i", { class: "tp-line c" }), h("i", { class: "tp-bar" }));
   const themeButtons = ["system", "light", "dark"].map((value) =>
@@ -64,7 +64,7 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
   const accentGrid = h("div", { class: "accent-grid", role: "radiogroup", "aria-label": t("set.accent") }, accentButtons);
   const paletteButtons = PALETTES.map((value) => h("button", { type: "button", role: "radio", class: "palette-opt", "data-palette-choice": value, "aria-checked": "false", onclick: () => pick({ palette: value, accent: PALETTE_ACCENT[value] }) }, h("span", { class: `palette-swatch palette-${value}`, "aria-hidden": "true" }), t(`palette.${value}`)));
   const paletteGrid = h("div", { class: "palette-grid", role: "radiogroup", "aria-label": t("palette.title") }, paletteButtons);
-  /** Arrow keys move through a radio group like native radios do. */
+  /** Клавиши со стрелками перемещаются по группе радиостанций, как это делают родные радиоприемники. */
   for (const group of [themePicker, accentGrid, paletteGrid]) {
     group.addEventListener("keydown", (event) => {
       if (!["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"].includes(event.key)) return;
@@ -133,7 +133,8 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
       const chosen = settings.outputDevice;
       const options = [h("option", { value: "", text: t("set.output.default") }),
         ...names.map((name) => h("option", { value: name, text: name }))];
-      // A saved device that is unplugged right now stays selectable.
+      // Сохраненное устройство, которое в данный момент отключено от сети, остается доступным для
+      // выбора.
       if (chosen && !names.includes(chosen)) options.push(h("option", { value: chosen, text: chosen }));
       deviceSelect.replaceChildren(...options);
       deviceSelect.value = chosen ?? "";
@@ -160,7 +161,7 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
     visualizerSelect.value = settings.visualizer ?? "bars";
     lyricsBox.checked = settings.lyrics !== false;
     flatBox.checked = settings.flatChrome === true;
-    // Radio groups: the checked one is the single tab stop.
+    // Группы радио: отмечена одна позиция табуляции.
     for (const button of themeButtons) {
       const on = button.dataset.v === (settings.theme ?? "system");
       button.setAttribute("aria-checked", String(on));
@@ -197,7 +198,7 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
         if (!info.has_tray) trayBox.checked = false;
         trayNote.textContent = info.has_tray ? t("set.tray.note") : t("set.tray.none");
       } catch {
-        // Version and tray state are cosmetic here.
+        // Версия и состояние лотка здесь носят косметический характер.
       }
     },
     setProfile(profile) { accountName.textContent = profile ? `${profile.first_name} ${profile.last_name}`.trim() : ""; },

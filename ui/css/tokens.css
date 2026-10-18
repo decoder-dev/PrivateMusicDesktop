@@ -1,6 +1,8 @@
-/* Design tokens. Values mirror the iOS app (App/AppPalette.swift,
-   App/AppSettings.swift, UI/Bubble/*): the classic palette, the nine accents,
-   the radii, the elevations and the system-like motion curves. */
+/*
+ * Дизайнерские жетоны. Значения соответствуют приложению iOS (App/AppPalette.swift,
+ * App/AppSettings.swift, UI/Bubble/*): классическая палитра, девять акцентов, радиусы, возвышения и
+ * системные кривые движения.
+ */
 
 @font-face { font-family: "Inter"; font-weight: 400; font-style: normal; font-display: swap; src: url("../fonts/Inter-Regular.woff2") format("woff2"); }
 @font-face { font-family: "Inter"; font-weight: 500; font-style: normal; font-display: swap; src: url("../fonts/Inter-Medium.woff2") format("woff2"); }
@@ -10,12 +12,17 @@
 :root {
   color-scheme: light dark;
 
-  /* Typeface: SF on macOS, Segoe UI (Variable) on Windows, the bundled Inter
-     on Linux, then whatever the system offers. */
+  /*
+   * Гарнитура: SF в macOS, Segoe UI (Variable) в Windows, входящий в комплект Inter в Linux, а затем
+   * все, что предлагает система.
+   */
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", Inter, system-ui, "Noto Sans", Roboto, Cantarell, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Cascadia Mono", "DejaVu Sans Mono", monospace;
 
-  /* Neutral palette: light (App/AppPalette.swift classic; text-2 is a little stronger than iOS's .secondary so 13px text passes 4.5:1). */
+  /*
+   * Нейтральная палитра: светлая (классический App/AppPalette.swift; text-2 немного сильнее, чем
+   * .вторичный iOS, поэтому текст размером 13 пикселей пропускает 4,5:1).
+   */
   --page-top: #ffffff;
   --page-bottom: #f6f6f6;
   --surface: #f4f4f4;
@@ -28,7 +35,7 @@
   --warning: #b86d0a;
   --shadow-rgb: 0 0 0;
 
-  /* Hairline and strokes (UI/ContrastPolicy.swift, PremiumDesign.swift:46,117). */
+  /* Линия роста волос и штрихи (UI/ContrastPolicy.swift, PremiumDesign.swift:46,117). */
   --hair: 1px;
   --hover: color-mix(in srgb, var(--text) 6%, transparent);
   --pressed: color-mix(in srgb, var(--text) 10%, transparent);
@@ -37,8 +44,11 @@
   --line-glass: color-mix(in srgb, var(--text) 11%, transparent);
   --line-placeholder: color-mix(in srgb, var(--text) 12%, transparent);
 
-  /* Accent (App/AppSettings.swift AppAccent): --accent follows the theme, --on-accent is the readable label
-     (black on the dark-theme accents, white on the light ones: the higher WCAG contrast, as onAccent does). */
+  /*
+   * Accent (App/AppSettings.swift AppAccent): --accent соответствует теме, --on-accent — это читаемая
+   * метка (черная для акцентов темной темы, белая для светлых: более высокий контраст WCAG, как это
+   * делает onAccent).
+   */
   --accent: var(--a-l);
   --on-accent: #ffffff;
   --a-l: #1a6be0;
@@ -48,20 +58,20 @@
   --accent-row: color-mix(in srgb, var(--accent) 8%, transparent);
   --accent-wash: color-mix(in srgb, var(--accent) 14%, transparent);
 
-  /* Role colours of mixes and context tiles (BubbleGamut). */
+  /* Ролевые цвета миксов и контекстных тайлов (BubbleGamut). */
   --role-station: #d98c3d;
   --role-artist: #d1617a;
   --role-mood: #339480;
   --role-mix: #8557c7;
 
-  /* Shape (PremiumDesign.swift:6-14, BubbleFoundation.swift:46-59). */
+  /* Форма (PremiumDesign.swift:6-14, BubbleFoundation.swift:46-59). */
   --r-card: 22px;
   --r-compact: 16px;
   --r-control: 14px;
   --r-tile: 20px;
   --r-pill: 999px;
 
-  /* Space and layout. */
+  /* Пространство и планировка. */
   --s-xs: 4px; --s-s: 8px; --s-m: 12px; --s-l: 16px; --s-xl: 20px; --s-xxl: 24px; --s-section: 32px;
   --gutter: 24px;
   --row: 56px;
@@ -70,7 +80,10 @@
   --bar-gap: 12px;
   --clear: calc(var(--bar-h) + var(--bar-gap) + 16px);
 
-  /* Elevation (BubbleComponents.swift:78-107, PremiumDesign.swift:55-60); CSS blur is twice SwiftUI's radius. */
+  /*
+   * Высота (BubbleComponents.swift:78-107, PremiumDesign.swift:55-60); Размытие CSS в два раза больше
+   * радиуса SwiftUI.
+   */
   --sh-card: 0 8px 18px rgb(0 0 0 / 0.04);
   --sh-card-i: 0 14px 28px rgb(0 0 0 / 0.07);
   --sh-rest: 0 4px 20px rgb(0 0 0 / 0.10);
@@ -83,13 +96,13 @@
   --scrim: rgb(0 0 0 / 0.30);
   --tint-amt: 18%;
 
-  /* Materials: blur is for chrome the content passes under, and nothing else. */
+  /* Материалы: размытие предназначено для Chrome, под которым проходит контент, и ничего больше. */
   --glass: color-mix(in srgb, var(--surface) 62%, transparent);
   --glass-strong: color-mix(in srgb, var(--surface) 80%, transparent);
   --glass-blur: saturate(1.6) blur(24px);
   --glass-strong-blur: saturate(1.6) blur(32px);
 
-  /* Motion. */
+  /* Движение. */
   --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-std: cubic-bezier(0.4, 0, 0.2, 1);
@@ -97,7 +110,10 @@
   --t-toast: 240ms; --t-dialog: 240ms; --t-page: 260ms; --t-push: 340ms; --t-sheet: 420ms;
 }
 
-/* Dark: the system asks for it and the app is not forced to light, or the app forces it. */
+/*
+ * Темный: система запрашивает это, и приложение не принудительно включает свет или приложение
+ * принудительно это делает.
+ */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --page-top: #000000;
@@ -139,7 +155,7 @@
 }
 :root[data-theme="light"] { color-scheme: light; }
 
-/* The nine accents (AppAccent): a light and a dark value each. */
+/* Девять акцентов (AppAccent): каждый светлый и темный. */
 :root[data-accent="blue"]   { --a-l: #1a6be0; --a-d: #3385fa; }
 :root[data-accent="indigo"] { --a-l: #4f52db; --a-d: #6e73fa; }
 :root[data-accent="violet"] { --a-l: #874ccc; --a-d: #b275f7; }
@@ -150,7 +166,7 @@
 :root[data-accent="teal"]   { --a-l: #0f787a; --a-d: #3dcccc; }
 :root[data-accent="banana"] { --a-l: #805600; --a-d: #f4d66f; }
 
-/* Higher contrast: stronger strokes, no translucency. */
+/* Более высокий контраст: более сильные штрихи, отсутствие прозрачности. */
 @media (prefers-contrast: more) {
   :root {
     --hair: 1.2px;
@@ -170,8 +186,10 @@
   :root { --hair: 1.2px; }
 }
 
-/* Flat chrome: the system asks for no transparency, the user prefers a simpler
-   look, or the window is in the background. Glass becomes an opaque surface. */
+/*
+ * Плоский хром: система не требует прозрачности, пользователь предпочитает более простой вид или окно
+ * находится на заднем плане. Стекло становится матовой поверхностью.
+ */
 @media (prefers-reduced-transparency: reduce) {
   :root {
     --glass: var(--surface);

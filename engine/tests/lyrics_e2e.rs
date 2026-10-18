@@ -1,5 +1,5 @@
-//! Lyrics through the app layer: LRCLIB first, VK's own text second, and the
-//! difference between "nothing exists" and "could not ask".
+//! Тексты на уровне приложения: сначала LRCLIB, потом собственный текст VK, а также разница между
+//! "nothing exists" и "could not ask".
 
 mod common;
 
@@ -19,7 +19,7 @@ fn track(lyrics_id: Option<i64>) -> Track {
 }
 
 fn app(vk: &str, lrclib: &str) -> App {
-    // No Genius: these tests never reach the real site.
+    // Нет гения: эти тесты никогда не доходят до реального объекта.
     app_with_genius(vk, lrclib, "")
 }
 
@@ -52,7 +52,7 @@ fn timed_lyrics_from_lrclib_win_and_vk_is_not_asked() {
     assert_eq!(lyrics.lines.len(), 2);
     assert_eq!(lyrics.lines[1].time, 2.5);
     assert_eq!(vk.call_count("getLyrics"), 0);
-    // The exact lookup carries the length, and nothing but the track's own fields.
+    // Точный поиск содержит длину и ничего, кроме собственных полей дорожки.
     let calls = lrclib.calls.lock().unwrap();
     assert!(calls[0].0.starts_with("/api/get?") && calls[0].0.contains("duration=200"), "{calls:?}");
 }
@@ -87,10 +87,10 @@ fn plain_lrclib_text_is_the_last_resort_and_nothing_found_is_not_an_error() {
 fn a_failing_source_is_reported_only_when_nothing_else_answered() {
     let broken = FakeApi::start(|_, _, _| (500, "oops".to_string()));
     let vk = FakeApi::start(|_, _, _| (200, r#"{"response":{"text":"vk text"}}"#.to_string()));
-    // LRCLIB down, VK has text: the user gets the text.
+    // LRCLIB вниз, VK имеет текст: пользователь получает текст.
     let found = app(&vk.base, &broken.base).lyrics(&track(Some(9))).unwrap().unwrap();
     assert_eq!(found.source, "VK");
-    // LRCLIB down and no other source: say so instead of "no lyrics".
+    // LRCLIB отключен и нет другого источника: скажите так вместо "no lyrics".
     let error = app(&vk.base, &broken.base).lyrics(&track(None)).unwrap_err();
     assert!(matches!(error, Error::Http(500)), "{error:?}");
 }
@@ -119,7 +119,7 @@ fn not_found_is_never_an_error() {
     let lrclib = FakeApi::start(|_, _, _| (404, r#"{"code":404,"name":"TrackNotFound"}"#.to_string()));
     let vk = FakeApi::start(|_, _, _| (200, "{}".to_string()));
     assert!(app(&vk.base, &lrclib.base).lyrics(&track(None)).unwrap().is_none());
-    // The search endpoint answering 404 or an empty list is the same.
+    // Конечная точка поиска, отвечающая на 404 или пустой список, та же самая.
     assert!(lrclib.call_count("/api/search") >= 1);
 }
 
@@ -139,13 +139,13 @@ fn lrclib_down_but_vk_and_genius_say_none_is_not_found() {
     let app = app_with_genius(&vk.base, &lrclib.base, &format!("{}/", genius.base));
     assert!(app.lyrics(&track(Some(9))).unwrap().is_none());
     assert_eq!(genius.call_count("/api/search/song"), 1);
-    // Without a definitive answer from anyone it is still a failure.
+    // Без однозначного ответа от кого-либо это все равно провал.
     let broken_genius = FakeApi::start(|_, _, _| (403, "no".to_string()));
     let app = app_with_genius(&vk.base, &lrclib.base, &format!("{}/", broken_genius.base));
     let vk_down = FakeApi::start(|_, _, _| (200, r#"{"error":{"error_code":15,"error_msg":"Access denied"}}"#.to_string()));
     let app_down = self::app_with_genius(&vk_down.base, &lrclib.base, &format!("{}/", broken_genius.base));
     assert!(matches!(app_down.lyrics(&track(Some(9))).unwrap_err(), Error::Http(503)));
-    // VK saying "none" is enough on its own.
+    // VK говорит, что "none" само по себе достаточно.
     assert!(app.lyrics(&track(Some(9))).unwrap().is_none());
 }
 
@@ -159,7 +159,7 @@ fn unauthorized_from_vk_still_propagates() {
 
 #[test]
 fn a_failed_exact_lookup_does_not_stop_the_searches() {
-    // /api/get is broken, /api/search works: the text is found.
+    // /api/get не работает, /api/search работает: текст найден.
     let lrclib = FakeApi::start(|url, _, _| if url.starts_with("/api/get") { (500, "oops".into()) } else { (200, format!("[{PLAIN_ONLY}]")) });
     let vk = FakeApi::start(|_, _, _| (200, "{}".to_string()));
     let lyrics = app(&vk.base, &lrclib.base).lyrics(&track(None)).unwrap().unwrap();
@@ -171,7 +171,7 @@ fn a_title_with_a_speed_up_tag_is_found_and_the_query_is_encoded() {
     let entry = r#"[{"trackName":"Дорога в ад","artistName":"Чучело","duration":150,"plainLyrics":"слова дороги","syncedLyrics":"[00:01.00] слова\n[00:02.00] дороги"}]"#;
     let lrclib = FakeApi::start(move |url, _, _| {
         let q = query_of(url);
-        // Only the cleaned title is known to LRCLIB.
+        // LRCLIB известен только очищенный заголовок.
         if url.starts_with("/api/search") && q.get("track_name").map(String::as_str) == Some("Дорога в ад") {
             (200, entry.to_string())
         } else if url.starts_with("/api/get") {
@@ -187,7 +187,7 @@ fn a_title_with_a_speed_up_tag_is_found_and_the_query_is_encoded() {
     assert_eq!(lyrics.source, "LRCLIB");
     assert_eq!(lyrics.lines.len(), 2);
     let calls = lrclib.calls.lock().unwrap();
-    // Raw characters never reach the wire: Cyrillic, parentheses and & are escaped.
+    // Необработанные символы никогда не доходят до провода: кириллица, круглые скобки и & экранируются.
     for (url, _) in calls.iter() {
         assert!(url.is_ascii() && !url.contains('(') && !url.contains(' '), "{url}");
     }

@@ -1,14 +1,12 @@
-//! The player thread.
+//! Воспроизведение с раздельными потоками декодирования и вывода звука.
 //!
-//! Two threads cooperate per track:
+//! Поток декодера ждёт данные, декодирует их, преобразует в формат устройства
+//! и передаёт готовые блоки через ограниченный канал. Ожидание сети не блокирует
+//! поток управления аудио.
 //!
-//! * the **decoder thread** waits for the download, decodes, converts to the
-//!   device format and sends chunks through a bounded channel. It may block
-//!   for long (a seek past what has been downloaded) without affecting
-//!   anything else;
-//! * the **audio thread** (this file's `run`) owns the sink, writes chunks to
-//!   it, applies pause/volume/seek and reports events. It never blocks on the
-//!   network or on decoding, so Pause and Stop always answer immediately.
+//! Аудиопоток (`run`) владеет выходным устройством, подаёт готовые блоки,
+//! применяет паузу, громкость, перемотку и сообщает события. Сетевые запросы
+//! и декодирование выполняются отдельно.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver as StdReceiver, RecvTimeoutError, Sender as StdSender};
@@ -27,17 +25,17 @@ use crate::Error;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PlayerEvent {
-    /// A track was requested; audio has not started.
+    /// Трек был запрошен; звук не запустился.
     Loading { track_id: String },
-    /// Audio is coming out of the speakers (or resumed).
+    /// Звук выходит из динамиков (или возобновляется).
     Playing { track_id: String },
     Paused { track_id: String },
-    /// The stream ran dry mid-track and playback waits for data.
+    /// Поток прервался в середине дорожки, и воспроизведение ожидает данных.
     Buffering { track_id: String, on: bool },
     Position { track_id: String, seconds: f64, duration: f64 },
-    /// Levels (0…1) of what is playing right now; only while the visualizer is on.
+    /// Уровни (0…1) того, что играет прямо сейчас; только при включенном визуализаторе.
     Spectrum { bands: [f32; BANDS] },
-    /// The track played to its end by itself.
+    /// Трек доигрался сам по себе.
     Ended { track_id: String },
     Stopped,
     Failed { track_id: String, error: Error },
@@ -50,12 +48,12 @@ pub enum Command {
     Resume,
     Seek(f64),
     SetVolume(f32),
-    /// Turns the spectrum analysis (and its events) on or off.
+    /// Включает или выключает спектральный анализ (и его события).
     SetVisualizer(bool),
-    /// Equaliser gains in dB for `eq::BANDS`; `None` (or all zero) turns it off.
+    /// Усиление эквалайзера в dB для `eq::BANDS`; `None` (или все нули) отключает его.
     SetEqualizer(Option<[f32; 10]>),
-    /// Closes the sound card so the next Play opens it again (the user chose
-    /// another output). Whatever was playing stops.
+    /// Закрывает звуковую карту, чтобы при следующем воспроизведении она открывалась снова
+    /// (пользователь выбрал другой выход). Что бы ни играло, останавливается.
     ReopenSink,
     Stop,
     Shutdown,
@@ -68,12 +66,12 @@ enum Chunk {
 }
 
 enum DecoderCommand {
-    /// `near_end`: the target is within the last seconds of VK's length,
-    /// which is rounded up and can lie past the real end of the audio.
+    /// `near_end`: цель находится в пределах последних секунд длины VK, которая округляется в большую
+    /// сторону и может находиться за пределами реального конца аудио.
     Seek { generation: u64, seconds: f64, near_end: bool },
 }
 
-/// Everything about the track being played.
+/// Все о воспроизводимом треке.
 struct Session {
     track_id: String,
     duration: f64,
@@ -82,13 +80,13 @@ struct Session {
     chunks: Receiver<Chunk>,
     decoder_commands: Sender<DecoderCommand>,
     generation: u64,
-    /// Stream time of the sink's frame 0.
+    /// Время потока кадра приемника 0.
     base_seconds: f64,
-    /// Converted samples waiting for room in the sink.
+    /// Преобразованные образцы ждут своего места в раковине.
     pending: Vec<f32>,
     pending_offset: usize,
     ended: bool,
-    /// Set when the stream died; reported once, then the session is dropped.
+    /// Устанавливается, когда поток умер; сообщается один раз, затем сеанс прерывается.
     failure: Option<Error>,
     started: bool,
     buffering: bool,
@@ -115,8 +113,8 @@ pub struct PlayerHandle {
     thread: Option<JoinHandle<()>>,
 }
 
-/// A cloneable way to talk to the player thread (from its own event callback,
-/// from worker threads). It does not own the thread.
+/// Клонируемый способ общения с потоком игрока (из его собственного обратного вызова событий, из
+/// рабочих потоков). Он не является владельцем потока.
 #[derive(Clone)]
 pub struct Remote {
     commands: StdSender<Command>,
@@ -142,8 +140,8 @@ impl Remote {
 }
 
 impl PlayerHandle {
-    /// `make_sink` runs on the audio thread, lazily at the first Play, so the
-    /// app starts without a sound card and a stream never crosses threads.
+    /// `make_sink` выполняется в аудиопотоке лениво при первом воспроизведении, поэтому приложение
+    /// запускается без звуковой карты, и поток никогда не пересекает потоки.
     pub fn spawn<F>(make_sink: F, events: impl Fn(PlayerEvent) + Send + 'static) -> Self
     where
         F: FnMut() -> crate::Result<Box<dyn Sink>> + Send + 'static,
@@ -188,17 +186,16 @@ impl Drop for PlayerHandle {
 }
 
 const POSITION_INTERVAL: Duration = Duration::from_millis(250);
-/// A seek this close to VK's (rounded) length may land past the real end.
+/// Поиск так близко к длине VK (округленной) может оказаться за пределами реального конца.
 const NEAR_END_SECONDS: f64 = 2.0;
-/// About 30 pictures a second for the visualizer.
+/// Около 30 кадров в секунду для визуализатора.
 const SPECTRUM_INTERVAL: Duration = Duration::from_millis(33);
-/// Refill the sink when it holds less than this, up to `HIGH_WATER`. Filling
-/// in batches lets every thread sleep for a few hundred milliseconds at a
-/// time instead of waking dozens of times a second, which is what keeps a
-/// playing track from costing battery.
+/// Наполните раковину, когда она вмещает меньше этого значения, до `HIGH_WATER`. Пакетное заполнение
+/// позволяет каждому потоку спать на несколько сотен миллисекунд за раз вместо того, чтобы просыпаться
+/// десятки раз в секунду, что предотвращает расход заряда батареи при воспроизведении трека.
 const LOW_WATER_SECONDS: f64 = 0.2;
 const HIGH_WATER_SECONDS: f64 = 0.45;
-/// Decoded chunks (about 23 ms each) the decoder may run ahead of the sink.
+/// Декодированные фрагменты (около 23 мс каждый) декодер может запускать раньше приемника.
 const CHUNK_QUEUE: usize = 24;
 
 fn run<F>(commands: StdReceiver<Command>, mut make_sink: F, events: impl Fn(PlayerEvent))
@@ -215,10 +212,10 @@ where
     let mut last_spectrum = Instant::now();
     let mut eq_gains: Option<[f32; 10]> = None;
     let mut eq: Option<Equalizer> = None;
-    let mut eq_for: Option<(u32, usize)> = None; // the device format the filters were made for
+    let mut eq_for: Option<(u32, usize)> = None; // формат устройства, для которого были созданы фильтры
 
     loop {
-        // Commands first, so Pause/Stop never wait behind audio work.
+        // Сначала команды, поэтому Pause/Stop никогда не откладывает работу звука.
         let timeout = match (session.as_ref(), sink.as_ref()) {
             (Some(active), Some(output)) if !paused => {
                 let wake = wake_after(active, output.as_ref(), last_position);
@@ -247,7 +244,7 @@ where
                 }
                 Command::SetEqualizer(gains) => {
                     eq_gains = gains;
-                    eq_for = None; // rebuild below
+                    eq_for = None; // восстановить ниже
                 }
                 Command::SetVisualizer(on) => {
                     visualizer = on;
@@ -307,7 +304,8 @@ where
                 Command::Play { track_id, url, duration, start, fetch } => {
                     session = None;
                     if let Some(eq) = eq.as_mut() { eq.reset(); }
-                    // A device that vanished (or never opened) is retried here.
+                    // Здесь повторяется попытка устройства, которое исчезло (или никогда не
+                    // открывалось).
                     if sink.as_ref().map(|s| !s.is_healthy()).unwrap_or(true) {
                         sink = None;
                         match make_sink() {
@@ -340,7 +338,7 @@ where
 
         let (Some(active), Some(output)) = (session.as_mut(), sink.as_mut()) else { continue };
         if !output.is_healthy() {
-            // Device gone mid-track: report and let the app decide.
+            // Устройство вышло из строя: сообщите и позвольте приложению принять решение.
             let id = active.track_id.clone();
             session = None;
             log::warn!("audio output is unresponsive; stopping the current stream for recovery");
@@ -396,14 +394,14 @@ fn position_event(session: &Session, sink: &dyn Sink) -> PlayerEvent {
     }
 }
 
-/// How long the audio thread can sleep before it has work again: until the
-/// sink drains to the low-water mark (or sooner while it waits for the
-/// decoder), and never past the next position report.
+/// Как долго аудиопоток может спать, прежде чем он снова начнет работать: до тех пор, пока сток не
+/// опустеет до нижней отметки (или раньше, пока он ожидает декодера), и никогда не пройдет мимо
+/// следующего отчета о местоположении.
 fn wake_after(session: &Session, sink: &dyn Sink, last_position: Instant) -> Duration {
     let scale = sink.time_scale().max(1.0);
     let queued = sink.queued_frames() as f64 / sink.sample_rate() as f64;
     let until_refill = if session.pending_offset < session.pending.len() || queued < LOW_WATER_SECONDS {
-        // Work is waiting or the device is about to run dry.
+        // Ожидается работа или устройство скоро разрядится.
         0.008
     } else {
         (queued - LOW_WATER_SECONDS) / scale
@@ -413,10 +411,10 @@ fn wake_after(session: &Session, sink: &dyn Sink, last_position: Instant) -> Dur
     Duration::from_secs_f64(until_refill.min(until_report).min(end_check).clamp(0.005, 0.25))
 }
 
-/// Moves chunks from the decoder thread into the sink.
+/// Перемещает фрагменты из потока декодера в приемник.
 fn pump(session: &mut Session, sink: &mut dyn Sink, mut eq: Option<&mut Equalizer>, events: &impl Fn(PlayerEvent)) {
     loop {
-        // Finish what is left of the previous chunk first.
+        // Сначала закончите то, что осталось от предыдущего куска.
         if session.pending_offset < session.pending.len() {
             let room = sink.writable();
             if room == 0 {
@@ -436,7 +434,7 @@ fn pump(session: &mut Session, sink: &mut dyn Sink, mut eq: Option<&mut Equalize
             session.pending.clear();
             session.pending_offset = 0;
         }
-        // Do not queue more than the high-water mark: a seek should flush little.
+        // Не ставьте в очередь больше верхней отметки: поиск должен смыть немного.
         if sink.queued_frames() as f64 / sink.sample_rate() as f64 > HIGH_WATER_SECONDS {
             return;
         }
@@ -454,7 +452,7 @@ fn pump(session: &mut Session, sink: &mut dyn Sink, mut eq: Option<&mut Equalize
             }
             Ok(Chunk::End { generation }) if generation == session.generation => {
                 session.ended = true;
-                // Nothing more is coming, so this is no longer waiting for data.
+                // Больше ничего не приходит, так что данных больше не ждем.
                 if session.buffering {
                     session.buffering = false;
                     events(PlayerEvent::Buffering { track_id: session.track_id.clone(), on: false });
@@ -465,9 +463,9 @@ fn pump(session: &mut Session, sink: &mut dyn Sink, mut eq: Option<&mut Equalize
                 session.cancel();
                 return;
             }
-            Ok(_) => {} // stale chunk from before a seek
+            Ok(_) => {} // устаревший фрагмент перед поиском
             Err(TryRecvError::Empty) => {
-                // Nothing decoded and the sink is nearly dry: buffering.
+                // Ничего не декодировано и сток почти сухой: буферизация.
                 if !session.ended && session.started && !session.buffering && sink.queued_frames() == 0 {
                     session.buffering = true;
                     events(PlayerEvent::Buffering { track_id: session.track_id.clone(), on: true });
@@ -475,8 +473,8 @@ fn pump(session: &mut Session, sink: &mut dyn Sink, mut eq: Option<&mut Equalize
                 return;
             }
             Err(TryRecvError::Disconnected) => {
-                // The decoder thread is gone. After End that is normal; any
-                // other time it died, which must not look like a finished track.
+                // Нить декодера исчезла. После End это нормально; в любой другой раз он умер, что не
+                // должно выглядеть как законченный трек.
                 if !session.ended {
                     session.failure = Some(Error::Stream("the decoder stopped unexpectedly".into()));
                     session.cancel();
@@ -547,9 +545,8 @@ fn start_session(
     })
 }
 
-/// Sends a chunk, blocking until there is room. It wakes when the audio
-/// thread takes a chunk (no polling), and gives up if the session is
-/// cancelled meanwhile.
+/// Отправляет фрагмент, блокируя до тех пор, пока не останется место. Он просыпается, когда аудиопоток
+/// принимает кусок (без опроса), и прекращает работу, если сеанс тем временем отменяется.
 fn send_chunk(sender: &Sender<Chunk>, stop: &AtomicBool, mut chunk: Chunk) -> bool {
     loop {
         if stop.load(Ordering::Relaxed) {
@@ -598,13 +595,13 @@ fn decode_loop(
         if stop.load(Ordering::Relaxed) {
             return;
         }
-        // The latest Seek wins; older ones are superseded.
+        // Последний Seek побеждает; более старые заменяются.
         let mut seek = None;
         while let Ok(DecoderCommand::Seek { generation: g, seconds, near_end }) = commands.try_recv() {
             seek = Some((g, seconds, near_end));
         }
-        // At the end of the stream there is nothing to decode: sleep until a
-        // Seek arrives (or the session is dropped), without polling.
+        // В конце потока нечего декодировать: спать до тех пор, пока не придет Seek (или сеанс не будет
+        // прерван), без опроса.
         if at_end && seek.is_none() {
             match commands.recv_timeout(Duration::from_millis(250)) {
                 Ok(DecoderCommand::Seek { generation: g, seconds, near_end }) => seek = Some((g, seconds, near_end)),
@@ -620,8 +617,8 @@ fn decode_loop(
                     return;
                 }
                 if near_end {
-                    // Past the real end of the audio: the track is over, which
-                    // is not a failure (a failure would restart it from 0:00).
+                    // После реального окончания звука: трек окончен, что не является сбоем (в случае
+                    // сбоя он перезапускается с 0:00).
                     at_end = true;
                     if !send_chunk(&sender, &stop, Chunk::End { generation }) {
                         return;

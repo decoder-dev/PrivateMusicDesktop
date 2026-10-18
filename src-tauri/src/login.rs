@@ -1,12 +1,12 @@
-//! Signing in to VK.
+//! Авторизуемся в VK.
 //!
-//! A separate window shows vk.ru's own login page (so VK's password, 2FA and
-//! captcha screens work as they do in a browser). The app never sees the
-//! password: it watches that window's cookie jar, and once a session cookie
-//! appears it asks VK for an API token with it, exactly like the iOS app.
+//! В отдельном окне отображается собственная страница входа vk.ru (поэтому пароль VK, экраны 2FA и
+//! капчи работают так же, как и в браузере). Приложение никогда не видит пароль: оно просматривает
+//! jar-файл cookie этого окна, и как только появляется файл cookie сеанса, оно запрашивает у VK токен
+//! API, точно так же, как приложение iOS.
 //!
-//! The window is isolated: private storage, no app capabilities, and it may
-//! only navigate within vk.ru / vk.com over https.
+//! Окно изолировано: личное хранилище, нет возможностей приложения, и оно может перемещаться только
+//! внутри vk.ru / vk.com через https.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -21,32 +21,33 @@ use url::Url;
 
 use crate::AppState;
 
-/// Set by CI: verify both page loading and private cookie access, then quit.
+/// Установлено CI: проверьте загрузку страницы и доступ к личным файлам cookie, затем выйдите.
 pub static SMOKE_REPORT: OnceLock<PathBuf> = OnceLock::new();
 static SMOKE_PAGE_LOADED: AtomicBool = AtomicBool::new(false);
 
-// Did VK's own page arrive? A blocked or unreachable VK (a VPN that is on, or
-// should be off) leaves the window blank or on the browser's error page, and
-// the web view reports no failure of its own.
+// Пришла ли собственная страница VK? Заблокированный или недоступный VK (VPN, который включен или
+// должен быть выключен) оставляет окно пустым или на странице ошибок браузера, и веб-представление не
+// сообщает о собственных сбоях.
 static PAGE_LOADED: AtomicBool = AtomicBool::new(false);
 static PAGE_ERROR: AtomicBool = AtomicBool::new(false);
-/// The window was reported as not loading; the next "sign in" press reloads it.
+/// Сообщалось, что окно не загружается; следующее нажатие "sign in" перезагружает его.
 static LOAD_FAILED: AtomicBool = AtomicBool::new(false);
-/// Tells the watcher that the page was asked for again: its clock restarts.
+/// Сообщает наблюдателю, что страницу снова запросили: его часы перезапускаются.
 static LOAD_RESTARTED: AtomicBool = AtomicBool::new(false);
 
-/// How long VK's login page may take before the window is called stuck.
+/// Сколько времени может пройти страница входа VK, прежде чем окно будет названо зависшим.
 const LOAD_TIMEOUT: Duration = Duration::from_secs(25);
-/// A blank page can be the web view's own first one: only a non-VK page that
-/// is still what we see after this long is taken for an error page.
+/// Пустая страница может быть первой страницей веб-представления: только страница, отличная от VK,
+/// которая по-прежнему остается тем, что мы видим после того, как это долгое время принимается за
+/// страницу с ошибкой.
 const ERROR_PAGE_GRACE: Duration = Duration::from_secs(4);
 
 const LOGIN_URL: &str = "https://vk.ru/login";
 const POLL: Duration = Duration::from_millis(1500);
 const SESSION_COOKIES: [&str; 3] = ["remixsid", "remixsid6", "remixnsid"];
 
-/// The browser identity shown to VK, both by the sign-in window and by the
-/// token exchange (VK ties the token to it).
+/// Идентификатор браузера, отображаемый VK как в окне входа, так и при обмене токенами (VK привязывает
+/// к нему токен).
 #[cfg(target_os = "windows")]
 pub const WEB_USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
@@ -65,9 +66,9 @@ fn is_vk_host(host: &str) -> bool {
 fn is_allowed_navigation(url: &Url) -> bool {
     match url.scheme() {
         "https" => url.host_str().map(is_vk_host).unwrap_or(false),
-        // Blank frames VK's page creates for itself carry no content.
+        // Пустые рамки, которые страница VK создает сама для себя, не несут никакого контента.
         "about" => matches!(url.path(), "blank" | "srcdoc"),
-        // Object URLs made by VK's own page: blob:https://id.vk.ru/<uuid>.
+        // Объект URLs, созданный собственной страницей VK: blob:https://id.vk.ru/<uuid>.
         "blob" => Url::parse(url.path()).is_ok_and(|inner| is_allowed_navigation(&inner) && inner.scheme() == "https"),
         _ => false,
     }
@@ -79,9 +80,9 @@ enum LoadVerdict {
     Failed,
 }
 
-/// The login page counts as not loading when VK's page has not finished after
-/// [`LOAD_TIMEOUT`], or a page other than VK's finished (the browser's own
-/// error page, which this window refuses to navigate to anyway).
+/// Страница входа считается не загружающейся, если страница VK не завершилась после [`LOAD_TIMEOUT`]
+/// или завершилась страница, отличная от страницы VK (собственная страница ошибки браузера, на которую
+/// это окно все равно отказывается перейти).
 fn load_verdict(elapsed: Duration, loaded: bool, error_page: bool) -> LoadVerdict {
     if loaded {
         LoadVerdict::Waiting
@@ -99,8 +100,8 @@ fn reset_load_state() {
     LOAD_RESTARTED.store(true, Ordering::SeqCst);
 }
 
-/// Automatic checks wait for a known session cookie; manual completion lets
-/// VK validate any nonempty cookie set, as the iOS client's finish button does.
+/// Автоматические проверки ждут известного файла cookie сеанса; Заполнение вручную позволяет VK
+/// проверять любой непустой набор файлов cookie, как это делает кнопка завершения клиента iOS.
 fn session_header(cookies: &[(String, String)], manual: bool) -> Option<String> {
     let signed_in = cookies
         .iter()
@@ -109,16 +110,16 @@ fn session_header(cookies: &[(String, String)], manual: bool) -> Option<String> 
         .then(|| cookies.iter().map(|(n, v)| format!("{n}={v}")).collect::<Vec<_>>().join("; "))
 }
 
-/// Read the whole private cookie store: looking up just vk.ru/ drops
-/// host-only cookies set by login.vk.ru, where web_token is requested.
-/// Never forward cookies from VK ID, vk.com or an unrelated site to it.
+/// Прочитайте весь частный магазин файлов cookie: поиск по vk.ru/ удаляет файлы cookie только для
+/// хоста, установленные login.vk.ru, где запрашивается web_token. Никогда не пересылайте на него файлы
+/// cookie с VK, ID, vk.com или несвязанных сайтов.
 fn token_cookies(cookies: &[tauri::webview::Cookie<'_>]) -> Vec<(String, String)> {
     let mut cookies: Vec<_> = cookies.iter().filter(|cookie| {
         let domain = cookie.domain().unwrap_or("").trim_start_matches('.');
         (domain.eq_ignore_ascii_case("vk.ru") || domain.eq_ignore_ascii_case("login.vk.ru"))
             && cookie.path().unwrap_or("/") == "/"
     }).collect();
-    // As in a browser, prefer the host-specific value when names collide.
+    // Как и в браузере, при конфликте имен отдавайте предпочтение значению, специфичному для хоста.
     cookies.sort_by_key(|cookie| std::cmp::Reverse(cookie.domain().unwrap_or("").len()));
     let mut seen = std::collections::HashSet::new();
     cookies.into_iter().filter(|cookie| seen.insert(cookie.name().to_string()))
@@ -128,16 +129,16 @@ fn token_cookies(cookies: &[tauri::webview::Cookie<'_>]) -> Vec<(String, String)
 pub fn start(handle: &AppHandle, state: &AppState) -> Result<(), String> {
     if let Some(existing) = handle.get_webview_window("login") {
         if LOAD_FAILED.load(Ordering::SeqCst) {
-            // The page never arrived: "Retry" loads it again, in the same
-            // window and with the same restrictions.
+            // Страница так и не дошла: «Повторить» загружает ее снова, в том же окне и с теми же
+            // ограничениями.
             log::info!("sign-in window: reloading the login page");
             reset_load_state();
             if let Ok(url) = LOGIN_URL.parse::<Url>() {
                 let _ = existing.navigate(url);
             }
         }
-        // Explicit completion also works if VK changes its session-cookie names.
-        // Only VK's token endpoint decides whether these cookies authenticate.
+        // Явное завершение также работает, если VK меняет имена файлов cookie сеанса. Только конечная
+        // точка токена VK решает, аутентифицируются ли эти файлы cookie.
         state.login_check.store(true, Ordering::SeqCst);
         let _ = existing.unminimize();
         let _ = existing.show();
@@ -162,7 +163,7 @@ pub fn start(handle: &AppHandle, state: &AppState) -> Result<(), String> {
         .on_navigation(|url| {
             let allowed = is_allowed_navigation(url);
             if !allowed {
-                // Only the host: sign-in addresses can carry one-time codes.
+                // Только адреса входа хоста могут содержать одноразовые коды.
                 log::warn!("sign-in window: blocked a {} page on {:?}", url.scheme(), url.host_str());
             }
             allowed
@@ -177,15 +178,15 @@ pub fn start(handle: &AppHandle, state: &AppState) -> Result<(), String> {
                 PAGE_LOADED.store(true, Ordering::SeqCst);
                 PAGE_ERROR.store(false, Ordering::SeqCst);
                 if LOAD_FAILED.swap(false, Ordering::SeqCst) {
-                    // It got through after all (the VPN was switched meanwhile).
+                    // В конце концов, это удалось (VPN тем временем был переключен).
                     let _ = webview.app_handle().emit("pm-login", "loadok");
                 }
             } else if !PAGE_LOADED.load(Ordering::SeqCst) {
-                // Not VK's page: the engine's error page, or a blank one.
+                // Не страница VK: страница ошибок движка или пустая.
                 PAGE_ERROR.store(true, Ordering::SeqCst);
             }
             if SMOKE_REPORT.get().is_some() && is_vk_host(&host) {
-                // The worker must also prove that private cookies are readable.
+                // Работник также должен доказать, что частные файлы cookie доступны для чтения.
                 SMOKE_PAGE_LOADED.store(true, Ordering::SeqCst);
             }
         })
@@ -218,7 +219,7 @@ pub fn start(handle: &AppHandle, state: &AppState) -> Result<(), String> {
     Ok(())
 }
 
-/// Waits for the user to finish signing in. `None` when the window was closed.
+/// Ожидает завершения входа пользователя в систему. `None`, когда окно было закрыто.
 fn poll(
     handle: &AppHandle,
     window: &tauri::WebviewWindow,
@@ -244,15 +245,15 @@ fn poll(
                 PAGE_ERROR.load(Ordering::SeqCst),
             ) == LoadVerdict::Failed
         {
-            // Tell the window: it shows the VPN hint and a Retry button, and
-            // this window stays open for the retry.
+            // Сообщите окну: оно показывает подсказку VPN и кнопку «Повторить», и это окно остается
+            // открытым для повторной попытки.
             log::warn!("sign-in window: the VK login page did not load");
             LOAD_FAILED.store(true, Ordering::SeqCst);
             let _ = handle.emit("pm-login", "loadfailed");
         }
         if SMOKE_REPORT.get().is_some() {
-            // CI only probes the browser, never VK's token endpoint, including
-            // while the initial page is still loading.
+            // CI проверяет только браузер, а не конечную точку токена VK, в том числе во время загрузки
+            // начальной страницы.
             if !SMOKE_PAGE_LOADED.load(Ordering::SeqCst) { continue; }
             let verified = smoke_cookie_store(window);
             if let Some(report) = SMOKE_REPORT.get() {
@@ -285,22 +286,22 @@ fn poll(
         }
         match exchange_web_session(&header, WEB_USER_AGENT) {
             Ok(session) => {
-                // Closing the window during the HTTP request cancels adoption.
+                // Закрытие окна во время запроса HTTP отменяет принятие.
                 if handle.get_webview_window("login").is_none() || !running.load(Ordering::SeqCst) {
                     return None;
                 }
                 log::info!("sign-in window: token exchange succeeded");
                 return Some(Ok(session));
             }
-            // A cookie exists but VK does not call it signed in yet (a 2FA or
-            // captcha step): keep waiting.
+            // Файл cookie существует, но VK еще не вызывает его для входа в систему (этап 2FA или
+            // проверки подлинности): продолжайте ждать.
             Err(Error::Unauthorized) => {
                 failures += 1;
                 if failures == 3 || manual {
                     log::warn!("sign-in window: VK has not confirmed the web session");
                     let _ = handle.emit("pm-login", "pending:unauthorized");
                 }
-                // Keep the browser session for 2FA, without hammering VK.
+                // Сохраняйте сессию браузера для 2FA, не забивая VK.
                 std::thread::sleep(Duration::from_secs(5));
             }
             Err(error) => {
@@ -313,16 +314,16 @@ fn poll(
     }
 }
 
-/// Exercises the actual native cookie manager in the isolated CI window.
-/// No credentials or token requests are involved.
+/// Запускает собственный менеджер файлов cookie в изолированном окне CI. Никаких учетных данных или
+/// запросов токенов не требуется.
 fn smoke_cookie_store(window: &tauri::WebviewWindow) -> bool {
     use tauri::webview::Cookie;
     let probes = [
         Cookie::build(("pm_probe_browser", "browser")).domain(".vk.ru").path("/").secure(true).build(),
         Cookie::build(("pm_probe_login", "login")).domain("login.vk.ru").path("/").secure(true).http_only(true).build(),
     ];
-    // One cookie comes from page JavaScript, the other from the native manager.
-    // A native-only round trip would miss a manager reading the wrong profile.
+    // Один файл cookie поступает со страницы JavaScript, другой — от собственного менеджера. При
+    // поездке туда и обратно только для местных жителей менеджер пропустит неправильный профиль.
     for cookie in &probes[1..] {
         if window.set_cookie(cookie.clone()).is_err() { return false; }
     }

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""Reuse the mobile app's original icons and mood artwork on desktop.
-Run: python scripts/sync-ios-assets.py --source /path/to/PrivateMusic2
-"""
+"""Повторно используйте оригинальные значки и изображения настроения мобильного приложения на рабочем
+столе. Запустите: python scripts/sync-ios-assets.py --source /path/to/PrivateMusic2"""
 import argparse
 from pathlib import Path
 from PIL import Image

@@ -2,7 +2,7 @@ import { h } from "./dom.js";
 import { t } from "./i18n.js";
 import { afterAnimation } from "./motion.js";
 
-/** Opens the dialog modally and returns `close(value)`, which fades it out first. */
+/** Открывает диалоговое окно модально и возвращает `close(value)`, который сначала затухает. */
 function present(dialog, resolve) {
   let done = false;
   document.body.classList.add("overlay-open");
@@ -21,7 +21,7 @@ function present(dialog, resolve) {
   };
 }
 
-/** A modal form. Resolves to the field values, or null when cancelled. */
+/** Модальная форма. Возвращает значения полей или нулевое значение при отмене. */
 export function formDialog({ title, fields, confirm }) {
   return new Promise((resolve) => {
     const inputs = fields.map((field) => {
@@ -57,7 +57,7 @@ export function formDialog({ title, fields, confirm }) {
   });
 }
 
-/** Yes/no. Resolves to true when confirmed. */
+/** Yes/no. При подтверждении принимает значение true. */
 export function confirmDialog({ text, confirm, danger = false }) {
   return new Promise((resolve) => {
     const dialog = h("dialog", { class: "dialog", "aria-label": text },

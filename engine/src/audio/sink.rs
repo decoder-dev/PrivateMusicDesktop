@@ -10,34 +10,34 @@ use ringbuf::{HeapCons, HeapProd, HeapRb};
 use crate::{Error, Result};
 use super::health::CallbackWatch;
 
-/// Where decoded audio goes. Lives on the audio thread and is not `Send`
-/// (a cpal stream must stay on the thread that built it).
+/// Куда идет декодированный звук. Находится в аудиопотоке и не является `Send` (поток cpal должен
+/// оставаться в потоке, который его создал).
 pub trait Sink {
     fn sample_rate(&self) -> u32;
     fn channels(&self) -> usize;
-    /// Interleaved samples that can be written right now without blocking.
+    /// Перемежающиеся семплы, которые можно записать прямо сейчас без блокировки.
     fn writable(&self) -> usize;
     fn write(&mut self, samples: &[f32]) -> usize;
-    /// Frames the device has played since the last flush.
+    /// Кадры, воспроизведенные устройством с момента последней очистки.
     fn played_frames(&self) -> u64;
-    /// Frames written but not played yet.
+    /// Кадры написаны, но еще не воспроизведены.
     fn queued_frames(&self) -> usize;
-    /// Drops everything queued and resets the played counter. Returns once
-    /// the device side has acknowledged, so nothing written afterwards is lost.
+    /// Удаляет все, что стоит в очереди, и сбрасывает счетчик сыгранных игр. Возвращается после
+    /// подтверждения со стороны устройства, поэтому ничего записанного впоследствии не теряется.
     fn flush(&mut self);
     fn set_paused(&mut self, paused: bool);
     fn set_volume(&mut self, volume: f32);
-    /// False after the device disappeared (unplugged headphones).
+    /// Ложь после исчезновения устройства (отключены наушники).
     fn is_healthy(&self) -> bool;
-    /// How much faster than real time the device consumes audio. Always 1
-    /// for a sound card; a simulated device in tests may run faster.
+    /// Насколько быстрее, чем в реальном времени, устройство потребляет звук. Всегда 1 для звуковой
+    /// карты; смоделированное устройство в тестах может работать быстрее.
     fn time_scale(&self) -> f64 {
         1.0
     }
 }
 
-/// A pretend sound card that consumes audio in real time (optionally faster),
-/// for tests and for machines without audio hardware.
+/// Имитационная звуковая карта, которая потребляет звук в реальном времени (возможно, быстрее), для
+/// тестов и для машин без звукового оборудования.
 pub struct SimulatedSink {
     rate: u32,
     channels: usize,
@@ -56,7 +56,7 @@ struct SimState {
 }
 
 impl SimulatedSink {
-    /// `speed` > 1 makes the pretend device consume faster than real time.
+    /// `speed` > 1 заставляет мнимое устройство потреблять энергию быстрее, чем в реальном времени.
     pub fn new(rate: u32, channels: usize, speed: f64) -> Self {
         Self {
             rate,
@@ -142,7 +142,7 @@ pub struct CpalSink {
     capacity: usize,
 }
 
-/// Names of the sound outputs the system offers, default first.
+/// Названия звуковых выходов, предлагаемые системой, сначала по умолчанию.
 pub fn output_devices() -> Vec<String> {
     use cpal::traits::HostTrait;
     let host = cpal::default_host();
@@ -161,13 +161,13 @@ pub fn output_devices() -> Vec<String> {
 }
 
 impl CpalSink {
-    /// Opens the default output device.
+    /// Открывает устройство вывода по умолчанию.
     pub fn open_default() -> Result<Self> {
         Self::open(None)
     }
 
-    /// Opens the named output, or the default one when `name` is `None` or
-    /// that device is gone (unplugged headphones should not mean silence).
+    /// Открывает указанный выход или выход по умолчанию, если `name` равен `None` или это устройство
+    /// отсутствует (отключение наушников не должно означать тишину).
     pub fn open(name: Option<&str>) -> Result<Self> {
         let host = cpal::default_host();
         let named = name.and_then(|wanted| {
@@ -183,7 +183,7 @@ impl CpalSink {
         let config = device.default_output_config().map_err(|e| Error::Stream(format!("audio output: {e}")))?;
         let rate = config.sample_rate().0;
         let channels = config.channels() as usize;
-        let capacity = (rate as usize * channels) / 2; // half a second
+        let capacity = (rate as usize * channels) / 2; // полсекунды
         let (producer, consumer) = HeapRb::<f32>::new(capacity.max(4096)).split();
         let shared = Arc::new(Shared {
             callbacks: AtomicU64::new(0),
@@ -233,8 +233,8 @@ where
 
 fn render_output<T: SizedSample + FromSample<f32>>(output: &mut [T], consumer: &mut HeapCons<f32>, shared: &Shared, channels: usize) {
     shared.callbacks.fetch_add(1, Ordering::Relaxed);
-    // A flush asks the callback to drop what is queued. The writer waits
-    // for the acknowledgement before writing again.
+    // Флеш просит обратный вызов удалить то, что стоит в очереди. Автор ждет подтверждения, прежде чем
+    // писать снова.
     let requested = shared.flush_requested.load(Ordering::Acquire);
     if requested != shared.flush_acknowledged.load(Ordering::Relaxed) {
         while consumer.try_pop().is_some() {}
@@ -281,7 +281,7 @@ impl Sink for CpalSink {
     }
     fn set_paused(&mut self, paused: bool) { self.shared.paused.store(paused, Ordering::Relaxed); }
     fn set_volume(&mut self, volume: f32) {
-        // `NaN.clamp(..)` is NaN, and a NaN gain turns every sample into noise.
+        // `NaN.clamp(..)` — это NaN, а усиление NaN превращает каждую выборку в шум.
         let volume = if volume.is_finite() { volume.clamp(0.0, 1.0) } else { 1.0 };
         self.shared.volume_bits.store(volume.to_bits(), Ordering::Relaxed);
     }

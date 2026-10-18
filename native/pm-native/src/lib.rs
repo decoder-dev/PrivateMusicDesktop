@@ -1,8 +1,8 @@
-//! Native core of Private Music.
+//! Родное ядро Private Music.
 //!
-//! Every `pm_*` function here keeps the exact C ABI of the headers in
-//! `PrivateMusic/Native/`, which Swift imports through the bridging header.
-//! The headers stay the contract; this crate is the implementation.
+//! Каждая функция `pm_*` здесь сохраняет точный C ABI заголовков в `PrivateMusic/Native/`, который
+//! Swift импортирует через мостовой заголовок. Заголовки остаются в рамках контракта; этот ящик
+//! является реализацией.
 
 #![allow(clippy::missing_safety_doc)]
 #![allow(non_camel_case_types, non_upper_case_globals)]

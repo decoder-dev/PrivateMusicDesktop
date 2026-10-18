@@ -26,8 +26,7 @@ export function createSearchView({ play, onTrackAction, toast }) {
   let debounce = null;
   let tab = "tracks";
   let recent = readRecent();
-  // Artists and albums are asked for when their tab is first shown for a
-  // query: query -> list.
+  // Исполнители и альбомы запрашиваются при первом отображении их вкладки по запросу: запрос -> список.
   const shelves = { artists: new Map(), albums: new Map() };
 
   const field = searchField({
@@ -35,7 +34,7 @@ export function createSearchView({ play, onTrackAction, toast }) {
     autocomplete: "off", spellcheck: "false", maxlength: "120",
     oninput: () => {
       clearTimeout(debounce);
-      sequence++; // Invalidate responses immediately, including during debounce.
+      sequence++; // Немедленно делайте ответы недействительными, в том числе во время устранения дребезга.
       nextOffset = null;
       loadingMore = false;
       if (!normalize(input.value)) { run(""); return; }
@@ -54,7 +53,7 @@ export function createSearchView({ play, onTrackAction, toast }) {
     title: t("search.title"),
     hooks: { emptyText: t("search.empty"), art: "search", onPlay: play, onAction: onTrackAction },
   });
-  // The search box lives in the header, next to the title.
+  // Поле поиска находится в заголовке, рядом с заголовком.
   const header = screen.element.querySelector(".view-header");
   header.insertBefore(field.element, header.querySelector(".vh-actions"));
 
@@ -65,8 +64,8 @@ export function createSearchView({ play, onTrackAction, toast }) {
     h("h2", { class: "shelf-title", text: t("search.recent") }),
     h("button", { class: "btn", type: "button", text: t("search.clearRecent"), onclick: clearRecent }));
   const recentList = h("div", { class: "search-recents" });
-  // The track list, its status and empty note move into a pane of their own
-  // so the other tabs can take their place.
+  // Список треков, его статус и пустая заметка перемещаются на отдельную панель, чтобы другие вкладки
+  // могли занять свое место.
   const tracksPane = h("div", { class: "tab-pane" }, ...[...screen.element.children].filter((child) => child !== header));
   const panes = { tracks: tracksPane };
   const shelfParts = {};
@@ -90,7 +89,7 @@ export function createSearchView({ play, onTrackAction, toast }) {
   function renderTabs() {
     for (const button of tabs.querySelectorAll("button")) button.setAttribute("aria-selected", String(button.dataset.tab === tab));
     for (const [id, pane] of Object.entries(panes)) pane.hidden = id !== tab;
-    // Play and Shuffle act on the tracks.
+    // На треках действуют функции Play и Shuffle.
     header.querySelector(".vh-actions").hidden = tab !== "tracks";
   }
 
@@ -125,12 +124,12 @@ export function createSearchView({ play, onTrackAction, toast }) {
 
   function clearRecent() {
     recent = [];
-    try { localStorage.removeItem(HISTORY_KEY); } catch { /* storage can be disabled */ }
+    try { localStorage.removeItem(HISTORY_KEY); } catch { /* хранилище можно отключить */ }
     renderRecent();
   }
 
   function persistRecent() {
-    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(recent)); } catch { /* storage can be disabled */ }
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(recent)); } catch { /* хранилище можно отключить */ }
   }
 
   function select(id) {
@@ -209,7 +208,7 @@ export function createSearchView({ play, onTrackAction, toast }) {
     screen.setStatus(t("loading"));
     try {
       const page = await api.search(text, 0, PAGE);
-      if (mine !== sequence) return; // a newer query replaced this one
+      if (mine !== sequence) return; // новый запрос заменил этот
       results = uniqueTracks(page.items);
       summary.textContent=t("search.found",{count:Number.isFinite(page.total)?page.total:results.length});
       summary.hidden=false;

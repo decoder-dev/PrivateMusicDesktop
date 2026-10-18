@@ -1,8 +1,8 @@
 use std::cell::Cell;
 use std::time::{Duration, Instant};
 
-/// Driver callbacks must continue even during silence and pause. A stopped
-/// callback can leave a full ring buffer forever without a CPAL error.
+/// Обратные вызовы драйвера должны продолжаться даже во время тишины и паузы. Остановленный обратный
+/// вызов может навсегда оставить полный кольцевой буфер без ошибки CPAL.
 pub(super) struct CallbackWatch {
     seen: Cell<u64>,
     changed: Cell<Instant>,

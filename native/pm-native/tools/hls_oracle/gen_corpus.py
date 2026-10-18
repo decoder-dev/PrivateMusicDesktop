@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Random HLS playlists, weighted toward malformed and unusual input."""
+"""Случайные плейлисты HLS, ориентированные на искаженный и необычный ввод."""
 import random, sys, pathlib
 out = pathlib.Path(sys.argv[1]); out.mkdir(parents=True, exist_ok=True)
 n = int(sys.argv[2]); random.seed(int(sys.argv[3]) if len(sys.argv) > 3 else 1)
@@ -87,6 +87,6 @@ for i in range(n):
     for line in L:
         text += ws() + line + ws() + random.choice(NL)
     (out / f"p{i:05d}.m3u8").write_text(text, encoding="utf-8", newline="")
-# segment limit
+# лимит сегмента
 (out / "pbig.m3u8").write_text("#EXTM3U\n" + "".join(f"s{i}.ts\n" for i in range(4001)))
 (out / "pbig_ok.m3u8").write_text("#EXTM3U\n" + "".join(f"s{i}.ts\n" for i in range(4000)))

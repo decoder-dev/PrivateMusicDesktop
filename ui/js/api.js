@@ -1,6 +1,6 @@
 import { invoke } from "./bridge.js";
 
-// Every call resolves to data or rejects with { kind, message }.
+// Каждый вызов преобразуется в данные или отклоняется с помощью { kind, message }.
 export const api = {
   sessionState: () => invoke("session_state"),
   profile: () => invoke("profile"),
@@ -39,13 +39,16 @@ export const api = {
   downloads: () => invoke("downloads"),
   download: (track) => invoke("download", { track }),
   removeDownload: (trackId) => invoke("remove_download", { trackId }),
-  mix: (options = null) => invoke("mix", { options }),
+  mix: (options = null, offset = 0) => invoke("mix", { options, offset }),
   mixSettings: () => invoke("mix_settings"),
   catalogMixes: () => invoke("catalog_mixes"),
-  streamMix: (mixId, options = null) => invoke("stream_mix", { mixId, options }),
+  streamMix: (mixId, options = null, offset = 0) => invoke("stream_mix", { mixId, options, offset }),
   newReleases: () => invoke("new_releases"),
-  /** Plays a queue that keeps refilling from `source`: { kind: "personal"|"catalog"|"similar", … }. */
-  playRadio: (source, tracks, index) => invoke("play_radio", { source, tracks, index }),
+  /**
+   * Воспроизводит очередь, которая продолжает пополняться из `source`: { kind:
+   * "personal"|"catalog"|"similar", … }.
+   */
+  playRadio: (source, tracks, index) => { const { next_offset, ...radio } = source; return invoke("play_radio", { source:radio, tracks, index, nextOffset:next_offset ?? null }); },
   recommendations: () => invoke("recommendations"),
   similar: (track) => invoke("similar", { track }),
   addToLibrary: (track) => invoke("add_to_library", { track }),
@@ -83,17 +86,20 @@ export const api = {
   listeningStats: (scope, choice = null) => invoke("listening_stats", { scope, choice }),
   resetListeningStats: () => invoke("reset_listening_stats"),
   setUtcOffset: (minutes) => invoke("set_utc_offset", { minutes }),
-  /** Tells the engine whether the window has the user's attention (it watches the network only then or while playing). */
+  /**
+   * Сообщает движку, привлекает ли окно внимание пользователя (он наблюдает за сетью только тогда или
+   * во время игры).
+   */
   networkFocus: (focused) => invoke("network_focus", { focused }),
-  /** "Retry" after a connection failure: the engine drops pooled connections and looks at the network. */
+  /** «Повторить» после сбоя соединения: механизм отбрасывает соединения из пула и просматривает сеть. */
   networkCheck: () => invoke("network_check"),
-  /** "Retry" for playback that stopped on a connection problem. */
+  /** «Повторить» для воспроизведения, остановленного из-за проблемы с подключением. */
   retryPlayback: () => invoke("retry_playback"),
 };
 
 export const trackKey = (track) => `${track.owner_id}_${track.track_id}`;
 
-/** Pulls every page of a paged call, reporting progress as it goes. */
+/** Извлекает каждую страницу пейджингового вызова, сообщая о ходе выполнения. */
 export async function loadAllPages(fetchPage, { pageSize = 200, onProgress, isCancelled = () => false } = {}) {
   const items = [];
   let offset = 0;

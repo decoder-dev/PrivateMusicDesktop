@@ -1,9 +1,8 @@
-//! Where the signed-in session lives between launches.
+//! Сохранение входа между запусками приложения.
 //!
-//! The VK token and cookie are credentials: they go into the operating
-//! system's secret store (Keychain, Credential Manager, Secret Service) and
-//! nowhere else. If no secret store is available the app still works for the
-//! current run; it just cannot remember the sign-in.
+//! Токен и cookie VK хранятся только в защищённом хранилище операционной системы:
+//! Keychain, Credential Manager или Secret Service. При временной недоступности
+//! хранилища текущая сессия продолжает работать в памяти, а запись можно повторить.
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -17,18 +16,18 @@ pub trait SecretStore: Send + Sync {
     fn load(&self) -> Result<Option<Session>>;
     fn save(&self, session: &Session) -> Result<()>;
     fn clear(&self) -> Result<()>;
-    /// Records an explicit account replacement before attempting credential writes.
+    /// Записывает явную замену учетной записи перед попыткой записи учетных данных.
     fn begin_login(&self) -> Result<()> {
         Ok(())
     }
-    /// False for stores that forget everything at exit.
+    /// False для магазинов, которые забывают все на выходе.
     fn is_durable(&self) -> bool {
         true
     }
 }
 
-/// Keeps the session in memory only. Used in tests and as the fallback when
-/// the OS has no secret store.
+/// Сохраняет сеанс только в памяти. Используется в тестах и ​​в качестве запасного варианта, когда у OS
+/// нет секретного хранилища.
 #[derive(Default)]
 pub struct MemoryStore(Mutex<Option<Session>>);
 
@@ -52,18 +51,18 @@ impl SecretStore for MemoryStore {
     }
 }
 
-/// The operating system's secret store.
+/// Секретное хранилище операционной системы.
 ///
-/// Windows entries are bounded UTF-16 chunks. Two banks allow a complete,
-/// checksum-verified write before the manifest commits; the previous snapshot
-/// is recoverable only for the same known account. Legacy entries remain readable.
+/// Записи Windows представляют собой ограниченные фрагменты UTF-16. Два банка допускают полную запись с
+/// проверкой контрольной суммы до фиксации манифеста; предыдущий снимок можно восстановить только для
+/// той же известной учетной записи. Устаревшие записи остаются читаемыми.
 pub struct KeyringStore {
     service: String,
     logout_marker: Option<PathBuf>,
 }
 
 const ACCOUNT: &str = "vk-session";
-/// UTF-16 units per entry: under Windows' 1280, with room to spare.
+/// UTF-16 единиц на запись: под Windows 1280, с запасом места.
 const PART_LEN: usize = 1000;
 const PARTS_PREFIX: &str = "parts:";
 
@@ -88,7 +87,7 @@ impl KeyringStore {
     }
 }
 
-/// Named text slots in a secret store; the split format is written over these.
+/// Именные текстовые слоты в хранилище секретов; поверх них записывается формат разделения.
 trait Slots {
     fn get(&self, name: &str) -> Result<Option<String>>;
     fn set(&self, name: &str, value: &str) -> Result<()>;
@@ -120,7 +119,8 @@ fn keyring_entry(service: &str, name: &str) -> Result<keyring::Entry> {
     keyring::Entry::new(service, name).map_err(secret_error)
 }
 
-/// A separate credential, never mixed with the VK account or written to disk.
+/// Отдельные учетные данные, которые никогда не смешиваются с учетной записью VK и не записываются на
+/// диск.
 pub fn update_token(token: Option<&str>) -> Result<()> {
     let store = KeyringStore::new("com.dec.privatemusic2.desktop.updater");
     match token.filter(|s| !s.is_empty()) {
@@ -141,7 +141,7 @@ fn part_name(index: usize) -> String {
     format!("{ACCOUNT}.{index}")
 }
 
-/// How many parts the main entry points to (0 when it holds the text itself).
+/// На сколько частей указывает основной вход (0, если он содержит сам текст).
 fn part_count(head: &str) -> usize {
     head.strip_prefix(PARTS_PREFIX).and_then(|n| n.parse().ok()).unwrap_or(0)
 }
@@ -243,7 +243,7 @@ fn save_text(slots: &impl Slots, text: &str) -> Result<()> {
     if read_blob(slots, &active)?.as_deref() != Some(text) {
         return Err(Error::Format("credential verification failed".into()));
     }
-    // Recovery must never silently restore a different account.
+    // Восстановление никогда не должно автоматически восстанавливать другую учетную запись.
     if let Some(blob) = &previous {
         let old = read_blob(slots, blob)?.and_then(|s| serde_json::from_str::<Session>(&s).ok());
         let new = serde_json::from_str::<Session>(text).ok();
@@ -254,7 +254,7 @@ fn save_text(slots: &impl Slots, text: &str) -> Result<()> {
     }
     let m = Manifest { active, previous };
     let json = serde_json::to_string(&m).map_err(|e| Error::Format(e.to_string()))?;
-    // The only commit point: existing live parts stay untouched until here.
+    // Единственный момент фиксации: существующие активные части до сих пор остаются нетронутыми.
     slots.set(ACCOUNT, &format!("{V2}{json}"))?;
     let old = head.as_deref().map_or(0, part_count).min(MAX_PARTS);
     for index in 1..=old {
@@ -263,7 +263,7 @@ fn save_text(slots: &impl Slots, text: &str) -> Result<()> {
     Ok(())
 }
 
-/// Splits text into pieces of at most `max` UTF-16 units, never inside a character.
+/// Разбивает текст на фрагменты длиной не более `max` UTF-16, но не внутри символа.
 fn split_utf16(text: &str, max: usize) -> Vec<&str> {
     let mut parts = Vec::new();
     let (mut start, mut units) = (0, 0);
@@ -279,7 +279,7 @@ fn split_utf16(text: &str, max: usize) -> Vec<&str> {
 }
 
 fn clear_text(slots: &impl Slots) -> Result<()> {
-    // A durable tombstone is committed before removing any recovery copy.
+    // Перед удалением резервной копии создается надежное захоронение.
     slots.set(ACCOUNT, LOGGED_OUT)?;
     for i in 0..MAX_PARTS {
         for bank in 0..=1 {
@@ -321,7 +321,7 @@ impl SecretStore for KeyringStore {
 
     fn clear(&self) -> Result<()> {
         let guard = self.mark_logout();
-        // Still clear the OS entries if writing the nonsecret marker failed.
+        // По-прежнему очищайте записи OS, если запись несекретного маркера не удалась.
         let cleared = clear_text(self);
         cleared.and(guard)
     }
@@ -370,7 +370,7 @@ mod tests {
             Ok(self.0.lock().unwrap().get(name).cloned())
         }
         fn set(&self, name: &str, value: &str) -> Result<()> {
-            // Windows' limit, in UTF-16 bytes.
+            // Ограничение Windows, в UTF-16 байт.
             assert!(value.encode_utf16().count() * 2 <= 2560, "{name} too long for Windows");
             self.0.lock().unwrap().insert(name.into(), value.into());
             Ok(())
@@ -385,7 +385,7 @@ mod tests {
     fn a_long_session_is_split_and_read_back() {
         let slots = MapSlots::default();
         let mut session = sample();
-        session.refresh_cookie = "remixsid=ё😀".repeat(600); // long, with 2-unit characters
+        session.refresh_cookie = "remixsid=ё😀".repeat(600); // длинный, из двухзначных символов
         let json = serde_json::to_string(&session).unwrap();
         save_text(&slots, &json).unwrap();
         assert!(slots.0.lock().unwrap().len() > 2);
@@ -462,7 +462,7 @@ mod tests {
         std::fs::remove_file(path).unwrap();
     }
 
-    /// The real Credential Manager, which is what refused long sessions.
+    /// Настоящий диспетчер учетных данных, именно он и отказывался от длительных сессий.
     #[cfg(windows)]
     #[test]
     fn windows_credential_manager_keeps_a_long_session() {

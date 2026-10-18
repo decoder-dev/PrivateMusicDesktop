@@ -1,4 +1,4 @@
-/* Sign-in. */
+/* Войдите в систему. */
 .login { position: relative; height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px; overflow: auto; }
 .login::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 55%; pointer-events: none; background: linear-gradient(180deg, color-mix(in srgb, var(--role-station) 20%, transparent), transparent); }
 .login .box { position: relative; width: 100%; max-width: 360px; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; animation: view-in var(--t-page) var(--ease-out) backwards; }
@@ -13,7 +13,10 @@
 }
 .login .note svg { flex: none; color: var(--warning); margin-top: 1px; }
 
-/* A composed hero: the app tile in front of two tilted tiles (artist and album), on a soft wash of the accent. */
+/*
+ * Составной герой: плитка приложения перед двумя наклоненными плитками (исполнитель и альбом) с мягким
+ * размытием акцента.
+ */
 .login::after { content: ""; position: absolute; inset: auto 0 0 0; height: 45%; pointer-events: none; background: radial-gradient(60% 100% at 50% 100%, color-mix(in srgb, var(--accent) 16%, transparent), transparent); }
 .login .box { z-index: 1; gap: 12px; }
 .login-art { position: relative; width: 224px; height: 112px; margin-bottom: 14px; }

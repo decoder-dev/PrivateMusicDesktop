@@ -7,9 +7,9 @@ import { store, subscribe } from "../store.js";
 import { confirmDialog } from "../dialog.js";
 
 /**
- * What was played on this computer, newest first. A track lands here once
- * 30 % of it has really been heard (the engine decides); the list lives in a
- * small file on this computer and can be cleared.
+ * Во что играли на этом компьютере, сначала самые новые. Трек попадает сюда, как только 30% его
+ * действительно было услышано (решает движок); список находится в небольшом файле на этом компьютере,
+ * и его можно очистить.
  */
 export function createHistoryView({ play, onTrackAction, toast, openTrackMenu }) {
   let tracks = [];
@@ -71,8 +71,8 @@ export function createHistoryView({ play, onTrackAction, toast, openTrackMenu })
     }
   }
 
-  // A play is counted a while after the track starts, so a track that has
-  // just finished its first third shows up when the next one begins.
+  // Проигрывание засчитывается через некоторое время после начала трека, поэтому трек, первая треть
+  // которого только что завершилась, появляется, когда начинается следующий.
   let lastTrack = null;
   subscribe("player", (player) => {
     const key = player.track ? trackKey(player.track) : null;

@@ -1,6 +1,6 @@
 import { PALETTES } from "./themes.js";
-// What survives a restart: volume, shuffle, repeat and the last queue.
-// Stored in the window's own localStorage; no credentials are ever kept here.
+// Что сохраняется при перезапуске: громкость, перемешивание, повтор и последняя очередь. Хранится в
+// собственном localStorage окна; здесь никогда не хранятся никакие учетные данные.
 
 const SETTINGS = "pm.settings.v1";
 const QUEUE = "pm.queue.v1";
@@ -18,7 +18,7 @@ function write(key, value) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    // Storage full or unavailable: forgetting is acceptable.
+    // Память заполнена или недоступна: забывание допустимо.
   }
 }
 
@@ -31,7 +31,7 @@ function readEq(saved) {
 }
 
 export const ACCENTS = ["blue", "indigo", "violet", "pink", "red", "orange", "green", "teal", "banana"];
-// Older versions called two of the accents by other names.
+// В более старых версиях два акцента назывались другими именами.
 const RENAMED = { purple: "violet", yellow: "banana" };
 
 export function loadSettings() {
@@ -57,7 +57,7 @@ export function saveSettings(settings) {
   write(SETTINGS, settings);
 }
 
-/** Stream URLs expire, so a saved track never carries one. */
+/** Срок действия потока URLs истекает, поэтому сохраненный трек никогда не будет содержать его. */
 function trim(track) {
   return {
     track_id: track.track_id,
@@ -79,7 +79,7 @@ function trim(track) {
 
 export function saveQueue(tracks, index, position) {
   if (!tracks.length || index == null || index < 0 || index >= tracks.length) {
-    try { localStorage.removeItem(QUEUE); } catch { /* storage may be unavailable */ }
+    try { localStorage.removeItem(QUEUE); } catch { /* хранилище может быть недоступно */ }
     return;
   }
   let start = 0;
@@ -100,5 +100,5 @@ export function loadQueue() {
 }
 
 export function clearQueue() {
-  try { localStorage.removeItem(QUEUE); } catch { /* storage may be unavailable */ }
+  try { localStorage.removeItem(QUEUE); } catch { /* хранилище может быть недоступно */ }
 }

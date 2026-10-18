@@ -1,5 +1,5 @@
-//! Output side: converting decoded audio to the device format and handing it
-//! to the sound card.
+//! Выходная сторона: преобразование декодированного звука в формат устройства и передача его на
+//! звуковую карту.
 
 pub mod convert;
 pub mod eq;

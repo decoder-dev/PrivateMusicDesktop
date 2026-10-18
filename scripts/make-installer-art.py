@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Draws the installer artwork (NSIS sidebar and header, DMG background) from
-the app icon. Run it again after changing the icon; outputs are committed.
+"""Рисует изображение установщика (боковая панель и заголовок NSIS, фон DMG) из значка приложения.
+Запустите его еще раз после смены значка; результаты зафиксированы.
 
-    python3 scripts/make-installer-art.py
-"""
+python3 scripts/make-installer-art.py"""
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -49,7 +48,7 @@ def paste_icon(image, size, position):
     image.paste(icon, position, icon)
 
 
-# NSIS welcome/finish page: 164x314, BMP.
+# Страница NSIS welcome/finish: 164x314, BMP.
 sidebar = gradient((164, 314), (14, 16, 24), (10, 40, 90))
 glow(sidebar, (82, 120), 90, (51, 133, 250), 0.55)
 paste_icon(sidebar, 96, (34, 72))
@@ -58,13 +57,13 @@ draw.text((82, 214), "Private Music", font=font(BOLD, 15), fill=(255, 255, 255),
 draw.text((82, 238), "VK Music", font=font(REGULAR, 11), fill=(170, 190, 225), anchor="mm")
 sidebar.save(OUT / "sidebar.bmp")
 
-# NSIS header: 150x57, BMP.
+# Заголовок NSIS: 150x57, BMP.
 header = gradient((150, 57), (14, 16, 24), (14, 40, 84))
 paste_icon(header, 40, (100, 8))
 ImageDraw.Draw(header).text((10, 28), "Private\nMusic", font=font(BOLD, 12), fill=(255, 255, 255), anchor="lm", spacing=1)
 header.save(OUT / "header.bmp")
 
-# DMG window background: 660x400.
+# Фон окна DMG: 660x400.
 dmg = gradient((660, 400), (16, 18, 28), (12, 42, 92))
 glow(dmg, (330, 40), 260, (51, 133, 250), 0.35)
 draw = ImageDraw.Draw(dmg)

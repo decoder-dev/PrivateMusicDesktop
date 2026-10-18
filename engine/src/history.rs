@@ -1,17 +1,16 @@
-//! What was played on this computer: a short history of recent tracks and
-//! compact listening statistics, both kept in one small JSON file in the
-//! app's data folder (`listening-<VK user id>.json`).
+//! Что воспроизводилось на этом компьютере: краткая история последних треков и компактная статистика
+//! прослушивания, которые хранятся в одном небольшом файле JSON в папке данных приложения
+//! (`listening-<VK user id>.json`).
 //!
-//! This is a port of the iOS app's `ListeningProgressPolicy`,
-//! `ListeningHistoryStore` and `ListeningStats`:
+//! Это порт приложений iOS `ListeningProgressPolicy`, `ListeningHistoryStore` и `ListeningStats`:
 //!
-//! * a track counts as played once the *time actually listened* reaches 30 %
-//!   of its length (seeking does not count, pausing does not count);
-//! * the history keeps the last 250 distinct tracks, newest first;
-//! * the statistics keep counters per month, never a play-by-play log.
+//! * трек считается прослушанным, когда *время фактического прослушивания* достигает 30 % его длины
+//!   (поиск не учитывается, пауза не учитывается);
+//! * в истории сохраняются 250 последних отдельных треков, сначала самые новые;
+//! * статистика ведет счетчики за месяц, а не журнал игр за игрой.
 //!
-//! The file holds track metadata only: no session token, no cookie and no
-//! stream address. Nothing here is ever sent anywhere.
+//! В файле хранятся только метаданные дорожки: нет токена сеанса, файлов cookie и адреса потока. Здесь
+//! ничего и никогда никуда не отправляют.
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -25,42 +24,42 @@ use serde::{Deserialize, Serialize};
 use crate::vk::Track;
 use crate::{Error, Result};
 
-/// Share of a track that must have been heard before it counts as played.
+/// Доля трека, которая должна быть прослушана, прежде чем она будет засчитана как проигранная.
 pub const REQUIRED_FRACTION: f64 = 0.30;
-/// The history keeps this many distinct tracks.
+/// История хранит множество различных следов.
 pub const MAX_ENTRIES: usize = 250;
-/// Listening seconds are folded into the counters once this much piled up.
+/// Секунды прослушивания засчитываются в счетчики, как только их накопится столько.
 pub const COMMIT_THRESHOLD: f64 = 10.0;
-/// A month keeps at most this many tracks; the one-play tail is dropped.
+/// В месяц сохраняется не более такого количества следов; хвост с одной игрой опущен.
 pub const TRACK_LIMIT: usize = 400;
 pub const TRACK_KEEP: usize = 300;
-/// A day counts as "with music" from one minute of listening.
+/// День засчитывается как "with music" за одну минуту прослушивания.
 pub const ACTIVE_DAY_SECONDS: f64 = 60.0;
-/// Entries in each top list.
+/// Записи в каждом топ-листе.
 pub const TOP_COUNT: usize = 5;
-/// A position step larger than this is a seek, not listening (the player
-/// reports every quarter of a second, so this is three missed reports).
+/// Шаг позиции больше этого — это поиск, а не прослушивание (игрок сообщает каждую четверть секунды, то
+/// есть это три пропущенных сообщения).
 const MAX_LISTEN_DELTA: f64 = 1.5;
 const SAVE_DELAY: Duration = Duration::from_secs(5);
 const MAX_FILE: u64 = 32 * 1024 * 1024;
 const VERSION: u32 = 1;
 
-/// Whether a track listened to for `listened` seconds out of `duration` counts
-/// as played (iOS `ListeningProgressPolicy.shouldMarkListened`).
+/// Считается ли трек прослушанным в течение `listened` секунд из `duration` (iOS
+/// `ListeningProgressPolicy.shouldMarkListened`).
 pub fn should_mark_listened(listened: f64, duration: f64, already_marked: bool) -> bool {
     !already_marked && listened.is_finite() && duration.is_finite() && duration > 0.0 && listened / duration >= REQUIRED_FRACTION
 }
 
-// ------------------------------------------------------------------ time
+// ------------------------------------------------------------------ время
 
-/// A moment in the user's local time, from Unix seconds and the UTC offset.
+/// Момент местного времени пользователя, исходя из секунд Unix и смещения UTC.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Local {
     year: i64,
     month: u32,
     day: u32,
     hour: u32,
-    /// 0 = Sunday … 6 = Saturday.
+    /// 0 = воскресенье… 6 = суббота.
     weekday: u32,
 }
 
@@ -68,7 +67,7 @@ fn local(unix: i64, offset_minutes: i32) -> Local {
     let seconds = unix.saturating_add(i64::from(offset_minutes) * 60);
     let days = seconds.div_euclid(86_400);
     let of_day = seconds.rem_euclid(86_400);
-    // Civil date from days since 1970-01-01 (H. Hinnant's algorithm).
+    // Гражданская дата отсчитывается от дней, прошедших с 1 января 1970 г. (алгоритм Х. Хиннанта).
     let z = days + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z.rem_euclid(146_097);
@@ -85,7 +84,7 @@ fn month_key(at: Local) -> String {
     format!("{:04}-{:02}", at.year, at.month)
 }
 
-/// Artist names compared loosely: case, accents, ё and й folded, as on iOS.
+/// Имена исполнителей сравниваются свободно: регистр, ударения, ё и й сложены, как на iOS.
 fn artist_key(name: &str) -> String {
     name.trim()
         .chars()
@@ -108,12 +107,12 @@ fn artist_key(name: &str) -> String {
         .collect()
 }
 
-// ------------------------------------------------------------------ data
+// ------------------------------------------------------------------ данные
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HistoryEntry {
     pub track: Track,
-    /// Unix seconds.
+    /// Unix-секунды.
     pub played_at: i64,
 }
 
@@ -140,13 +139,13 @@ pub struct Month {
     pub seconds: f64,
     #[serde(default)]
     pub plays: u32,
-    /// Seconds heard in each hour of the day.
+    /// Секунды слышны в каждый час дня.
     #[serde(default)]
     pub hour_seconds: Vec<f64>,
-    /// Seconds heard on each weekday, 0 = Sunday.
+    /// Секунды слышимости в каждый будний день, 0 = воскресенье.
     #[serde(default)]
     pub weekday_seconds: Vec<f64>,
-    /// Seconds per day of the month, keyed "01"…"31".
+    /// Секунды на день месяца, с кодом "01"…"31".
     #[serde(default)]
     pub day_seconds: BTreeMap<String, f64>,
     #[serde(default)]
@@ -174,7 +173,7 @@ impl Month {
         self.seconds > 0.0 || self.plays > 0
     }
 
-    /// A file written by hand or by another version must not break the maths.
+    /// Файл, написанный вручную или в другой версии, не должен нарушать математические вычисления.
     fn sanitize(&mut self) {
         let fix = |v: &mut f64| {
             if !v.is_finite() || *v < 0.0 {
@@ -192,8 +191,8 @@ impl Month {
         self.prune();
     }
 
-    /// Keeps a month small however long the app is used: the tail of tracks
-    /// heard once cannot reach a top list anyway.
+    /// Месяц остается небольшим, независимо от того, как долго используется приложение: хвост
+    /// прослушанных однажды треков все равно не может попасть в топ-лист.
     fn prune(&mut self) {
         if self.tracks.len() <= TRACK_LIMIT {
             return;
@@ -210,7 +209,7 @@ impl Month {
     }
 }
 
-/// What the statistics need to know about a track.
+/// Что статистика должна знать о треке.
 #[derive(Debug, Clone, PartialEq)]
 struct Subject {
     id: String,
@@ -279,8 +278,8 @@ impl Stats {
         month.hour_seconds[at.hour as usize % 24] += seconds;
         month.weekday_seconds[at.weekday as usize % 7] += seconds;
         *month.day_seconds.entry(format!("{:02}", at.day)).or_insert(0.0) += seconds;
-        // The play is counted a while after the listening starts, so the
-        // tallies may be created here and have their plays raised later.
+        // Пьеса засчитывается через некоторое время после начала прослушивания, поэтому здесь можно
+        // создать подсчеты, а их пьесы поднять позже.
         if let Some(track) = month.tracks.get_mut(&subject.id) {
             track.seconds += seconds;
         }
@@ -291,9 +290,9 @@ impl Stats {
     }
 }
 
-// --------------------------------------------------------------- summary
+// --------------------------------------------------------------- Резюме
 
-/// Which months a statistics screen looks at.
+/// Какие месяцы показывает экран статистики.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Period {
@@ -313,7 +312,7 @@ impl Period {
     }
 }
 
-/// `YYYY-MM` with a real month.
+/// `YYYY-MM` с реальным месяцем.
 fn valid_month_key(key: &str) -> bool {
     let bytes = key.as_bytes();
     bytes.len() == 7
@@ -339,7 +338,7 @@ pub struct BusyDay {
     pub seconds: f64,
 }
 
-/// The numbers a statistics screen shows for one period.
+/// Цифры, отображаемые на экране статистики за один период.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Summary {
     pub period: Period,
@@ -349,15 +348,15 @@ pub struct Summary {
     pub top_artists: Vec<SummaryEntry>,
     pub top_tracks: Vec<SummaryEntry>,
     pub hour_seconds: Vec<f64>,
-    /// Hour of day with the most listening.
+    /// Час дня, когда больше всего слушают.
     pub peak_hour: Option<u32>,
-    /// 0 = Sunday … 6 = Saturday.
+    /// 0 = воскресенье… 6 = суббота.
     pub favourite_weekday: Option<u32>,
     pub busiest_day: Option<BusyDay>,
     pub is_empty: bool,
 }
 
-/// Index of the largest value; the earliest wins a tie. `None` when all zero.
+/// Индекс наибольшего значения; тот, кто раньше всех, выигрывает вничью. `None`, когда все ноль.
 fn peak_index(values: &[f64]) -> Option<u32> {
     let mut best: Option<usize> = None;
     for (index, value) in values.iter().enumerate() {
@@ -382,7 +381,7 @@ impl Stats {
         let mut tracks: HashMap<&str, TrackTally> = HashMap::new();
         let mut artists: HashMap<&str, ArtistTally> = HashMap::new();
 
-        // Oldest first, so the newest month's names are the ones shown.
+        // Сначала самые старые, поэтому отображаются названия самых новых месяцев.
         for (key, month) in self.months.iter().filter(|(key, _)| period.matches(key)) {
             total_seconds += month.seconds;
             plays += month.plays;
@@ -451,7 +450,7 @@ impl Stats {
         top_artists.sort_by(ranking);
         top_artists.truncate(TOP_COUNT);
 
-        // The earliest day wins a tie, as on iOS.
+        // Самый ранний день выигрывает вничью, как и в iOS.
         let busiest_day = days
             .iter()
             .filter(|(_, seconds)| **seconds > 0.0)
@@ -476,12 +475,12 @@ impl Stats {
         }
     }
 
-    /// Months that have any data, newest first.
+    /// Месяцы, по которым есть данные, сначала самые новые.
     pub fn available_months(&self) -> Vec<String> {
         self.months.iter().rev().filter(|(_, m)| m.has_data()).map(|(k, _)| k.clone()).collect()
     }
 
-    /// Years that have any data, newest first.
+    /// Годы, по которым есть данные, сначала самые новые.
     pub fn available_years(&self) -> Vec<i32> {
         let mut years: Vec<i32> = self.available_months().iter().filter_map(|k| k[..4].parse().ok()).collect();
         years.dedup();
@@ -489,19 +488,19 @@ impl Stats {
     }
 }
 
-/// The scope the window asks for: `month`, `year` or `all`, with an optional
-/// choice (`"YYYY-MM"` or `"YYYY"`).
+/// Область действия, которую запрашивает окно: `month`, `year` или `all`, с возможностью выбора
+/// (`"YYYY-MM"` или `"YYYY"`).
 #[derive(Debug, Clone, Serialize)]
 pub struct StatsView {
     pub summary: Summary,
-    /// Months with data, newest first.
+    /// Месяцы с данными, сначала самые новые.
     pub months: Vec<String>,
     pub years: Vec<i32>,
 }
 
-// --------------------------------------------------------------- progress
+// --------------------------------------------------------------- прогресс
 
-/// Turns the player's position reports into "seconds really listened".
+/// Превращает отчеты о положении игрока в "seconds really listened".
 #[derive(Debug, Default)]
 struct Progress {
     track_id: Option<String>,
@@ -511,9 +510,9 @@ struct Progress {
 }
 
 struct Step {
-    /// Seconds to credit.
+    /// Секунды на счету.
     seconds: f64,
-    /// The track just reached the play threshold.
+    /// Трек только что достиг порога воспроизведения.
     counted: bool,
 }
 
@@ -540,7 +539,7 @@ impl Progress {
     }
 }
 
-// ------------------------------------------------------------------ store
+// ------------------------------------------------------------------ Магазин
 
 #[derive(Serialize, Deserialize)]
 struct FileData {
@@ -554,8 +553,8 @@ struct FileData {
 struct Pending {
     subject: Subject,
     seconds: f64,
-    /// When the chunk started, so one that straddles midnight lands on the
-    /// day the listening began.
+    /// Когда начался фрагмент, то есть тот, который находится между полуночью, приходится на день
+    /// начала прослушивания.
     since: i64,
 }
 
@@ -622,7 +621,8 @@ impl Inner {
         let id = track.id();
         if self.entries.first().is_none_or(|e| e.track.id() != id) {
             self.entries.retain(|e| e.track.id() != id);
-            // The stream address is a signed, expiring link: never stored.
+            // Адрес потока представляет собой подписанную ссылку с истекающим сроком действия: никогда
+            // не сохраняется.
             let track = Track { stream_url: None, ..track.clone() };
             self.entries.insert(0, HistoryEntry { track, played_at: (self.clock)() });
             self.entries.truncate(MAX_ENTRIES);
@@ -695,12 +695,12 @@ fn write_atomic(path: &Path, data: &FileData) -> std::io::Result<()> {
 }
 
 impl History {
-    /// `dir` is where the file lives; `None` keeps everything in memory.
+    /// `dir` — место хранения файла; `None` сохраняет все в памяти.
     pub fn open(dir: Option<PathBuf>) -> Arc<Self> {
         Self::build(dir, Box::new(unix_now), Some(SAVE_DELAY))
     }
 
-    /// For tests: a fixed clock and no background saver (call [`History::flush`]).
+    /// Для тестов: фиксированные часы и отсутствие фоновой заставки (вызов [`History::flush`]).
     pub fn with_clock(dir: Option<PathBuf>, clock: impl Fn() -> i64 + Send + 'static) -> Arc<Self> {
         Self::build(dir, Box::new(clock), None)
     }
@@ -737,7 +737,7 @@ impl History {
         Arc::new(Self { inner, wake })
     }
 
-    /// Runs `f` under the lock and wakes the saver when it made something dirty.
+    /// Запускает `f` под блокировкой и будит заставку, когда она что-то испачкала.
     fn with<R>(&self, f: impl FnOnce(&mut Inner) -> R) -> R {
         let (result, wake) = {
             let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
@@ -753,8 +753,8 @@ impl History {
         result
     }
 
-    /// Switches to another VK account (or none: nothing is recorded then).
-    /// The outgoing account's data is saved first.
+    /// Переключается на другую учетную запись VK (или ни на одну: тогда ничего не записывается).
+    /// Сначала сохраняются данные исходящего аккаунта.
     pub fn set_account(&self, account: Option<i64>) {
         self.with(|inner| {
             if inner.account == account {
@@ -770,8 +770,8 @@ impl History {
         self.with(|inner| inner.account)
     }
 
-    /// Minutes east of UTC. Hours and weekdays in the statistics follow the
-    /// user's clock; the window knows the zone and reports it.
+    /// В нескольких минутах к востоку от UTC. Часы и дни недели в статистике соответствуют часам
+    /// пользователя; окно знает зону и сообщает об этом.
     pub fn set_utc_offset(&self, minutes: i32) -> Result<()> {
         if !(-14 * 60..=14 * 60).contains(&minutes) {
             return Err(Error::InvalidRequest);
@@ -783,8 +783,8 @@ impl History {
         Ok(())
     }
 
-    /// The player reported a position. `playing` is true only while sound
-    /// really comes out (not while paused or buffering).
+    /// Игрок сообщил о своей позиции. `playing` истинно только тогда, когда звук действительно
+    /// воспроизводится (а не во время паузы или буферизации).
     pub fn tick(&self, track: &Track, position: f64, duration: f64, playing: bool) {
         if !position.is_finite() {
             return;
@@ -813,7 +813,7 @@ impl History {
         });
     }
 
-    /// A track (re)starts from the beginning: repeating one counts again.
+    /// Трек (повторно) начинается с начала: повторение одного трека засчитывается снова.
     pub fn restart(&self) {
         self.with(|inner| {
             inner.commit_pending();
@@ -821,7 +821,7 @@ impl History {
         });
     }
 
-    /// Recent tracks, newest first.
+    /// Свежие треки, сначала самые новые.
     pub fn entries(&self) -> Vec<HistoryEntry> {
         self.with(|inner| inner.entries.clone())
     }
@@ -836,7 +836,7 @@ impl History {
         })
     }
 
-    /// Forgets the recent tracks. The statistics stay.
+    /// Забывает недавние треки. Статистика остается.
     pub fn clear(&self) {
         self.with(|inner| {
             inner.entries.clear();
@@ -844,7 +844,7 @@ impl History {
         });
     }
 
-    /// Forgets the statistics. The recent tracks stay.
+    /// Забывает статистику. Недавние следы остаются.
     pub fn reset_stats(&self) {
         self.with(|inner| {
             inner.pending = None;
@@ -853,8 +853,8 @@ impl History {
         });
     }
 
-    /// The statistics for a scope: `"month"`, `"year"` or `"all"`, with the
-    /// choice (`YYYY-MM` / `YYYY`) or the newest period that has data.
+    /// Статистика для области: `"month"`, `"year"` или `"all"`, с выбором (`YYYY-MM` / `YYYY`) или
+    /// самого нового периода, по которому есть данные.
     pub fn stats(&self, scope: &str, choice: Option<&str>) -> Result<StatsView> {
         self.with(|inner| {
             inner.commit_pending();
@@ -885,7 +885,7 @@ impl History {
         })
     }
 
-    /// Writes what is pending to disk now (used on exit and in tests).
+    /// Записывает на диск то, что сейчас ожидает выполнения (используется при выходе и в тестах).
     pub fn flush(&self) {
         self.with(|inner| inner.save());
     }
@@ -893,7 +893,7 @@ impl History {
 
 impl Drop for History {
     fn drop(&mut self) {
-        // Closing the channel lets the saver thread do its final save.
+        // Закрытие канала позволяет потоку сохранения выполнить окончательное сохранение.
         self.wake = None;
         self.flush();
     }
@@ -923,7 +923,7 @@ mod tests {
         }
     }
 
-    /// 2026-03-04 (a Wednesday) 10:30:00 UTC.
+    /// 04.03.2026 (среда) 10:30:00 UTC.
     const T0: i64 = 1_772_620_200;
 
     fn rig(dir: Option<PathBuf>) -> (Arc<History>, Arc<AtomicI64>) {
@@ -934,7 +934,7 @@ mod tests {
         (history, now)
     }
 
-    /// Plays `seconds` of `track` starting at `from`, as 4 reports a second.
+    /// Воспроизводит `seconds` из `track`, начиная с `from`, так как 4 сообщает в секунду.
     fn listen(history: &History, track: &Track, from: f64, seconds: f64) -> f64 {
         let mut position = from;
         let end = from + seconds;
@@ -980,7 +980,7 @@ mod tests {
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].played_at, T0);
         assert_eq!(entries[0].track.stream_url, None, "the signed stream link is never kept");
-        // Going on does not count it twice.
+        // Продолжение не считается дважды.
         listen(&history, &song, 31.0, 60.0);
         assert_eq!(history.stats("all", None).unwrap().summary.plays, 1);
     }
@@ -990,17 +990,17 @@ mod tests {
         let (history, _) = rig(None);
         let song = track(1, "Кино", 100);
         for second in 0..20 {
-            // A jump forward every report: no step is a believable listen.
+            // Скачок вперед в каждом отчете: ни один шаг не вызывает доверия.
             history.tick(&song, f64::from(second) * 10.0, 100.0, true);
         }
         assert!(history.entries().is_empty());
-        // Paused reports move the playhead but credit nothing.
+        // В приостановленных отчетах курсор воспроизведения перемещается, но ничего не указывается.
         for step in 0..400 {
             history.tick(&song, f64::from(step) * 0.25, 100.0, false);
         }
         assert!(history.entries().is_empty());
         assert!(history.stats("all", None).unwrap().summary.is_empty);
-        // Backwards is not listening either.
+        // Обратно тоже не слушается.
         history.tick(&song, 50.0, 100.0, true);
         history.tick(&song, 10.0, 100.0, true);
         assert!(history.stats("all", None).unwrap().summary.total_seconds <= 0.0);
@@ -1011,7 +1011,7 @@ mod tests {
         let (history, _) = rig(None);
         let song = track(1, "Кино", 100);
         listen(&history, &song, 0.0, 20.0);
-        history.tick(&song, 70.0, 100.0, true); // seek
+        history.tick(&song, 70.0, 100.0, true); // искать
         assert!(history.entries().is_empty());
         listen(&history, &song, 70.0, 11.0);
         assert_eq!(history.entries().len(), 1, "20 s + 11 s of 100");
@@ -1043,7 +1043,7 @@ mod tests {
         assert_eq!(entries.len(), MAX_ENTRIES);
         assert_eq!(entries[0].track.track_id, MAX_ENTRIES as i64 + 19);
         assert_eq!(entries.last().unwrap().track.track_id, 20);
-        // Playing an old one again moves it to the front.
+        // Повторное воспроизведение старой игры перемещает ее на передний план.
         let again = track(100, "A", 10);
         history.restart();
         listen(&history, &again, 0.0, 4.0);
@@ -1056,7 +1056,7 @@ mod tests {
     #[test]
     fn statistics_bucket_by_the_users_local_hour_weekday_and_day() {
         let (history, _) = rig(None);
-        history.set_utc_offset(9 * 60).unwrap(); // 19:30 on Wednesday the 4th
+        history.set_utc_offset(9 * 60).unwrap(); // 19:30 в среду, 4-го числа.
         let song = track(1, "Кино", 100);
         listen(&history, &song, 0.0, 40.0);
         let view = history.stats("month", None).unwrap();
@@ -1077,7 +1077,7 @@ mod tests {
         let (history, now) = rig(None);
         let song = track(1, "Кино", 20);
         listen(&history, &song, 0.0, 7.0);
-        now.store(T0 + 40 * 86_400, Ordering::Relaxed); // April
+        now.store(T0 + 40 * 86_400, Ordering::Relaxed); // апрель
         history.restart();
         let other = track(2, "Кино", 20);
         listen(&history, &other, 0.0, 7.0);

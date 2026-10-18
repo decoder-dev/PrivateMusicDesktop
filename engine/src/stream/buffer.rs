@@ -3,7 +3,7 @@ use std::sync::{Arc, Condvar, Mutex};
 
 use crate::Error;
 
-/// What the elementary stream in the buffer is.
+/// Что такое элементарный поток в буфере.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ElementaryKind {
     AdtsAac,
@@ -24,8 +24,8 @@ struct Inner {
     changed: Condvar,
 }
 
-/// A byte buffer one thread appends to while another reads it, blocking
-/// until the bytes it wants arrive.
+/// Буфер байтов, к которому один поток добавляет, а другой читает его, блокируя до тех пор, пока не
+/// поступят нужные байты.
 #[derive(Clone)]
 pub struct SharedBuffer {
     inner: Arc<Inner>,
@@ -33,8 +33,8 @@ pub struct SharedBuffer {
 }
 
 impl SharedBuffer {
-    /// `limit` caps the total size: a hostile playlist cannot grow memory
-    /// without bound.
+    /// `limit` ограничивает общий размер: враждебный плейлист не может неограниченно увеличивать
+    /// память.
     pub fn new(limit: usize) -> Self {
         Self {
             inner: Arc::new(Inner { state: Mutex::new(State::default()), changed: Condvar::new() }),
@@ -43,13 +43,13 @@ impl SharedBuffer {
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, State> {
-        // A panicking writer must not wedge the audio thread: the state is
-        // plain data, so the poisoned guard is still usable.
+        // Паникующий писатель не должен прерывать аудиопоток: состояние представляет собой простые
+        // данные, поэтому отравленную защиту все еще можно использовать.
         self.inner.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    /// Appends bytes. Returns `false` when the buffer was cancelled or the
-    /// size limit was hit (the buffer is then failed).
+    /// Добавляет байты. Возвращает `false`, когда буфер был отменен или был достигнут предел размера (в
+    /// этом случае буфер выходит из строя).
     pub fn push(&self, bytes: &[u8]) -> bool {
         let mut state = self.lock();
         if state.cancelled || state.failure.is_some() {
@@ -111,8 +111,8 @@ impl SharedBuffer {
         self.lock().failure.clone()
     }
 
-    /// Blocks until the kind is known (first segment demuxed), the stream
-    /// failed, or it was cancelled.
+    /// Блокируется до тех пор, пока тип не станет известен (первый сегмент не будет
+    /// демультиплексирован), поток не прекратится или не будет отменен.
     pub fn wait_for_kind(&self) -> Result<ElementaryKind, Error> {
         let mut state = self.lock();
         loop {
@@ -132,7 +132,7 @@ impl SharedBuffer {
         }
     }
 
-    /// Everything received, once the stream is complete (for saving a download).
+    /// Все получил, как только поток завершится (для сохранения загрузки).
     pub fn completed_bytes(&self) -> Option<(ElementaryKind, Vec<u8>)> {
         let state = self.lock();
         match (state.complete, state.kind) {
@@ -146,9 +146,8 @@ impl SharedBuffer {
     }
 }
 
-/// `Read + Seek` over a [`SharedBuffer`]. A read at the end of what has been
-/// downloaded so far waits for more; end of stream is only reported once the
-/// download completed.
+/// `Read + Seek` над [`SharedBuffer`]. Чтение в конце того, что уже загружено, ждет продолжения; Конец
+/// потока сообщается только после завершения загрузки.
 pub struct BufferReader {
     shared: SharedBuffer,
     position: u64,
@@ -161,10 +160,10 @@ impl BufferReader {
     }
 }
 
-/// Carried inside the `io::Error` of a cancelled read.
+/// Переносится внутри `io::Error` отмененного чтения.
 ///
-/// Not `ErrorKind::Interrupted`: `Read::read_to_end` and most readers retry
-/// that kind forever, which would turn a cancel into a hang.
+/// Не `ErrorKind::Interrupted`: `Read::read_to_end` и большинство читателей повторяют эту попытку
+/// вечно, что превратило бы отмену в зависание.
 #[derive(Debug)]
 pub struct Cancelled;
 
@@ -289,7 +288,7 @@ mod tests {
         let error = reader.read(&mut chunk).unwrap_err();
         assert!(is_cancelled_io(&error));
         assert_ne!(error.kind(), io::ErrorKind::Interrupted, "would be retried forever");
-        // And the standard retrying reader terminates.
+        // И стандартная повторная попытка чтения завершается.
         assert!(cancelled.reader().read_to_end(&mut Vec::new()).is_err());
         assert!(!cancelled.push(b"x"));
     }

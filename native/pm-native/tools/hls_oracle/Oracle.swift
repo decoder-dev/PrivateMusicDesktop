@@ -76,8 +76,8 @@ enum HLSExportError: Error {
             if let explicitIV {
                 return explicitIV
             }
-            // RFC 8216 §5.2: default IV is the media sequence as a
-            // 128-bit big-endian integer (8 zero bytes + 8 sequence bytes).
+            // RFC 8216 §5.2: по умолчанию IV — это медиа-последовательность в виде 128-битного целого
+            // числа с прямым порядком байтов (8 нулевых байтов + 8 байтов последовательности).
             var iv = Data(repeating: 0, count: 16)
             var sequence = UInt64(segmentNumber)
             for byteIndex in stride(from: 15, through: 8, by: -1) {
@@ -155,10 +155,9 @@ final class Oracle {
         return renditions
     }
 
-    /// Selection order: `DEFAULT=YES` rendition → `AUTOSELECT=YES`
-    /// rendition → first URI in a group referenced by a variant → best
-    /// audio-only variant (codec mp4a/aac/ac-3/ec-3/mp3 and no video codec).
-    /// Video-only variants are never chosen.
+    /// Порядок выбора: исполнение `DEFAULT=YES` → исполнение `AUTOSELECT=YES` → первый URI в группе, на
+    /// которую ссылается вариант → лучший вариант только для звука (кодек mp4a/aac/ac-3/ec-3/mp3 и без
+    /// видеокодека). Варианты только для видео никогда не выбираются.
     func chooseAudioPlaylist(
         variants: [HLSVariant],
         renditions: [HLSAudioRendition]
@@ -197,7 +196,7 @@ final class Oracle {
             .url
     }
 
-    // MARK: - Playlist parsing
+    // MARK: - Разбор плейлиста
 
     func parseSegments(
         in playlist: String,
@@ -254,10 +253,9 @@ final class Oracle {
         )
     }
 
-    /// Parses `#EXT-X-KEY`. `METHOD=NONE` clears the current key;
-    /// `METHOD=AES-128` requires a URI and accepts an optional IV; any other
-    /// method (SAMPLE-AES, ...) is rejected instead of being treated as
-    /// clear content.
+    /// Разбирает `#EXT-X-KEY`. `METHOD=NONE` очищает текущий ключ; `METHOD=AES-128` требует URI и
+    /// принимает дополнительный IV; любой другой метод (SAMPLE-AES, ...) отклоняется и не
+    /// рассматривается как чистое содержимое.
     func parseKey(_ line: String, baseURL: URL) throws -> EncryptionKey? {
         let attributes = parseAttributeList(
             String(line.dropFirst("#EXT-X-KEY:".count))
@@ -317,9 +315,9 @@ final class Oracle {
         )
     }
 
-    /// Parses `#EXT-X-MAP:URI="init.mp4",BYTERANGE="720@0"`. The map keeps a
-    /// snapshot of the current key; an AES-128-encrypted map must carry an
-    /// explicit IV (the media-sequence default does not apply to maps).
+    /// Разбирает `#EXT-X-MAP:URI="init.mp4",BYTERANGE="720@0"`. Карта сохраняет снимок текущего ключа;
+    /// карта, зашифрованная AES-128, должна содержать явный IV (по умолчанию медиа-последовательность
+    /// не применяется к картам).
     func parseInitializationSection(
         _ line: String,
         baseURL: URL,
@@ -357,7 +355,7 @@ final class Oracle {
         )
     }
 
-    /// Quote-aware attribute list parser: quoted values may contain commas.
+    /// Анализатор списка атрибутов с учетом кавычек: значения в кавычках могут содержать запятые.
     func parseAttributeList(
         _ rawValue: String
     ) -> [String: String] {
@@ -400,10 +398,9 @@ final class Oracle {
         return result
     }
 
-    /// Resolves a media-segment BYTERANGE spec. An implicit offset continues
-    /// the previous *media* range of the same URL (RFC 8216 §4.4.4.2). Map
-    /// ranges are independent and must not advance this cursor — vkpymusic
-    /// PR #41 / RFC 8216 §4.4.4.5.
+    /// Устраняет спецификацию медиа-сегмента BYTERANGE. Неявное смещение продолжает предыдущий диапазон
+    /// *media* того же URL (RFC 8216 §4.4.4.2). Диапазоны карт независимы и не должны перемещать этот
+    /// курсор — vkpymusic PR #41 / RFC 8216 §4.4.4.5.
     func resolveByteRange(
         _ spec: HLSByteRangeSpec?,
         for url: URL,
@@ -427,8 +424,8 @@ final class Oracle {
         return start..<end
     }
 
-    /// Map BYTERANGE: omitted offset starts at byte 0 of the resource, never
-    /// at the next media-segment cursor.
+    /// Карта BYTERANGE: пропущенное смещение начинается с байта 0 ресурса, а не со следующего курсора
+    /// медиа-сегмента.
     func resolveMapByteRange(
         _ spec: HLSByteRangeSpec?
     ) throws -> Range<Int>? {
@@ -448,8 +445,8 @@ final class Oracle {
         if let absolute = URL(string: string), absolute.scheme != nil {
             return absolute
         }
-        // URL(string:relativeTo:) resolves per RFC 3986, handling ../
-        // and other relative components that appendPathComponent breaks.
+        // URL(string:relativeTo:) разрешается согласно RFC 3986, обрабатывая ../ и другие относительные
+        // компоненты, которые appendPathComponent нарушает.
         return URL(string: string, relativeTo: base)
             ?? base.appendingPathComponent(string)
     }

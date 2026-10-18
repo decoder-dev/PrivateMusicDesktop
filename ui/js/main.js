@@ -38,8 +38,8 @@ import { handleBackendEvent as networkEvent, isNetworkError, setReloader, initNe
 addStrings({ ru: { "export.audio": "Сохранить аудиофайл…", "export.saved": "Аудиофайл сохранён" }, en: { "export.audio": "Save audio file…", "export.saved": "Audio file saved" } });
 
 const root = document.getElementById("app");
-// Keep the application's own track menus; suppress the webview's browser
-// commands (Save as, Print, Reload, developer tools) everywhere else.
+// Сохраняйте собственные меню треков приложения; подавлять команды браузера веб-просмотра (Сохранить
+// как, Печать, Обновить, инструменты разработчика) везде.
 document.addEventListener("contextmenu", (event) => event.preventDefault(), { capture: true });
 document.addEventListener("keydown", (event) => {
   const key = event.key.toLowerCase();
@@ -54,8 +54,8 @@ function applyAppearance() {
   applyChrome();
 }
 
-// Blur and translucency are for a window that is being looked at: the simplified
-// look in Settings, or a window in the background for a while, makes the chrome flat.
+// Размытие и прозрачность предназначены для окна, на которое смотрят: упрощенный вид в настройках или
+// окно на заднем плане на некоторое время делает хром плоским.
 let backgrounded = false;
 let backgroundTimer = 0;
 function applyChrome() {
@@ -78,12 +78,12 @@ let login = null;
 let unlisten = [];
 let lastQueueSave = 0;
 
-// ---------------------------------------------------------------- actions
+// ---------------------------------------------------------------- действия
 
 async function play(tracks, index, { shuffle = false, radio = null } = {}) {
   try {
     if (shuffle) await api.setShuffle(true);
-    // A queue from a mix keeps refilling from it while it plays.
+    // Очередь из микса пополняется из него во время воспроизведения.
     if (radio) await api.playRadio(radio, tracks, index);
     else await api.playTracks(tracks, index);
   } catch (error) {
@@ -91,7 +91,7 @@ async function play(tracks, index, { shuffle = false, radio = null } = {}) {
   }
 }
 
-/** Hearts everywhere end here. */
+/** Сердца повсюду заканчиваются здесь. */
 export async function like(track) {
   if (!track) return;
   try {
@@ -112,7 +112,7 @@ async function download(track) {
   }
 }
 
-/** "More like this": the track, then VK's radio from it. */
+/** "More like this": трек, затем радио VK из него. */
 async function playSimilar(track) {
   toast(t("radio.loading"));
   try {
@@ -124,7 +124,7 @@ async function playSimilar(track) {
   }
 }
 
-/** Asks for a name and creates a playlist; resolves to it or null. */
+/** Запрашивает имя и создает список воспроизведения; разрешает это или ноль. */
 export async function newPlaylist() {
   const values = await formDialog({
     title: t("pl.new"),
@@ -156,9 +156,9 @@ async function addToPlaylist(playlist, track) {
   }
 }
 
-/** The ⋯ / right-click menu of a track. `extra` adds screen-specific items. */
+/** ⋯ / контекстное меню трека. `extra` добавляет элементы, специфичные для экрана. */
 async function openTrackMenu(track, at, extra = []) {
-  // Opening a menu must not wait for VK or for an unavailable network.
+  // Открытие меню не должно ждать VK или недоступной сети.
   const playlists = ownPlaylists();
   ensurePlaylists().catch(() => {});
   const targets = [
@@ -166,7 +166,7 @@ async function openTrackMenu(track, at, extra = []) {
     ...(playlists.length ? ["-"] : []),
     { label: t("menu.newPlaylist"), action: "new-playlist", icon: "plus", run: async () => { const p = await newPlaylist(); if (p) addToPlaylist(p, track); } },
   ];
-  // Several linked artists get a sub-menu; one, or just a name, a plain item.
+  // У нескольких связанных исполнителей есть подменю; один или просто имя, простой предмет.
   const artists = linkedArtists(track);
   const goTo = [
     artists.length > 1
@@ -210,14 +210,14 @@ function persistSettings(patch) {
   saveSettings(settings);
 }
 
-/** From the settings screen: saved, and pushed to whatever shows them now. */
+/** С экрана настроек: сохранено и перенесено туда, где они сейчас отображаются. */
 function applySettings(patch) {
   persistSettings(patch);
   if ("theme" in patch || "accent" in patch || "flatChrome" in patch || "palette" in patch) applyAppearance();
   nowPlaying?.applySettings(patch);
 }
 
-// ------------------------------------------------------------------ shell
+// ------------------------------------------------------------------ оболочка
 
 function buildShell() {
   const { value, dispose } = withScope(buildShellParts);
@@ -225,9 +225,9 @@ function buildShell() {
 }
 
 function buildShellParts() {
-  // Artist and album pages stack on top of whatever was on screen: Back
-  // returns there, with that screen as it was (a playlist stays open, a
-  // search keeps its results). The sidebar starts over from a clean stack.
+  // Страницы исполнителя и альбома располагаются поверх всего, что было на экране: «Назад» возвращается
+  // туда с тем же экраном, каким он был (список воспроизведения остается открытым, результаты поиска
+  // сохраняются). Боковая панель начинается заново с чистого стека.
   let stack = [];
   let current = { id: "library", payload: null };
   const ctx = { play, onTrackAction, toast, openTrackMenu, newPlaylist, back };
@@ -258,11 +258,11 @@ function buildShellParts() {
     ["settings", "nav.settings", "settings"],
   ];
 
-  // Groups: the library, then what is playing, then the settings.
+  // Группы: библиотека, потом что играет, потом настройки.
   const groupEnds = new Set(["search", "downloads"]);
   const nav = h("nav", { class: "nav", "aria-label": t("app.name") },
     items.flatMap(([id, label, glyph]) => [
-      // The label is also the name and tooltip: the narrow sidebar shows icons only.
+      // Метка также является именем и подсказкой: на узкой боковой панели отображаются только значки.
       h("button", { type: "button", "data-view": id, title: t(label), "aria-label": t(label), onclick: () => show(id) },
         h("span", { class: "glyph" }, icon(glyph, 18)),
         h("span", { class: "label", text: t(label) })),
@@ -286,12 +286,12 @@ function buildShellParts() {
     nowPlaying.element);
 
   function display(id, direction = "") {
-    // Set before the view is shown: pages that are pushed slide in, the rest settle.
+    // Установите перед отображением вида: выдвинутые страницы сдвигаются внутрь, остальные оседают.
     if (direction) main.dataset.dir = direction;
     else delete main.dataset.dir;
     set("view", id);
     for (const [key, view] of Object.entries(views)) view.element.hidden = key !== id;
-    // A page opened from a screen keeps that screen's place in the sidebar.
+    // Страница, открытая с экрана, сохраняет свое место на боковой панели.
     const section = stack[0]?.id ?? id;
     for (const button of nav.querySelectorAll("button")) {
       if (button.dataset.view === section) button.setAttribute("aria-current", "page");
@@ -300,7 +300,10 @@ function buildShellParts() {
     views[id].show?.();
   }
 
-  /** From the sidebar: the screen starts over at its first page, like tapping a tab again. */
+  /**
+   * На боковой панели: экран начинается заново с первой страницы, как если бы вы снова коснулись
+   * вкладки.
+   */
   function show(id) {
     stack = [];
     current = { id, payload: null };
@@ -336,7 +339,7 @@ function buildShellParts() {
   };
 }
 
-// ----------------------------------------------------------- screen routing
+// ---------------------------------------------------------- Маршрутизация экрана
 
 function showLogin() {
   nowPlaying?.close();
@@ -371,16 +374,16 @@ async function showApp() {
 }
 
 /**
- * The statistics group listening by the hour of the user's own clock; only
- * the window knows its time zone, so it tells the engine (and again when the
- * clock may have changed, e.g. daylight saving time or travel).
+ * Группа статистики прослушивает по часам собственных часов пользователя; только окно знает свой
+ * часовой пояс, поэтому оно сообщает об этом движку (и снова, когда часы могли измениться, e.g. летнее
+ * время или путешествие).
  */
 function syncTimeZone() {
   api.setUtcOffset(-new Date().getTimezoneOffset()).catch(() => {});
 }
 window.addEventListener("focus", () => { if (shell) syncTimeZone(); });
 
-/** Pushes saved settings to the engine, and brings back the last queue. */
+/** Отправляет сохраненные настройки в движок и возвращает последнюю очередь. */
 async function applyStartupState() {
   const activeShell = shell;
   try {
@@ -420,7 +423,7 @@ async function signOut() {
   signedOut();
 }
 
-// ------------------------------------------------------------ backend events
+// ------------------------------------------------------------ Внутренние события
 
 function onBackendEvent(event) {
   networkEvent(event);
@@ -443,7 +446,7 @@ function onBackendEvent(event) {
       nowPlaying?.feed(event.bands);
       break;
     case "error":
-      // A connection failure gets the VPN card (network.js) instead of a toast.
+      // В случае сбоя соединения вместо всплывающего уведомления отображается карта VPN (network.js).
       if (!isNetworkError(event)) toast(errorText(event), { error: true });
       break;
     case "session_expired":
@@ -456,7 +459,7 @@ function onBackendEvent(event) {
   }
 }
 
-/** Remembers where we are, but only every few seconds. */
+/** Помнит, где мы находимся, но только каждые несколько секунд. */
 function scheduleQueueSave(state) {
   const now = Date.now();
   if (now - lastQueueSave < 5000 || !state.track) return;
@@ -470,7 +473,7 @@ subscribe("queue", ({ tracks, current }) => {
   saveQueue(tracks, current, sameTrack ? store.player.position : 0);
 });
 
-// ----------------------------------------------------------------- shortcuts
+// ------------------------------------------------------------------ ярлыки
 
 function typing(event) {
   const el = event.target;
@@ -479,13 +482,14 @@ function typing(event) {
 
 document.addEventListener("keydown", (event) => {
   if (!shell || typing(event) || event.altKey) return;
-  // A focused slider (volume, position) uses the arrow keys itself.
+  // Сфокусированный ползунок (объем, положение) сам использует клавиши со стрелками.
   if (event.target instanceof HTMLInputElement && event.target.type === "range" && event.key.startsWith("Arrow")) return;
   const mod = event.ctrlKey || event.metaKey;
   if (nowPlaying?.isOpen() && (event.key === "/" || (mod && (event.key === "f" || event.key === "F")))) return;
   switch (event.key) {
     case " ":
-      if (event.target instanceof HTMLButtonElement) return; // a focused button handles Space itself
+      if (event.repeat) { event.preventDefault(); return; }
+      if (event.target instanceof HTMLButtonElement) return; // кнопка с фокусом управляет самим пространством
       event.preventDefault();
       api.toggle();
       break;
@@ -507,6 +511,7 @@ document.addEventListener("keydown", (event) => {
       break;
     case "m":
     case "M":
+      if (event.repeat) { event.preventDefault(); return; }
       if (!mod) shell.bar.toggleMute();
       break;
     case "/":
@@ -528,7 +533,7 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-// -------------------------------------------------------------------- start
+// -------------------------------------------------------------------- Начни
 
 async function start() {
   unlisten = await Promise.all([
@@ -557,7 +562,7 @@ initNetwork();
 start();
 window.addEventListener("beforeunload", () => unlisten.forEach((fn) => fn()));
 
-// Window shortcuts also work outside the now-playing view and inside form controls.
+// Ярлыки окон также работают за пределами текущего представления и внутри элементов управления формой.
 document.addEventListener("keydown",event=>{
  if(event.key!=="F11" && !(event.key==="Escape" && isWindowFullscreen()))return;
  event.preventDefault();event.stopImmediatePropagation();

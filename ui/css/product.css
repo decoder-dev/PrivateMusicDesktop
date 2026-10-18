@@ -1,4 +1,4 @@
-/* Shared product finish: clear hierarchy, calm surfaces, a dedicated player dock. */
+/* Общая отделка продукта: четкая иерархия, спокойные поверхности, выделенная док-станция для плеера. */
 :root { --r-control:12px; --r-card:20px; }
 .main > .view > .view-header, .main > .view > .view > .view-header { padding-block:24px 16px; }
 .view-header h1 { font-size:28px; line-height:36px; letter-spacing:-0.65px; }
@@ -107,7 +107,7 @@ input[type="range"].eq-slider { height:136px; width:28px !important; --fill-dir:
  .mix-tile:not(:disabled):hover { transform:none; }
 }
 
-/* Radial mode reserves room for its spectrum instead of drawing over neighbours. */
+/* Радиальный режим оставляет место для своего спектра, а не затягивает соседей. */
 .np[data-mode="radial"] .np-main { gap:clamp(32px,5vw,72px); }
 .np[data-mode="radial"] .np-cover { width:min(30vw,40vh); margin:32px; }
 .np .np-info { padding-block:8px; }
@@ -123,7 +123,7 @@ input[type="range"].eq-slider { height:136px; width:28px !important; --fill-dir:
 .main { overflow:clip; }
 .selena-row { scroll-padding-inline:var(--gutter); }
 
-/* Download and access controls share the app's settings language. */
+/* Элементы управления загрузкой и доступом используют тот же язык настроек приложения. */
 .update-panel { padding:24px; display:flex; flex-direction:column; gap:12px; min-width:0; }
 .update-panel > strong { font-size:18px; letter-spacing:-0.4px; }
 .update-panel > .set-note { margin:0; }
@@ -143,7 +143,10 @@ input[type="range"].eq-slider { height:136px; width:28px !important; --fill-dir:
 .np[data-mode="radial"]:is([data-side="lyrics"],[data-side="queue"]) .np-cover { width:min(24vw,28vh); margin:24px; }
 .discovery-view .mix-catalog.inline-error :is(.shelf-heading,.mix-grid) { display:none; }
 
-/* Leave room above accents and below Cyrillic descenders while preserving ellipsis. */
+/*
+ * Оставьте место над диакритическими знаками и под нижними кириллическими элементами, сохраняя при этом
+ * многоточие.
+ */
 .nav button .label, .account .name, .brand-name { line-height:24px; padding-block:2px; }
 .now .title, .row .title { line-height:22px; padding-block:1px; }
 .now .artist, .row .artist { line-height:20px; padding-block:1px; }
@@ -165,3 +168,6 @@ input[type="range"].eq-slider { height:136px; width:28px !important; --fill-dir:
 .eq-hint { margin:0 20px 18px; color:var(--text-2); font-size:12px; line-height:19px; max-width:620px; }
 .eq-error { display:flex; align-items:center; gap:12px; margin:0 20px 18px; color:var(--danger,#e46c76); font-size:13px; }
 .eq-error[hidden] { display:none; }
+.discovery-view .view-header .fy-toolbar .vh-actions { margin:0; }
+
+@media(max-width:640px) { .discovery-view .fy-heading-row .tabs { width:100%; } .discovery-view .fy-heading-row .tabs button { flex:1; } }
