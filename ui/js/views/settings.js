@@ -125,6 +125,28 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
         h("div", { class: "set-row" }, h("div", {}, h("strong", { text: "Private Music" }), version,
           h("div", { class: "set-note", text: t("set.disclaimer") }))))));
 
+  // Переходы ведут к настоящим разделам этой же прокручиваемой страницы.
+  // Клавиатурный фокус переносится на заголовок, чтобы переход был понятен и без мыши.
+  const settingsBody = element.querySelector(".set-body");
+  const shortcuts = ["set.sound", "set.appearance", "eq.title", "set.window", "update.title"];
+  const settingsNav = h("nav", { class:"settings-nav", "aria-label":t("set.title") });
+  for (const key of shortcuts) {
+    const heading = [...settingsBody.querySelectorAll(".set-section > h2")].find(node => node.textContent === t(key));
+    if (!heading) continue;
+    const section = heading.parentElement;
+    section.id = `settings-${key.replaceAll(".", "-")}`;
+    heading.tabIndex = -1;
+    settingsNav.append(h("button", {
+      type:"button", class:"btn", text:t(key), "aria-controls":section.id,
+      onclick:() => {
+        const top = section.getBoundingClientRect().top - settingsBody.getBoundingClientRect().top + settingsBody.scrollTop;
+        settingsBody.scrollTo({ top:Math.max(0, top - 12), behavior:"instant" });
+        heading.focus({ preventScroll:true });
+      },
+    }));
+  }
+  element.querySelector(".view-header").append(settingsNav);
+
   async function loadDevices() {
     refreshButton.disabled = true;
     refreshButton.setAttribute("aria-busy", "true");

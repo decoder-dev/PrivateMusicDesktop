@@ -130,11 +130,11 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     canvas,
     h("div", { class: "np-top" }, closeButton, h("div", { class: "np-kicker" }, h("div", { class: "k1", text: t("np.nowPlaying") }), kickerAlbum), lyricsButton, modeButton, windowButton),
     h("div", { class: "np-stage" },
-      h("div", { class: "np-main" }, coverBox, h("div", { class: "np-info" }, title, h("div", { class: "np-artist-row" }, artist, likeButton), upNext)),
+      h("div", { class: "np-main" }, coverBox, h("div", { class: "np-info" }, title, h("div", { class: "np-artist-row" }, artist), upNext)),
       lyrics.element, queuePanel),
     h("div", { class: "np-bottom" },
       h("div", { class: "np-seek" }, elapsed, seek, total),
-      h("div", { class: "np-controls" }, shuffleButton, previousButton, playButton, nextButton, repeatButton),
+      h("div", { class: "np-controls" }, shuffleButton, previousButton, playButton, nextButton, repeatButton, likeButton),
       h("div", { class: "np-quick" }, quickLyrics, quickQueue, quickMore)));
 
   const visualizer = createVisualizer(canvas);

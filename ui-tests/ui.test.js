@@ -3019,3 +3019,47 @@ test("refinement: holding Space sends one playback toggle",async()=>{
   assert.equal(await page.evaluate(()=>window.__mock.count('toggle')),1);assert.deepEqual(app.problems,[]);
  }finally{await app.close();}
 });
+
+test("studio: settings shortcuts reveal their section, move focus and leave playback running", async () => {
+ for (const viewport of [{width:1120,height:740},{width:1920,height:1080}]) {
+  const app = await openApp({config:{signedIn:true},viewport});
+  try {
+   const {page}=app; await waitForLibrary(page); await rows(page).first().click();
+   await page.locator('.nav button[data-view="settings"]').click();
+   await page.evaluate(() => document.fonts.load('400 14px Onest', 'Ёлка'));
+   assert.equal(await page.evaluate(() => document.fonts.check('400 14px Onest', 'Ёлка')),true);
+   for (const target of ['settings-eq-title','settings-update-title','settings-set-appearance','settings-set-sound']) {
+    await page.locator(`.settings-nav button[aria-controls="${target}"]`).click();
+    const bounds=await page.evaluate(id=>{
+     const heading=document.querySelector(`#${id} > h2`), box=heading.getBoundingClientRect(), body=document.querySelector('.set-body').getBoundingClientRect();
+     return {visible:box.top>=body.top && box.bottom<=body.bottom,focused:document.activeElement===heading};
+    },target);
+    assert.deepEqual(bounds,{visible:true,focused:true});
+   }
+   assert.equal(await page.evaluate(()=>window.__mock.count('toggle')),0);
+   assert.equal(await page.locator('.player .controls .play').getAttribute('aria-label'),'Пауза');
+   assert.deepEqual(app.problems,[]);
+  } finally { await app.close(); }
+ }
+});
+
+test("studio: expanded player keeps the favourite after repeat and fits its controls", async () => {
+ for (const width of [420,1120,1920]) {
+  const app=await openApp({config:{signedIn:true},viewport:{width,height:800}});
+  try {
+   const {page}=app; await waitForLibrary(page); await rows(page).first().click();
+   await page.locator('.cover-button').click();
+   await page.waitForSelector('.np:not([hidden])');
+   const layout=await page.evaluate(()=>{
+    const controls=document.querySelector('.np-controls'), box=controls.getBoundingClientRect();
+    const play=document.querySelector('.np-play').getBoundingClientRect();
+    return {heartLast:controls.lastElementChild.classList.contains('np-like'),fits:box.left>=0 && box.right<=innerWidth,center:play.x+play.width/2};
+   });
+   assert.ok(layout.heartLast && layout.fits,JSON.stringify(layout));
+   if(width>640) assert.ok(Math.abs(layout.center-width/2)<2,JSON.stringify(layout));
+   await page.locator('.np-like').click();
+   assert.equal(await page.evaluate(()=>window.__mock.count('toggle')),0);
+   assert.deepEqual(app.problems,[]);
+  } finally { await app.close(); }
+ }
+});
