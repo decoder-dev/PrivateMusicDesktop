@@ -1,3 +1,4 @@
+import { ft } from "../feature-i18n.js";
 import { playlistLink } from "../playlist-link.js";
 import { api } from "../api.js";
 import { createTracksScreen } from "../tracks-screen.js";
@@ -13,6 +14,9 @@ import { albumCard } from "../album-card.js";
 import { openAlbum } from "../navigation.js";
 import { artBox, paintStatus, backButton, headerOnScroll } from "../ui-parts.js";
 import { enter } from "../motion.js";
+import { isSynced,setPlaylistSync,syncPlaylists } from "../playlist-sync.js";
+import { removeSelected } from "../batch-remove.js";
+const sameTrack=(a,b)=>a.owner_id===b.owner_id && a.track_id===b.track_id;
 
 addStrings({ ru: { "pl.openLink": "Открыть по ссылке", "pl.link": "Ссылка на плейлист VK", "pl.linkInvalid": "Вставьте ссылку VK вида vk.com/music/playlist/-123_456 или vk.com/audio_playlist-123_456.", "pl.shared": "Плейлист по ссылке", "pl.follow": "Добавить в мои плейлисты", "pl.followed": "Плейлист добавлен" }, en: { "pl.openLink": "Open link", "pl.link": "VK playlist link", "pl.linkInvalid": "Paste a VK playlist link, such as vk.com/music/playlist/-123_456.", "pl.shared": "Shared playlist", "pl.follow": "Add to my playlists", "pl.followed": "Playlist added" } });
 
@@ -46,6 +50,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
   headerOnScroll(header, shelves);
 
   const editButton = h("button", { class: "btn", type: "button", onclick: () => edit(), text: t("pl.edit") });
+  const syncButton=h("button",{class:"btn",type:"button",text:ft("Сохранять офлайн"),onclick:async()=>{if(!current)return;try{setPlaylistSync(current,!isSynced(current));renderOwner();await syncPlaylists();}catch(error){toast(errorText(error),{error:true});}}});
   const deleteButton = h("button", { class: "btn danger-text", type: "button", onclick: () => remove(), text: t("pl.delete") });
   const followButton = h("button", { class:"btn",type:"button",text:t("pl.follow"),hidden:true,onclick:followShared });
   const detail = createTracksScreen({
@@ -56,11 +61,13 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
       emptyText: t("library.empty"),
       onPlay: play,
       onAction: onTrackAction,
+      canBatchRemove:()=>!!current && isOwn(current),
+      onBatchRemove:async items=>{const playlist=current;if(!playlist || !isOwn(playlist))return;try{await removeSelected(items,async track=>{await api.removeFromPlaylist(playlist,track);changeCount(playlist,-1);tracks=tracks.filter(other=>!sameTrack(other,track));});}finally{if(current===playlist)detail.setTracks(tracks);}},
       onMenu: (track, at, index) => openTrackMenu(track, at, current && isOwn(current)
         ? [{ label: t("menu.removeFrom"), action: "remove-from-playlist", icon: "trash", destructive: true, run: () => removeTrack(track, index) }]
         : []),
       back: backButton(t("playlists.back"), () => showList()),
-      headerExtra: h("div", { class: "set-inline pl-owner" }, editButton, deleteButton, followButton),
+      headerExtra: h("div", { class: "set-inline pl-owner" }, editButton, deleteButton, followButton,syncButton),
     },
   });
   detail.element.hidden = true;
@@ -76,6 +83,8 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
   }
 
   function renderOwner() {
+    syncButton.textContent=current && isSynced(current)?ft("Офлайн-синхронизация включена"):ft("Сохранять офлайн");
+    syncButton.setAttribute("aria-pressed",String(!!current && isSynced(current)));
     const own = current && isOwn(current);
     editButton.hidden = deleteButton.hidden = !own;
     followButton.hidden = !sharedAlbum || own || sharedAlbum.is_followed;

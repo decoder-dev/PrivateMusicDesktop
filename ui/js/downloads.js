@@ -3,6 +3,7 @@
 import { api, trackKey } from "./api.js";
 import { publish } from "./store.js";
 import { t } from "./i18n.js";
+import { readPersonal,writePersonal } from "./personal.js";
 
 let job = null;
 export const downloadJob = () => job;
@@ -41,6 +42,7 @@ export async function toggleDownload(track) {
       return "removed";
     }
     await api.download(track);
+    writePersonal("manualDownloads",[...new Set([...readPersonal("manualDownloads",[]),key])].slice(-20000));
     return "added";
   } finally {
     pending.delete(key);
@@ -55,7 +57,7 @@ export function formatSize(value) {
 }
 
 /** Загружает по одному элементу за раз; отмена останавливает планирование новых запросов. */
-export async function downloadAll(items, { isCancelled = () => false, onProgress = () => {} } = {}) {
+export async function downloadAll(items, { isCancelled = () => false, onProgress = () => {}, managed=false } = {}) {
   if (job?.running) return null;
   const unique = [...new Map(items.map(track => [trackKey(track),track])).values()].slice(0,20000);
   const state = { running:true,cancelled:false,completed:0,total:unique.length,failed:0,current:null,errors:[] };
@@ -65,6 +67,7 @@ export async function downloadAll(items, { isCancelled = () => false, onProgress
     for (const track of unique) {
       if (state.cancelled || isCancelled()) { state.cancelled=true; break; }
       const key=trackKey(track);
+      if(!managed)writePersonal("manualDownloads",[...new Set([...readPersonal("manualDownloads",[]),key])].slice(-20000));
       state.current=track;
       publish("downloadJob");
       if (!keys.has(key) && !pending.has(key)) {

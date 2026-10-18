@@ -39,6 +39,10 @@ export function loadSettings() {
   const volume = Number.isFinite(saved.volume) ? Math.min(1, Math.max(0, saved.volume)) : 1;
   return {
     volume,
+    prefetch:saved.prefetch!==false,
+    gapless:saved.gapless!==false,
+    crossfade:Number.isFinite(saved.crossfade)?Math.max(0,Math.min(8,saved.crossfade)):0,
+    normalization:saved.normalization===true,
     shuffle: saved.shuffle === true,
     repeat: ["off", "all", "one"].includes(saved.repeat) ? saved.repeat : "off",
     lyrics: saved.lyrics !== false,

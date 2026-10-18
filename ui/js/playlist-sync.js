@@ -1,0 +1,142 @@
+import { ft } from "./feature-i18n.js";
+import { api, loadAllPages, trackKey } from "./api.js";
+import {
+  downloads,
+  refreshDownloads,
+  downloadAll,
+  downloadJob,
+} from "./downloads.js";
+import { accountId, readPersonal, writePersonal } from "./personal.js";
+import { publish, own, subscribe } from "./store.js";
+
+const keyOf = (playlist) => `${playlist.owner_id}_${playlist.playlist_id}`;
+export function syncRules() {
+  const rules = readPersonal("playlistSync", []);
+  return Array.isArray(rules) ? rules.slice(0, 100) : [];
+}
+export const isSynced = (playlist) =>
+  syncRules().some((rule) => rule.key === keyOf(playlist));
+export function setPlaylistSync(playlist, on) {
+  const rules = syncRules().filter((rule) => rule.key !== keyOf(playlist));
+  if (on)
+    rules.push({
+      key: keyOf(playlist),
+      playlist: { ...playlist, artwork_url: null },
+      owned: [],
+      last: 0,
+      error: null,
+    });
+  writePersonal("playlistSync", rules);
+  publish("playlistSync");
+}
+let running = false;
+function sharedProtection(currentKey){
+  const manual=new Set(),protectedKeys=new Set();let complete=true;
+  // Файлы загрузок общие для компьютера: чужое локальное закрепление тоже защищает файл.
+  for(let i=0;i<localStorage.length;i++){
+    const key=localStorage.key(i);if(!/^pm\.personal\.[^.]+\.(playlistSync|manualDownloads)$/.test(key || ""))continue;
+    let values;try{values=JSON.parse(localStorage.getItem(key));}catch{complete=false;continue;}
+    if(!Array.isArray(values)){complete=false;continue;}
+    if(key.endsWith(".manualDownloads")){for(const id of values)manual.add(id);continue;}
+    for(const other of values){
+      if(key===`pm.personal.${accountId()}.playlistSync` && other.key===currentKey)continue;
+      if(!Array.isArray(other.wanted))complete=false;
+      for(const id of other.wanted || other.owned || [])protectedKeys.add(id);
+    }
+  }
+  return {manual,protectedKeys,complete};
+}
+export async function syncPlaylists() {
+  if (running || downloadJob()?.running || !accountId()) return;
+  running = true;
+  publish("playlistSync");
+  const id = accountId();
+  try {
+    await refreshDownloads();
+    for (const original of syncRules()) {
+      if (id !== accountId() || !isSynced(original.playlist)) break;
+      let rule = { ...original };
+      try {
+        const items = await loadAllPages(
+          (offset, count) => api.playlistTracks(rule.playlist, offset, count),
+          { isCancelled: () => id !== accountId() || !isSynced(rule.playlist) },
+        );
+        if (!items || id !== accountId()) break;
+        const before = new Set(downloads().tracks.map(trackKey));
+        const result = await downloadAll(items, {
+          managed: true,
+          isCancelled: () => id !== accountId() || !isSynced(rule.playlist),
+        });
+        if (id !== accountId()) break;
+        const existing = new Set(downloads().tracks.map(trackKey));
+        const wanted = new Set(items.map(trackKey));
+        const created = items
+          .map(trackKey)
+          .filter((key) => !before.has(key) && existing.has(key));
+        rule.owned = [...new Set([...(rule.owned || []), ...created])];
+        const protection=sharedProtection(rule.key);
+        if (
+          result &&
+          !result.cancelled &&
+          !result.failed &&
+          readPersonal("syncRemoveObsolete", false) &&
+          protection.complete &&
+          syncRules()
+            .filter((other) => other.key !== rule.key)
+            .every((other) => Array.isArray(other.wanted))
+        ) {
+          const {manual,protectedKeys}=protection;
+          for (const key of rule.owned) {
+            if (id !== accountId() || !isSynced(rule.playlist)) break;
+            if (!wanted.has(key) && !manual.has(key) && !protectedKeys.has(key))
+              await api.removeDownload(key);
+          }
+          rule.owned = rule.owned.filter(
+            (key) =>
+              wanted.has(key) || manual.has(key) || protectedKeys.has(key),
+          );
+        }
+        rule.wanted = [...wanted];
+        rule.last = Date.now();
+        rule.error = result?.cancelled
+          ? ft("Остановлено")
+          : result?.failed
+            ? ft("Не загружено: {n}",{n:result.failed})
+            : null;
+      } catch (error) {
+        rule.error = error.kind
+          ? ft("Ошибка: {kind}",{kind:error.kind})
+          : String(error.message || ft("Не удалось синхронизировать"));
+      }
+      if (id !== accountId()) break;
+      const rules = syncRules();
+      if (rules.some((other) => other.key === rule.key))
+        writePersonal(
+          "playlistSync",
+          rules.map((other) => (other.key === rule.key ? rule : other)),
+        );
+      publish("playlistSync");
+    }
+  } finally {
+    running = false;
+    await refreshDownloads();
+    publish("playlistSync");
+  }
+}
+export const syncRunning = () => running;
+export function installPlaylistSync() {
+  const timer = setInterval(
+    () => syncPlaylists().catch(() => {}),
+    15 * 60 * 1000,
+  );
+  const online = () => syncPlaylists().catch(() => {});
+  window.addEventListener("online", online);
+  subscribe("session", () => {
+    if (accountId()) online();
+  });
+  own(() => {
+    clearInterval(timer);
+    window.removeEventListener("online", online);
+  });
+  online();
+}

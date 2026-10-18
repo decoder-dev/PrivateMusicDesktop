@@ -26,7 +26,7 @@ export function formDialog({ title, fields, confirm }) {
   return new Promise((resolve) => {
     const inputs = fields.map((field) => {
       const attrs = { class: "field", name: field.name, "aria-label": field.label, maxlength: String(field.max ?? 128) };
-      const input = field.multiline ? h("textarea", { ...attrs, rows: "3" }) : h("input", { ...attrs, type: "text" });
+      const input = field.options ? h("select",attrs,field.options.map(([value,label])=>h("option",{value,text:label}))) : field.multiline ? h("textarea", { ...attrs, rows: "3" }) : h("input", { ...attrs, type: field.type ?? "text", ...(field.min != null ? {min:String(field.min)} : {}), ...(field.maxValue != null ? {max:String(field.maxValue)} : {}) });
       input.value = field.value ?? "";
       return { field, input };
     });
@@ -40,7 +40,7 @@ export function formDialog({ title, fields, confirm }) {
     const dialog = h("dialog", { class: "dialog", "aria-label": title }, form);
 
     function valid() {
-      return inputs.every(({ field, input }) => !field.required || input.value.trim());
+      return inputs.every(({ field, input }) => (!field.required || input.value.trim()) && input.checkValidity());
     }
     function refresh() { submit.disabled = !valid(); }
     inputs.forEach(({ input }) => input.addEventListener("input", refresh));

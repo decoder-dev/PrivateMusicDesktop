@@ -1,3 +1,4 @@
+import { ft } from "../feature-i18n.js";
 import { api } from "../api.js";
 import { createTracksScreen } from "../tracks-screen.js";
 import { errorText, t } from "../i18n.js";
@@ -5,6 +6,7 @@ import { h } from "../dom.js";
 import { trackKey } from "../api.js";
 import { store, subscribe } from "../store.js";
 import { confirmDialog } from "../dialog.js";
+import { removeSelected } from "../batch-remove.js";
 
 /**
  * Во что играли на этом компьютере, сначала самые новые. Трек попадает сюда, как только 30% его
@@ -24,6 +26,7 @@ export function createHistoryView({ play, onTrackAction, toast, openTrackMenu })
       emptyText: t("history.empty"), art: "history",
       onPlay: play,
       onAction: onTrackAction,
+      onBatchRemove:async items=>{try{await removeSelected(items,track=>api.historyRemove(trackKey(track)),ft("Удалить записи истории?"));}finally{await load();}},
       headerExtra: clearButton,
       onMenu: (track, at) => openTrackMenu(track, at, [
         { label: t("history.remove"), action: "remove-from-history", icon: "trash", destructive: true, run: () => remove(track) },

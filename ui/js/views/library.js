@@ -1,8 +1,11 @@
+import { ft } from "../feature-i18n.js";
 import { api, loadAllPages } from "../api.js";
 import { createTracksScreen } from "../tracks-screen.js";
 import { errorText, t } from "../i18n.js";
 import { setLibrary, forgetLibrary, onLibraryChange } from "../likes.js";
 import { trackKey } from "../api.js";
+import { removeSelected } from "../batch-remove.js";
+import { toggleLike,isLiked } from "../likes.js";
 
 export function createLibraryView({ play, onTrackAction, toast }) {
   let loaded = false;
@@ -16,6 +19,7 @@ export function createLibraryView({ play, onTrackAction, toast }) {
       emptyText: t("library.empty"),
       onPlay: play,
       onAction: onTrackAction,
+      onBatchRemove:items=>removeSelected(items,track=>isLiked(track)?toggleLike(track):Promise.resolve(),ft("Удалить из моей музыки?")),
       pinLiked: false, // здесь все нравится; сердце отображается только при наведении
       onRetry: () => { loaded = false; loading = false; load(); },
     },

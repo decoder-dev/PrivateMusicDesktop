@@ -1,4 +1,5 @@
-import { toggleWindowFullscreen, isWindowFullscreen } from "./window-mode.js";
+import { ft } from "./feature-i18n.js";
+import { toggleWindowFullscreen, isWindowFullscreen,setWindowMode } from "./window-mode.js";
 import { applyPalette } from "./themes.js";
 import { h, clear } from "./dom.js";
 import { icon } from "./icons.js";
@@ -9,9 +10,14 @@ import { store, set, publish, subscribe, withScope } from "./store.js";
 import { toast } from "./toast.js";
 import { installTooltips } from "./tooltip.js";
 import { createPlayerBar } from "./player-bar.js";
-import { setDefaultTrackMenu } from "./tracks-screen.js";
+import { setDefaultTrackMenu, setDefaultBatchAction } from "./tracks-screen.js";
+import { rememberQueue } from "./queue-history.js";
+import { createSmartView } from "./views/smart.js";
+import { createMiniPlayer } from "./mini-player.js";
+import { installPlaylistSync } from "./playlist-sync.js";
+import { installTastes,dislike } from "./tastes.js";
 import { createNowPlaying } from "./now-playing.js";
-import { toggleLike } from "./likes.js";
+import { toggleLike,isLiked } from "./likes.js";
 import { createLibraryView } from "./views/library.js";
 import { createPlaylistsView } from "./views/playlists.js";
 import { createSearchView } from "./views/search.js";
@@ -82,6 +88,7 @@ let lastQueueSave = 0;
 
 async function play(tracks, index, { shuffle = false, radio = null } = {}) {
   try {
+    rememberQueue();
     if (shuffle) await api.setShuffle(true);
     // Очередь из микса пополняется из него во время воспроизведения.
     if (radio) await api.playRadio(radio, tracks, index);
@@ -96,7 +103,8 @@ export async function like(track) {
   if (!track) return;
   try {
     const result = await toggleLike(track);
-    if (result) toast(t(result === "added" ? "like.added" : "like.removed"));
+    const id=store.session.profile?.id;
+    if (result) toast(t(result === "added" ? "like.added" : "like.removed"),result==="removed"?{action:{label:t("queue.undo"),run:async()=>{if(store.session.profile?.id!==id || isLiked(track))return;try{await toggleLike(track);}catch(error){toast(errorText(error),{error:true});}}}}:{});
   } catch (error) {
     toast(errorText(error), { error: true });
   }
@@ -179,6 +187,11 @@ async function openTrackMenu(track, at, extra = []) {
     { label: t("playLast"), action: "play-last", icon: "queue-add", run: () => onTrackAction("play-last", track) },
     { label: t("export.audio"), action: "export", icon: "download", run: async () => { try { if (await api.exportTrack(track)) toast(t("export.saved")); await refreshDownloads(); } catch (error) { toast(errorText(error), { error: true }); } } },
     { label: t("radio"), action: "radio", icon: "radio", run: () => playSimilar(track) },
+    { label:ft("Предпочтения Selena"),action:"taste",icon:"sparkles",items:[
+      {label:ft("Меньше такого"),action:"taste-less",run:()=>dislike(track,"less").catch(error=>toast(errorText(error),{error:true}))},
+      {label:ft("Не предлагать этот трек"),action:"taste-track",run:()=>dislike(track,"tracks").catch(error=>toast(errorText(error),{error:true}))},
+      {label:ft("Не предлагать исполнителя"),action:"taste-artist",run:()=>dislike(track,"artists").catch(error=>toast(errorText(error),{error:true}))},
+    ]},
     ...(goTo.length ? ["-", ...goTo] : []),
     "-",
     { label: t("menu.addTo"), action: "add-to-playlist", icon: "playlist", items: targets },
@@ -187,6 +200,28 @@ async function openTrackMenu(track, at, extra = []) {
 }
 
 setDefaultTrackMenu((track, at) => openTrackMenu(track, at));
+setDefaultBatchAction(async (action, tracks) => {
+  const account=store.session.profile?.id;
+  if (action === "queue") {
+    for (const track of tracks) {
+      if (!store.session.signed_in || store.session.profile?.id !== account) break;
+      await api.playLast(track);
+    }
+    toast(t("playLast"));
+  } else if (action === "playlist") {
+    await ensurePlaylists();
+    openMenu({x:Math.max(16,window.innerWidth/2-130),y:150},ownPlaylists().map(playlist=>({label:playlist.title,action:"batch-playlist",run:async()=>{
+      let done=0;
+      try {
+        for (const track of tracks) {
+          if (!store.session.signed_in || store.session.profile?.id !== account) break;
+          await api.addToPlaylist(playlist,track); done++; changeCount(playlist,1);
+        }
+        toast(`${t("pl.added",{title:playlist.title})}: ${done}`);
+      } catch(error) {toast(errorText(error),{error:true});}
+    }})),{label:t("menu.addTo")});
+  }
+});
 
 async function onTrackAction(action, track) {
   if (action === "like") return like(track);
@@ -225,6 +260,8 @@ function buildShell() {
 }
 
 function buildShellParts() {
+  installPlaylistSync();
+  installTastes();
   // Страницы исполнителя и альбома располагаются поверх всего, что было на экране: «Назад» возвращается
   // туда с тем же экраном, каким он был (список воспроизведения остается открытым, результаты поиска
   // сохраняются). Боковая панель начинается заново с чистого стека.
@@ -236,6 +273,7 @@ function buildShellParts() {
     forYou: createForYouView(ctx),
     downloads: createDownloadsView(ctx),
     playlists: createPlaylistsView(ctx),
+    smart: createSmartView(ctx),
     friends: createFriendsView(ctx),
     history: createHistoryView(ctx),
     stats: createStatsView(ctx),
@@ -249,6 +287,7 @@ function buildShellParts() {
     ["library", "nav.library", "library"],
     ["forYou", "nav.forYou", "home"],
     ["playlists", "nav.playlists", "playlist"],
+    ["smart", "nav.smart", "sparkles"],
     ["friends", "nav.friends", "friends"],
     ["search", "nav.search", "search"],
     ["queue", "nav.queue", "queue"],
@@ -283,7 +322,7 @@ function buildShellParts() {
       h("div", { class: "brand" }, h("span", { class: "brand-mark", "aria-hidden": "true" }, h("img", { src: "assets/app-icon.png", alt: "", width: "32", height: "32" })), h("span", { class: "brand-name", text: t("app.name") })),
       nav, h("div", { class: "spacer" }), account),
     main,
-    nowPlaying.element);
+    nowPlaying.element,createMiniPlayer(like));
 
   function display(id, direction = "") {
     // Установите перед отображением вида: выдвинутые страницы сдвигаются внутрь, остальные оседают.
@@ -342,6 +381,7 @@ function buildShellParts() {
 // ---------------------------------------------------------- Маршрутизация экрана
 
 function showLogin() {
+  if(document.documentElement.dataset.windowMode==="mini")setWindowMode("medium").catch(()=>{});
   nowPlaying?.close();
   nowPlaying = null;
   shell?.dispose();
@@ -389,6 +429,8 @@ async function applyStartupState() {
   const activeShell = shell;
   try {
     api.setCloseToTray(settings.closeToTray).catch(() => {});
+    api.setTransitions(settings.prefetch,settings.gapless,settings.crossfade).catch(()=>{});
+    api.setNormalization(settings.normalization).catch(()=>{});
     syncTimeZone();
     if (settings.outputDevice) await api.setOutputDevice(settings.outputDevice).catch(() => {});
     if (settings.eq.on) api.setEqualizer(settings.eq.gains).catch(() => {});

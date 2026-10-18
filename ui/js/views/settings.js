@@ -10,6 +10,10 @@ import { icon } from "../icons.js";
 import { setWindowMode } from "../window-mode.js";
 import { createUpdater } from "../updater.js";
 import { ACCENTS } from "../persist.js";
+import { addStrings } from "../i18n.js";
+import { createTastePanel } from "../tastes.js";
+import { createAudioOptions } from "../audio-options.js";
+addStrings({ru:{"window.mini":"Мини-плеер"},en:{"window.mini":"Mini player"}});
 
 const IS_MAC = /Mac/i.test(navigator.platform || navigator.userAgent);
 const MOD = IS_MAC ? "⌘" : "Ctrl";
@@ -84,7 +88,7 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
   const accountName = h("div", { class: "set-account" });
   const persistNote = h("div", { class: "set-note warn", hidden: true, text: t("set.persist.off") });
   const updater = createUpdater();
-  const windowModes = h("div", {class:"window-modes set-inline"}, ["medium","maximized","fullscreen"].map(mode => h("button",{class:"btn",type:"button","data-window-mode":mode,text:t(`window.${mode}`),onclick:async()=>{try{await setWindowMode(mode);}catch(error){toast(errorText(error),{error:true});}}})));
+  const windowModes = h("div", {class:"window-modes set-inline"}, ["medium","maximized","fullscreen","mini"].map(mode => h("button",{class:"btn",type:"button","data-window-mode":mode,text:t(`window.${mode}`),onclick:async()=>{try{await setWindowMode(mode);}catch(error){toast(errorText(error),{error:true});}}})));
   const version = h("div", { class: "set-note" });
 
   const keys = [
@@ -97,7 +101,7 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
     h("header", { class: "view-header" }, h("div", { class: "vh-text" }, h("h1", { text: t("set.title") }))),
     h("div", { class: "set-body" },
       section(t("set.sound"),
-        row(t("set.output"), h("div", { class: "set-inline" }, deviceSelect, refreshButton), t("set.output.note"), "volume")),
+        row(t("set.output"), h("div", { class: "set-inline" }, deviceSelect, refreshButton), t("set.output.note"), "volume"),createAudioOptions(settings,onSettingsChange)),
       section(t("set.appearance"),
         row(t("set.theme"), themePicker, null, "sparkles"),
         row(t("palette.title"), paletteGrid, null, "sparkles"),
@@ -105,6 +109,7 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
         h("div", { class: "set-row" },
           h("label", { class: "set-check", for: "set-flat" }, h("span", { class: "set-label" }, tile("settings"), h("span", { class: "set-text" }, t("set.flat"), h("div", { class: "set-note", text: t("set.flat.note") }))), flatBox))),
       section(t("eq.title"), equalizer.element),
+      section("Selena",createTastePanel()),
       section(t("sleep.title"), row(t("sleep.action"),createSleepTimer(),t("sleep.note"),"moon")),
       section(t("set.window"),
         row(t("window.mode"),windowModes,t("window.note"),"expand"),

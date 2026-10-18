@@ -126,6 +126,7 @@
     library: async ({ offset, count }) => { await delay(config.pageDelay ?? 5); return page(library, offset, count); },
     playlists: async ({ offset, count }) => page(playlists, offset, count),
     playlist_tracks: async ({ playlist, offset, count }) => {
+      if(Array.isArray(config.playlistTrackIds))return page(config.playlistTrackIds.map(n=>makeTrack(n)),offset,count);
       const key = `${playlist.owner_id}_${playlist.playlist_id}`;
       if (!playlistTracks.has(key)) playlistTracks.set(key, library.slice(0, playlist.count).map((t) => ({ ...t, title: `${playlist.title}: ${t.title}` })));
       return page(playlistTracks.get(key), offset, count);
@@ -292,6 +293,10 @@
     set_window_mode: () => null,
     app_info: () => ({ version: "0.1.0", has_tray: config.noTray ? false : true }),
     set_equalizer: ({ gains }) => { state.eq = gains; },
+    set_taste:({taste})=>{state.taste=taste;},
+    set_transitions:settings=>{state.transitions=settings;},
+    set_normalization:({on})=>{state.normalization=on;},
+    lyrics_versions:()=>[],
     set_visualizer: ({ on }) => { state.visualizer = on; },
     artwork_palette: ({ url }) => {
       if (config.paletteFails) throw { kind: "format", message: "no palette" };
@@ -359,6 +364,7 @@
       return page(ownerId === 13 ? [] : friendPlaylistList(ownerId), offset, count);
     },
     history: () => state.history.map((entry) => ({ ...entry })),
+    month_plays:()=>config.monthPlays || {},
     history_remove: ({ trackId }) => {
       const before = state.history.length;
       state.history = state.history.filter((entry) => `${entry.track.owner_id}_${entry.track.track_id}` !== trackId);

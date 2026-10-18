@@ -1,7 +1,13 @@
+import { ft } from "./feature-i18n.js";
 import { h } from "./dom.js";
 import { t } from "./i18n.js";
 import { api, trackKey } from "./api.js";
 import { motionOk } from "./motion.js";
+import { parseLocalLrc,personalLyrics,savePersonalLyrics } from "./lyrics-personal.js";
+import { accountId } from "./personal.js";
+import { toast } from "./toast.js";
+import { errorText } from "./i18n.js";
+import { openMenu } from "./menu.js";
 
 const CACHE_LIMIT = 60;
 /** Строка считается текущей незадолго до ее отметки, поэтому она загорается во время пения. */
@@ -24,13 +30,29 @@ export function createLyricsPanel() {
   let active = -1;
   let handScrollUntil = 0;
   let autoFollow = readAutoFollow();
+  let offset=0;
+  let displayed=null;
 
   const body = h("div", { class: "ly-body" });
   const source = h("div", { class: "ly-source" });
   const currentButton = h("button", { class: "ly-control", type: "button", text: t("ly.current"), hidden: true, onclick: () => snap(lastPosition) });
   const followButton = h("button", { class: "ly-control", type: "button", onclick: () => setAutoFollow(!autoFollow) });
   const controls = h("div", { class: "ly-controls" }, source, currentButton, followButton);
-  const element = h("section", { class: "ly", "aria-label": t("ly.label"), hidden: true }, body, controls);
+  const offsetText=h("span",{class:"ly-offset"});
+  function changeOffset(delta){if(!current)return;try{offset=Math.round(Math.max(-30,Math.min(30,offset+delta))*10)/10;savePersonalLyrics(current,{...personalLyrics(current),offset});offsetText.textContent=`${offset>0?"+":""}${offset.toFixed(1)} с`;snap(lastPosition);}catch(error){toast(errorText(error),{error:true});}}
+  const file=h("input",{type:"file",accept:".lrc,text/plain",hidden:true,onchange:async()=>{
+    const track=current,id=accountId(),chosen=file.files?.[0];file.value="";if(!track || !chosen)return;
+    try{if(chosen.size>256*1024)throw new Error(ft("LRC должен быть не больше 256 КБ"));const lyrics=parseLocalLrc(await chosen.text());if(id!==accountId() || track!==current)return;savePersonalLyrics(track,{...personalLyrics(track),lyrics});show(lyrics);snap(lastPosition);}catch(error){toast(errorText(error),{error:true});}
+  }});
+  const editControls=h("div",{class:"ly-edit-controls"},
+    h("button",{type:"button",class:"ly-control",text:"−0,5 с","aria-label":ft("Показать текст раньше на полсекунды"),onclick:()=>changeOffset(-.5)}),offsetText,
+    h("button",{type:"button",class:"ly-control",text:"+0,5 с","aria-label":ft("Показать текст позже на полсекунды"),onclick:()=>changeOffset(.5)}),
+    h("button",{type:"button",class:"ly-control",text:ft("Импорт LRC"),onclick:()=>file.click()}),
+    h("button",{type:"button",class:"ly-control",text:ft("Версии"),onclick:async event=>{
+      if(!current)return;const track=current,id=accountId(),button=event.currentTarget;button.disabled=true;
+      try{const versions=await api.lyricsVersions(track);if(track!==current || id!==accountId())return;if(displayed && !versions.some(v=>v.text===displayed.text))versions.unshift(displayed);if(!versions.length)throw new Error(ft("Другие версии не найдены"));const box=button.getBoundingClientRect();openMenu({x:box.left,y:box.top-versions.length*40},versions.map((lyrics,index)=>({label:`${index+1}. ${lyrics.source} · ${lyrics.lines.length?`${lyrics.lines.length} строк с таймингом`:"без тайминга"}`,action:"lyrics-version",run:()=>{if(track!==current || id!==accountId())return;try{savePersonalLyrics(track,{...personalLyrics(track),lyrics});show(lyrics);snap(lastPosition);}catch(error){toast(errorText(error),{error:true});}}})),{label:ft("Версия текста")});}catch(error){toast(errorText(error),{error:true});}finally{button.disabled=false;}
+    }}),h("button",{type:"button",class:"ly-control",text:ft("Сбросить"),onclick:()=>{if(!current)return;try{savePersonalLyrics(current,{});offset=0;cache.delete(trackKey(current));load(current);}catch(error){toast(errorText(error),{error:true});}}}),file);
+  const element = h("section", { class: "ly", "aria-label": t("ly.label"), hidden: true }, body, controls,editControls);
   let lastPosition = 0;
 
   function renderControls() {
@@ -61,6 +83,7 @@ export function createLyricsPanel() {
   }
 
   function show(lyrics) {
+    displayed=lyrics;
     active = -1;
     source.textContent = t("ly.source", { source: lyrics.source });
     if (lyrics.lines.length) {
@@ -68,7 +91,7 @@ export function createLyricsPanel() {
         time: line.time,
         node: h("button", {
           type: "button", class: line.text ? "ly-line" : "ly-line gap", "data-i": String(index),
-          onclick: () => api.seek(line.time),
+          onclick: () => api.seek(Math.max(0,line.time+offset)),
         }, line.text || "♪"),
       }));
       body.replaceChildren(h("div", { class: "ly-pad" }), ...lines.map((l) => l.node), h("div", { class: "ly-pad" }));
@@ -83,8 +106,13 @@ export function createLyricsPanel() {
   }
 
   async function load(track) {
+    displayed=null;
     const key = trackKey(track);
     const mine = ++token;
+    const id=accountId();
+    const personal=personalLyrics(track);offset=Number.isFinite(personal.offset)?Math.max(-30,Math.min(30,personal.offset)):0;
+    offsetText.textContent=`${offset>0?"+":""}${offset.toFixed(1)} с`;
+    if(personal.lyrics?.lines && typeof personal.lyrics.text === "string"){show(personal.lyrics);return;}
     if (cache.has(key)) {
       const cached = cache.get(key);
       if (cached) show(cached); else message(t("ly.none"));
@@ -95,7 +123,7 @@ export function createLyricsPanel() {
       const lyrics = await api.lyrics(track);
       if (cache.size >= CACHE_LIMIT) cache.clear();
       cache.set(key, lyrics ?? null);
-      if (mine !== token) return;
+      if (mine !== token || id!==accountId()) return;
       if (lyrics) show(lyrics); else message(t("ly.none"));
     } catch (error) {
       if (mine !== token) return;
@@ -111,7 +139,7 @@ export function createLyricsPanel() {
     let found = -1;
     while (low <= high) {
       const mid = (low + high) >> 1;
-      if (lines[mid].time <= position + LEAD_SECONDS) { found = mid; low = mid + 1; } else high = mid - 1;
+      if (lines[mid].time + offset <= position + LEAD_SECONDS) { found = mid; low = mid + 1; } else high = mid - 1;
     }
     return found;
   }

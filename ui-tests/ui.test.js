@@ -546,7 +546,7 @@ test("design: the collapsed sidebar names every button, and keyboard focus is vi
     const { page } = app;
     await waitForLibrary(page);
     const buttons = await page.locator(".nav button").evaluateAll((all) => all.map((b) => ({ view: b.dataset.view, title: b.title, label: b.getAttribute("aria-label"), text: b.querySelector(".label").textContent, labelShown: getComputedStyle(b.querySelector(".label")).display !== "none" })));
-    assert.equal(buttons.length, 10);
+    assert.equal(buttons.length, 11);
     for (const b of buttons) {
       assert.equal(b.labelShown, false, `${b.view}: the label is hidden in the narrow sidebar`);
       assert.ok(b.title && b.title === b.text && b.label === b.text, `${b.view}: tooltip and accessible name`);
@@ -2270,7 +2270,7 @@ test("the window tells the engine its UTC offset, and the English UI has the new
     await page.waitForFunction(() => window.__mock.count("set_utc_offset") > 0);
     const expected = await page.evaluate(() => -new Date().getTimezoneOffset());
     assert.equal(await page.evaluate(() => window.__mock.last("set_utc_offset").args.minutes), expected);
-    assert.deepEqual(await page.locator(".nav button .label").allInnerTexts(), ["My music", "For you", "Playlists", "Friends", "Search", "Queue", "History", "Statistics", "Downloads", "Settings"]);
+    assert.deepEqual(await page.locator(".nav button .label").allInnerTexts(), ["My music", "For you", "Playlists", "Smart playlists", "Friends", "Search", "Queue", "History", "Statistics", "Downloads", "Settings"]);
     await openSection(page, "stats");
     await page.waitForSelector(`${view} [data-stat=time]`);
     assert.equal(await page.locator(`${view} [data-stat=time]`).innerText(), "1 h 30 min");

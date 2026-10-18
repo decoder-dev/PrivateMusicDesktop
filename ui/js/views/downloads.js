@@ -1,3 +1,4 @@
+import { ft } from "../feature-i18n.js";
 import { createTracksScreen } from "../tracks-screen.js";
 import { t, tn, addStrings, errorText } from "../i18n.js";
 import { h } from "../dom.js";
@@ -6,6 +7,8 @@ import { confirmDialog } from "../dialog.js";
 import { api } from "../api.js";
 import { subscribe } from "../store.js";
 import { downloads, refreshDownloads, formatSize, downloadJob, cancelDownloads, downloadAll } from "../downloads.js";
+import { createSyncPanel } from "../sync-panel.js";
+import { removeSelected } from "../batch-remove.js";
 
 addStrings({ ru:{ "dl.clear":"Очистить загрузки", "dl.confirm":"Удалить все скачанные аудиофайлы с этого компьютера? Музыка в VK сохранится.", "dl.stop":"Остановить после текущего", "dl.retry":"Повторить неудачные", "dl.progress":"Скачано: {done}/{total}. Ошибок: {failed}", "dl.stopping":"Остановка после текущего трека…" }, en:{ "dl.clear":"Clear downloads", "dl.confirm":"Remove all downloaded audio from this computer? Your VK library will be kept.", "dl.stop":"Stop after current", "dl.retry":"Retry failed", "dl.progress":"Downloaded: {done}/{total}. Failed: {failed}", "dl.stopping":"Stopping after the current track…" } });
 
@@ -14,7 +17,7 @@ export function createDownloadsView({ play, onTrackAction, toast }) {
   const screen = createTracksScreen({
     title: t("dl.title"),
     filterable: true,
-    hooks: { emptyText: t("dl.empty"), art: "download", onPlay: play, onAction: onTrackAction },
+    hooks: { emptyText: t("dl.empty"), art: "download", onPlay: play, onAction: onTrackAction,onBatchRemove:async items=>{try{await removeSelected(items,track=>api.removeDownload(`${track.owner_id}_${track.track_id}`),ft("Удалить скачанные файлы?"));}finally{await refreshDownloads();}} },
   });
 
   // Сводная карточка над списком: сколько места занимает офлайн-музыка.
@@ -24,6 +27,7 @@ export function createDownloadsView({ play, onTrackAction, toast }) {
     h("span", { class: "dl-tile", "aria-hidden": "true" }, icon("download", 22)),
     h("div", { class: "dl-text" }, sizeText, countText));
   screen.element.insertBefore(summary, screen.element.querySelector(".status"));
+  screen.header.after(createSyncPanel());
 
   const jobText=h("div",{class:"set-note",role:"status","aria-live":"polite"});
   const stop=h("button",{class:"btn",type:"button",text:t("dl.stop"),onclick:cancelDownloads});

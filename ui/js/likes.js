@@ -37,6 +37,7 @@ function libraryCopy(track) {
 }
 
 export const isLiked = (track) => !!track && libraryCopy(track) !== null;
+export const libraryTracks = () => [...inLibrary.values()];
 export const isBusy = (track) => !known || (!!track && pending.has(trackKey(track)));
 
 /** `listener({ added } | { removed })` — представление библиотеки сохраняет свой список в порядке. */

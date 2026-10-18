@@ -29,12 +29,44 @@ import { artBox, paintStatus, pageHero, searchField, headerOnScroll, setAmbience
 addStrings({ ru: { "batch.download": "Скачать все", "batch.cancel": "Остановить ({done}/{total})", "batch.done": "Обработано: {done}. Ошибок: {failed}" }, en: { "batch.download": "Download all", "batch.cancel": "Stop ({done}/{total})", "batch.done": "Processed: {done}. Failed: {failed}" } });
 let defaultMenu = null;
 export function setDefaultTrackMenu(fn) { defaultMenu = fn; }
+let defaultBatch = null;
+export function setDefaultBatchAction(fn) { defaultBatch = fn; }
+addStrings({ ru: { "select.start":"Выбрать", "select.count":"Выбрано: {n}", "select.all":"Все", "select.clear":"Снять выделение", "select.queue":"В очередь", "select.playlist":"В плейлист", "select.download":"Скачать", "select.remove":"Удалить выбранное" }, en: { "select.start":"Select", "select.count":"Selected: {n}", "select.all":"All", "select.clear":"Clear selection", "select.queue":"Queue", "select.playlist":"Playlist", "select.download":"Download", "select.remove":"Remove selected" } });
 
 export function createTracksScreen({ title, filterable = false, playable = true, heading: level = "h1", hero = false, kicker = "", hooks }) {
   let all = [];
   let visible = [];
   let query = "";
   let lastActivation = { key: "", at: 0 };
+  const selected = new Set();
+  let selecting = false;
+  let anchor = 0;
+  let batchBusy = false;
+  const selectionCount = h("strong");
+  const selectionBar = h("div", { class:"selection-bar", hidden:true, role:"toolbar", "aria-label":t("select.start") }, selectionCount);
+  const selectionButton = h("button", {class:"btn select-toggle",type:"button",text:t("select.start"),"aria-pressed":"false",onclick:()=>{ selecting=!selecting; selected.clear(); renderSelection(); }});
+  const chosen = () => [...new Map(visible.filter(track => selected.has(trackKey(track))).map(track=>[trackKey(track),track])).values()];
+  function renderSelection() {
+    selectionBar.hidden = !selecting;
+    selectionButton.setAttribute("aria-pressed",String(selecting));
+    selectionCount.textContent = t("select.count",{n:chosen().length});
+    selectionBar.querySelectorAll("[data-batch]").forEach(button => { button.disabled=batchBusy || !chosen().length;button.hidden=button.dataset.batch==="remove" && hooks.canBatchRemove && !hooks.canBatchRemove(); });
+    list.refresh();
+  }
+  async function runBatch(action) {
+    const items=chosen();
+    if (batchBusy || !items.length) return;
+    batchBusy=true; renderSelection();
+    try {
+      if (action === "remove") await hooks.onBatchRemove?.(items);
+      else if (action === "download") await downloadAll(items);
+      else await defaultBatch?.(action,items);
+    } catch(error) { toast(errorText(error),{error:true}); }
+    finally { batchBusy=false; renderSelection(); }
+  }
+  selectionBar.append(h("button",{class:"btn",type:"button",text:t("select.all"),onclick:()=>{ visible.forEach(track=>selected.add(trackKey(track))); renderSelection(); }}));
+  for (const action of ["queue","playlist","download",...(hooks.onBatchRemove ? ["remove"] : [])]) selectionBar.append(h("button",{class:"btn",type:"button","data-batch":action,text:t(`select.${action}`),onclick:()=>runBatch(action)}));
+  selectionBar.append(h("button",{class:"btn",type:"button",text:t("select.clear"),onclick:()=>{selected.clear(); selecting=false; renderSelection();}}));
 
   const heading = h(level, { text: title });
   const meta = h("span", { class: "meta" });
@@ -72,8 +104,8 @@ export function createTracksScreen({ title, filterable = false, playable = true,
 
   const list = createVirtualList({
     rowHeight: ROW_HEIGHT,
-    renderRow: (track, index) =>
-      trackRow(track, {
+    renderRow: (track, index) => {
+      const row = trackRow(track, {
         selected: hooks.isSelected ? hooks.isSelected(track, index) : !!store.player.track && trackKey(store.player.track) === trackKey(track),
         paused: store.player.status !== "playing" && store.player.status !== "buffering" && store.player.status !== "loading",
         actions: hooks.rowActions,
@@ -82,9 +114,19 @@ export function createTracksScreen({ title, filterable = false, playable = true,
         pinLiked: hooks.pinLiked ?? true,
         downloaded: isDownloaded(track),
         downloading: isDownloading(track),
-      }),
+      });
+      row.classList.toggle("multi-selected",selected.has(trackKey(track)));
+      if (selecting) row.setAttribute("aria-selected",String(selected.has(trackKey(track))));
+      return row;
+    },
     onRowEvent: (type, event, track, index) => {
       const button = event.target.closest?.("[data-action]");
+      if (!button && ((type === "click" && (selecting || event.ctrlKey || event.metaKey || event.shiftKey)) || (type === "keydown" && event.key === " " && selecting))) {
+        event.preventDefault(); event.stopPropagation(); selecting=true;
+        if (event.shiftKey) for (let i=Math.min(anchor,index);i<=Math.max(anchor,index);i++) selected.add(trackKey(visible[i]));
+        else { const key=trackKey(track); if (selected.has(key)) selected.delete(key); else selected.add(key); anchor=index; }
+        renderSelection(); return;
+      }
       if (type === "contextmenu") {
         event.preventDefault();
         (hooks.onMenu ?? defaultMenu)?.(track, { x: event.clientX, y: event.clientY }, index);
@@ -110,6 +152,11 @@ export function createTracksScreen({ title, filterable = false, playable = true,
       }
     },
   });
+  list.element.setAttribute("aria-multiselectable","true");
+  list.element.addEventListener("keydown",event=>{
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") { event.preventDefault();event.stopPropagation();selecting=true;visible.forEach(track=>selected.add(trackKey(track)));renderSelection(); }
+    if (event.key === "Escape" && selecting) { event.preventDefault();event.stopPropagation();selected.clear();selecting=false;renderSelection(); }
+  });
 
   const heroArt = hero ? h("span", { class: "hero-art page-art" }, artBox(null, { glyph: "playlist", size: 40 })) : null;
   const note = hero ? h("div", { class: "page-note", hidden: true }) : null;
@@ -125,12 +172,18 @@ export function createTracksScreen({ title, filterable = false, playable = true,
   headerOnScroll(header, list.element);
 
   const element = h("section", { class: "view" }, header, status, empty, list.element);
+  header.append(selectionButton);
+  header.after(selectionBar);
 
   function applyFilter({ reset = true } = {}) {
     visible = query
       ? all.filter((track) => fold(track.title).includes(query) || fold(track.artist).includes(query))
       : all;
     list.setItems(visible);
+    const available=new Set(visible.map(trackKey));
+    anchor=Math.min(anchor,Math.max(0,visible.length-1));
+    for (const key of selected) if (!available.has(key)) selected.delete(key);
+    renderSelection();
     if (reset) list.scrollToTop();
     renderEmpty();
   }
@@ -146,7 +199,7 @@ export function createTracksScreen({ title, filterable = false, playable = true,
     empty.hidden = !show;
     if (show) fillPanel(empty, all.length === 0 ? (hooks.emptyText ?? "") : t("library.noMatches"), all.length === 0 ? hooks.art : "search");
     // Никаких мертвых кнопок: когда не во что играть, они вообще не отображаются.
-    for (const button of [playButton, shuffleButton, batchButton]) if (button) button.hidden = visible.length === 0;
+    for (const button of [playButton, shuffleButton, batchButton,selectionButton]) if (button) button.hidden = visible.length === 0;
     renderState();
   }
 
