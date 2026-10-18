@@ -29,6 +29,7 @@ static SMOKE_PAGE_LOADED: AtomicBool = AtomicBool::new(false);
 // должен быть выключен) оставляет окно пустым или на странице ошибок браузера, и веб-представление не
 // сообщает о собственных сбоях.
 static PAGE_LOADED: AtomicBool = AtomicBool::new(false);
+static PAGE_AUTH_READY: AtomicBool = AtomicBool::new(false);
 static PAGE_ERROR: AtomicBool = AtomicBool::new(false);
 /// Сообщалось, что окно не загружается; следующее нажатие "sign in" перезагружает его.
 static LOAD_FAILED: AtomicBool = AtomicBool::new(false);
@@ -99,6 +100,8 @@ fn load_verdict(elapsed: Duration, loaded: bool, error_page: bool) -> LoadVerdic
 
 fn reset_load_state() {
     PAGE_LOADED.store(false, Ordering::SeqCst);
+                        PAGE_AUTH_READY.store(false, Ordering::SeqCst);
+    PAGE_AUTH_READY.store(false, Ordering::SeqCst);
     PAGE_ERROR.store(false, Ordering::SeqCst);
     LOAD_FAILED.store(false, Ordering::SeqCst);
     LOAD_RESTARTED.store(true, Ordering::SeqCst);
@@ -205,9 +208,13 @@ pub fn start(handle: &AppHandle, state: &AppState, reset: bool) -> Result<(), St
         })
         .on_page_load(|webview, payload| {
             if payload.event() != PageLoadEvent::Finished {
+                PAGE_AUTH_READY.store(false, Ordering::SeqCst);
                 return;
             }
             let host = payload.url().host_str().unwrap_or("").to_string();
+            // Cookies могут появиться ещё в VK ID, до завершения входа и проверки 2FA.
+            PAGE_AUTH_READY
+                .store(payload.url().scheme() == "https" && host.eq_ignore_ascii_case("vk.ru"), Ordering::SeqCst);
             log::info!("sign-in window: page loaded on {host}");
             if payload.url().scheme() == "https" && is_vk_host(&host) {
                 PAGE_LOADED.store(true, Ordering::SeqCst);
@@ -437,6 +444,9 @@ fn poll(
         };
         let pairs = token_cookies(&cookies);
         let manual = check.swap(false, Ordering::SeqCst);
+        if !manual && !PAGE_AUTH_READY.load(Ordering::SeqCst) {
+            continue;
+        }
         let Some(header) = session_header(&pairs, manual) else {
             if manual {
                 let _ = handle.emit("pm-login", "pending:unauthorized");
