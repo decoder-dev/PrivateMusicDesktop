@@ -30,7 +30,8 @@ fn app_with_genius(vk: &str, lrclib: &str, genius: &str) -> App {
         || Ok(Box::new(SimulatedSink::new(44_100, 2, 1.0)) as Box<dyn Sink>),
         Box::new(store),
         |_| {},
-        AppOptions { fetch: lab_config(), lyrics_base: format!("{lrclib}/"), genius_base: genius.to_string(), ..AppOptions::default() },
+        // Обновление сессии тоже остаётся на локальном сервере: отказ VK не должен обращаться в интернет.
+        AppOptions { fetch: lab_config(), token_url: format!("{vk}/web_token"), lyrics_base: format!("{lrclib}/"), genius_base: genius.to_string(), ..AppOptions::default() },
     );
     app.sign_in(Session {
         access_token: "tok".into(), user_id: Some(7), expires_at: None, api_user_agent: "ua".into(),
@@ -155,6 +156,7 @@ fn unauthorized_from_vk_still_propagates() {
     let vk = FakeApi::start(|_, _, _| (200, r#"{"error":{"error_code":5,"error_msg":"User authorization failed"}}"#.to_string()));
     let error = app(&vk.base, &lrclib.base).lyrics(&track(Some(9))).unwrap_err();
     assert!(matches!(error, Error::Unauthorized), "{error:?}");
+    assert_eq!(vk.call_count("/web_token"), 1);
 }
 
 #[test]
