@@ -215,13 +215,19 @@ pub async fn artwork_palette(url: String) -> CommandResult<pm_engine::artwork::P
 /// Полноэкранный режим для всего окна (собственный вид "full screen" у UI отдельный).
 #[tauri::command]
 pub fn set_fullscreen(window: tauri::WebviewWindow, on: bool) -> CommandResult<()> {
-    window.set_fullscreen(on).map_err(|e| CommandError { kind: "window".into(), message: e.to_string(), retry_after:None })
+    set_window_mode(window,if on{"fullscreen"}else{"medium"}.into())
 }
 
 #[tauri::command]
 pub async fn lyrics(state: TauriState<'_, AppState>, track: Track) -> CommandResult<Option<pm_engine::lyrics::Lyrics>> {
     let app = state.app.clone();
     blocking(move || app.lyrics(&track)).await
+}
+
+#[tauri::command]
+pub async fn lyrics_versions(state: TauriState<'_, AppState>, track: Track) -> CommandResult<Vec<pm_engine::lyrics::Lyrics>> {
+    let app = state.app.clone();
+    blocking(move || app.lyrics_versions(&track)).await
 }
 
 #[tauri::command]
@@ -361,6 +367,24 @@ pub async fn similar(state: TauriState<'_, AppState>, track: Track) -> CommandRe
 pub fn set_equalizer(state: TauriState<'_, AppState>, gains: Option<[f32; 10]>) {
     state.app.controller().set_equalizer(gains);
 }
+
+#[tauri::command]
+pub fn set_taste(state:TauriState<'_,AppState>,taste:pm_engine::taste::Taste,user_id:i64)->CommandResult<()> {
+    if state.app.controller().session().and_then(|session|session.user_id)!=Some(user_id){return Err(CommandError::from(pm_engine::Error::Unauthorized));}
+    state.app.controller().set_taste(taste).map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub fn set_transitions(state:TauriState<'_,AppState>,prefetch:bool,gapless:bool,crossfade:f64)->CommandResult<()> {
+    if !crossfade.is_finite() || !(0.0..=8.0).contains(&crossfade){return Err(CommandError::from(pm_engine::Error::InvalidRequest));}
+    state.app.controller().set_transitions(prefetch,gapless,crossfade);Ok(())
+}
+
+#[tauri::command]
+pub fn set_normalization(state:TauriState<'_,AppState>,on:bool){state.app.controller().set_normalization(on);}
+
+#[tauri::command]
+pub fn month_plays(state:TauriState<'_,AppState>)->std::collections::HashMap<String,u32>{state.app.month_plays()}
 
 #[derive(Serialize)]
 pub struct Downloads {
@@ -598,6 +622,13 @@ pub async fn playlist_by_id(state: TauriState<'_, AppState>, album: Album) -> Co
 pub fn set_window_mode(window: tauri::WebviewWindow, mode: String) -> CommandResult<()> {
     let apply = || -> tauri::Result<()> {
         window.set_fullscreen(false)?;
+        window.set_always_on_top(mode == "mini")?;
+        window.set_min_size(Some(tauri::LogicalSize::new(if mode == "mini" { 420.0 } else { 780.0 },if mode == "mini" { 190.0 } else { 540.0 })))?;
+        if mode == "mini" {
+            window.unmaximize()?;
+            window.set_size(tauri::LogicalSize::new(420.0,190.0))?;
+            return window.center();
+        }
         if mode == "fullscreen" {
             return window.set_fullscreen(true);
         }
@@ -613,7 +644,7 @@ pub fn set_window_mode(window: tauri::WebviewWindow, mode: String) -> CommandRes
         window.set_size(tauri::LogicalSize::new(width, height))?;
         window.center()
     };
-    if !matches!(mode.as_str(), "medium" | "maximized" | "fullscreen") {
+    if !matches!(mode.as_str(), "medium" | "maximized" | "fullscreen" | "mini") {
         return Err(CommandError { kind: "window".into(), message: "unknown window mode".into(), retry_after:None });
     }
     apply().map_err(|e| CommandError { kind: "window".into(), message: e.to_string(), retry_after:None })

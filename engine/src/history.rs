@@ -855,6 +855,14 @@ impl History {
 
     /// Статистика для области: `"month"`, `"year"` или `"all"`, с выбором (`YYYY-MM` / `YYYY`) или
     /// самого нового периода, по которому есть данные.
+    pub fn month_plays(&self)->HashMap<String,u32>{
+        self.with(|inner|{
+            inner.commit_pending();
+            let key=month_key(inner.now_local());
+            inner.stats.months.get(&key).map(|month|month.tracks.iter().map(|(id,tally)|(id.clone(),tally.plays)).collect()).unwrap_or_default()
+        })
+    }
+
     pub fn stats(&self, scope: &str, choice: Option<&str>) -> Result<StatsView> {
         self.with(|inner| {
             inner.commit_pending();

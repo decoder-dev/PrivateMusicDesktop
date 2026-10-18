@@ -3,6 +3,7 @@
 
 pub mod convert;
 pub mod eq;
+pub mod loudness;
 mod health;
 pub mod player;
 pub mod sink;

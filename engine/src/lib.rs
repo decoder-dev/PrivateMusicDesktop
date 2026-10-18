@@ -18,6 +18,7 @@ pub mod queue;
 pub mod radio;
 pub mod store;
 pub mod stream;
+pub mod taste;
 pub mod unmask;
 pub mod update;
 pub mod vk;

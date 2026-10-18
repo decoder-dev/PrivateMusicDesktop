@@ -201,6 +201,13 @@ impl Queue {
 
     /// Удаляет трек по индексу `tracks()`. Возвращает true, если это была текущая дорожка (вызывающая
     /// сторона должна начать следующую дорожку или остановиться).
+    pub fn retain_upcoming(&mut self,keep:impl Fn(&Track)->bool){
+        let start=self.cursor.map(|cursor|cursor+1).unwrap_or_default();
+        let mut remove:Vec<_>=self.order[start..].iter().copied().filter(|index|!keep(&self.tracks[*index])).collect();
+        remove.sort_unstable_by(|a,b|b.cmp(a));
+        for index in remove{self.remove(index);}
+    }
+
     pub fn remove(&mut self, index: usize) -> bool {
         if index >= self.tracks.len() {
             return false;

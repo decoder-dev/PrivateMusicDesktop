@@ -192,6 +192,9 @@ fn what(error: &Error) -> String {
 }
 
 struct Inner {
+    prefetch: bool,
+    prepared_tag: Option<(String,String,u64)>,
+    preparation_generation:u64,
     sleep_end: bool,
     user_paused: bool,
     queue: Queue,
@@ -243,6 +246,7 @@ struct Recovery {
 type TimerCancel = Arc<(Mutex<bool>, std::sync::Condvar)>;
 
 struct Shared {
+    taste: Mutex<crate::taste::Taste>,
     sleep_cancel: Mutex<Option<TimerCancel>>,
     recovery_cancel: Mutex<Option<TimerCancel>>,
     sleep_deadline: Mutex<Option<Instant>>,
@@ -306,16 +310,46 @@ impl Shared {
     }
 
     /// Запускает `f` под блокировкой, затем выдает то, что вернул после разблокировки.
-    fn with<R>(&self, f: impl FnOnce(&mut Inner, &mut Vec<UiEvent>) -> R) -> R {
+    fn with<R>(self: &Arc<Self>, f: impl FnOnce(&mut Inner, &mut Vec<UiEvent>) -> R) -> R {
         let mut events = Vec::new();
         let result = {
             let mut inner = self.lock();
-            f(&mut inner, &mut events)
+            let result=f(&mut inner, &mut events);
+            self.prepare_next(&mut inner);
+            result
         };
         for event in events {
             (self.emit)(event);
         }
         result
+    }
+
+    fn prepare_next(self:&Arc<Self>,inner:&mut Inner){
+        let mut next=inner.queue.clone();
+        let track=if inner.prefetch && !inner.sleep_end && !inner.user_paused && inner.status==Status::Playing {next.advance(true).cloned()}else{None};
+        let tag=track.as_ref().and_then(|track|inner.queue.current().map(|current|(current.id(),track.id(),inner.network_epoch)));
+        if tag==inner.prepared_tag{return;}
+        inner.prepared_tag=tag.clone();
+        inner.preparation_generation=inner.preparation_generation.wrapping_add(1);
+        let generation=inner.preparation_generation;
+        self.remote().send(crate::audio::Command::ClearPrepared);
+        let Some(track)=track else{return};
+        let config=self.fetch_config(inner);let session=inner.session.clone();
+        let downloaded=self.offline.get().and_then(|offline|offline.address(&track.id()));
+        let stale=self.is_stale(inner,&track);
+        let weak=Arc::downgrade(self);
+        std::thread::spawn(move||{
+            let Some(shared)=weak.upgrade()else{return};
+            let resolved=if let Some(address)=downloaded{Ok((track.clone(),address))}else if !stale && track.stream_url.is_some(){Ok((track.clone(),track.stream_url.clone().unwrap_or_default()))}else if let Some(session)=session{shared.client.refreshed_track_once(&session,&track).and_then(|fresh|fresh.stream_url.clone().map(|url|(fresh,url)).ok_or(Error::InvalidRequest))}else{Err(Error::Unauthorized)};
+            match resolved{
+                Ok((fresh,url))=>shared.with(|inner,_|{
+                    if inner.prepared_tag!=tag || inner.preparation_generation!=generation{return;}
+                    inner.queue.replace_track(&fresh);inner.fresh.insert(fresh.id(),inner.network_epoch);
+                    shared.remote().send(crate::audio::Command::Prepare{track_id:fresh.id(),url,duration:f64::from(fresh.duration),fetch:config});
+                }),
+                Err(error)=>log::debug!("next track preparation deferred: {}",error.kind()),
+            }
+        });
     }
 
     fn fetch_config(&self, inner: &Inner) -> FetchConfig {
@@ -484,7 +518,7 @@ impl Shared {
                 radio.answered(&request);
                 let fresh = radio.fresh(proposed);
                 let room = radio::UPCOMING_LIMIT.saturating_sub(queue.upcoming());
-                let appended = queue.append_unique(fresh, room);
+                let appended = queue.append_unique(self.taste.lock().unwrap_or_else(|p|p.into_inner()).filter(fresh), room);
                 radio.record(&appended);
                 if !appended.is_empty() {
                     events.push(inner.queue_event());
@@ -737,7 +771,7 @@ impl Shared {
     /// Каждый разрешенный на данный момент поток URL принадлежит старой сети: для каждого удаленного
     /// трека запрашивается новый перед воспроизведением следующего. Все, что воспроизводится из
     /// загруженного файла, остается нетронутым.
-    fn network_changed(&self) {
+    fn network_changed(self:&Arc<Self>) {
         self.with(|inner, _| {
             inner.network_epoch += 1;
             let queued = inner.queue.len();
@@ -785,6 +819,18 @@ impl Shared {
 
     fn on_player_event(self: &Arc<Self>, event: PlayerEvent) {
         match event {
+            PlayerEvent::Transition{from,to}=>self.with(|inner,events|{
+                if inner.queue.current().map(Track::id).as_deref()!=Some(from.as_str()){return;}
+                let mut next=inner.queue.clone();
+                if next.advance(true).map(Track::id).as_deref()!=Some(to.as_str()){self.remote().stop();self.start_current(inner,events);return;}
+                inner.queue=next;inner.position=0.0;inner.pending_start=0.0;inner.duration=inner.queue.current().map(|track|f64::from(track.duration)).unwrap_or_default();inner.status=Status::Playing;
+                inner.prepared_tag=None;
+                inner.source_offline=inner.queue.current().is_some_and(|track|self.offline.get().and_then(|offline|offline.address(&track.id())).is_some());
+                inner.failures=0;
+                if let Some(history)=self.history.get(){history.restart();}
+                self.cancel_recovery(inner,events);self.maybe_refill(inner);
+                events.push(inner.queue_event());events.push(UiEvent::State(inner.state()));
+            }),
             PlayerEvent::Position { track_id, seconds, duration } => self.with(|inner, events| {
                 if inner.queue.current().map(Track::id).as_deref() == Some(track_id.as_str()) {
                     inner.position = seconds;
@@ -915,6 +961,9 @@ impl Controller {
     {
         let shared = Arc::new(Shared {
             inner: Mutex::new(Inner {
+                prefetch:true,
+                prepared_tag:None,
+                preparation_generation:0,
                 sleep_end: false,
                 user_paused: false,
                 queue: Queue::default(),
@@ -938,6 +987,7 @@ impl Controller {
                 source_offline: false,
                 loading_since: Instant::now(),
             }),
+            taste: Mutex::new(crate::taste::Taste { novelty:50,..Default::default() }),
             client,
             remote: OnceLock::new(),
             emit: Box::new(emit),
@@ -963,6 +1013,7 @@ impl Controller {
             let signed_out = session.is_none();
             inner.session = session;
             if signed_out {
+                *self.shared.taste.lock().unwrap_or_else(|p|p.into_inner())=crate::taste::Taste{novelty:50,..Default::default()};
                 self.shared.cancel_recovery(inner, events);
                 inner.radio = None;
                 inner.queue.clear();
@@ -1056,6 +1107,9 @@ impl Controller {
     /// `offset` — это место, где продолжается микс потока, `seeds` — треки, о которых начинает
     /// спрашивать радиостанция; `tracks` считайте, как уже слышали.
     pub fn play_radio(&self, tracks: Vec<Track>, index: usize, kind: RadioKind, fetch: RadioFetch, offset: u32, seeds: Vec<Track>) {
+        let selected=tracks.get(index).map(Track::id);
+        let tracks=self.recommendations(tracks);
+        let index=tracks.iter().position(|track|Some(track.id())==selected).unwrap_or_default();
         self.shared.with(|inner, events| {
             let Inner { queue, rng, .. } = inner;
             queue.replace(tracks, index, rng);
@@ -1072,6 +1126,8 @@ impl Controller {
     /// через `position` секунд.
     pub fn load_queue(&self, tracks: Vec<Track>, index: usize, position: f64) {
         self.shared.with(|inner, events| {
+            self.shared.remote().stop();
+            self.shared.cancel_recovery(inner,events);
             let Inner { queue, rng, .. } = inner;
             queue.replace(tracks, index, rng);
             inner.radio = None;
@@ -1126,6 +1182,7 @@ impl Controller {
     }
 
     pub fn seek(&self, seconds: f64) {
+        self.shared.with(|inner,_|{inner.prepared_tag=None;});
         self.shared.with(|inner, events| {
             if inner.queue.current().is_none() || !seconds.is_finite() {
                 return;
@@ -1169,6 +1226,26 @@ impl Controller {
     pub fn set_equalizer(&self, gains: Option<[f32; 10]>) {
         self.shared.remote().set_equalizer(gains);
     }
+
+    pub fn set_taste(&self,taste:crate::taste::Taste)->crate::Result<()> {
+        taste.validate()?;
+        *self.shared.taste.lock().unwrap_or_else(|p|p.into_inner())=taste.clone();
+        self.shared.with(|inner,events|{
+            if inner.radio.is_some(){let allowed:HashSet<_>=taste.filter(inner.queue.tracks().to_vec()).iter().map(Track::id).collect();inner.queue.retain_upcoming(|track|allowed.contains(&track.id()));events.push(inner.queue_event());events.push(UiEvent::State(inner.state()));}
+        });
+        Ok(())
+    }
+    pub fn recommendations(&self,tracks:Vec<Track>)->Vec<Track>{self.shared.taste.lock().unwrap_or_else(|p|p.into_inner()).filter(tracks)}
+
+    pub fn set_transitions(&self,prefetch:bool,gapless:bool,crossfade:f64){
+        self.shared.remote().send(crate::audio::Command::SetTransitions{gapless,crossfade});
+        self.shared.with(|inner,_|{inner.prefetch=prefetch;});
+    }
+    pub fn set_normalization(&self,on:bool){
+        self.shared.remote().send(crate::audio::Command::SetNormalization(on));
+        self.shared.with(|inner,_|{inner.prepared_tag=None;});
+    }
+    pub fn set_analysis_directory(&self,path:Option<std::path::PathBuf>){self.shared.remote().send(crate::audio::Command::SetAnalysisDirectory(path));}
 
     /// Запускает или останавливает события спектра. По умолчанию отключено: анализ звука требует CPU,
     /// который необходим только для полноэкранного просмотра.

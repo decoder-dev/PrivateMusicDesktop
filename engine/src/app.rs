@@ -226,6 +226,7 @@ impl App {
             options.fetch,
         );
         let durable = store.is_durable();
+        controller.set_analysis_directory(options.history_dir.as_ref().map(|dir|dir.join("loudness")));
         let app = Core {
             controller,
             store,
@@ -649,7 +650,7 @@ impl Core {
         if offset > 1_000_000 { return Err(Error::InvalidRequest); }
         let mix_id = checked_mix_id(mix_id)?.to_string();
         let options = checked_mix_options(options)?;
-        self.api(|client, session| client.mix_window_at(session, &mix_id, options.as_deref(), offset))
+        self.api(|client, session| client.mix_window_at(session, &mix_id, options.as_deref(), offset)).map(|tracks|self.controller.recommendations(tracks))
     }
 
     /// Полка «Новые релизы» из каталога VK.
@@ -658,12 +659,12 @@ impl Core {
     }
 
     pub fn recommendations(&self) -> Result<Vec<Track>> {
-        self.api(|client, session| client.recommendations(session, None))
+        self.api(|client, session| client.recommendations(session, None)).map(|tracks|self.controller.recommendations(tracks))
     }
 
     /// "More like this": Радио VK засеяно одним треком.
     pub fn similar(&self, track: &Track) -> Result<Vec<Track>> {
-        self.api(|client, session| client.recommendations(session, Some(track)))
+        self.api(|client, session| client.recommendations(session, Some(track))).map(|tracks|self.controller.recommendations(tracks))
     }
 
     pub fn create_playlist(&self, title: &str, description: &str) -> Result<Playlist> {
@@ -701,6 +702,10 @@ impl Core {
     /// тогда, когда ни один источник не дал однозначного ответа ("found" или "none"), поэтому
     /// пользователю сообщают "could not load" только тогда, когда мы действительно не можем это
     /// выяснить; в любом случае ошибка записывается в журнал.
+    pub fn lyrics_versions(&self, track: &Track) -> Result<Vec<Lyrics>> {
+        match self.lrclib.as_ref() { Some(client) => client.versions(track), None => Ok(Vec::new()) }
+    }
+
     pub fn lyrics(&self, track: &Track) -> Result<Option<Lyrics>> {
         let mut failure: Option<Error> = None;
         let mut answered = false;
@@ -760,6 +765,7 @@ impl Core {
     pub fn history(&self) -> Vec<HistoryEntry> {
         self.history.entries()
     }
+    pub fn month_plays(&self)->std::collections::HashMap<String,u32>{self.history.month_plays()}
 
     pub fn history_remove(&self, track_id: &str) -> Result<bool> {
         if track_id.is_empty() || track_id.len() > 64 || !track_id.chars().all(|c| c.is_ascii_digit() || c == '_' || c == '-') {

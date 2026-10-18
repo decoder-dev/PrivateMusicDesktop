@@ -37,6 +37,8 @@ impl Tap {
     pub fn reset(&mut self) {
         self.written = 0;
     }
+    /// Включение анализа в середине непрерывного аудиовыхода сохраняет общий счётчик кадров.
+    pub fn align(&mut self,frame:u64){self.written=frame;self.ring.fill(0.0);}
 
     pub fn push(&mut self, interleaved: &[f32], channels: usize) {
         if !self.enabled || channels == 0 {

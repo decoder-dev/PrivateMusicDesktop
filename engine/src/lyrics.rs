@@ -514,6 +514,22 @@ impl LrcLib {
     /// — это "nothing"; любой другой сбой является ошибкой только в том случае, если ни один запрос не
     /// нашел текст. Запрос, который завершился неудачей со статусом HTTP, не останавливает следующий;
     /// сбой транспорта (оффлайн, тайм-аут) касается хоста и немедленно прекращает поиск.
+    pub fn versions(&self, track: &Track) -> Result<Vec<Lyrics>> {
+        let mut versions = Vec::new();
+        for (path, query) in lookup_queries(track).into_iter().take(2) {
+            if let Some(found) = self.fetch(path, &query)? {
+                for candidate in found.into_iter().take(30) {
+                    if let Some(lyrics) = best(track, vec![candidate]) {
+                        if !versions.iter().any(|old: &Lyrics| old.text == lyrics.text && old.lines == lyrics.lines) { versions.push(lyrics); }
+                    }
+                }
+            }
+            if versions.len() >= 8 { break; }
+        }
+        versions.truncate(8);
+        Ok(versions)
+    }
+
     pub fn lookup(&self, track: &Track) -> Result<Option<Lyrics>> {
         if track.title.trim().is_empty() {
             return Ok(None);

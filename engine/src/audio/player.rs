@@ -25,6 +25,8 @@ use crate::Error;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PlayerEvent {
+    /// Аудиовыход пересёк границу заранее подготовленного трека.
+    Transition { from:String, to:String },
     /// Трек был запрошен; звук не запустился.
     Loading { track_id: String },
     /// Звук выходит из динамиков (или возобновляется).
@@ -43,6 +45,11 @@ pub enum PlayerEvent {
 
 #[derive(Debug)]
 pub enum Command {
+    Prepare {track_id:String,url:String,duration:f64,fetch:FetchConfig},
+    ClearPrepared,
+    SetTransitions {gapless:bool,crossfade:f64},
+    SetNormalization(bool),
+    SetAnalysisDirectory(Option<std::path::PathBuf>),
     Play { track_id: String, url: String, duration: f64, start: f64, fetch: FetchConfig },
     Pause,
     Resume,
@@ -73,6 +80,7 @@ enum DecoderCommand {
 
 /// Все о воспроизводимом треке.
 struct Session {
+    tail:std::collections::VecDeque<f32>,
     track_id: String,
     duration: f64,
     buffer: SharedBuffer,
@@ -94,6 +102,9 @@ struct Session {
     _fetch: JoinHandle<()>,
     _decoder: JoinHandle<()>,
 }
+
+#[derive(Clone)]
+struct DecodeConfig{rate:u32,channels:usize,visualizer:bool,normalization:bool,analysis_dir:Option<std::path::PathBuf>}
 
 impl Session {
     fn cancel(&self) {
@@ -204,6 +215,13 @@ where
 {
     let mut sink: Option<Box<dyn Sink>> = None;
     let mut session: Option<Session> = None;
+    let mut prepared:Option<Session>=None;
+    let mut transition:Option<(String,String,u64,f64,f64)>=None;
+    let mut retired:Option<Session>=None;
+    let mut gapless=true;
+    let mut crossfade=0.0f64;
+    let mut normalization=false;
+    let mut analysis_dir=None;
     let mut paused = false;
     let mut volume = 1.0f32;
     let mut last_position = Instant::now();
@@ -235,6 +253,18 @@ where
         };
         while let Some(command) = next.take().or_else(|| commands.try_recv().ok()) {
             match command {
+                Command::SetNormalization(on)=>{normalization=on;prepared=None;}
+                Command::SetAnalysisDirectory(path)=>{analysis_dir=path;}
+                Command::Prepare{track_id,url,duration,fetch}=>{
+                    prepared=None;
+                    if let Some(output)=sink.as_ref(){
+                        match start_session(track_id,&url,duration,0.0,fetch,DecodeConfig{rate:output.sample_rate(),channels:output.channels(),visualizer,normalization,analysis_dir:analysis_dir.clone()}){
+                            Ok(next)=>prepared=Some(next),Err(error)=>log::debug!("preparation unavailable: {}",error.kind()),
+                        }
+                    }
+                }
+                Command::ClearPrepared=>{prepared=None;}
+                Command::SetTransitions{gapless:on,crossfade:seconds}=>{gapless=on;crossfade=if seconds.is_finite(){seconds.clamp(0.0,8.0)}else{0.0};}
                 Command::Shutdown => return,
                 Command::SetVolume(v) => {
                     volume = if v.is_finite() { v.clamp(0.0, 1.0) } else { 1.0 };
@@ -250,19 +280,21 @@ where
                     visualizer = on;
                     if let Some(s) = session.as_mut() {
                         s.tap.enabled = on;
-                        s.tap.reset();
+                        if let Some(output)=sink.as_ref(){s.tap.align(output.played_frames()+output.queued_frames() as u64);}else{s.tap.reset();}
                     }
                     if !on {
                         analyzer = None;
                     }
                 }
                 Command::ReopenSink => {
+                    prepared=None;transition=None;retired=None;
                     session = None;
                     sink = None;
                     paused = false;
                     events(PlayerEvent::Stopped);
                 }
                 Command::Stop => {
+                    prepared=None;transition=None;retired=None;
                     session = None;
                     if let Some(sink) = sink.as_mut() {
                         sink.flush();
@@ -276,7 +308,7 @@ where
                             paused = true;
                             sink.set_paused(true);
                             log::info!("pause applied to audio output at {:.2} s", position_seconds(s, sink.as_ref()));
-                            events(PlayerEvent::Paused { track_id: s.track_id.clone() });
+                            events(PlayerEvent::Paused { track_id: transition.as_ref().map(|t|t.0.clone()).unwrap_or_else(||s.track_id.clone()) });
                         }
                     }
                 }
@@ -287,14 +319,17 @@ where
                             sink.set_paused(false);
                             log::info!("resume applied to audio output at {:.2} s", position_seconds(s, sink.as_ref()));
                             if s.started {
-                                events(PlayerEvent::Playing { track_id: s.track_id.clone() });
+                                events(PlayerEvent::Playing { track_id: transition.as_ref().map(|t|t.0.clone()).unwrap_or_else(||s.track_id.clone()) });
                             }
                         }
                     }
                 }
                 Command::Seek(seconds) => {
+                    if transition.is_some(){session=retired.take();}
+                    transition=None;
                     if let (Some(s), Some(sink)) = (session.as_mut(), sink.as_mut()) {
                         seek(s, sink.as_mut(), seconds);
+                        s.tap.enabled=visualizer;
                         if let Some(eq) = eq.as_mut() { eq.reset(); }
                         s.tap.reset();
                         events(position_event(s, sink.as_ref()));
@@ -302,6 +337,7 @@ where
                     }
                 }
                 Command::Play { track_id, url, duration, start, fetch } => {
+                    transition=None;retired=None;
                     session = None;
                     if let Some(eq) = eq.as_mut() { eq.reset(); }
                     // Здесь повторяется попытка устройства, которое исчезло (или никогда не
@@ -328,7 +364,9 @@ where
                     sink.set_paused(false);
                     paused = false;
                     events(PlayerEvent::Loading { track_id: track_id.clone() });
-                    match start_session(track_id.clone(), &url, duration, start, fetch, (sink.sample_rate(), sink.channels()), visualizer) {
+                    let reusable=prepared.take().filter(|next|next.track_id==track_id && start==0.0 && next.failure.is_none());
+                    let started=if let Some(mut next)=reusable{next.base_seconds=0.0;next.started=false;next.tap.enabled=visualizer;if let Some(eq)=eq.as_mut(){eq.process(&mut next.pending);}Ok(next)}else{start_session(track_id.clone(), &url, duration, start, fetch, DecodeConfig{rate:sink.sample_rate(),channels:sink.channels(),visualizer,normalization,analysis_dir:analysis_dir.clone()})};
+                    match started {
                         Ok(started) => session = Some(started),
                         Err(error) => events(PlayerEvent::Failed { track_id, error }),
                     }
@@ -337,9 +375,14 @@ where
         }
 
         let (Some(active), Some(output)) = (session.as_mut(), sink.as_mut()) else { continue };
+        if let Some((from,to,frame,_,_))=transition.as_ref(){
+            if output.played_frames()>=*frame{events(PlayerEvent::Transition{from:from.clone(),to:to.clone()});transition=None;retired=None;}
+        }
+        if let Some(next)=prepared.as_mut(){prefill(next,((crossfade+0.6)*f64::from(output.sample_rate())) as usize*output.channels());if next.failure.is_some(){prepared=None;}}
         if !output.is_healthy() {
             // Устройство вышло из строя: сообщите и позвольте приложению принять решение.
-            let id = active.track_id.clone();
+            let id = transition.take().map(|t|t.0).unwrap_or_else(||active.track_id.clone());
+            retired=None;
             session = None;
             log::warn!("audio output is unresponsive; stopping the current stream for recovery");
             events(PlayerEvent::Failed { track_id: id, error: Error::Stream("audio device disconnected or stopped responding".into()) });
@@ -352,7 +395,8 @@ where
             eq_for = Some(format);
         }
         if !paused {
-            pump(active, output.as_mut(), eq.as_mut(), &events);
+            let hold=prepared.as_ref().map(|next|crossfade.min(active.duration*0.4).min(next.duration*0.4)).unwrap_or(0.0);
+            pump(active, output.as_mut(), eq.as_mut(), hold, &events);
             if visualizer && active.started && last_spectrum.elapsed() >= SPECTRUM_INTERVAL {
                 last_spectrum = Instant::now();
                 let analyzer = analyzer.get_or_insert_with(|| Analyzer::new(output.sample_rate()));
@@ -360,13 +404,37 @@ where
             }
         }
         if let Some(error) = active.failure.take() {
-            let id = active.track_id.clone();
+            let id = transition.take().map(|t|t.0).unwrap_or_else(||active.track_id.clone());
+            retired=None;
             session = None;
             output.flush();
             events(PlayerEvent::Failed { track_id: id, error });
             continue;
         }
 
+        if active.ended && active.pending_offset>=active.pending.len() && !paused {
+            if (gapless || crossfade>0.0) && prepared.as_ref().is_some_and(|next|!next.pending.is_empty()) {
+                let mut next=prepared.take().expect("checked above");
+                let from=active.track_id.clone();let to=next.track_id.clone();
+                let channels=output.channels();let rate=f64::from(output.sample_rate());
+                let tail:Vec<f32>=active.tail.drain(..).collect();
+                let fade=(tail.len().min(next.pending.len())/channels).min((crossfade.min(next.duration*0.4)*rate) as usize)*channels;
+                let before=tail.len()-fade;
+                let mut samples=tail[..before].to_vec();
+                for i in 0..fade{let phase=(i/channels) as f32/(fade/channels).max(1) as f32*std::f32::consts::FRAC_PI_2;samples.push((tail[before+i]*phase.cos()+next.pending[i]*phase.sin()).clamp(-1.0,1.0));}
+                samples.extend_from_slice(&next.pending[fade..]);
+                if next.ended && crossfade>0.0{let keep=((crossfade.min(next.duration*0.4)*rate) as usize*channels).min(samples.len().saturating_sub(before+fade));let split=samples.len()-keep;next.tail.extend(samples.drain(split..));}
+                let boundary=output.played_frames()+output.queued_frames() as u64+(before/channels) as u64;
+                next.base_seconds= -(boundary as f64/rate);next.pending=samples;next.pending_offset=0;next.started=true;
+                next.tap=std::mem::replace(&mut active.tap,Tap::new(false));next.tap.enabled=visualizer;
+                if let Some(eq)=eq.as_mut(){eq.process(&mut next.pending);}
+                transition=Some((from,to,boundary,active.base_seconds,active.duration));
+                retired=session.take();
+                session=Some(next);
+                continue;
+            }
+            if !active.tail.is_empty(){active.pending=active.tail.drain(..).collect();active.pending_offset=0;if let Some(eq)=eq.as_mut(){eq.process(&mut active.pending);}continue;}
+        }
         if active.ended && !active.buffering && output.queued_frames() == 0 && active.pending_offset >= active.pending.len() {
             let id = active.track_id.clone();
             session = None;
@@ -374,15 +442,29 @@ where
             continue;
         }
         if !paused && last_position.elapsed() >= POSITION_INTERVAL {
-            events(position_event(active, output.as_ref()));
+            if let Some((from,_,_,base,duration))=transition.as_ref(){events(PlayerEvent::Position{track_id:from.clone(),seconds:(base+output.played_frames() as f64/f64::from(output.sample_rate())).clamp(0.0,*duration),duration:*duration});}
+            else{events(position_event(active, output.as_ref()));}
             last_position = Instant::now();
+        }
+    }
+}
+
+/// Подготовка следующего трека ограничена несколькими секундами PCM; декодер дальше ждёт канал.
+fn prefill(session:&mut Session,limit:usize){
+    while session.pending.len()<limit && !session.ended && session.failure.is_none(){
+        match session.chunks.try_recv(){
+            Ok(Chunk::Audio{generation,samples}) if generation==session.generation=>session.pending.extend(samples),
+            Ok(Chunk::End{generation}) if generation==session.generation=>session.ended=true,
+            Ok(Chunk::Failed{error,..})=>{session.failure=Some(error);session.cancel();},
+            Ok(_)=>{},Err(TryRecvError::Empty)=>break,
+            Err(TryRecvError::Disconnected)=>{session.failure=Some(Error::Stream("prepared decoder stopped".into()));break;},
         }
     }
 }
 
 fn position_seconds(session: &Session, sink: &dyn Sink) -> f64 {
     let played = sink.played_frames() as f64 / sink.sample_rate() as f64;
-    let position = session.base_seconds + played;
+    let position = (session.base_seconds + played).max(0.0);
     if session.duration > 0.0 { position.min(session.duration) } else { position }
 }
 
@@ -412,7 +494,7 @@ fn wake_after(session: &Session, sink: &dyn Sink, last_position: Instant) -> Dur
 }
 
 /// Перемещает фрагменты из потока декодера в приемник.
-fn pump(session: &mut Session, sink: &mut dyn Sink, mut eq: Option<&mut Equalizer>, events: &impl Fn(PlayerEvent)) {
+fn pump(session: &mut Session, sink: &mut dyn Sink, mut eq: Option<&mut Equalizer>, hold_seconds:f64, events: &impl Fn(PlayerEvent)) {
     loop {
         // Сначала закончите то, что осталось от предыдущего куска.
         if session.pending_offset < session.pending.len() {
@@ -444,7 +526,10 @@ fn pump(session: &mut Session, sink: &mut dyn Sink, mut eq: Option<&mut Equalize
                     session.buffering = false;
                     events(PlayerEvent::Buffering { track_id: session.track_id.clone(), on: false });
                 }
-                session.pending = samples;
+                session.tail.extend(samples);
+                let hold=(hold_seconds*f64::from(sink.sample_rate())) as usize*sink.channels();
+                let count=session.tail.len().saturating_sub(hold);
+                session.pending = session.tail.drain(..count).collect();
                 session.pending_offset = 0;
                 if let Some(eq) = eq.as_deref_mut() {
                     eq.process(&mut session.pending);
@@ -486,6 +571,7 @@ fn pump(session: &mut Session, sink: &mut dyn Sink, mut eq: Option<&mut Equalize
 }
 
 fn seek(session: &mut Session, sink: &mut dyn Sink, seconds: f64) {
+    session.tail.clear();
     let mut target = if seconds.is_finite() { seconds.max(0.0) } else { 0.0 };
     if session.duration > 0.0 {
         target = target.min((session.duration - 0.05).max(0.0));
@@ -506,8 +592,7 @@ fn start_session(
     duration: f64,
     start: f64,
     fetch: FetchConfig,
-    (out_rate, out_channels): (u32, usize),
-    visualizer: bool,
+    config:DecodeConfig,
 ) -> crate::Result<Session> {
     let buffer = SharedBuffer::new(fetch.max_stream_bytes);
     let fetch_thread = spawn_fetch(url.to_string(), fetch, buffer.clone());
@@ -519,12 +604,15 @@ fn start_session(
     let decoder_thread = {
         let buffer = buffer.clone();
         let stop = stop.clone();
+        let decode_config=config.clone();
+        let id=track_id.clone();
         std::thread::Builder::new()
             .name("pm-decode".into())
-            .spawn(move || decode_loop(buffer, stop, chunk_sender, command_receiver, start, out_rate, out_channels))
+            .spawn(move || decode_loop(buffer, stop, chunk_sender, command_receiver, start, (id,duration,decode_config)))
             .map_err(|e| Error::Stream(e.to_string()))?
     };
     Ok(Session {
+        tail:std::collections::VecDeque::new(),
         track_id,
         duration: duration.max(0.0),
         buffer,
@@ -539,7 +627,7 @@ fn start_session(
         failure: None,
         started: false,
         buffering: false,
-        tap: Tap::new(visualizer),
+        tap: Tap::new(config.visualizer),
         _fetch: fetch_thread,
         _decoder: decoder_thread,
     })
@@ -566,9 +654,11 @@ fn decode_loop(
     sender: Sender<Chunk>,
     commands: Receiver<DecoderCommand>,
     start: f64,
-    out_rate: u32,
-    out_channels: usize,
+    (track_id,duration,config):(String,f64,DecodeConfig),
 ) {
+    let (out_rate,out_channels)=(config.rate,config.channels);
+    let path=config.analysis_dir.filter(|_|track_id.len()<=64&&track_id.chars().all(|c|c.is_ascii_digit()||c=='_'||c=='-')).map(|dir|dir.join(format!("{track_id}-{out_channels}.json")));
+    let mut normalizer=config.normalization.then(||super::loudness::Normalizer::new(out_rate,out_channels,path,duration,start));
     let mut generation = 0u64;
     let opened = (|| {
         let kind = buffer.wait_for_kind()?;
@@ -609,6 +699,7 @@ fn decode_loop(
             }
         }
         if let Some((g, seconds, near_end)) = seek {
+            if let Some(normalizer)=normalizer.as_mut(){normalizer.seeked();}
             generation = g;
             at_end = false;
             converter.reset();
@@ -640,6 +731,7 @@ fn decode_loop(
                     send_chunk(&sender, &stop, Chunk::Failed { generation, error });
                     return;
                 }
+                if let Some(normalizer)=normalizer.as_mut(){normalizer.process(&mut converted);}
                 if !converted.is_empty() && !send_chunk(&sender, &stop, Chunk::Audio { generation, samples: std::mem::take(&mut converted) }) {
                     return;
                 }
@@ -649,6 +741,7 @@ fn decode_loop(
                     send_chunk(&sender, &stop, Chunk::Failed { generation, error });
                     return;
                 }
+                if let Some(normalizer)=normalizer.as_ref(){normalizer.finish();}
                 at_end = true;
                 if !send_chunk(&sender, &stop, Chunk::End { generation }) {
                     return;

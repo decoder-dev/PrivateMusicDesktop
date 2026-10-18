@@ -42,7 +42,7 @@ impl Decoder {
         });
         let source = MediaSourceStream::new(Box::new(reader), MediaSourceStreamOptions::default());
         let probed = symphonia::default::get_probe()
-            .format(&hint, source, &FormatOptions { enable_gapless: false, ..Default::default() }, &MetadataOptions::default())
+            .format(&hint, source, &FormatOptions { enable_gapless: true, ..Default::default() }, &MetadataOptions::default())
             .map_err(stream_error)?;
         let format = probed.format;
         let track = format
