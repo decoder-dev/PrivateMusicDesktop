@@ -5,7 +5,7 @@ import { h } from "./dom.js";
 import { icon, illustration } from "./icons.js";
 import { t } from "./i18n.js";
 import { coverPalette } from "./palette.js";
-import { decorateStatus } from "./network.js";
+import { decorateStatus, forgetStatus } from "./network.js";
 
 /**
  * Произведение искусства. Заполнитель (градиент акцента и глиф) находится позади изображения, поэтому
@@ -79,6 +79,7 @@ function skeleton(kind) {
  * остальное - панелью состояния. Пустой текст скрывает элемент.
  */
 export function paintStatus(element, text, { error = false, kind = "rows", extra = "", art = null } = {}) {
+  forgetStatus(element);
   if (!text) {
     element.hidden = true;
     element.className = `status${extra ? ` ${extra}` : ""}`;

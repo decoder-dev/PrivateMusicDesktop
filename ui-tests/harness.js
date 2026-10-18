@@ -44,7 +44,13 @@ export async function openApp({ config = {}, viewport = { width: 1120, height: 7
   await context.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.fulfill({ status: 200, contentType: "image/png", body: pixel }));
   await page.addInitScript(`window.__mockConfig = ${JSON.stringify(config)};`);
   await page.addInitScript(mockSource);
-  await page.goto(url);
+  try { await page.goto(url); }
+  catch (error) {
+    // Не оставляем браузер и сервер жить после ошибки открытия тестовой страницы.
+    await browser.close();
+    server.close();
+    throw error;
+  }
   return {
     page, problems,
     async close() {

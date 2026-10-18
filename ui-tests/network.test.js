@@ -9,6 +9,139 @@ import { openApp } from "./harness.js";
 const HINT_RU = "Если используете VPN, попробуйте отключить его (или включить, если VK недоступен) и повторить.";
 const HINT_EN = "If you use a VPN, try turning it off (or on, if VK is unavailable) and try again.";
 
+test("online does not claim recovery while VK is still unreachable", async () => {
+ const app=await openApp({config:{signedIn:true,failing:['library','network_probe']}});
+ try {
+  const {page}=app; await page.waitForSelector('.net-hint');
+  const before=await page.evaluate(()=>window.__mock.count('library'));
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await page.waitForFunction(()=>window.__mock.count('network_probe')===1);
+  await page.waitForFunction(()=>document.querySelector('.net-chip')?.textContent.includes('Не удаётся'));
+  assert.equal(await page.evaluate(()=>window.__mock.count('library')),before);
+  assert.equal(await page.locator('.toast:not(.error)').count(),0);
+  assert.equal(await page.locator('.net-hint').count(),1);
+ }finally{await app.close();}
+});
+
+test("a later online signal during the cooldown is retried rather than lost", async () => {
+ const app=await openApp({config:{signedIn:true,libraryTotal:3,failing:['library','network_probe']}});
+ try {
+  const {page}=app;await page.waitForSelector('.net-hint');
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await page.waitForFunction(()=>document.querySelector('.net-chip')?.textContent.includes('Не удаётся'));
+  await page.evaluate(()=>{window.__mock.config.failing=[];window.dispatchEvent(new Event('online'));});
+  await waitForLibrary(page);
+  assert.equal(await page.evaluate(()=>window.__mock.count('network_probe')),2);
+ }finally{await app.close();}
+});
+
+test("a burst of route events confirms VK once and retries a visible panel once", async () => {
+ const app=await openApp({config:{signedIn:true,libraryTotal:3,failing:['library'],probeDelay:120}});
+ try {
+  const {page}=app;await page.waitForSelector('.net-hint');
+  const before=await page.evaluate(()=>window.__mock.count('library'));
+  await page.evaluate(()=>{window.__mock.config.failing=[];for(let n=0;n<20;n++)window.dispatchEvent(new Event('online'));});
+  await waitForLibrary(page);
+  assert.equal(await page.evaluate(()=>window.__mock.count('network_probe')),1);
+  assert.equal(await page.evaluate(()=>window.__mock.count('library')),before+1);
+  assert.equal(await page.evaluate(()=>window.__mock.count('network_check')),0);
+ }finally{await app.close();}
+});
+
+test("rapid offline-online flaps keep one probe running and verify only the latest route", async () => {
+ const app=await openApp({config:{signedIn:true,libraryTotal:3,failing:['library'],probeDelay:120}});
+ try {
+  const {page}=app;await page.waitForSelector('.net-hint');
+  await page.evaluate(()=>{
+    window.__mock.config.failing=[];
+    for(let n=0;n<20;n++){window.dispatchEvent(new Event('offline'));window.dispatchEvent(new Event('online'));}
+  });
+  await waitForLibrary(page);
+  assert.equal(await page.evaluate(()=>window.__mock.count('network_probe')),2,'the obsolete probe and one confirmation of the final route');
+  assert.equal(await page.locator('.net-chip,.net-banner').count(),0);
+ }finally{await app.close();}
+});
+
+test("a late connection probe cannot restore a banner or toast after logout", async () => {
+ const app=await openApp({config:{signedIn:true,probeDelay:180}});
+ try {
+  const {page}=app;await waitForLibrary(page);
+  await page.evaluate(()=>{window.__mock.emit('pm-event',{type:'error',kind:'offline'});window.dispatchEvent(new Event('online'));});
+  await page.waitForFunction(()=>window.__mock.count('network_probe')===1);
+  await page.locator('.account .link').click();await page.waitForSelector('.login');
+  await page.waitForTimeout(230);
+  assert.equal(await page.locator('.net-banner,.net-chip').count(),0);
+  assert.equal(await page.locator('.toast').count(),0);
+ }finally{await app.close();}
+});
+
+test("offline invalidates a successful response from an older route", async () => {
+ const app=await openApp({config:{signedIn:true,probeDelay:120}});
+ try {
+  const {page}=app;await waitForLibrary(page);
+  await page.evaluate(()=>{window.__mock.emit('pm-event',{type:'network',state:'unreachable'});window.dispatchEvent(new Event('online'));});
+  await page.waitForFunction(()=>window.__mock.count('network_probe')===1);
+  await page.evaluate(()=>window.dispatchEvent(new Event('offline')));
+  await page.waitForTimeout(180);
+  assert.equal(await page.locator('.net-chip').innerText(),'Нет подключения к сети');
+  assert.equal(await page.locator('.toast').count(),0);
+ }finally{await app.close();}
+});
+
+test("a busy service has its own retry card without VPN instructions", async () => {
+ const app=await openApp({config:{signedIn:true}});
+ try {
+  const {page}=app;await waitForLibrary(page);
+  await page.evaluate(()=>window.__mock.emit('pm-event',{type:'recovery',phase:'failed',kind:'service',attempt:6,max:6}));
+  await page.waitForSelector('.net-banner[data-kind="service"]');
+  assert.equal(await page.locator('.net-banner .net-how').count(),0);
+  await page.locator('.net-banner button').click();
+  assert.equal(await page.evaluate(()=>window.__mock.count('retry_playback')),1);
+  assert.equal(await page.evaluate(()=>window.__mock.count('network_check')),0);
+ }finally{await app.close();}
+});
+
+test("a service wait names its duration and pausing removes the retry indicator", async () => {
+ const app=await openApp({config:{signedIn:true}});
+ try {
+  const {page}=app;await waitForLibrary(page);
+  await page.evaluate(()=>window.__mock.emit('pm-event',{type:'recovery',phase:'retrying',kind:'service',attempt:1,max:6,retry_in_secs:120}));
+  await page.waitForFunction(()=>document.querySelector('.net-chip')?.textContent.includes('120'));
+  assert.equal(await page.locator('.net-how').count(),0);
+  await page.evaluate(()=>window.__mock.emit('pm-event',{...window.__mock.state.player,type:'state',status:'idle'}));
+  assert.equal(await page.locator('.net-chip').count(),0);
+  assert.equal(await page.locator('.toast:not(.error)').count(),0);
+ }finally{await app.close();}
+});
+
+test("service errors use one card and device failures do not suggest changing VPN", async () => {
+ const app=await openApp({config:{signedIn:true}});
+ try {
+  const {page}=app;await waitForLibrary(page);
+  await page.evaluate(()=>window.__mock.emit('pm-event',{type:'error',kind:'service',message:'HTTP status 503.'}));
+  await page.waitForSelector('.net-banner[data-kind="service"]');
+  assert.equal(await page.locator('.toast.error').count(),0);
+  await page.evaluate(async()=>{const {resetNetwork}=await import('/js/network.js');resetNetwork();window.__mock.emit('pm-event',{type:'error',kind:'device'});});
+  await page.waitForSelector('.toast.error');
+  assert.ok((await page.locator('.toast.error').innerText()).includes('устройство'));
+  assert.equal(await page.locator('.net-banner,.net-how').count(),0);
+ }finally{await app.close();}
+});
+
+test("a connection returning does not refresh a hidden failed screen", async () => {
+ const app=await openApp({config:{signedIn:true,libraryTotal:3,failing:['library']}});
+ try {
+  const {page}=app;await page.waitForSelector('.net-hint');
+  const before=await page.evaluate(()=>window.__mock.count('library'));
+  await page.locator('.nav button[data-view="search"]').click();
+  await page.evaluate(()=>{window.__mock.config.failing=[];window.dispatchEvent(new Event('online'));});
+  await page.waitForSelector('.toast:not(.error)');
+  assert.equal(await page.evaluate(()=>window.__mock.count('library')),before);
+  await page.locator('.nav button[data-view="library"]').click();await waitForLibrary(page);
+  assert.equal(await page.evaluate(()=>window.__mock.count('library')),before+1);
+ }finally{await app.close();}
+});
+
 const libraryStatus = (page) => page.locator(".main > .view:not([hidden]) .status.error");
 
 async function waitForLibrary(page) {
@@ -166,7 +299,7 @@ test("a playback error that is not about the network keeps its toast and gets no
     await waitForLibrary(page);
     await page.evaluate(() => {
       window.__mock.emit("pm-event", { type: "error", kind: "stream", message: "Stream error" });
-      window.__mock.emit("pm-event", { type: "recovery", phase: "failed", attempt: 6, max: 6, kind: "service" });
+      window.__mock.emit("pm-event", { type: "recovery", phase: "failed", attempt: 6, max: 6, kind: "stream" });
     });
     await page.waitForSelector(".toast.error");
     assert.equal(await page.locator(".net-banner, .net-hint").count(), 0);

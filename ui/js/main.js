@@ -32,7 +32,7 @@ import { openMenu } from "./menu.js";
 import { formDialog } from "./dialog.js";
 import { ensurePlaylists, ownPlaylists, addPlaylist, changeCount, forgetPlaylists } from "./my-playlists.js";
 import { loadSettings, saveSettings, saveQueue, loadQueue, clearQueue } from "./persist.js";
-import { handleBackendEvent as networkEvent, isNetworkError, setReloader, initNetwork } from "./network.js";
+import { handleBackendEvent as networkEvent, isNetworkError, setReloader, initNetwork, resetNetwork } from "./network.js";
 
 
 addStrings({ ru: { "export.audio": "Сохранить аудиофайл…", "export.saved": "Аудиофайл сохранён" }, en: { "export.audio": "Save audio file…", "export.saved": "Audio file saved" } });
@@ -354,6 +354,7 @@ function showLogin() {
 }
 
 async function showApp() {
+  resetNetwork();
   login = null;
   shell?.dispose();
   clear(root);
@@ -408,6 +409,7 @@ async function applyStartupState() {
 }
 
 function signedOut() {
+  resetNetwork();
   for (const view of Object.values(shell?.views ?? {})) view.reset?.();
   clearQueue();
   forgetPlaylists();
@@ -447,7 +449,7 @@ function onBackendEvent(event) {
       break;
     case "error":
       // В случае сбоя соединения вместо всплывающего уведомления отображается карта VPN (network.js).
-      if (!isNetworkError(event)) toast(errorText(event), { error: true });
+      if (!isNetworkError(event) && !["rate","service"].includes(event.kind)) toast(errorText(event), { error: true });
       break;
     case "session_expired":
       api.sessionState().then((session) => {

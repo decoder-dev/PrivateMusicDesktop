@@ -93,6 +93,7 @@ export const api = {
   networkFocus: (focused) => invoke("network_focus", { focused }),
   /** «Повторить» после сбоя соединения: механизм отбрасывает соединения из пула и просматривает сеть. */
   networkCheck: () => invoke("network_check"),
+  networkProbe: () => invoke("network_probe"),
   /** «Повторить» для воспроизведения, остановленного из-за проблемы с подключением. */
   retryPlayback: () => invoke("retry_playback"),
 };

@@ -281,6 +281,7 @@
     set_close_to_tray: ({ on }) => { state.closeToTray = on; },
     network_focus: ({ focused }) => { state.focused = focused; },
     network_check: () => {},
+    network_probe: async () => { await delay(config.probeDelay ?? 5); },
     retry_playback: () => {},
     update_state: () => state.update ?? {phase:"idle",current:"0.3.0",access_saved:false},
     update_check: () => state.update = {phase:"available",current:"0.3.0",version:"0.4.0",name:"PrivateMusic_0.4.0_windows-x64-setup.exe",notes:"Новая версия",total:10485760,downloaded:0},

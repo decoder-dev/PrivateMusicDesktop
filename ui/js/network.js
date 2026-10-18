@@ -12,6 +12,7 @@ import { t, addStrings } from "./i18n.js";
 import { api } from "./api.js";
 import { icon } from "./icons.js";
 import { toast } from "./toast.js";
+import { store } from "./store.js";
 
 addStrings({
   ru: {
@@ -29,6 +30,18 @@ addStrings({
     "net.restored": "Соединение восстановлено",
     "net.retrying": "Восстанавливаем соединение… ({n}/{max})",
     "net.unreachable": "Нет подключения к сети",
+    "net.checking": "Проверяем подключение к VK…",
+    "net.serviceRetrying": "VK временно недоступен. Повторяем запрос… ({n}/{max})",
+    "net.serviceFailed": "VK временно недоступен",
+    "net.serviceHint": "Сервис перегружен или ограничил частоту запросов. Подождите немного и повторите.",
+    "net.serviceWait": "VK попросил подождать {seconds} с. Повторим автоматически.",
+    "error.rate": "VK ограничил частоту запросов. Подождите немного и повторите.",
+    "error.service": "Сервис временно недоступен. Повторите позже.",
+    "error.format": "Сервис прислал неподдерживаемый ответ. Повторите позже.",
+    "error.rate.wait": "VK ограничил запросы. Повторите через {seconds} с.",
+    "error.service.wait": "Сервис попросил подождать {seconds} с. Повторите позже.",
+    "error.device": "Не удаётся вывести звук. Проверьте выбранное устройство в настройках.",
+    "error.unconfirmed": "Не удалось подтвердить изменение. Обновите список перед повторной попыткой, чтобы не выполнить его дважды.",
   },
   en: {
     "error.network": "Network error. Check your connection.",
@@ -45,6 +58,18 @@ addStrings({
     "net.restored": "Connection restored",
     "net.retrying": "Restoring the connection… ({n}/{max})",
     "net.unreachable": "No network connection",
+    "net.checking": "Checking the connection to VK…",
+    "net.serviceRetrying": "VK is temporarily unavailable. Retrying… ({n}/{max})",
+    "net.serviceFailed": "VK is temporarily unavailable",
+    "net.serviceHint": "The service is busy or limiting requests. Wait a little and try again.",
+    "net.serviceWait": "VK asked to wait {seconds} s. Playback will retry automatically.",
+    "error.rate": "VK is limiting requests. Wait a little and try again.",
+    "error.service": "The service is temporarily unavailable. Try again later.",
+    "error.format": "The service returned an unsupported response. Try again later.",
+    "error.rate.wait": "VK is limiting requests. Try again in {seconds} s.",
+    "error.service.wait": "The service asked to wait {seconds} s. Try again later.",
+    "error.device": "Audio output is unavailable. Check the selected device in settings.",
+    "error.unconfirmed": "The change could not be confirmed. Refresh the list before trying again to avoid applying it twice.",
   },
 });
 
@@ -110,13 +135,15 @@ const pending = new Set();
 let automatic = false;
 
 async function retryStatus(element, { check = true } = {}) {
+  const mine = connectionGeneration;
   if (check) await api.networkCheck().catch(() => {});
+  if (mine !== connectionGeneration || !element.isConnected) return;
   const own = element.querySelector(":scope > .retry");
   if (own) {
     // Нажатие собственной кнопки панели не означает повторного запроса пользователя.
-    automatic = !check;
-    own.click();
-    automatic = false;
+    const previous = automatic;
+    automatic = true;
+    try { own.click(); } finally { automatic = previous; }
   } else reloader?.();
 }
 
@@ -126,6 +153,7 @@ async function retryStatus(element, { check = true } = {}) {
  * панель запоминается, поэтому она перезагружается сама, когда сеть восстанавливается.
  */
 export function decorateStatus(element, text) {
+  pending.delete(element);
   if (!networkTexts().has(text)) return;
   if (element.classList.contains("inline")) {
     // Примечание в одну строку: только путь к инструкции, подсказка в виде ее всплывающей подсказки.
@@ -139,6 +167,7 @@ export function decorateStatus(element, text) {
 }
 
 const watched = new WeakSet();
+export function forgetStatus(element) { pending.delete(element); }
 
 /** Собственная кнопка панели «Повторить» также сначала отменяет соединения. */
 function watchRetry(element) {
@@ -156,6 +185,17 @@ let float = null;
 let chip = null;
 let chipKind = "";
 let banner = null;
+let connectionGeneration = 0;
+let reconnecting = null;
+let lastProbeAt = -Infinity;
+let reconnectTimer = null;
+let reconnectRequested = false;
+
+function cancelReconnectTimer() {
+  clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+  reconnectRequested = false;
+}
 
 function floating() {
   if (!float) {
@@ -188,6 +228,7 @@ function hideBanner() {
 function showBanner() {
   hideChip();
   trouble = true;
+  if (banner?.dataset.kind === "service") hideBanner();
   if (banner) return;
   banner = h("div", { class: "net-banner glass strong", role: "alert" },
     vpnHint({
@@ -200,17 +241,91 @@ function showBanner() {
   floating().append(banner);
 }
 
-/** Соединение восстановлено: перезагрузите то, что не удалось загрузить, и скажите об этом один раз. */
-function connectivityBack() {
+function showServiceBanner() {
   hideChip();
   hideBanner();
-  const waiting = [...pending].filter((element) => element.isConnected && !element.hidden && element.querySelector(":scope > .net-hint, :scope > .net-how"));
-  pending.clear();
+  trouble = true;
+  banner = h("div", { class:"net-banner glass strong", role:"alert", "data-kind":"service" },
+    h("div", {class:"net-hint"},
+      h("p", {class:"net-hint-title",text:t("net.serviceFailed")}),
+      h("p", {class:"net-hint-text",text:t("net.serviceHint")}),
+      h("button", {class:"btn",type:"button",text:t("net.retry"),onclick:() => {
+        hideBanner(); api.retryPlayback().catch(() => {});
+      }})));
+  floating().append(banner);
+}
+
+/** Соединение восстановлено: перезагрузите то, что не удалось загрузить, и скажите об этом один раз. */
+function confirmedBack(verified) {
+  cancelReconnectTimer();
+  hideChip();
+  hideBanner();
+  const waiting = [...pending].filter((element) => element.isConnected && element.getClientRects().length && element.querySelector(":scope > .net-hint, :scope > .net-how"));
+  for (const element of [...pending]) if (!element.isConnected || waiting.includes(element)) pending.delete(element);
   for (const element of waiting) retryStatus(element, { check: false });
-  if (trouble) {
+  if (trouble && verified) {
     trouble = false;
     toast(t("net.restored"));
   }
+}
+
+// Событие online и стабильный маршрут не доказывают, что VK доступен:
+// за ними могут оставаться страница входа Wi-Fi, отказ DNS или блокировка сервиса.
+async function connectivityBack() {
+  const visiblePending = [...pending].some(element => element.isConnected && element.getClientRects().length);
+  if (!trouble && !visiblePending) return;
+  if (reconnecting) { reconnectRequested = true; return; }
+  const remaining = 1500 - (performance.now() - lastProbeAt);
+  if (remaining > 0) {
+    // Последний сигнал не теряется из-за защиты от частых событий.
+    reconnectTimer ??= setTimeout(() => { reconnectTimer = null; connectivityBack(); },remaining);
+    return;
+  }
+  const mine = connectionGeneration;
+  lastProbeAt = performance.now();
+  const work = (async () => {
+    if (store.session.signed_in) {
+      showChip(t("net.checking"), "checking");
+      try { await api.networkProbe(); }
+      catch (error) {
+        if (mine !== connectionGeneration) return;
+        // Ответ об истёкшей сессии тоже подтверждает доступность API.
+        // Само продление остаётся задачей обычного запроса приложения.
+        if (error?.kind !== "unauthorized") {
+          if (banner) hideChip();
+          else showChip(t("net.failed"), "failed");
+          return;
+        }
+      }
+    }
+    if (mine === connectionGeneration) confirmedBack(store.session.signed_in);
+  })();
+  reconnecting = work;
+  try { await work; } finally {
+    if (reconnecting === work) {
+      reconnecting = null;
+      if (reconnectRequested) { reconnectRequested = false; connectivityBack(); }
+    }
+  }
+}
+
+export function resetNetwork() {
+  cancelReconnectTimer();
+  connectionGeneration++;
+  lastProbeAt = -Infinity;
+  pending.clear();
+  trouble = false;
+  chipKind = "";
+  hideChip();
+  hideBanner();
+}
+
+function connectionLost() {
+  cancelReconnectTimer();
+  connectionGeneration++;
+  lastProbeAt = -Infinity;
+  trouble = true;
+  showChip(t("net.unreachable"), "unreachable");
 }
 
 /**
@@ -220,24 +335,30 @@ function connectivityBack() {
 export function handleBackendEvent(event) {
   switch (event.type) {
     case "network":
-      if (event.state === "unreachable") { trouble = true; showChip(t("net.unreachable"), "unreachable"); }
+      if (event.state === "changed") { cancelReconnectTimer(); connectionGeneration++; lastProbeAt = -Infinity; }
+      else if (event.state === "unreachable") connectionLost();
       else if (event.state === "ok") connectivityBack();
       break;
     case "recovery":
-      if (event.phase === "retrying" && event.attempt >= 2) { trouble = true; showChip(t("net.retrying", { n: event.attempt, max: event.max }), "retrying"); }
+      if (event.phase === "retrying" && (event.kind === "service" || event.attempt >= 2) && event.kind !== "device") {
+        const waiting = event.kind === "service" && Number.isFinite(event.retry_in_secs) && event.retry_in_secs >= 2;
+        trouble = true; showChip(t(waiting ? "net.serviceWait" : event.kind === "service" ? "net.serviceRetrying" : "net.retrying", { n: event.attempt, max: event.max,seconds:event.retry_in_secs }), "retrying");
+      }
       else if (event.phase === "failed" && event.kind === "network") showBanner();
+      else if (event.phase === "failed" && event.kind === "service") showServiceBanner();
       else if (event.phase === "recovered") {
-        hideChip();
-        hideBanner();
-        if (trouble) { trouble = false; toast(t("net.restored")); }
+        connectionGeneration++;
+        confirmedBack(true);
       }
       break;
     case "error":
       if (isNetworkError(event)) showBanner();
+      else if (["rate","service"].includes(event.kind)) showServiceBanner();
       break;
     case "state":
       // Играю снова: больше не за что извиняться.
-      if (event.status === "playing" && chipKind === "retrying") hideChip();
+      if (event.status === "playing") { if (chipKind === "retrying") hideChip(); hideBanner(); }
+      else if (["idle","paused"].includes(event.status) && chipKind === "retrying") hideChip();
       break;
   }
 }
@@ -249,6 +370,6 @@ export function initNetwork() {
   window.addEventListener("blur", report);
   document.addEventListener("visibilitychange", report);
   window.addEventListener("online", connectivityBack);
-  window.addEventListener("offline", () => { trouble = true; showChip(t("net.unreachable"), "unreachable"); });
+  window.addEventListener("offline", connectionLost);
   report();
 }

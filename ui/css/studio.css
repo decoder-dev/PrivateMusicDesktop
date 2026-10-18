@@ -76,6 +76,7 @@ body { font-family:var(--font); }
 .np-controls { gap:clamp(6px,1.8vw,20px); }
 /* Пустое место слева уравновешивает избранное справа: воспроизведение остаётся по центру. */
 .np-controls::before { content:""; width:44px; height:44px; flex:none; }
+.np-controls .np-like { width:44px; height:44px; }
 @media(max-width:1100px) { :root { --gutter:24px; } .discovery-view .fy-tools { margin-left:0; } }
 @media(max-width:900px) {
  .shell { padding:6px; gap:6px; }

@@ -612,6 +612,12 @@ export function errorText(error) {
     case "offline": return t("error.offline");
     case "timeout": return t("error.timeout");
     case "network": return t("error.network");
+      case "rate":
+      case "service": return Number.isInteger(error.retry_after) && error.retry_after>0 && error.retry_after<=86400
+        ? t(`error.${kind}.wait`,{seconds:error.retry_after}) : t(`error.${kind}`);
+      case "format": return t("error.format");
+      case "device": return t("error.device");
+      case "unconfirmed": return t("error.unconfirmed");
     case "unavailable": return t("error.unavailable");
     case "stream":
     case "http": return t("error.stream");
