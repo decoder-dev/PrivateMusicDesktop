@@ -672,12 +672,19 @@ fn smoke_cookie_store(window: &tauri::WebviewWindow) -> bool {
     // поездке туда и обратно только для местных жителей менеджер пропустит неправильный профиль.
     for cookie in &probes[1..] {
         if window.set_cookie(cookie.clone()).is_err() {
+            log::warn!("sign-in smoke: native cookie write failed");
             return false;
         }
     }
+    // Внедряем запись один раз. Повторный ExecuteScript может ещё выполняться,
+    // когда предыдущая запись уже прочитана: тогда тест сам восстановит cookie
+    // после очистки профиля и ошибочно объявит сброс неработающим.
+    if window.eval("document.cookie = 'pm_probe_browser=browser; Domain=vk.ru; Path=/; Secure; SameSite=Lax'").is_err() {
+        log::warn!("sign-in smoke: browser cookie script could not be submitted");
+        return false;
+    }
     let mut verified = false;
     for attempt in 1..=40 {
-        let _ = window.eval("document.cookie = 'pm_probe_browser=browser; Domain=vk.ru; Path=/; Secure; SameSite=Lax'");
         if let Ok(cookies) = window.cookies() {
             let pairs = token_cookies(&cookies);
             verified = probes
@@ -695,6 +702,7 @@ fn smoke_cookie_store(window: &tauri::WebviewWindow) -> bool {
         std::thread::sleep(Duration::from_millis(200));
     }
     if !verified {
+        log::warn!("sign-in smoke: browser/native cookie roundtrip did not complete");
         return false;
     }
     #[cfg(target_os = "windows")]
@@ -705,6 +713,7 @@ fn smoke_cookie_store(window: &tauri::WebviewWindow) -> bool {
     };
     #[cfg(target_os = "windows")]
     if main.set_cookie(main_probe.clone()).is_err() {
+        log::warn!("sign-in smoke: main profile cookie write failed");
         return false;
     }
     // Проверяем настоящий сброс приватного профиля, включая HttpOnly cookies.
@@ -714,10 +723,12 @@ fn smoke_cookie_store(window: &tauri::WebviewWindow) -> bool {
     }
     let cleared =
         window.cookies().is_ok_and(|cookies| !cookies.iter().any(|cookie| cookie.name().starts_with("pm_probe_")));
+    log::info!("sign-in smoke: private profile cleared={cleared}");
     #[cfg(target_os = "windows")]
     let cleared = {
         let isolated =
             main.cookies().is_ok_and(|cookies| cookies.iter().any(|cookie| cookie.name() == main_probe.name()));
+        log::info!("sign-in smoke: main profile isolated={isolated}");
         let _ = main.delete_cookie(main_probe);
         cleared && isolated
     };
