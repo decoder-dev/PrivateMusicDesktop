@@ -62,7 +62,7 @@ fn start_login_smoke_test(handle: &tauri::AppHandle, report: std::path::PathBuf)
     let opener = handle.clone();
     tauri::async_runtime::spawn(async move {
         let state = opener.state::<AppState>();
-        if let Err(error) = login::start(&opener, &state) {
+        if let Err(error) = login::start(&opener, &state, false) {
             let _ = std::fs::write(&report, format!("error {error}\n"));
             opener.exit(1);
         }

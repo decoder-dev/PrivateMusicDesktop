@@ -4,7 +4,7 @@ import { invoke } from "./bridge.js";
 export const api = {
   sessionState: () => invoke("session_state"),
   profile: () => invoke("profile"),
-  loginStart: () => invoke("login_start"),
+  loginStart: (reset = false) => invoke("login_start", { reset }),
   logout: () => invoke("logout"),
   library: (offset, count) => invoke("library", { offset, count }),
   playlists: (offset, count) => invoke("playlists", { offset, count }),

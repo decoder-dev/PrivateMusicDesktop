@@ -66,8 +66,8 @@ pub async fn profile(state: TauriState<'_, AppState>) -> CommandResult<Profile> 
 #[tauri::command]
 // Специальная асинхронность: в Windows создание окна из синхронной команды приводит к взаимоблокировке
 // WebView2 (окно открывается, но его страница никогда не загружается).
-pub async fn login_start(handle: AppHandle, state: TauriState<'_, AppState>) -> CommandResult<()> {
-    crate::login::start(&handle, &state).map_err(|message| CommandError { kind: "login".into(), message })
+pub async fn login_start(handle: AppHandle, state: TauriState<'_, AppState>, reset: Option<bool>) -> CommandResult<()> {
+    crate::login::start(&handle, &state, reset.unwrap_or(false)).map_err(|message| CommandError { kind: "login".into(), message })
 }
 
 #[tauri::command]

@@ -7,7 +7,10 @@ import { isNetworkError, vpnHint } from "../network.js";
 /** Экран входа в систему. Собственная страница VK открывается в отдельном окне. */
 export function createLoginView({ onError }) {
   const message = h("p", { class: "message", role: "status" });
-  const button = h("button", { class: "btn primary", type: "button", onclick: start }, t("login.button"));
+  const button = h("button", { class: "btn primary", type: "button", onclick: () => start() }, t("login.button"));
+  const restart = h("button", { class: "login-restart", type: "button", onclick: () => start(true) }, t("login.restart"));
+  const recovery = h("div", { class: "login-recovery", hidden: true }, restart,
+    h("p", { text: t("login.restartHint") }));
   const note = h("p", { class: "note", hidden: true, role: "note" }, icon("alert", 16), h("span", { text: t("login.notPersistent") }));
   // Подсказка VPN для страницы входа, которая не загружается, или для невыполненного запроса токена.
   const hint = h("div", { class: "net-hint-slot", hidden: true });
@@ -18,20 +21,26 @@ export function createLoginView({ onError }) {
     hint.replaceChildren(...(show ? [vpnHint({ onRetry: () => { showHint(false); start(); } })] : []));
   }
 
-  async function start() {
+  async function start(reset = false) {
+    if (button.disabled) return;
     button.disabled = true;
-    if (!waiting) message.textContent = t("login.waiting");
+    restart.disabled = true;
+    if (!waiting || reset) message.textContent = t("login.waiting");
+    if (reset) showHint(false);
     try {
-      await api.loginStart();
+      await api.loginStart(reset);
       waiting = true;
+      recovery.hidden = false;
       button.textContent = t("login.return");
     } catch (error) {
       button.disabled = false;
+      restart.disabled = false;
       message.textContent = "";
       onError(error);
     } finally {
       // Открытие окна завершено; держите способ вернуть его на передний план.
       button.disabled = false;
+      restart.disabled = false;
     }
   }
 
@@ -42,7 +51,7 @@ export function createLoginView({ onError }) {
         h("div", { class: "app-icon" }, icon("note", 40))),
       h("h1", { text: t("login.title") }),
       h("p", { text: t("login.lead") }),
-      button, message, hint, note));
+      button, message, hint, recovery, note));
 
   return {
     element,
@@ -66,6 +75,6 @@ export function createLoginView({ onError }) {
       else message.textContent = "";
     },
     showPersistenceWarning(show) { note.hidden = !show; },
-    reset() { waiting = false; button.disabled = false; button.textContent = t("login.button"); message.textContent = ""; showHint(false); },
+    reset() { waiting = false; button.disabled = false; restart.disabled = false; recovery.hidden = true; button.textContent = t("login.button"); message.textContent = ""; showHint(false); },
   };
 }

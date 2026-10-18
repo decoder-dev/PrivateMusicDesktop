@@ -3509,7 +3509,7 @@ dependencies = [
 
 [[package]]
 name = "pm_engine"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "cpal",
  "crossbeam-channel",
@@ -3655,7 +3655,7 @@ dependencies = [
 
 [[package]]
 name = "private-music-desktop"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "env_logger",
  "log",
@@ -3670,6 +3670,8 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-plugin-window-state",
  "url",
+ "webview2-com",
+ "windows-core 0.62.2",
 ]
 
 [[package]]

@@ -49,6 +49,26 @@ test("pending sign-in can be brought back, reports verification and recovers aft
   } finally { await app.close(); }
 });
 
+test("перезапуск входа очищает только окно VK и доступен после ошибки страницы", async () => {
+  const app = await openApp({ config: { signedIn: false, loginPending: true } });
+  try {
+    const { page } = app;
+    await page.click(".login .btn.primary");
+    assert.equal(await page.evaluate(() => window.__mock.last("login_start").args.reset), false);
+    await page.evaluate(() => window.__mock.emit("pm-login", "loadfailed"));
+    await page.getByRole("button", { name: "Начать вход заново" }).click();
+    assert.equal(await page.evaluate(() => window.__mock.last("login_start").args.reset), true);
+    assert.equal(await page.locator(".login .net-hint").count(), 0);
+    assert.equal(await page.evaluate(() => window.__mock.count("logout")), 0);
+    assert.equal(await page.locator(".login-restart").isEnabled(), true);
+    await page.evaluate(() => { window.__mock.config.failing = ["login_start"]; });
+    await page.getByRole("button", { name: "Начать вход заново" }).click();
+    await page.waitForSelector(".toast");
+    assert.equal(await page.locator(".login-restart").isEnabled(), true);
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
 test("a warning is shown when the sign-in cannot be remembered", async () => {
   const app = await openApp({ config: { signedIn: false, persistent: false } });
   try {
