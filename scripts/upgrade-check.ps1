@@ -4,13 +4,12 @@
 систему и данные приложения так же, как это происходит при обновлении пользователя.
 
 .DESCRIPTION
-scripts\upgrade-check.ps1 -Старый <старый setup.exe> -Новый <новый setup.exe>
+scripts\upgrade-check.ps1 -Old <старый setup.exe> -New <новый setup.exe>
 
-Устанавливает OLD автоматически, устанавливает маркеры там, где приложение хранит данные (секрет, в
-котором хранится вход в систему, и папки данных приложения), устанавливает NEW поверх него
-автоматически и завершается сбоем, если маркер пропал, версия не изменилась на версию NEW или
-программа отсутствует. Предназначен для CI (меняет установленные у текущего пользователя программы и
-диспетчер учетных данных).
+Устанавливает старую версию без диалогов, создаёт маркеры в хранилище учётных данных и папках
+приложения, затем устанавливает новую версию поверх старой. Завершается с ошибкой, если маркер
+пропал, версия не обновилась или программа отсутствует. Предназначен для CI: меняет установленные
+у текущего пользователя программы и записи диспетчера учётных данных.
 #>
 [CmdletBinding()]
 param(
@@ -21,7 +20,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $AppName = 'Private Music'
 $AppId = 'com.dec.privatemusic2.desktop'
-$Target = "vk-session.$AppId"   # где в ящике для ключей хранится вход в систему
+$Target = "vk-session.$AppId"   # Имя записи сессии в диспетчере учётных данных Windows.
 $Marker = 'upgrade-marker.txt'
 
 function Say($text) { Write-Host "==> $text" -ForegroundColor Cyan }
@@ -45,7 +44,7 @@ function Install($setup) {
   Say "installing $(Split-Path $setup -Leaf)"
   $process = Start-Process -FilePath $setup -ArgumentList '/S' -PassThru -Wait
   if ($process.ExitCode -ne 0) { Fail "the installer exited with $($process.ExitCode)" }
-  # NSIS может передать свою копию: подождите, пока реестр не покажет это.
+  # NSIS может передать установку дочернему процессу: ждём появления записи в реестре.
   for ($i = 0; $i -lt 60 -and -not (Get-Installed); $i++) { Start-Sleep -Seconds 1 }
 }
 
