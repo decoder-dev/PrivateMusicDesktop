@@ -435,7 +435,8 @@ fn clear_login_data(window: &tauri::WebviewWindow) -> Result<(), String> {
 fn observe_load_errors(window: &tauri::WebviewWindow) -> Result<(), String> {
     use webview2_com::{
         Microsoft::Web::WebView2::Win32::{
-            ICoreWebView2NavigationCompletedEventArgs2, COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN,
+            ICoreWebView2NavigationCompletedEventArgs2, COREWEBVIEW2_WEB_ERROR_STATUS_CONNECTION_ABORTED,
+            COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED, COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN,
         },
         NavigationCompletedEventHandler,
     };
@@ -465,6 +466,16 @@ fn observe_load_errors(window: &tauri::WebviewWindow) -> Result<(), String> {
                                 // Код ошибки безопасен для лога: адреса с кодами входа сюда не попадают.
                                 let mut status = COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN;
                                 args.WebErrorStatus(&mut status)?;
+                                // Смена страницы и window.stop() тоже дают IsSuccess=false.
+                                // Не показываем сетевую ошибку для штатно отменённой загрузки
+                                // или уже полученной страницы, остановившей собственную загрузку.
+                                if status == COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED
+                                    || (status == COREWEBVIEW2_WEB_ERROR_STATUS_CONNECTION_ABORTED
+                                        && (200..300).contains(&http_status))
+                                {
+                                    log::info!("sign-in navigation={navigation_id}: interrupted status={}", status.0);
+                                    return Ok(());
+                                }
                                 log::warn!("sign-in window: navigation failed ({})", status.0);
                                 PAGE_LOADED.store(false, Ordering::SeqCst);
                                 PAGE_ERROR.store(true, Ordering::SeqCst);
@@ -665,13 +676,18 @@ fn smoke_cookie_store(window: &tauri::WebviewWindow) -> bool {
         }
     }
     let mut verified = false;
-    for _ in 0..10 {
+    for attempt in 1..=40 {
         let _ = window.eval("document.cookie = 'pm_probe_browser=browser; Domain=vk.ru; Path=/; Secure; SameSite=Lax'");
         if let Ok(cookies) = window.cookies() {
             let pairs = token_cookies(&cookies);
             verified = probes
                 .iter()
                 .all(|probe| pairs.iter().any(|(name, value)| name == probe.name() && value == probe.value()));
+            if attempt == 1 || attempt % 10 == 0 || verified {
+                let browser = pairs.iter().any(|(name, value)| name == "pm_probe_browser" && value == "browser");
+                let native = pairs.iter().any(|(name, value)| name == "pm_probe_login" && value == "login");
+                log::info!("sign-in smoke cookie probe: attempt={attempt} browser={browser} native={native}");
+            }
             if verified {
                 break;
             }
