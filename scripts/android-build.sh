@@ -10,6 +10,8 @@ profile="${1:?usage: $0 <release|debug> <aarch64|x86_64> <out-dir>}"
 target="${2:?usage: $0 <release|debug> <aarch64|x86_64> <out-dir>}"
 out="${3:?usage: $0 <release|debug> <aarch64|x86_64> <out-dir>}"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Относительный путь считается от каталога, где скрипт запустили, а не от src-tauri.
+case "$out" in /*) ;; *) out="$PWD/$out" ;; esac
 
 # shellcheck source=android-ci-env.sh
 . "$root/scripts/android-ci-env.sh"
