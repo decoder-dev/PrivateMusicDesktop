@@ -97,6 +97,9 @@ is also written to the app's log directory.)
 
 ## Verified only on a device
 
+(The `Android` workflow, see the CI section below, now runs the app on an emulator; what it covers is
+listed there. Until its first green run, treat the list below as still unverified.)
+
 Nothing here has been run on a device or emulator (the build machine has no KVM). Built and
 unit-tested without one: both APKs (release unsigned, debug), the manifest merge (service
 `mediaPlayback`, `LoginActivity`, permissions), the plugins' Kotlin unit tests and the Rust
@@ -113,3 +116,124 @@ tests. To check on a phone:
   (`connect-src ipc: http://ipc.localhost`) with Tauri's IPC;
 * the desktop-oriented parts of the UI (window size, updates, output device, export) are
   not adapted for a phone yet: they are harmless but pointless there.
+
+## Выпуск Android-версии
+
+The release workflow (`release.yml`, job `Android`) builds the **unsigned** arm64 release APK and attaches it
+to the GitHub release as `PrivateMusic_<version>_android-arm64-unsigned.apk` (it is also listed in
+`SHA256SUMS.txt`). The project owner signs it **outside CI** with a private key that never enters the
+repository, and re-uploads the signed file as `PrivateMusic_<version>_android-arm64.apk`.
+
+Steps (build-tools 35 or newer; the APK is already zipaligned, so sign it as is):
+
+    gh release download v<version> --pattern '*android-arm64-unsigned.apk'
+    $ANDROID_HOME/build-tools/35.0.0/apksigner sign --ks <release.jks> --ks-key-alias <alias> \
+        --out PrivateMusic_<version>_android-arm64.apk PrivateMusic_<version>_android-arm64-unsigned.apk
+    $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs PrivateMusic_<version>_android-arm64.apk
+    gh release upload v<version> PrivateMusic_<version>_android-arm64.apk --clobber
+
+Check that the certificate fingerprint printed by `verify` is the one of your release key. Then delete the
+unsigned asset from the release (`gh release delete-asset v<version> PrivateMusic_<version>_android-arm64-unsigned.apk`)
+and refresh the checksums (`SHA256SUMS.txt` lists the unsigned file): download the assets, run `sha256sum`
+over them and `gh release upload v<version> SHA256SUMS.txt --clobber`.
+
+Installing:
+
+* with a cable: `adb install PrivateMusic_<version>_android-arm64.apk` (`-r` to update);
+* or copy the APK to the phone, open it from a file manager or the browser's downloads and allow
+  "Install unknown apps" for that app (Settings, Apps, Special access). Android 8+ asks per app.
+
+Updates install over the previous version **only if it was signed with the same key** (and the version code
+is higher: it grows with the version, `0.6.1` = 601). A different key means uninstalling first, which also
+removes the signed-in session. Keep the keystore and its passwords backed up: without the key there are no
+updates for the installed copies.
+
+Optional signing in CI: if **all four** repository secrets exist, the `Android` job signs the APK itself
+(Gradle reads them; the key is a temporary file removed at the end) and the asset is named
+`PrivateMusic_<version>_android-arm64.apk` without "unsigned":
+
+    ANDROID_KEYSTORE_BASE64    the .jks file, base64 (`base64 -w0 release.jks`)
+    ANDROID_KEYSTORE_PASSWORD  ANDROID_KEY_ALIAS  ANDROID_KEY_PASSWORD
+
+With any of them missing the job stays unsigned and prints a notice. If the Android job fails, the desktop
+installers are still published (with a warning) and the APK can be added later with `gh release upload`.
+
+## CI
+
+Workflow `.github/workflows/android.yml` ("Android"). It runs on pushes to `android` and `android-**`, on pull
+requests that touch the Android-relevant paths (`src-tauri`, `plugins`, `engine`, `native`, `ui`, Cargo files,
+the Android scripts) and by hand (`workflow_dispatch`). Only the two already pinned actions (`checkout`,
+`upload-artifact`) are used; everything else is plain `run:` steps, helpers are in `scripts/android-*.sh`.
+
+**Job `build`** (ubuntu-latest): Rust stable with `aarch64-linux-android` and `x86_64-linux-android`; the
+preinstalled Android SDK at `$ANDROID_HOME`, plus NDK `27.2.12479018`, platforms 35 and 36 and build-tools 35.0.0 and
+36.0.0 when missing (`scripts/android-ci-sdk.sh`, licences accepted automatically); JDK 17 (21 as a fallback) from
+the runner. `scripts/android-ci-env.sh` drops the runner's own NDK variables and sources `scripts/android-env.sh`,
+so the exact NDK is used. Then:
+
+1. release arm64 APK, unsigned (`scripts/android-build.sh release aarch64`);
+2. `scripts/android-verify-apk.sh`: `libprivate_music_desktop_lib.so` for the ABI, `classes.dex`, package id,
+   the permissions (INTERNET, ACCESS_NETWORK_STATE, FOREGROUND_SERVICE, FOREGROUND_SERVICE_MEDIA_PLAYBACK,
+   POST_NOTIFICATIONS, WAKE_LOCK), `PlaybackService` as a `mediaPlayback` foreground service, `LoginActivity`,
+   debuggable only in the debug build. It reports every failed check, then prints the manifest tree;
+3. SHA-256 of the release APK;
+4. debug x86_64 APK for the emulator (+ the same checks), and a second debug build with versionCode + 1
+   (`ANDROID_VERSION_CODE_OVERRIDE`, read by `app/build.gradle.kts`) for the update test;
+5. upload the artifacts; the emulator job can start from here;
+6. `cargo clippy --target aarch64-linux-android -p private-music-desktop -p tauri-plugin-vk-login -p
+   tauri-plugin-media-session --locked -- -D warnings`. The three crates share dependencies, so one command is
+   cheaper than three; if it becomes too slow, keep only `private-music-desktop`;
+7. the Kotlin unit tests of both plugins (`testDebugUnitTest`, Gradle 8.14.3 from the media-session wrapper).
+
+**Job `emulator`** (needs `build`, 45 min limit, runs even when clippy or the Kotlin tests failed): downloads the
+debug APKs with `gh run download`, enables KVM, installs the emulator and the image
+`system-images;android-34;google_apis;x86_64`, creates a Pixel 6 AVD with 2 GB RAM and boots it headless
+(`scripts/android-emulator-tests/boot-emulator.sh`, one retry; animations off). Then:
+
+* `scripts/android-emulator-tests/run.mjs` drives the real app (no mock backend, signed out) through the WebView
+  DevTools socket (`webview_devtools_remote_<pid>` forwarded with `adb forward`, Playwright `connectOverCDP`;
+  Playwright needs no browser download for this). Steps: (1) starts, alive after 20 s, no crash in logcat;
+  (2) the page loads from the app origin, `data-platform="android"` and `data-layout="phone"` (only a warning while
+  the phone layout is not on the branch); (3) the sign-in screen with an enabled primary button;
+  (4) `app_info` (platform `android`, version = `tauri.conf.json`); (5) `session_state` is signed out and
+  `persistent`, plus the debug-only `debug_secure_selftest` command (write, read, delete through the Keystore plugin);
+  (6a) the smoke hook (`--ez pm_smoke_login true`) loads a VK page: `files/pm_smoke_login.txt` says `loaded <host>`;
+  (6b) the real button opens `LoginActivity`, the `pm-login` event `loadok` arrives, a page-initiated jump to a non-VK
+  site is checked (warning only if it was not blocked), Back returns to the sign-in screen; (7) Back on the main screen
+  moves the app to the background, relaunch works; (8) rotation keeps the same page; (9) revoking and granting
+  POST_NOTIFICATIONS and the media plugin's `status` command; (10) no crash in the whole log and no uncaught page errors;
+* `scripts/android-upgrade-check.sh`: installs the first APK, writes a file, a `localStorage` value and a Keystore
+  probe (`files/secure/session.bin`), installs the second APK (higher versionCode) over it, then checks that
+  everything survived (file, localStorage, same `session.bin` hash, the probe still decrypts) and that the app starts.
+  It proves the install-over path and Keystore survival with a debug key; it cannot prove a migration from an
+  older release (none exists yet) or a signature change.
+
+**Artifacts** (Actions run page, "Artifacts"):
+
+| Name | Content |
+| --- | --- |
+| `android-release-unsigned` | `PrivateMusic_<v>_android-arm64-unsigned.apk` and its `.sha256` |
+| `android-debug-x86_64` | the debug APK and the same with versionCode + 1 |
+| `android-kotlin-test-reports` | Gradle reports of the plugin unit tests |
+| `android-emulator-logs` | everything below |
+
+**Reading the emulator logs** (`android-emulator-logs`): `summary.md` / `results.json` (also in the job summary) tell
+which step failed and why; `fail-NN.png` is the screen at the failure, `03-sign-in.png`, `08-landscape.png`,
+`06-vk-login-page.png` are normal screenshots (the sign-in Activity is `FLAG_SECURE`, so only the DevTools
+screenshot shows it); `logcat-full.txt` is the full `adb logcat -d` (search for `FATAL EXCEPTION`, `RustStdoutStderr`
+for the Rust log, `PrivateMusic`, `PmSmokeLogin`); `emulator-boot-N.log` is the emulator's own output (KVM
+problems show up there); `devtools-pages-*.json` lists the WebView pages (host only), `dumpsys-*.txt`,
+`window-focus.txt`, `tombstones/` (native crashes, when readable) and `logcat-upgrade.txt` come from the end of the run.
+
+**Rerun**: "Re-run failed jobs" on the run page; or `workflow_dispatch` on the branch. Emulator boots flake on shared
+runners: the boot is retried once inside the job, a second red boot is worth one rerun before digging.
+
+**Locally** on a connected device or emulator (debug build, `adb` on PATH, Node 20+):
+
+    scripts/android-emulator-tests/run-local.sh --apk path/to/app-universal-debug.apk --clear
+    # --clear erases the app's data (the tests need the signed-out state); --upgrade also runs the update check
+    # (it uninstalls and reinstalls the app); --offline skips the VK steps when the device has no internet
+
+Without `--apk` it takes the newest debug APK under `src-tauri/gen/android/app/build/outputs/apk`. Results go to
+`scripts/android-emulator-tests/out`. To call one command in the running app:
+`node scripts/android-emulator-tests/invoke.mjs app_info`.
