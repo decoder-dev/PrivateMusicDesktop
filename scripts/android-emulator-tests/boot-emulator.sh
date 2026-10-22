@@ -59,8 +59,8 @@ attempt() { # <number>
   local log="$out/emulator-boot-$1.log"
   echo "--- boot attempt $1 (log: $log)"
   adb start-server
-  nohup "$emulator_bin" -avd "$avd" -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect \
-    -no-snapshot -wipe-data -memory 3072 -cores 4 -feature -Vulkan -accel on -netdelay none -netspeed full \
+  nohup "$emulator_bin" -avd "$avd" -no-window -no-audio -no-boot-anim -gpu guest \
+    -no-snapshot -wipe-data -memory 3072 -cores 4 -accel on -netdelay none -netspeed full \
     > "$log" 2>&1 &
   emulator_pid=$!
   echo "emulator pid $emulator_pid"
