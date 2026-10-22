@@ -18,10 +18,21 @@ echo "--- KVM"
 if [ -e /dev/kvm ]; then ls -l /dev/kvm; else echo "::warning::/dev/kvm does not exist: the emulator will be unusably slow or refuse to start"; fi
 
 echo "--- creating the AVD $avd from $image"
+# Каталог AVD задаём явно: у раннера он может быть другим, а avdmanager про выбор молчит.
+export ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-$HOME/.android/avd}"
+mkdir -p "$ANDROID_AVD_HOME"
+echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME ANDROID_USER_HOME=${ANDROID_USER_HOME:-<unset>} ANDROID_SDK_HOME=${ANDROID_SDK_HOME:-<unset>} HOME=$HOME"
 # `echo no` answers "create a custom hardware profile?".
 echo no | avdmanager create avd --force --name "$avd" --package "$image" --device pixel_6
-config="${ANDROID_AVD_HOME:-$HOME/.android/avd}/$avd.avd/config.ini"
+config="$ANDROID_AVD_HOME/$avd.avd/config.ini"
+if [ ! -f "$config" ]; then
+  echo "AVD config not at $config; looking for it" >&2
+  avdmanager list avd >&2 || true
+  found="$(find "$HOME" /root -name config.ini -path "*$avd.avd*" 2>/dev/null | head -1 || true)"
+  [ -n "$found" ] && config="$found"
+fi
 [ -f "$config" ] || { echo "::error::AVD config $config not found after avdmanager create" >&2; exit 1; }
+echo "AVD config: $config"
 set_config() { # key value
   if grep -q "^$1=" "$config"; then sed -i "s|^$1=.*|$1=$2|" "$config"; else echo "$1=$2" >> "$config"; fi
 }
