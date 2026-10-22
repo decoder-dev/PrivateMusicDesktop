@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "mobile",
+  "description": "Android: the main window may also read the background-playback status (notifications, battery list). The VK sign-in plugin gets nothing here on purpose: Rust starts it, a page never can.",
+  "windows": ["main"],
+  "platforms": ["android", "iOS"],
+  "permissions": ["media-session:default"]
+}

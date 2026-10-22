@@ -1,0 +1,5 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Private Music",
+  "identifier": "com.dec.privatemusic2.android"
+}

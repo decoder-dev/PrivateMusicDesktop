@@ -1,0 +1,7 @@
+[default]
+description = """
+Intentionally empty. The sign-in is started from Rust (`VkLogin::start`), never
+from the web UI: do not add `vk-login:allow-start` or `vk-login:allow-cancel`
+to a capability, or page JavaScript could open the sign-in screen.
+"""
+permissions = []

@@ -70,7 +70,12 @@ pub async fn profile(state: TauriState<'_, AppState>) -> CommandResult<Profile> 
 // Специальная асинхронность: в Windows создание окна из синхронной команды приводит к взаимоблокировке
 // WebView2 (окно открывается, но его страница никогда не загружается).
 pub async fn login_start(handle: AppHandle, state: TauriState<'_, AppState>, reset: Option<bool>) -> CommandResult<()> {
-    crate::login::start(&handle, &state, reset.unwrap_or(false)).map_err(|message| CommandError { kind: "login".into(), message, retry_after:None })
+    let reset = reset.unwrap_or(false);
+    #[cfg(desktop)]
+    let started = crate::login::start(&handle, &state, reset);
+    #[cfg(mobile)]
+    let started = crate::mobile_login::start(&handle, &state, reset);
+    started.map_err(|message| CommandError { kind: "login".into(), message, retry_after:None })
 }
 
 #[tauri::command]
@@ -213,9 +218,19 @@ pub async fn artwork_palette(url: String) -> CommandResult<pm_engine::artwork::P
 }
 
 /// Полноэкранный режим для всего окна (собственный вид "full screen" у UI отдельный).
+#[cfg(desktop)]
 #[tauri::command]
 pub fn set_fullscreen(window: tauri::WebviewWindow, on: bool) -> CommandResult<()> {
     set_window_mode(window,if on{"fullscreen"}else{"medium"}.into())
+}
+
+/// Mobile: the app is always full screen already; the commands exist so the
+/// UI never meets "command not found".
+#[cfg(mobile)]
+#[tauri::command]
+pub fn set_fullscreen(on: bool) -> CommandResult<()> {
+    let _ = on;
+    Ok(())
 }
 
 #[tauri::command]
@@ -279,6 +294,8 @@ pub struct AppInfo {
     version: String,
     /// Ложь, если на рабочем столе нет лотка: "close to tray" не может там работать.
     has_tray: bool,
+    /// `std::env::consts::OS`: "windows", "macos", "linux", "android" …
+    platform: &'static str,
 }
 
 #[tauri::command]
@@ -286,13 +303,22 @@ pub fn app_info(handle: AppHandle, state: TauriState<'_, AppState>) -> AppInfo {
     AppInfo {
         version: handle.package_info().version.to_string(),
         has_tray: state.has_tray.load(std::sync::atomic::Ordering::Relaxed),
+        platform: std::env::consts::OS,
     }
 }
 
 /// Звуковые выходы, по умолчанию в первую очередь. Запрос аудиосистемы может занять некоторое время.
 #[tauri::command]
 pub async fn output_devices() -> Vec<String> {
-    tauri::async_runtime::spawn_blocking(pm_engine::audio::output_devices).await.unwrap_or_default()
+    #[cfg(desktop)]
+    {
+        tauri::async_runtime::spawn_blocking(pm_engine::audio::output_devices).await.unwrap_or_default()
+    }
+    // Mobile: the system routes audio (speaker, headphones, Bluetooth) itself.
+    #[cfg(mobile)]
+    {
+        Vec::new()
+    }
 }
 
 /// `None` соответствует системному значению по умолчанию. Воспроизведение продолжится на новом выходе.
@@ -590,6 +616,7 @@ pub async fn sleep_timer(state: TauriState<'_, AppState>) -> CommandResult<(Opti
     blocking(move || Ok(app.controller().sleep_timer())).await
 }
 
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn export_track(handle: AppHandle, state: TauriState<'_, AppState>, track: Track) -> CommandResult<bool> {
     use tauri_plugin_dialog::DialogExt;
@@ -618,6 +645,7 @@ pub async fn playlist_by_id(state: TauriState<'_, AppState>, album: Album) -> Co
 }
 
 /// Исправлены обычные настройки, максимизация рабочего стола или полноэкранный режим без полей.
+#[cfg(desktop)]
 #[tauri::command]
 pub fn set_window_mode(window: tauri::WebviewWindow, mode: String) -> CommandResult<()> {
     let apply = || -> tauri::Result<()> {
@@ -648,4 +676,21 @@ pub fn set_window_mode(window: tauri::WebviewWindow, mode: String) -> CommandRes
         return Err(CommandError { kind: "window".into(), message: "unknown window mode".into(), retry_after:None });
     }
     apply().map_err(|e| CommandError { kind: "window".into(), message: e.to_string(), retry_after:None })
+}
+
+/// Mobile: режимов окна нет (приложение всегда на весь экран); команда существует, чтобы UI не
+/// встречал «command not found».
+#[cfg(mobile)]
+#[tauri::command]
+pub fn set_window_mode(mode: String) -> CommandResult<()> {
+    let _ = mode;
+    Ok(())
+}
+
+/// Mobile: диалога сохранения файла в этой сборке нет; команда возвращает понятную ошибку.
+#[cfg(mobile)]
+#[tauri::command]
+pub async fn export_track(track: Track) -> CommandResult<bool> {
+    let _ = track;
+    Err(CommandError { kind: "unsupported".into(), message: "Export is not available on this device".into(), retry_after: None })
 }

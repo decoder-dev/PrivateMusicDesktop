@@ -62,6 +62,24 @@ pub fn exchange_web_session(cookie_header: &str, web_user_agent: &str) -> Result
     exchange_at(TOKEN_URL, cookie_header, web_user_agent, now_unix())
 }
 
+/// Builds a session from a `web_token` answer that something else already
+/// fetched (the Android sign-in plugin asks VK from inside its own browser
+/// session, so the sign-in can wait out a 2FA step without losing the page).
+/// `set_cookies` are the `Set-Cookie` headers of that answer, if any.
+pub fn session_from_web_token(
+    body_json: &str,
+    cookie_header: &str,
+    set_cookies: &[String],
+    web_user_agent: &str,
+) -> Result<Session> {
+    let agent = web_user_agent.trim();
+    if cookie_header.trim().is_empty() || agent.is_empty() {
+        return Err(Error::Unauthorized);
+    }
+    let body: Value = serde_json::from_str(body_json).map_err(|_| Error::Format("web_token body".into()))?;
+    decode(&body, merge_cookies(cookie_header.trim(), set_cookies), agent, now_unix())
+}
+
 pub(crate) fn exchange_at(url: &str, cookie_header: &str, web_user_agent: &str, now: i64) -> Result<Session> {
     let exchange_id = EXCHANGE_SEQUENCE.fetch_add(1, Ordering::Relaxed) + 1;
     let started = std::time::Instant::now();
@@ -240,6 +258,19 @@ mod tests {
             &["remixsid=new; Path=/; HttpOnly".to_string(), "remixnsid=fresh; Secure".to_string()],
         );
         assert_eq!(merged, "remixlang=0; remixnsid=fresh; remixsid=new");
+    }
+
+    #[test]
+    fn a_fetched_answer_becomes_a_session() {
+        let body = r#"{"type":"okay","data":{"access_token":"0123456789abcdef0123","user_id":5,"expires":3600}}"#;
+        let s = session_from_web_token(body, "remixsid=old", &["remixsid=new; Path=/".to_string()], " ua ").unwrap();
+        assert_eq!(s.access_token, "0123456789abcdef0123");
+        assert_eq!(s.user_id, Some(5));
+        assert_eq!(s.refresh_cookie, "remixsid=new");
+        assert_eq!(s.web_user_agent, "ua");
+        assert_eq!(session_from_web_token(r#"{"type":"error"}"#, "a=b", &[], "ua").unwrap_err(), Error::Unauthorized);
+        assert!(matches!(session_from_web_token("not json", "a=b", &[], "ua"), Err(Error::Format(_))));
+        assert_eq!(session_from_web_token(body, " ", &[], "ua").unwrap_err(), Error::Unauthorized);
     }
 
     #[test]

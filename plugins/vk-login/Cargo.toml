@@ -1,0 +1,23 @@
+[package]
+name = "tauri-plugin-vk-login"
+version = "0.1.0"
+description = "Android VK sign-in for Private Music: an isolated WebView, restricted to VK over https, that hands the web session to Rust."
+edition = "2021"
+license = "MIT"
+publish = false
+links = "tauri-plugin-vk-login"
+
+[features]
+# `LoginSuccess::into_session` and `sign_in_message`: turn the plugin's result
+# into an engine session. Off by default so the plugin itself stays light.
+engine = ["dep:pm_engine"]
+
+[dependencies]
+tauri = { version = "2", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+pm_engine = { path = "../../engine", optional = true }
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

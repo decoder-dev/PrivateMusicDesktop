@@ -1,0 +1,27 @@
+[package]
+name = "tauri-plugin-media-session"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Android background playback for Private Music: foreground service, MediaSession notification and audio focus, driven by the Rust engine."
+# Required by tauri-plugin: lets the app's build script find this plugin's
+# permissions and Android project.
+links = "tauri-plugin-media-session"
+
+[dependencies]
+pm_engine = { path = "../../engine", optional = true }
+tauri = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+log = "0.4"
+
+[features]
+# `bridge` (engine glue). Default on; only off to build the Android half of the
+# plugin on its own (the engine itself must be ported to Android separately).
+default = ["engine"]
+engine = ["dep:pm_engine"]
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

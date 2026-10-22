@@ -1,5 +1,5 @@
 [workspace]
-members = ["engine", "src-tauri"]
+members = ["engine", "src-tauri", "plugins/media-session", "plugins/vk-login"]
 # Поставляемый крейт iOS является зависимостью, а не частью этого рабочего пространства (у него есть
 # собственное, с паникой=аборт): держите его подальше от запусков `--workspace`, таких как clippy.
 exclude = ["native"]

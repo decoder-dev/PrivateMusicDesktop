@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The WebView is the only reason for the network permission; the host app
+         has it already (it streams music), and manifest merging keeps one copy. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application>
+        <!-- Not exported: only the host app's own process can open it. configChanges
+             keeps the page through rotation, theme and keyboard changes, so no
+             instance state needs saving. -->
+        <activity
+            android:name=".LoginActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/PmVkLoginTheme"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|layoutDirection|locale|colorMode" />
+    </application>
+</manifest>

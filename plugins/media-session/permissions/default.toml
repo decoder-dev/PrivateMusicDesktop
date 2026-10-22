@@ -1,0 +1,9 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = """
+Lets the webview ask whether background playback is set up (notification
+permission, battery optimisation) and open the system battery settings screen.
+The playback commands themselves are Rust-only and need no permission.
+"""
+permissions = ["allow-status", "allow-open-battery-settings"]
