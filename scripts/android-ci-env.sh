@@ -43,7 +43,8 @@ export GRADLE_OPTS="${GRADLE_OPTS:--Dorg.gradle.daemon=false}"
 
 # cmdline-tools (sdkmanager, avdmanager, apkanalyzer) and the newest build-tools on PATH.
 for _c in "$ANDROID_HOME/cmdline-tools/latest/bin" "$ANDROID_HOME/cmdline-tools/bin" "$ANDROID_HOME/tools/bin"; do
-  [ -d "$_c" ] && PATH="$_c:$PATH"
+  # `[ -d ] && …` как последняя команда цикла возвращала бы 1 и роняла `set -e`.
+  if [ -d "$_c" ]; then PATH="$_c:$PATH"; fi
 done
 export PATH="$ANDROID_HOME/emulator:$PATH"
 
@@ -72,6 +73,6 @@ if [ -n "${GITHUB_ENV:-}" ]; then
     echo "$NDK_BIN"
     echo "$ANDROID_HOME/platform-tools"
     echo "$ANDROID_HOME/emulator"
-    for _c in "$ANDROID_HOME/cmdline-tools/latest/bin" "$ANDROID_HOME/cmdline-tools/bin"; do [ -d "$_c" ] && echo "$_c"; done
+    for _c in "$ANDROID_HOME/cmdline-tools/latest/bin" "$ANDROID_HOME/cmdline-tools/bin"; do if [ -d "$_c" ]; then echo "$_c"; fi; done
   } >> "${GITHUB_PATH:-/dev/null}"
 fi
