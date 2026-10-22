@@ -44,7 +44,7 @@ export function createPhoneShell({ main, views, display, activeId }) {
     onclick: () => selectTab(item.id),
   },
   h("span", { class: "dock-ico" }, icon(item.glyph, item.id === "search" ? 22 : 20)),
-  item.id === "search" ? null : h("span", { class: "dock-label", text: t(item.label) }));
+  h("span", { class: "dock-label", text: t(item.label) }));
   const dockButtons = TABS.map(tabButton);
   const dock = h("nav", { class: "dock", "aria-label": t("tab.nav") },
     h("div", { class: "dock-tabs glass" }, dockButtons.filter((b) => b.dataset.tab !== "search")),

@@ -241,7 +241,7 @@ test("mini player: shown above the dock for a track, play/pause and next work, a
     const { page } = app;
     assert.equal(await page.locator(".player").isVisible(), false);
     await playFromHome(page);
-    const [mini, dock] = await page.evaluate(() => ["#app .player", ".dock-tabs"].map((s) => { const r = document.querySelector(s).getBoundingClientRect(); return { top: r.top, bottom: r.bottom, height: r.height }; }));
+    const [mini, dock] = await page.evaluate(() => ["#app .player", ".dock"].map((s) => { const r = document.querySelector(s).getBoundingClientRect(); return { top: r.top, bottom: r.bottom, height: r.height }; }));
     assert.ok(mini.bottom <= dock.top, "the mini player sits above the dock");
     assert.ok(mini.height >= 56);
     assert.equal(await page.locator(".player .volume").isVisible(), false, "no volume slider on a phone");
@@ -447,19 +447,19 @@ test("safe areas: --sat/--sab/--sal/--sar from the shell move the chrome, env() 
     const { page } = app;
     const metrics = () => page.evaluate(() => {
       const navbar = document.querySelector(".navbar").getBoundingClientRect();
-      const dock = document.querySelector(".dock-tabs").getBoundingClientRect();
+      const dock = document.querySelector(".dock-tab").getBoundingClientRect();
       return { navbar: Math.round(navbar.height), dockBottom: Math.round(innerHeight - dock.bottom), dockLeft: Math.round(dock.left) };
     });
     const plain = await metrics();
     const settle = () => page.waitForTimeout(250);
-    assert.equal(plain.navbar, 44);
+    assert.equal(plain.navbar, 64);
     await page.evaluate(() => {
       const root = document.documentElement.style;
       root.setProperty("--sat", "32px"); root.setProperty("--sab", "24px"); root.setProperty("--sal", "10px"); root.setProperty("--sar", "10px");
     });
     await settle();
     const inset = await metrics();
-    assert.equal(inset.navbar, 44 + 32);
+    assert.equal(inset.navbar, 64 + 32);
     assert.equal(inset.dockBottom, plain.dockBottom + 24);
     assert.equal(inset.dockLeft, plain.dockLeft + 10);
     // Content still clears the dock and the mini player.

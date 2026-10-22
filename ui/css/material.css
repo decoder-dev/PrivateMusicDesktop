@@ -1,0 +1,232 @@
+/* Android: Material 3. Один слой поверх телефонной раскладки; целиком держится на
+   html[data-platform="android"][data-layout="phone"], поэтому окно Windows/macOS/Linux и
+   превью в браузере без ?platform=android остаются прежними.
+
+   Что здесь: тональная палитра от акцента (surface-container-*), нижняя панель навигации M3
+   (индикатор-«пилюля», подписи 12 sp), верхняя панель, плавающий мини-плеер, листы и диалоги M3,
+   снэкбар, кнопки-«пилюли», state layer вместо затемнения при нажатии. */
+
+html[data-platform="android"][data-layout="phone"], html[data-platform="android"][data-layout="phone"][data-palette] {
+  --font: Roboto, "Google Sans", "Noto Sans", system-ui, sans-serif;
+  /* Тональные поверхности: нейтраль, слегка подкрашенная акцентом. */
+  --md-bg: color-mix(in srgb, var(--accent) 3%, #fdfbff);
+  --md-c-low: color-mix(in srgb, var(--accent) 5%, #f7f5fa);
+  --md-c: color-mix(in srgb, var(--accent) 7%, #f1eff4);
+  --md-c-high: color-mix(in srgb, var(--accent) 9%, #ebe9ee);
+  --md-c-highest: color-mix(in srgb, var(--accent) 12%, #e5e3e9);
+  --md-primary-c: color-mix(in srgb, var(--accent) 22%, #fff);
+  --md-on-primary-c: color-mix(in srgb, var(--accent) 70%, #000);
+  --md-outline: color-mix(in srgb, var(--text) 28%, transparent);
+  --md-outline-v: color-mix(in srgb, var(--text) 12%, transparent);
+  --md-state: color-mix(in srgb, var(--text) 10%, transparent);
+  --md-ease: cubic-bezier(0.2, 0, 0, 1);
+  --md-ease-emph: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --page-top: var(--md-bg);
+  --page-bottom: var(--md-bg);
+  --surface: var(--md-c);
+  --line: var(--md-outline-v);
+  --line-card: var(--md-outline-v);
+  --glass: var(--md-c);
+  --glass-strong: var(--md-c-high);
+  --accent-fill: var(--md-primary-c);
+  --r-card: 16px;
+  --r-compact: 12px;
+  --r-control: 20px;
+  --studio-card: var(--md-c-low);
+  --gutter: 16px;
+  --dock-h: 80px;
+  --dock-gap: 0px;
+  --mini-h: 64px;
+  --mini-gap: 8px;
+  --nav-h: 64px;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-platform="android"][data-layout="phone"]:not([data-theme="light"]) {
+    --md-bg: color-mix(in srgb, var(--accent) 5%, #141218);
+    --md-c-low: color-mix(in srgb, var(--accent) 8%, #1d1b20);
+    --md-c: color-mix(in srgb, var(--accent) 10%, #211f26);
+    --md-c-high: color-mix(in srgb, var(--accent) 12%, #2b2930);
+    --md-c-highest: color-mix(in srgb, var(--accent) 14%, #36343b);
+    --md-primary-c: color-mix(in srgb, var(--accent) 34%, #1a1a1f);
+    --md-on-primary-c: color-mix(in srgb, var(--accent) 45%, #fff);
+    --md-state: color-mix(in srgb, var(--text) 14%, transparent);
+    --page-top: var(--md-bg); --page-bottom: var(--md-bg); --surface: var(--md-c);
+  }
+}
+html[data-platform="android"][data-layout="phone"][data-theme="dark"] {
+  --md-bg: color-mix(in srgb, var(--accent) 5%, #141218);
+  --md-c-low: color-mix(in srgb, var(--accent) 8%, #1d1b20);
+  --md-c: color-mix(in srgb, var(--accent) 10%, #211f26);
+  --md-c-high: color-mix(in srgb, var(--accent) 12%, #2b2930);
+  --md-c-highest: color-mix(in srgb, var(--accent) 14%, #36343b);
+  --md-primary-c: color-mix(in srgb, var(--accent) 34%, #1a1a1f);
+  --md-on-primary-c: color-mix(in srgb, var(--accent) 45%, #fff);
+  --md-state: color-mix(in srgb, var(--text) 14%, transparent);
+  --page-top: var(--md-bg); --page-bottom: var(--md-bg); --surface: var(--md-c);
+}
+
+/* ---- нажатие: state layer, а не затемнение ---- */
+html[data-platform="android"][data-layout="phone"] :is(.btn, .icon-btn, .card, .group-row, .lib-summary, .resume-card, .explore-row, .friend, .nav-btn, .nav-back, .dock-tab, .mix-tile, .stage-btn, .stage-track, .stage-art, .shelf-more, .sheet-item, .sheet-back, .toast-action, .lib-sections button, .tabs button, .search-recent-query, .search-recent-remove, .np-btn, .np-play, .np-quick button, .ly-line, .nq-row):active {
+  opacity: 1; background-color: var(--md-state);
+}
+html[data-platform="android"][data-layout="phone"] .btn.primary:active { background-color: color-mix(in srgb, var(--accent) 88%, var(--text)); }
+html[data-platform="android"][data-layout="phone"] .dock-tab:active { background: none; }
+html[data-platform="android"][data-layout="phone"] .row:active { background: var(--md-state); }
+
+/* ---- верхняя панель ---- */
+html[data-platform="android"][data-layout="phone"] .navbar { height: calc(var(--safe-top) + 64px); padding: var(--safe-top) 4px 0; background: var(--md-bg); }
+html[data-platform="android"][data-layout="phone"] .navbar::after { background: transparent; }
+html[data-platform="android"][data-layout="phone"] .navbar.is-scrolled { background: var(--md-c); transition: background-color 200ms var(--md-ease); }
+html[data-platform="android"][data-layout="phone"] .nav-back, html[data-platform="android"][data-layout="phone"] .nav-btn { width: 48px; height: 48px; margin: 0 4px; color: var(--text); }
+html[data-platform="android"][data-layout="phone"] .nav-title {
+  left: 64px; right: 64px; height: 64px; justify-content: flex-start; font: 400 22px/28px var(--font); letter-spacing: 0; text-align: left;
+}
+html[data-platform="android"][data-layout="phone"] .navbar:not(:has(.nav-back:not([hidden]))) .nav-title { left: 20px; }
+html[data-platform="android"][data-layout="phone"] .view-header { padding: 4px var(--gutter) 12px; }
+html[data-platform="android"][data-layout="phone"] .view-header h1, html[data-platform="android"][data-layout="phone"] .navbar .nav-title {
+  font-family: var(--font); letter-spacing: 0;
+}
+html[data-platform="android"][data-layout="phone"] .view-header h1 { font-size: 32px; line-height: 40px; font-weight: 400; }
+html[data-platform="android"][data-layout="phone"] .view-header .meta { font-size: 14px; color: var(--text-2); }
+html[data-platform="android"][data-layout="phone"] .shelf-title,
+html[data-platform="android"][data-layout="phone"] .mix-catalog .shelf-title { font: 500 22px/28px var(--font); letter-spacing: 0; margin: 24px var(--gutter) 12px; }
+html[data-platform="android"][data-layout="phone"] .group-label,
+html[data-platform="android"][data-layout="phone"] .set-section > h2 { font: 500 14px/20px var(--font); letter-spacing: 0.1px; text-transform: none; color: var(--accent); margin: 0 16px 8px; }
+
+/* ---- нижняя панель навигации M3: четыре пункта во всю ширину ---- */
+html[data-platform="android"][data-layout="phone"] .dock {
+  gap: 0; padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left); background: var(--md-c); height: calc(var(--dock-h) + var(--safe-bottom));
+  align-items: flex-start; box-shadow: none;
+}
+html[data-platform="android"][data-layout="phone"] .dock-tabs,
+html[data-platform="android"][data-layout="phone"] .dock-searchwrap { display: contents; }
+html[data-platform="android"][data-layout="phone"] .dock-tab {
+  flex: 1 1 0; height: var(--dock-h); min-width: 0; gap: 4px; padding: 12px 0 16px; border-radius: 0; color: var(--text-2); justify-content: flex-start;
+}
+html[data-platform="android"][data-layout="phone"] .dock-tab .dock-ico { width: 64px; height: 32px; border-radius: 16px; transition: background-color 200ms var(--md-ease); }
+html[data-platform="android"][data-layout="phone"] .dock-tab:active .dock-ico { background: var(--md-state); }
+html[data-platform="android"][data-layout="phone"] .dock-tab[aria-current="page"] { color: var(--text); }
+html[data-platform="android"][data-layout="phone"] .dock-tab[aria-current="page"] .dock-ico { background: var(--md-primary-c); color: var(--md-on-primary-c); }
+html[data-platform="android"][data-layout="phone"] .dock-label { font: 500 12px/16px var(--font); letter-spacing: 0.5px; }
+html[data-platform="android"][data-layout="phone"] .dock-tab[aria-current="page"] .dock-label { font-weight: 700; }
+html[data-platform="android"][data-layout="phone"] .dock-tab.dock-search { width: auto; height: var(--dock-h); order: 3; flex: 1 1 0; }
+html[data-platform="android"][data-layout="phone"] .dock-tab.dock-search .dock-ico { width: 64px; height: 32px; border-radius: 16px; }
+html[data-platform="android"][data-layout="phone"] .dock-tab.dock-search[aria-current="page"] .dock-ico { background: var(--md-primary-c); }
+/* Подпись есть и у «Поиска» (в iOS-раскладке ее нет). */
+html[data-platform="android"][data-layout="phone"] .dock-search .dock-label { display: block; }
+html[data-layout="phone"]:not([data-platform="android"]) .dock-search .dock-label { display: none; }
+
+/* ---- мини-плеер: карточка M3 над панелью ---- */
+html[data-platform="android"][data-layout="phone"] .player {
+  left: calc(8px + var(--safe-left)); right: calc(8px + var(--safe-right)); border-radius: 16px; border: 0;
+  background: var(--md-c-highest); box-shadow: 0 1px 3px rgb(0 0 0 / 0.18), 0 2px 8px rgb(0 0 0 / 0.08);
+}
+html[data-platform="android"][data-layout="phone"] .player .cover-button { border-radius: 12px; }
+html[data-platform="android"][data-layout="phone"] .player .cover-button .art-box { --art-size: 48px; border-radius: 10px; }
+html[data-platform="android"][data-layout="phone"] .player .title { font: 500 16px/22px var(--font); letter-spacing: 0.1px; }
+html[data-platform="android"][data-layout="phone"] .player .artist { font: 400 14px/20px var(--font); letter-spacing: 0.25px; }
+html[data-platform="android"][data-layout="phone"] .player .controls .play {
+  width: 48px; height: 48px; border-radius: 50%; background: var(--accent); color: var(--on-accent);
+}
+html[data-platform="android"][data-layout="phone"] .player .controls .play svg { width: 24px; height: 24px; }
+html[data-platform="android"][data-layout="phone"] .player .seek { left: 16px; right: 16px; bottom: 0; height: 3px; }
+html[data-platform="android"][data-layout="phone"] .player .seek input { height: 3px; --track: 3px; }
+
+/* ---- кнопки, поля, вкладки ---- */
+html[data-platform="android"][data-layout="phone"] .btn { border-radius: 20px; min-height: 40px; padding: 0 24px; font: 500 14px/20px var(--font); letter-spacing: 0.1px; background: none; border: 1px solid var(--md-outline); color: var(--accent); box-shadow: none; }
+html[data-platform="android"][data-layout="phone"] .btn.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; font-weight: 500; }
+html[data-platform="android"][data-layout="phone"] .btn.small { min-height: 40px; }
+html[data-platform="android"][data-layout="phone"] .btn.danger { color: var(--danger); border-color: var(--md-outline); }
+html[data-platform="android"][data-layout="phone"] .search-field { height: 56px; border-radius: 28px; background: var(--md-c-high); border: 0; }
+html[data-platform="android"][data-layout="phone"] .search-field .field { height: 56px; min-height: 56px; padding-left: 8px; }
+html[data-platform="android"][data-layout="phone"] .field { border-radius: 12px; }
+html[data-platform="android"][data-layout="phone"] .tabs, html[data-platform="android"][data-layout="phone"] .lib-sections {
+  border-radius: 0; padding: 0; background: none; border-bottom: 1px solid var(--md-outline-v); gap: 0;
+}
+html[data-platform="android"][data-layout="phone"] .tabs button, html[data-platform="android"][data-layout="phone"] .lib-sections button {
+  position: relative; border-radius: 0; font: 500 14px/20px var(--font); letter-spacing: 0.1px; color: var(--text-2); min-height: 48px; background: none; box-shadow: none;
+}
+html[data-platform="android"][data-layout="phone"] .tabs button[aria-selected="true"], html[data-platform="android"][data-layout="phone"] .lib-sections button[aria-selected="true"] { color: var(--accent); background: none; }
+html[data-platform="android"][data-layout="phone"] .tabs button[aria-selected="true"]::after {
+  content: ""; position: absolute; left: 12px; right: 12px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--accent);
+}
+html[data-platform="android"][data-layout="phone"] .lib-sections button[aria-selected="true"]::after { bottom: 0; height: 3px; left: 8px; right: 8px; border-radius: 3px 3px 0 0; }
+
+/* ---- списки и карточки ---- */
+html[data-platform="android"][data-layout="phone"] .row { margin: 0; padding-left: 16px; grid-template-columns: 48px minmax(0, 1fr) auto auto 48px; column-gap: 16px; min-height: 64px; }
+html[data-platform="android"][data-layout="phone"] .row .art-box { --art-size: 48px; border-radius: 8px; }
+html[data-platform="android"][data-layout="phone"] .row + .row::after, html[data-platform="android"][data-layout="phone"] .window > .row:not(:first-child)::after { display: none; }
+html[data-platform="android"][data-layout="phone"] .row .title { font: 400 16px/24px var(--font); letter-spacing: 0.5px; }
+html[data-platform="android"][data-layout="phone"] .row .artist { font: 400 14px/20px var(--font); letter-spacing: 0.25px; color: var(--text-2); }
+html[data-platform="android"][data-layout="phone"] .row[aria-selected="true"] { background: color-mix(in srgb, var(--accent) 14%, var(--md-bg)); border-radius: 0; }
+html[data-platform="android"][data-layout="phone"] .row[aria-selected="true"]::before { display: none; }
+html[data-platform="android"][data-layout="phone"] .row[data-swipe] { background: var(--md-bg); }
+html[data-platform="android"][data-layout="phone"] .card .art-box { border-radius: 12px; }
+html[data-platform="android"][data-layout="phone"] .card .name { font: 500 14px/20px var(--font); letter-spacing: 0.1px; }
+html[data-platform="android"][data-layout="phone"] .lib-summary, html[data-platform="android"][data-layout="phone"] .resume-card {
+  border-radius: 16px; background: var(--md-c-low); border: 0;
+}
+html[data-platform="android"][data-layout="phone"] .lib-summary-ico, html[data-platform="android"][data-layout="phone"] .group-ico { border-radius: 12px; background: var(--md-primary-c); color: var(--md-on-primary-c); }
+html[data-platform="android"][data-layout="phone"] .lib-summary-title, html[data-platform="android"][data-layout="phone"] .group-title { font: 500 16px/24px var(--font); letter-spacing: 0.15px; }
+html[data-platform="android"][data-layout="phone"] .group { border-radius: 16px; background: var(--md-c-low); border: 0; }
+html[data-platform="android"][data-layout="phone"] .group-row + .group-row::before { display: none; }
+html[data-platform="android"][data-layout="phone"] .mix-tile { border-radius: 16px; }
+html[data-platform="android"][data-layout="phone"] .stage-headline { font: 400 32px/40px var(--font); letter-spacing: 0; }
+html[data-platform="android"][data-layout="phone"] .stage-chip { border-radius: 8px; background: var(--md-primary-c); color: var(--md-on-primary-c); font-weight: 500; }
+html[data-platform="android"][data-layout="phone"] .stage-cta { min-height: 56px; border-radius: 28px; font: 500 16px/24px var(--font); }
+html[data-platform="android"][data-layout="phone"] .stage-btn { background: var(--md-c-high); border: 0; }
+html[data-platform="android"][data-layout="phone"] .profile-avatar { background: var(--md-primary-c); color: var(--md-on-primary-c); }
+html[data-platform="android"][data-layout="phone"] .profile-name { font: 400 24px/32px var(--font); letter-spacing: 0; }
+
+/* ---- листы и диалоги M3 ---- */
+html[data-platform="android"][data-layout="phone"] .sheet, html[data-platform="android"] .sheet {
+  border-radius: 28px 28px 0 0; background-color: var(--md-c-low); box-shadow: 0 -2px 12px rgb(0 0 0 / 0.14);
+}
+html[data-platform="android"] .sheet-grab i { width: 32px; height: 4px; margin-left: -16px; top: 12px; background: var(--md-outline); border-radius: 2px; }
+html[data-platform="android"] .sheet-title { text-align: left; padding: 0 24px 8px; font: 500 16px/24px var(--font); color: var(--text); }
+html[data-platform="android"] .sheet-item { min-height: 56px; border-radius: 0; padding: 0 16px; font: 400 16px/24px var(--font); letter-spacing: 0.5px; gap: 16px; }
+html[data-platform="android"] .sheet-ico { color: var(--text-2); width: 24px; }
+html[data-platform="android"] .sheet-sep { margin: 4px 0; background: var(--md-outline-v); }
+html[data-platform="android"][data-layout="phone"] .dialog {
+  width: min(312px, calc(100vw - 48px)); max-width: 560px; padding: 24px; border-radius: 28px; text-align: left; overflow: visible;
+  background-color: var(--md-c-high); box-shadow: 0 8px 24px rgb(0 0 0 / 0.25);
+}
+html[data-platform="android"][data-layout="phone"] .dialog h2 { font: 400 24px/32px var(--font); letter-spacing: 0; margin: 0 0 16px; }
+html[data-platform="android"][data-layout="phone"] .dialog-text { font: 400 14px/20px var(--font); letter-spacing: 0.25px; margin: 0 0 24px; }
+html[data-platform="android"][data-layout="phone"] .dialog-form { padding: 0; }
+html[data-platform="android"][data-layout="phone"] .dialog-actions, html[data-platform="android"][data-layout="phone"] .dialog-form .dialog-actions {
+  border: 0; margin: 24px 0 0; justify-content: flex-end; gap: 8px;
+}
+html[data-platform="android"][data-layout="phone"] .dialog-actions .btn {
+  flex: 0 0 auto; min-height: 40px; padding: 0 12px; border: 0; border-radius: 20px; font: 500 14px/20px var(--font); letter-spacing: 0.1px; color: var(--accent);
+}
+html[data-platform="android"][data-layout="phone"] .dialog-actions .btn + .btn { border: 0; }
+html[data-platform="android"][data-layout="phone"] .dialog-actions .btn.primary { font-weight: 500; color: var(--accent); background: none; }
+
+/* ---- снэкбар ---- */
+html[data-platform="android"][data-layout="phone"] .toast {
+  left: 8px; right: 8px; transform: none; max-width: none; margin: 0 auto; width: auto; border-radius: 4px; padding: 0 8px 0 16px;
+  min-height: 48px; background: color-mix(in srgb, var(--text) 88%, var(--md-bg)); color: var(--md-bg); font: 400 14px/20px var(--font); letter-spacing: 0.25px;
+  box-shadow: 0 3px 8px rgb(0 0 0 / 0.25); bottom: calc(var(--clear) - 4px);
+}
+html[data-platform="android"][data-layout="phone"] .toast-action { color: color-mix(in srgb, var(--accent) 60%, var(--md-bg)); font-weight: 500; border-radius: 20px; padding: 0 12px; }
+
+/* ---- полноэкранный плеер ---- */
+html[data-platform="android"][data-layout="phone"] .np { background: var(--md-bg); border-radius: 28px 28px 0 0; }
+html[data-platform="android"][data-layout="phone"] .np-grab i { width: 32px; height: 4px; margin-left: -16px; top: 10px; background: var(--md-outline); }
+html[data-platform="android"][data-layout="phone"] .np-cover { border-radius: 28px; }
+html[data-platform="android"][data-layout="phone"] .np-title { font: 500 24px/32px var(--font); letter-spacing: 0; }
+html[data-platform="android"][data-layout="phone"] .np-artist { font: 400 16px/24px var(--font); letter-spacing: 0.15px; color: var(--np-fg-2); }
+html[data-platform="android"][data-layout="phone"] .np-controls { justify-content: center; gap: 2px; }
+html[data-platform="android"][data-layout="phone"] .np-controls .np-btn:nth-child(2), html[data-platform="android"][data-layout="phone"] .np-controls .np-btn:nth-child(4) {
+  width: 56px; height: 56px; border-radius: 50%; background: var(--md-c-highest);
+}
+html[data-platform="android"][data-layout="phone"] .np-play { width: 88px; height: 64px; border-radius: 24px; margin: 0 4px; background: var(--accent); color: var(--on-accent); }
+html[data-platform="android"][data-layout="phone"] .np-quick .q-ico { border-radius: 24px; background: var(--md-c-high); }
+html[data-platform="android"][data-layout="phone"] .np-side, html[data-platform="android"][data-layout="phone"] .ly, html[data-platform="android"][data-layout="phone"] .np-queue { border-radius: 28px; background: var(--md-c-low); }
+html[data-platform="android"][data-layout="phone"] .np input[type="range"] { --track: 4px; }
+html[data-platform="android"][data-layout="phone"] .np input[type="range"]::-webkit-slider-thumb { width: 4px; height: 24px; border-radius: 2px; margin-block-start: calc((var(--track) - 24px) / 2); }
+
+/* Выбранная вкладка: только подчеркивание, без «таблетки» из базового стиля. */
+html[data-platform="android"][data-layout="phone"] .tabs button[aria-selected="true"],
+html[data-platform="android"][data-layout="phone"] .tabs button[aria-selected="true"]:hover { background: none; box-shadow: none; border: 0; }
