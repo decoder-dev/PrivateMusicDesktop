@@ -62,14 +62,14 @@ attempt() { # <number>
     sleep 3; waited=$((waited + 3))
   done
   echo "device is visible after ${waited}s: $(adb devices | grep emulator)"
-  until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do
+  until [ "$(timeout 15 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do
     kill -0 "$emulator_pid" 2>/dev/null || { echo "emulator process exited during boot" >&2; return 1; }
     [ "$waited" -lt "$boot_timeout" ] || { echo "sys.boot_completed not set after ${boot_timeout}s" >&2; return 1; }
     sleep 3; waited=$((waited + 3))
   done
   echo "sys.boot_completed after ${waited}s"
   # The package manager answers a bit after boot_completed.
-  until adb shell pm path android 2>/dev/null | grep -q '^package:'; do
+  until timeout 15 adb shell pm path android 2>/dev/null | grep -q '^package:'; do
     [ "$waited" -lt "$boot_timeout" ] || { echo "package manager not ready after ${boot_timeout}s" >&2; return 1; }
     sleep 2; waited=$((waited + 2))
   done

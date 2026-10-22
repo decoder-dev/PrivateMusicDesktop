@@ -7,7 +7,8 @@ export ANDROID_HOME="${ANDROID_HOME:-$HOME/android-sdk}"
 export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
 
 # Tauri's Android library lives inside the `tauri` crate of the cargo registry.
-manifest="$(cd "$here/../.." && cargo metadata --format-version 1 --offline 2>/dev/null \
+# Without --offline first (a fresh CI runner has not downloaded the crates of every platform), then with.
+manifest="$(cd "$here/../.." && { cargo metadata --format-version 1 --offline 2>/dev/null || cargo metadata --format-version 1; } \
   | python3 -c 'import json,sys; print(next(p["manifest_path"] for p in json.load(sys.stdin)["packages"] if p["name"]=="tauri"))')"
 tauri_android="$(dirname "$manifest")/mobile/android"
 [ -d "$tauri_android" ] || { echo "tauri android library not found at $tauri_android" >&2; exit 1; }

@@ -205,6 +205,7 @@ jobs:
           ls -l /dev/kvm
 
       - name: Emulator, system image, tools
+        timeout-minutes: 15
         run: |
           set -euxo pipefail
           . scripts/android-ci-env.sh
@@ -220,11 +221,13 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Boot the emulator
+        timeout-minutes: 20
         run: |
           . scripts/android-ci-env.sh >/dev/null
           scripts/android-emulator-tests/boot-emulator.sh
 
       - name: Install the debug APK
+        timeout-minutes: 5
         run: |
           set -euxo pipefail
           . scripts/android-ci-env.sh >/dev/null
@@ -234,6 +237,7 @@ jobs:
           adb shell pm list packages | grep "$PM_PACKAGE"
 
       - name: Emulator tests (the real app, over WebView DevTools)
+        timeout-minutes: 20
         working-directory: scripts/android-emulator-tests
         env:
           PM_CLEAR: "1"
@@ -243,6 +247,7 @@ jobs:
           node run.mjs
 
       - name: Update check (install a newer APK over the old one)
+        timeout-minutes: 10
         if: ${{ !cancelled() }}
         run: |
           . scripts/android-ci-env.sh >/dev/null
@@ -252,6 +257,7 @@ jobs:
 
       - name: Collect logs
         if: always()
+        timeout-minutes: 10
         run: |
           . scripts/android-ci-env.sh >/dev/null || true
           scripts/android-emulator-tests/collect-artifacts.sh "$PM_OUT"
