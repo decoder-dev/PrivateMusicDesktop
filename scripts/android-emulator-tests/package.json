@@ -1,0 +1,8 @@
+{
+  "name": "private-music-android-emulator-tests",
+  "private": true,
+  "type": "module",
+  "description": "Drives the real debug APK in an Android emulator (or on a device) through the WebView DevTools socket. See docs/android.md, section CI.",
+  "scripts": { "test": "node run.mjs" },
+  "dependencies": { "playwright": "1.56.1" }
+}
