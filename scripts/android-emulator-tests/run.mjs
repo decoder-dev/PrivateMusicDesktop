@@ -12,7 +12,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  OUT, PACKAGE, adb, allPages, appIsFocused, appPage, connect, crashReport, disconnect, dumpPages, finish, focusedWindow, forceStop,
+  OUT, PACKAGE, adb, allPages, refreshPages, appIsFocused, appPage, connect, crashReport, disconnect, dumpPages, finish, focusedWindow, forceStop,
   invoke, log, logcat, pageErrors, pid, safeUrl, screencap, sh, shSafe, sleep, startApp, step, waitFor, warn,
 } from "./lib.mjs";
 
@@ -193,7 +193,7 @@ await step("6b. sign-in from the UI button opens VK; a non-VK URL is blocked; Ba
 
   // The Activity's WebView lives in the same process, so its page shows up on the same DevTools socket.
   const listing = await dumpPages("devtools-pages-login");
-  const vkPage = await waitFor("the VK page among the DevTools pages", () => allPages().find((p) => { try { return isVk(new URL(p.url()).host); } catch { return false; } }), { timeout: 20_000 })
+  const vkPage = await waitFor("the VK page among the DevTools pages", async () => (await refreshPages(), allPages()).find((p) => { try { return isVk(new URL(p.url()).host); } catch { return false; } }), { timeout: 20_000 })
     .catch(() => null);
   let detail = `events ${events.join(",")}`;
   if (!vkPage) {

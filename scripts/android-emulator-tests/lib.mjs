@@ -3,7 +3,7 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { chromium } from "playwright";
+import { _android as android } from "playwright";
 
 export const PACKAGE = process.env.PM_PACKAGE ?? "com.dec.privatemusic2.android";
 export const OUT = path.resolve(process.env.PM_OUT ?? "out");
@@ -111,7 +111,7 @@ const collectedErrors = []; // survive reconnects
 
 export async function disconnect() {
   if (connection) {
-    try { await connection.browser.close(); } catch { /* the app may be gone */ }
+    try { await connection.device.close(); } catch { /* the app may be gone */ }
     connection = null;
   }
   await run(["forward", "--remove", `tcp:${CDP_PORT}`]).catch(() => {});
@@ -141,18 +141,43 @@ export async function connect({ timeout = 60_000 } = {}) {
     log(`DevTools /json/version: ${version.replace(/\s+/g, " ").slice(0, 300)}`);
     fs.writeFileSync(path.join(OUT, "devtools-version.json"), version);
   } catch (error) { log(`/json/version unreachable: ${error.message}`); }
-  const browser = await waitFor("Playwright to connect over CDP", () => chromium.connectOverCDP(base, { timeout: 15_000 }), { timeout, interval: 2000 });
-  connection = { browser };
-  const watch = (page) => {
-    page.on("pageerror", (error) => collectedErrors.push(`${page.url()}: ${error.message}`));
-    page.on("console", (message) => { if (message.type() === "error") log(`page console.error: ${message.text().slice(0, 300)}`); });
-  };
-  browser.contexts().forEach((context) => { context.pages().forEach(watch); context.on("page", watch); });
-  return browser;
+  // Playwright's Android API is made for WebViews: connectOverCDP needs browser-level context management,
+  // which a WebView's DevTools does not offer ("Browser context management is not supported").
+  const device = await waitFor("Playwright to see the emulator through adb", async () => {
+    const found = await android.devices();
+    if (!found.length) throw new Error("no adb devices");
+    return found[0];
+  }, { timeout, interval: 2000 });
+  connection = { device, pages: [], known: new Set() };
+  await refreshPages();
+  return device;
+}
+
+const watch = (page) => {
+  page.on("pageerror", (error) => collectedErrors.push(`${page.url()}: ${error.message}`));
+  page.on("console", (message) => { if (message.type() === "error") log(`page console.error: ${message.text().slice(0, 300)}`); });
+};
+
+/** Adopts the app's WebViews (the main window, the VK sign-in Activity) that appeared since the last call. */
+export async function refreshPages() {
+  if (!connection) return [];
+  for (const view of connection.device.webViews()) {
+    if (view.pkg() !== PACKAGE) continue;
+    const key = `${view.pid}:${view.socketName ?? ""}:${view.pkg()}`;
+    if (connection.known.has(key)) continue;
+    try {
+      const page = await view.page();
+      connection.known.add(key);
+      connection.pages.push(page);
+      watch(page);
+    } catch (error) { log(`WebView ${key} is not ready: ${String(error.message).split("\n")[0]}`); }
+  }
+  connection.pages = connection.pages.filter((page) => !page.isClosed());
+  return connection.pages;
 }
 
 export const pageErrors = () => collectedErrors;
-export const allPages = () => (connection ? connection.browser.contexts().flatMap((context) => context.pages()) : []);
+export const allPages = () => (connection ? connection.pages : []);
 
 export async function dumpPages(name) {
   try {
@@ -173,6 +198,7 @@ const isApp = (url) => /^https?:\/\/tauri\.localhost(\/|$)/.test(url) || /^tauri
 /** The app's own page (the Tauri origin), waiting for it to exist. */
 export async function appPage({ timeout = 60_000 } = {}) {
   return waitFor("the app's page (origin tauri.localhost) in the WebView", async () => {
+    await refreshPages();
     const found = allPages().find((page) => isApp(page.url()));
     if (found) return found;
     const seen = allPages().map((page) => safeUrl(page.url())).join(", ") || "no pages";
