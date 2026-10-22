@@ -41,6 +41,7 @@ import { loadSettings, saveSettings, saveQueue, loadQueue, clearQueue } from "./
 import { handleBackendEvent as networkEvent, isNetworkError, setReloader, initNetwork, resetNetwork } from "./network.js";
 import { initLayout, isPhone, isAndroid, onLayoutChange, setPlatform } from "./mobile/layout.js";
 import "./mobile/style.js";
+import "./mobile/np-theme.js";
 import { onBack } from "./mobile/back.js";
 import { createPhoneShell } from "./mobile/phone-shell.js";
 import { createHomeView } from "./mobile/home.js";

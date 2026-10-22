@@ -16,6 +16,8 @@ import { createAudioOptions } from "../audio-options.js";
 addStrings({ru:{"window.mini":"Мини-плеер"},en:{"window.mini":"Mini player"}});
 import { isAndroid } from "../mobile/layout.js";
 import { STYLES, currentStyle, setStyle } from "../mobile/style.js";
+import { NP_THEMES, currentNpTheme, setNpTheme } from "../mobile/np-theme.js";
+addStrings({ ru: { "set.nptheme": "Фон плеера", "set.nptheme.cover": "Обложка", "set.nptheme.aurora": "Аврора", "set.nptheme.plain": "Однотонный" }, en: { "set.nptheme": "Player background", "set.nptheme.cover": "Cover", "set.nptheme.aurora": "Aurora", "set.nptheme.plain": "Plain" } });
 addStrings({ ru: { "set.style": "Вид приложения", "set.style.ios": "Как в iOS", "set.style.material": "Material 3" }, en: { "set.style": "App style", "set.style.ios": "Like iOS", "set.style.material": "Material 3" } });
 
 const IS_MAC = /Mac/i.test(navigator.platform || navigator.userAgent);
@@ -114,6 +116,8 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
       section(t("set.appearance"),
         isAndroid() ? row(t("set.style"), h("select", { class: "field", "aria-label": t("set.style"), onchange: (event) => setStyle(event.target.value) },
           STYLES.map((value) => h("option", { value, selected: value === currentStyle(), text: t(`set.style.${value}`) }))), null, "sparkles") : null,
+        row(t("set.nptheme"), h("select", { class: "field", "aria-label": t("set.nptheme"), onchange: (event) => setNpTheme(event.target.value) },
+          NP_THEMES.map((value) => h("option", { value, selected: value === currentNpTheme(), text: t(`set.nptheme.${value}`) }))), null, "sparkles"),
         row(t("set.theme"), themePicker, null, "sparkles"),
         row(t("palette.title"), paletteGrid, null, "sparkles"),
         row(t("set.accent"), accentGrid, null, "album"),

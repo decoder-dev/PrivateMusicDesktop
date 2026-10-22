@@ -10,6 +10,8 @@ import { isLiked, isBusy } from "./likes.js";
 import { hasArtist, openArtistOf } from "./navigation.js";
 import { motionOk, onMotionChange, afterAnimation, morph } from "./motion.js";
 import { coverPalette } from "./palette.js";
+import { createEqualizerPanel } from "./equalizer.js";
+import { openSheet } from "./mobile/sheet.js";
 import { artBox, bindRange, syncRange } from "./ui-parts.js";
 import { isPhone, isAndroid } from "./mobile/layout.js";
 import { attachSheetDrag } from "./mobile/np-sheet.js";
@@ -49,8 +51,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   let coverUrl = null;
   let windowFullscreen = false;
   let lyricsOn = settings.lyrics !== false;
-  // The spectrum needs the desktop engine's analyser; an Android phone shows the cover and the lyrics.
-  let mode = isAndroid() ? "off" : MODES.includes(settings.visualizer) ? settings.visualizer : motionOk() ? "bars" : "off";
+  let mode = MODES.includes(settings.visualizer) ? settings.visualizer : motionOk() ? "bars" : "off";
 
   // Две сложенные друг на друга копии обложки размером 240 пикселей каждая, размытые и увеличенные; они
   // плавно исчезают при смене трека.
@@ -81,7 +82,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   }
 
   const closeButton = h("button", { class: "np-btn", type: "button", title: t("np.close"), "aria-label": t("np.close"), onclick: () => close() }, icon("chevron", 22));
-  const modeButton = h("button", { class: "np-btn desktop-only", type: "button", onclick: () => cycleMode() }, icon("visualizer", 20));
+  const modeButton = h("button", { class: "np-btn np-mode", type: "button", onclick: () => cycleMode() }, icon("visualizer", 20));
   const lyricsButton = h("button", { class: "np-btn", type: "button", title: t("ly.toggle"), "aria-label": t("ly.toggle"), "aria-pressed": String(lyricsOn),
     onclick: () => (queueOpen ? showLyricsPanel() : setLyrics(!lyricsOn)) }, icon("lyrics", 20));
   const lyrics = createLyricsPanel();
@@ -120,6 +121,12 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     if (track) onMenu?.(track, { x: box.left, y: box.top });
   });
 
+  const quickEq = quick("sliders", t("eq.title"), () => {
+    const panel = createEqualizerPanel({ settings, onSettingsChange });
+    openSheet({ label: t("eq.title"), className: "eq-sheet", content: [h("div", { class: "sheet-title", text: t("eq.title") }), panel.element] });
+    panel.render?.();
+  });
+
   const queueList = h("div", { class: "nq-list" });
   const queuePanel = h("section", { class: "np-queue", "aria-label": t("np.queue"), hidden: true },
     h("div", { class: "nq-head", text: t("np.queue") }), queueList);
@@ -141,7 +148,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     h("div", { class: "np-bottom" },
       h("div", { class: "np-seek" }, elapsed, seek, total),
       h("div", { class: "np-controls" }, shuffleButton, previousButton, playButton, nextButton, repeatButton, likeButton),
-      h("div", { class: "np-quick" }, quickLyrics, quickQueue, quickMore)));
+      h("div", { class: "np-quick" }, quickLyrics, quickQueue, quickEq, quickMore)));
 
   const visualizer = createVisualizer(canvas);
   visualizer.setMode(mode);
@@ -167,14 +174,11 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   }
 
   function syncEngine() {
-    // На Android нет анализатора звука настольного движка.
-    if (isAndroid()) return;
     // Движок анализирует звук только тогда, когда кто-то смотрит на результат.
     api.setVisualizer(open && mode !== "off" && !document.hidden).catch(() => {});
   }
 
   function cycleMode() {
-    if (isAndroid()) return;
     mode = MODES[(MODES.indexOf(mode) + 1) % MODES.length];
     userChoseMode = true;
     visualizer.setMode(mode);
@@ -271,7 +275,15 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
       const image = h("img", { src: url, alt: "", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" });
       image.addEventListener("error", () => image.replaceWith(h("div", { class: "np-placeholder" }, icon("note", 96))));
       // Старая обложка остается до тех пор, пока не раскодируется новая.
-      const swap = () => { if (token === paletteToken) coverBox.replaceChildren(image); };
+      // Новая обложка проявляется поверх старой (кроссфейд), затем старая убирается.
+      const swap = () => {
+        if (token !== paletteToken) return;
+        const old = [...coverBox.children];
+        if (!old.length || motionOk() === false) { coverBox.replaceChildren(image); return; }
+        image.classList.add("np-fade-in");
+        coverBox.append(image);
+        setTimeout(() => { if (token === paletteToken) { for (const node of old) node.remove(); image.classList.remove("np-fade-in"); } }, 520);
+      };
       if (coverBox.firstChild) image.decode().catch(() => {}).finally(swap); else swap();
     } else {
       coverBox.replaceChildren(h("div", { class: "np-placeholder" }, icon("note", 96)));

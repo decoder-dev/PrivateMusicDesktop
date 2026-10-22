@@ -1,0 +1,37 @@
+/* Полноэкранный плеер: кроссфейд обложек, фоны-темы и кнопка визуализации на телефоне.
+   Цвета --np-a/--np-b задаются из обложки (js/now-playing.js applyColors). */
+
+/* Кроссфейд: новая обложка проявляется поверх старой. */
+.np-cover > img.np-fade-in { position: absolute; inset: 0; animation: np-cover-in 480ms var(--ease-std) both; }
+@keyframes np-cover-in { from { opacity: 0; transform: scale(1.04); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .np-cover > img.np-fade-in { animation: none; } }
+
+/* На телефоне кнопка режима визуализации остается в шапке рядом с «Текстом». */
+html[data-layout="phone"] .np-top .np-btn.np-mode { display: inline-flex; }
+html[data-layout="phone"] .np-top .np-btn.np-mode[hidden] { display: none; }
+html[data-layout="phone"] .np-top::after { display: none; }
+html[data-layout="phone"] .np-quick { gap: 0; padding: 0 4px; }
+html[data-layout="phone"] .np-quick button { min-width: 0; flex: 1 1 0; }
+
+/* Тема «Аврора»: крупные размытые пятна цвета обложки медленно плывут. */
+html[data-np-theme="aurora"] .np-backdrop .np-bd { display: none; }
+html[data-np-theme="aurora"] .np-backdrop {
+  background:
+    radial-gradient(60% 45% at 20% 18%, color-mix(in srgb, var(--np-a) 85%, transparent), transparent 70%),
+    radial-gradient(55% 45% at 85% 40%, color-mix(in srgb, var(--np-b) 75%, transparent), transparent 70%),
+    radial-gradient(70% 50% at 35% 95%, color-mix(in srgb, var(--np-a) 60%, var(--np-b)), transparent 70%),
+    var(--page-bottom);
+  background-size: 140% 140%; animation: np-aurora 18s ease-in-out infinite alternate;
+}
+@keyframes np-aurora { from { background-position: 0% 0%; } to { background-position: 100% 100%; } }
+html[data-np-theme="aurora"] .np[data-playing="false"] .np-backdrop { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) { html[data-np-theme="aurora"] .np-backdrop { animation: none; } }
+
+/* Тема «Однотонная»: без обложки на фоне, только лёгкий оттенок акцента. */
+html[data-np-theme="plain"] .np-backdrop .np-bd { display: none; }
+html[data-np-theme="plain"] .np-backdrop { background: color-mix(in srgb, var(--np-a) 8%, var(--page-top)); }
+html[data-np-theme="plain"] .np-backdrop::after { display: none; }
+
+/* Эквалайзер в листе плеера: десять полос помещаются по ширине, без прокрутки. */
+html[data-layout="phone"] .eq-sheet .eq-bands { grid-template-columns: repeat(10, minmax(0, 1fr)); overflow: visible; padding-inline: 0; }
+html[data-layout="phone"] .eq-sheet .eq { padding: 0 4px 8px; }
