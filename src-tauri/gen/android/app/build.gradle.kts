@@ -26,7 +26,10 @@ android {
         // Tauri config); versionCode = major*10000 + minor*100 + patch (0.2.7 -> 207).
         val name = tauriProperties.getProperty("tauri.android.versionName", "0.0.1")
         val (major, minor, patch) = name.split("-")[0].split(".").map { it.toIntOrNull() ?: 0 }.plus(listOf(0, 0, 0))
-        versionCode = major * 10000 + minor * 100 + patch
+        // CI only: ANDROID_VERSION_CODE_OVERRIDE builds a "newer" APK of the same version to test
+        // installing an update over the previous one (scripts/android-upgrade-check.sh).
+        val codeOverride = System.getenv("ANDROID_VERSION_CODE_OVERRIDE")?.toIntOrNull()
+        versionCode = codeOverride ?: (major * 10000 + minor * 100 + patch)
         versionName = name
     }
 

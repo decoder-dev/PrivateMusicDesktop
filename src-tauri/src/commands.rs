@@ -307,6 +307,21 @@ pub fn app_info(handle: AppHandle, state: TauriState<'_, AppState>) -> AppInfo {
     }
 }
 
+/// CI на эмуляторе Android: цикл «записать, прочитать, удалить» через Keystore. Существует только в отладочной
+/// сборке Android (в остальных возвращает ошибку `unsupported`); сохранённую сессию не трогает.
+#[tauri::command]
+pub async fn debug_secure_selftest(handle: AppHandle, mode: Option<String>) -> CommandResult<String> {
+    #[cfg(all(target_os = "android", debug_assertions))]
+    {
+        blocking(move || crate::secure_store::selftest(&handle, mode.as_deref().unwrap_or("")).map(str::to_string)).await
+    }
+    #[cfg(not(all(target_os = "android", debug_assertions)))]
+    {
+        let _ = (handle, mode);
+        Err(CommandError { kind: "unsupported".into(), message: "available in Android debug builds only".into(), retry_after: None })
+    }
+}
+
 /// Звуковые выходы, по умолчанию в первую очередь. Запрос аудиосистемы может занять некоторое время.
 #[tauri::command]
 pub async fn output_devices() -> Vec<String> {

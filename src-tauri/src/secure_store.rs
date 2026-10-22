@@ -68,3 +68,49 @@ impl BlobBackend for KeystoreBackend {
         self.call::<serde_json::Value>("delete", serde_json::json!({})).map(|_| ())
     }
 }
+
+/// Debug builds only (CI): checks of the Keystore plugin. It never touches a real stored session: when one
+/// exists the write modes are skipped and say so.
+///
+/// * `""` / `"roundtrip"`: write, read back, delete.
+/// * `"keep"`: write a probe and leave it (the update test installs a new APK over this one).
+/// * `"verify"`: the probe left by `"keep"` must still decrypt (the Keystore key survived).
+/// * `"clean"`: delete the probe.
+///
+/// The probe is not a session: the engine reads it at start, fails to parse it and counts it as signed out
+/// without removing it.
+#[cfg(debug_assertions)]
+pub fn selftest(app: &AppHandle<Wry>, mode: &str) -> Result<&'static str> {
+    const PROBE: &str = "pm-selftest-\u{43f}\u{440}\u{438}\u{432}\u{435}\u{442}";
+    let backend = KeystoreBackend { app: app.clone() };
+    let fail = |text: &str| Err(Error::Transport(format!("secure store selftest: {text}")));
+    match mode {
+        "verify" => match backend.read()? {
+            Some(value) if value == PROBE => Ok("ok"),
+            Some(_) => fail("the stored value is not the probe"),
+            None => fail("the probe is gone or no longer decrypts"),
+        },
+        "clean" => backend.remove().map(|()| "ok"),
+        "" | "roundtrip" | "keep" => {
+            if backend.read()?.is_some() {
+                return Ok("skipped: a session is stored");
+            }
+            backend.write(PROBE)?;
+            let back = backend.read();
+            if mode == "keep" {
+                return if back?.as_deref() == Some(PROBE) { Ok("ok") } else { fail("read a different value back") };
+            }
+            // Always clean up, even if the read failed.
+            let removed = backend.remove();
+            if back?.as_deref() != Some(PROBE) {
+                return fail("read a different value back");
+            }
+            removed?;
+            if backend.read()?.is_some() {
+                return fail("the value survived the delete");
+            }
+            Ok("ok")
+        }
+        _ => fail("unknown mode"),
+    }
+}
