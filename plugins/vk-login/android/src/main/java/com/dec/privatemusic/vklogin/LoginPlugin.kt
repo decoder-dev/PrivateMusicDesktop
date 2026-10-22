@@ -4,6 +4,9 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.util.Log
+import android.provider.OpenableColumns
+import java.io.File
+import java.util.UUID
 import android.webkit.WebView
 import androidx.activity.result.ActivityResult
 import app.tauri.annotation.ActivityCallback
@@ -89,6 +92,65 @@ class LoginPlugin(private val activity: Activity) : Plugin(activity) {
     fun cancel(invoke: Invoke) {
         LoginBridge.cancelRequest?.invoke()
         invoke.resolve()
+    }
+
+    private val audioPickerRunning = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    @Command
+    fun pickAudio(invoke: Invoke) {
+        if (!audioPickerRunning.compareAndSet(false, true)) { invoke.reject("An audio picker is already open"); return }
+        try {
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "audio/*"
+                putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("audio/mpeg", "audio/mp3"))
+            }
+            startActivityForResult(invoke, intent, "onAudioPicked")
+        } catch (_: Exception) {
+            audioPickerRunning.set(false)
+            invoke.reject("Could not open the audio picker")
+        }
+    }
+
+    @ActivityCallback
+    fun onAudioPicked(invoke: Invoke, result: ActivityResult) {
+        val uri = result.data?.data
+        if (result.resultCode != Activity.RESULT_OK || uri == null) {
+            audioPickerRunning.set(false)
+            invoke.resolve(JSObject().put("cancelled", true))
+            return
+        }
+        Thread({
+            var staged: File? = null
+            try {
+                if (uri.scheme != "content") throw java.io.IOException("Unsupported audio provider")
+                var name = "audio.mp3"
+                activity.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameColumn = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (nameColumn >= 0) name = cursor.getString(nameColumn)?.take(256) ?: name
+                        val sizeColumn = cursor.getColumnIndex(OpenableColumns.SIZE)
+                        if (sizeColumn >= 0 && !cursor.isNull(sizeColumn) && cursor.getLong(sizeColumn) > AudioFilePolicy.MAX_BYTES)
+                            throw java.io.IOException("Audio exceeds size limit")
+                    }
+                }
+                val folder = File(activity.cacheDir, "audio-picker").apply { mkdirs() }
+                // These are only our private temporary files, left by interrupted pickers.
+                folder.listFiles()?.filter { it.name.startsWith("pick-") && it.lastModified() < System.currentTimeMillis() - 86_400_000L }
+                    ?.forEach { it.delete() }
+                val target = File(folder, "pick-${UUID.randomUUID()}.mp3")
+                staged = target
+                val bytes = activity.contentResolver.openInputStream(uri)?.use { input ->
+                    target.outputStream().use { output -> AudioFilePolicy.copyMp3(input, output) }
+                } ?: throw java.io.IOException("Audio could not be read")
+                invoke.resolve(JSObject().put("path", target.absolutePath).put("name", name).put("bytes", bytes))
+            } catch (_: Exception) {
+                staged?.delete()
+                invoke.reject("Could not read MP3 (maximum 200 MB)")
+            } finally {
+                audioPickerRunning.set(false)
+            }
+        }, "pm-audio-picker").start()
     }
 
     private companion object {

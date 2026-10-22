@@ -68,6 +68,13 @@ impl<R: Runtime> VkLogin<R> {
             .map_err(|e| Error::Native(e.to_string()))
     }
 
+    pub fn pick_audio(&self) -> Result<Option<crate::PickedAudio>> {
+        let reply: serde_json::Value = self.plugin.run_mobile_plugin("pickAudio", ())
+            .map_err(|error| Error::Native(error.to_string()))?;
+        if reply.get("cancelled").and_then(serde_json::Value::as_bool) == Some(true) { return Ok(None); }
+        serde_json::from_value(reply).map(Some).map_err(|_| Error::Native("invalid audio picker reply".into()))
+    }
+
     /// Closes the screen if it is open (the Activity reports `Cancelled`).
     pub fn cancel(&self) -> Result<()> {
         self.plugin

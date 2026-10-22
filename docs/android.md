@@ -142,6 +142,13 @@ desktop UI and its tests are unchanged.
   the confirmed partial playlist and prevents subsequent additions; leaving during matching cancels
   the search, and account changes clear the form and invalidate pending replies. No third-party
   streaming-service login is needed. File picking still needs verification on an Android device.
+* **Upload MP3**: Library's actions menu opens a native file picker, followed by artist/title and
+  an explicit Upload action. Only a bounded private copy (up to 200 MB) is staged; JavaScript gets
+  an opaque account-scoped handle. Both Kotlin and Rust validate the MP3 header/size. Uploads use
+  VK upload hosts over HTTPS, never follow redirects, and `audio.save` is not replayed on transport
+  errors. Cancel/account changes stop further work; temporary copies are removed after success,
+  cancellation or disposal. A save already sent to VK may complete despite cancellation. Device
+  picking and real VK upload still need a device/account smoke test; no real media is sent by tests.
 * **Collection search**: Playlists and Albums have local filters; album searches include artists.
 * **Tests**: `ui-tests/phone.test.js` (touch emulation of a Pixel 7, a 360 px and a 430 px phone, and
   landscape) includes the audits: every pressable at least 44 px, no hover-only control, no horizontal

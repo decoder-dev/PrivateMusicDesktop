@@ -12,6 +12,7 @@ import { installTooltips } from "./tooltip.js";
 import { createPlayerBar } from "./player-bar.js";
 import { setDefaultTrackMenu, setDefaultBatchAction } from "./tracks-screen.js";
 import { saveForLater } from "./listen-later.js";
+import { createAudioUploadView } from "./views/audio-upload.js";
 import { createPlaylistImportView } from "./views/playlist-import.js";
 import { rememberQueue } from "./queue-history.js";
 import { createSmartView } from "./views/smart.js";
@@ -294,10 +295,12 @@ function buildShellParts() {
     openPlayer: () => nowPlaying?.show(),
   };
   const libraryView = createLibraryView(ctx);
+  ctx.reloadLibrary = () => libraryView.reload?.();
   const views = {
     library: libraryView,
     home: lazyView(() => createHomeView(ctx)),
     libraryHub: lazyView(() => createLibraryTab({ libraryView, push: ctx.push, newPlaylist, toast })),
+    audioUpload: lazyView(() => createAudioUploadView(ctx)),
     playlistImport: lazyView(() => createPlaylistImportView(ctx)),
     profile: lazyView(() => createProfileView({ push: ctx.push, onSignOut: signOut })),
     forYou: createForYouView(ctx),

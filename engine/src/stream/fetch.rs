@@ -313,7 +313,7 @@ impl Fetcher<'_> {
             Ok(response) => {
                 let status = response.status().as_u16();
                 let delay = net::retry_after(response.headers());
-                if (status == 429 || status == 503) && (delay.is_some() || status == 429) {
+                if status == 429 || status == 503 && delay.is_some() {
                     return Err(Error::RetryAfter { status, seconds:(delay.unwrap_or(Duration::from_secs(1)).as_secs_f64().ceil() as u64).max(1) });
                 }
                 Err(Error::Http(status))

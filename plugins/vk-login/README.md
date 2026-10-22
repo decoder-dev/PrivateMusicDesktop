@@ -183,3 +183,14 @@ repository depends on it.
 * `Channel` delivery from Kotlin to Rust on a running app, and the `startActivityForResult` round trip.
 * Rendering: dark/light bars, insets with edge-to-edge, the keyboard, rotation.
 * The smoke mode on an emulator.
+
+## Native audio picker
+
+`VkLogin::pick_audio()` calls the Android system document picker through `LoginPlugin`, independently
+of the sign-in WebView. `AudioFilePolicy` checks the header and bounds the copied stream to 200 MB,
+including providers which omit the size. It returns a private cache path to Rust only. The shell stages
+an account-scoped opaque handle for its own `choose_audio`/`upload_audio`/`discard_audio` commands;
+no capability grants a WebView direct access to the native picker. The picker never reads or returns
+login cookies/tokens, and requires no broad storage permission. Kotlin policy tests run with the
+existing standalone Gradle test task. Process death can leave a temporary copy; stale picker copies
+are removed the next time the picker is used.

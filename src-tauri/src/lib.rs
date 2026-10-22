@@ -3,6 +3,7 @@
 //! Android shared library (`mobile_entry_point`).
 
 mod commands;
+mod audio_upload;
 mod diagnostics;
 #[cfg(desktop)]
 mod login;
@@ -101,7 +102,7 @@ fn start_login_smoke_test(handle: &tauri::AppHandle, report: std::path::PathBuf)
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri::Builder::default();
+    let builder = tauri::Builder::default().manage(audio_upload::AudioUploads::default());
     // First: a second launch hands over to the running app and exits.
     #[cfg(desktop)]
     let builder = builder
@@ -285,6 +286,7 @@ pub fn run() {
             commands::set_visualizer,
             commands::set_equalizer,commands::set_taste,commands::set_transitions,commands::set_normalization,commands::month_plays,
             commands::lyrics, commands::lyrics_versions,
+            commands::choose_audio, commands::upload_audio, commands::discard_audio,
             commands::create_playlist,
             commands::edit_playlist,
             commands::delete_playlist,

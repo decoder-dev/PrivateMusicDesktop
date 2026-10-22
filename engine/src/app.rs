@@ -347,6 +347,30 @@ impl App {
     }
 }
 
+impl App {
+    pub fn upload_audio(&self, path: &std::path::Path, artist: &str, title: &str, epoch: u64,
+        stop: std::sync::Arc<std::sync::atomic::AtomicBool>) -> Result<Track> {
+        use std::sync::atomic::Ordering;
+        if self.session_epoch()? != epoch { return Err(Error::Unauthorized); }
+        let core = self.core.clone();
+        let cancelled: crate::vk::upload::CancelUpload = std::sync::Arc::new(move ||
+            stop.load(Ordering::Acquire) || *core.generation.lock().unwrap_or_else(|p|p.into_inner()) != epoch);
+        if artist.trim().is_empty() || title.trim().is_empty() || artist.chars().count()>200 || title.chars().count()>200 {
+            return Err(Error::InvalidRequest);
+        }
+        let url = self.api(|client, session| {
+            if cancelled() { return Err(Error::Cancelled); }
+            client.audio_upload_server(session)
+        })?;
+        let uploaded = self.controller.client().upload_audio_file(url, path, cancelled.clone())?;
+        self.api(|client, session| {
+            if cancelled() { return Err(Error::Cancelled); }
+            client.save_audio_upload(session, &uploaded, artist, title, cancelled.as_ref())
+        })
+    }
+
+}
+
 impl Core {
     pub fn controller(&self) -> &Controller {
         &self.controller
@@ -665,6 +689,13 @@ impl Core {
     /// "More like this": Радио VK засеяно одним треком.
     pub fn similar(&self, track: &Track) -> Result<Vec<Track>> {
         self.api(|client, session| client.recommendations(session, Some(track))).map(|tracks|self.controller.recommendations(tracks))
+    }
+
+    /// Identifies the current login for account-scoped file staging and cancellation.
+    pub fn session_epoch(&self) -> Result<u64> {
+        let generation = Self::lock(&self.generation);
+        if self.controller.session().is_none() { return Err(Error::Unauthorized); }
+        Ok(*generation)
     }
 
     pub fn create_playlist(&self, title: &str, description: &str) -> Result<Playlist> {

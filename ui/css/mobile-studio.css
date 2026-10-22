@@ -207,7 +207,7 @@ html[data-layout="phone"] .later-remove { flex: none; display: grid; place-items
 html[data-layout="phone"] .later-note { margin: 8px var(--gutter) 0; font: 400 12px/18px var(--font); color: var(--text-2); }
 
 /* Import is a full phone page: content wraps, choices remain touchable. */
-.playlist-import-view .import-body { display: grid; gap: 16px; padding: 0 var(--gutter, 24px) 24px; }
+.playlist-import-view .import-body, .audio-upload-view .import-body { display: grid; gap: 16px; padding: 0 var(--gutter, 24px) 24px; }
 .import-input, .import-review { display: grid; gap: 16px; min-width: 0; }
 .import-input > label { display: grid; gap: 8px; font-weight: 600; }
 .import-input .field { width: 100%; min-width: 0; }
@@ -223,3 +223,7 @@ html[data-layout="phone"] .later-note { margin: 8px var(--gutter) 0; font: 400 1
 .import-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 html[data-layout="phone"] .import-body .btn { min-height: 44px; white-space: normal; padding: 10px 14px; }
 html[data-layout="phone"] .lib-collection-search { margin: 0 var(--gutter) 4px; width: calc(100% - 2 * var(--gutter)); }
+.upload-body > label { display: grid; gap: 8px; font-weight: 600; }
+.upload-body .field { width: 100%; min-width: 0; }
+.upload-file { display: grid; gap: 10px; min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 20px; background: var(--studio-card, var(--surface)); }
+.upload-filename { overflow-wrap: anywhere; }

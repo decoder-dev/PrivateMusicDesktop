@@ -58,6 +58,17 @@ export function attachRowGestures(list) {
     gesture = null;
   }
 
+  // Playback, likes and virtual scrolling can replace a row during a gesture.
+  // Rebind only to the same track; an index may now belong to a different song.
+  function currentRow(g) {
+    if (list.contains(g.row)) return g.row;
+    const replacement = rowAt(g.index);
+    if (!replacement || !g.key || replacement.dataset.trackKey !== g.key) { end(); return null; }
+    g.bg?.remove(); g.bg = null;
+    g.row = replacement;
+    return replacement;
+  }
+
   function stageFor(dx) {
     const distance = Math.abs(dx);
     if (distance >= FAR && dx > 0) return "far";
@@ -104,12 +115,13 @@ export function attachRowGestures(list) {
     const row = event.target.closest?.(".row");
     if (!row || !list.contains(row)) return;
     end();
-    gesture = { id: event.pointerId, row, index: Number(row.dataset.index), x: event.clientX, y: event.clientY, mode: "pending", stage: "near", bg: null, timer: 0 };
+    gesture = { id: event.pointerId, row, key: row.dataset.trackKey, index: Number(row.dataset.index), x: event.clientX, y: event.clientY, mode: "pending", stage: "near", bg: null, timer: 0 };
     // The ⋯ and heart buttons are plain taps.
     if (event.target.closest(".icon-btn")) { gesture.mode = "tap"; return; }
     const g = gesture;
     g.timer = setTimeout(() => {
       if (gesture !== g || g.mode !== "pending") return;
+      if (!currentRow(g)) return;
       g.mode = "long";
       swallowClickUntil = Date.now() + 700;
       haptic(14);
@@ -120,7 +132,7 @@ export function attachRowGestures(list) {
 
   list.addEventListener("pointermove", (event) => {
     const g = gesture;
-    if (!g || event.pointerId !== g.id) return;
+    if (!g || event.pointerId !== g.id || !currentRow(g)) return;
     const dx = event.clientX - g.x;
     const dy = event.clientY - g.y;
     if (g.mode === "pending") {
@@ -141,12 +153,12 @@ export function attachRowGestures(list) {
 
   function finish(event, cancelled) {
     const g = gesture;
-    if (!g || event.pointerId !== g.id) return;
+    if (!g || event.pointerId !== g.id || !currentRow(g)) return;
     if (g.mode === "swipe" && !cancelled) {
       const dx = event.clientX - g.x;
       swallowClickUntil = Date.now() + 500;
       const stage = stageFor(dx);
-      const row = rowAt(g.index) ?? g.row;
+      const row = g.row;
       end();
       if (stage !== "near") {
         row.dispatchEvent(new CustomEvent("pm-row-swipe", { bubbles: true, detail: { dir: dx > 0 ? "lead" : "trail", far: stage === "far" } }));

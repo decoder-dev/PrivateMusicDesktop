@@ -354,7 +354,7 @@ mod tests {
         q.set_repeat(Repeat::One);
         assert_eq!(q.advance(true).unwrap().track_id, 1, "auto-advance repeats the track");
         assert_eq!(q.advance(false).unwrap().track_id, 2, "Next press still moves on");
-        assert!(q.advance(false).is_none() || true);
+        assert!(q.advance(false).is_none(), "Next on the last track stops even in repeat-one mode");
         q.set_repeat(Repeat::All);
         q.jump(1);
         assert_eq!(q.advance(true).unwrap().track_id, 1, "wraps to the start");

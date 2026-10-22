@@ -34,6 +34,14 @@ const ANDROID_PACKAGE: &str = "com.dec.privatemusic.vklogin";
 /// Largest result accepted from the native side (a web_token answer is ~1 KiB).
 const MAX_FIELD: usize = 64 * 1024;
 
+/// A private cache copy made by the system audio picker, never a caller-supplied path.
+#[derive(Deserialize)]
+pub struct PickedAudio {
+    pub path: String,
+    pub name: String,
+    pub bytes: u64,
+}
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]

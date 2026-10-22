@@ -3,6 +3,8 @@
 // для управления UI.
 (() => {
   const calls = [];
+  let nextAudioFile = 0;
+  const cancelledAudioFiles = new Set();
   const handlers = new Map();
   const delay = (ms) => new Promise((r) => setTimeout(r, ms));
   const config = window.__mockConfig || {};
@@ -130,6 +132,18 @@
       const key = `${playlist.owner_id}_${playlist.playlist_id}`;
       if (!playlistTracks.has(key)) playlistTracks.set(key, library.slice(0, playlist.count).map((t) => ({ ...t, title: `${playlist.title}: ${t.title}` })));
       return page(playlistTracks.get(key), offset, count);
+    },
+    choose_audio: async () => {
+      const id=`audio-${++nextAudioFile}`;
+      if(config.audioPickDelay) await delay(config.audioPickDelay);
+      return config.audioPickCancelled ? null : {id,name:config.audioFilename??"chosen.mp3",bytes:13};
+    },
+    discard_audio: ({fileId}) => {cancelledAudioFiles.add(fileId);},
+    upload_audio: async ({fileId,artist,title}) => {
+      if(config.audioUploadDelay) await delay(config.audioUploadDelay);
+      if(cancelledAudioFiles.has(fileId)) throw {kind:"cancelled",message:"Cancelled"};
+      if(config.audioUploadFails) throw {kind:config.audioUploadFails,message:"Upload failed"};
+      const track=makeTrack(9001,{artist,title});library.unshift(track);return track;
     },
     create_playlist: async ({ title, description }) => {
       await delay(10);

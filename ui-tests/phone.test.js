@@ -555,6 +555,10 @@ async function everyScreen(page, check) {
   await see(page, '.import-review');
   await check("playlist-import-review");
   await back();
+  await tap(page, '.nav-btn[aria-label="Действия"]');
+  await tap(page, '.sheet-item[data-action="upload-audio"]');
+  await check("audio-upload");
+  await back();
   for (const section of ["tracks", "playlists", "albums"]) {
     await tap(page, `.lib-sections [data-section="${section}"]`);
     await page.waitForTimeout(200);
@@ -1243,6 +1247,84 @@ test("playlist import: account changes erase input and invalidate a pending matc
     assert.equal(await page.locator('.import-rows > *').count(),0);
     assert.equal(await page.evaluate(()=>window.__mock.count('create_playlist')),0);
     assert.equal(await page.evaluate(()=>window.__mock.count('search')),1);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+
+async function openAudioUpload(page) {
+  await tab(page,'library');await tap(page,'.nav-btn[aria-label="Действия"]');
+  await tap(page,'.sheet [data-action="upload-audio"]');await see(page,'.audio-upload-view');
+}
+test("audio upload: choosing is separate from uploading, metadata is required and success refreshes Library",async()=>{
+  const app=await phoneApp({phone:'small'});
+  try {
+    const {page}=app;await openAudioUpload(page);
+    assert.equal(await page.locator('.upload-body > .btn.primary').isDisabled(),true);
+    await tap(page,'.upload-file .btn');
+    assert.equal(await page.locator('.upload-body > label input').last().inputValue(),'chosen');
+    assert.equal(await page.evaluate(()=>window.__mock.count('upload_audio')),0);
+    await page.locator('.upload-body > label input').first().fill('My artist');
+    await tap(page,'.upload-body > .btn.primary');
+    assert.equal(await page.evaluate(()=>window.__mock.count('upload_audio')),1);
+    assert.equal(await page.evaluate(()=>window.__mock.last('upload_audio').args.artist),'My artist');
+    assert.match(await page.locator('.upload-body .import-status').innerText(),/Трек загружен/);
+    assert.equal(await page.locator('.upload-filename').innerText(),'Файл не выбран');
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("audio upload: leaving a pending picker discards its eventual private file handle",async()=>{
+  const app=await phoneApp({config:{...CONFIG,audioPickDelay:350}});
+  try {
+    const {page}=app;await openAudioUpload(page);await tap(page,'.upload-file .btn');await pressBack(page);
+    await page.waitForTimeout(400);
+    assert.equal(await page.evaluate(()=>window.__mock.count('discard_audio')),1);
+    assert.equal(await page.evaluate(()=>window.__mock.count('upload_audio')),0);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("audio upload: cancel requests native cleanup and late responses cannot show success",async()=>{
+  const app=await phoneApp({config:{...CONFIG,audioUploadDelay:400}});
+  try {
+    const {page}=app;await openAudioUpload(page);await tap(page,'.upload-file .btn');
+    await page.locator('.upload-body > label input').first().fill('Singer');
+    await tap(page,'.upload-body > .btn.primary');await tap(page,'.upload-body > .btn:not(.primary)');
+    await page.waitForTimeout(450);
+    assert.equal(await page.evaluate(()=>window.__mock.count('discard_audio')),1);
+    assert.match(await page.locator('.upload-body .import-status').innerText(),/Остановка запрошена/);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("audio upload: ambiguous writes discard the handle to prevent a quick duplicate retry",async()=>{
+  const app=await phoneApp({config:{...CONFIG,audioUploadFails:'unconfirmed'}});
+  try {
+    const {page}=app;await openAudioUpload(page);await tap(page,'.upload-file .btn');
+    await page.locator('.upload-body > label input').first().fill('Singer');await tap(page,'.upload-body > .btn.primary');
+    assert.equal(await page.locator('.upload-body > .btn.primary').isDisabled(),true);
+    assert.equal(await page.evaluate(()=>window.__mock.count('discard_audio')),1);
+    assert.equal(await page.evaluate(()=>window.__mock.count('upload_audio')),1);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+
+test("row gestures: a rerender during a swipe keeps the same track and rejects a changed identity",async()=>{
+  const app=await phoneApp();
+  try {
+    const {page}=app;await openLibraryTracks(page);
+    await page.evaluate(()=>{
+      function swipe(changeIdentity) {
+        const row=document.querySelector('.library-hub .row');
+        const send=(target,type,x)=>target.dispatchEvent(new PointerEvent(type,{bubbles:true,pointerId:99,pointerType:'touch',clientX:x,clientY:200}));
+        send(row,'pointerdown',20);send(row,'pointermove',40);
+        const fresh=row.cloneNode(true);
+        if(changeIdentity)fresh.dataset.trackKey='different-track';
+        row.replaceWith(fresh);
+        send(fresh,'pointermove',120);send(fresh,'pointerup',120);
+      }
+      swipe(false);swipe(true);
+    });
+    await page.waitForFunction(()=>window.__mock.count('play_next')===1);
+    assert.equal(await page.evaluate(()=>window.__mock.count('play_next')),1);
     assert.deepEqual(app.problems,[]);
   } finally {await app.close();}
 });

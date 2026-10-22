@@ -3,6 +3,21 @@ import { addStrings } from "../i18n.js";
 
 addStrings({
   ru: {
+    "upload.title": "Загрузить MP3",
+    "upload.artist": "Исполнитель",
+    "upload.track": "Название трека",
+    "upload.noFile": "Файл не выбран",
+    "upload.fileError": "Не удалось открыть MP3. Проверьте формат файла и размер до 200 МБ.",
+    "upload.choose": "Выбрать MP3",
+    "upload.hint": "Выберите свой MP3 размером до 200 МБ, проверьте исполнителя и название, затем загрузите в свою музыку VK.",
+    "upload.submit": "Загрузить в VK",
+    "upload.cancel": "Отменить загрузку",
+    "upload.uncertain": "VK мог сохранить трек, но подтверждение не получено. Обновите медиатеку перед повторной загрузкой.",
+    "upload.cancelled": "Остановка запрошена. Если сохранение уже завершилось, трек появится в медиатеке. Проверьте её перед повторной загрузкой.",
+    "upload.choosing": "Открываем файл…",
+    "upload.sending": "Загружаем MP3…",
+    "upload.done": "Трек загружен в VK.",
+
     "later.title": "Послушать позже",
     "later.save": "Сохранить очередь на потом",
     "later.saved": "Очередь сохранена в медиатеке",
@@ -91,6 +106,21 @@ addStrings({
     "np.grab": "Потяните вниз, чтобы свернуть",
   },
   en: {
+    "upload.title": "Upload MP3",
+    "upload.artist": "Artist",
+    "upload.track": "Track title",
+    "upload.noFile": "No file selected",
+    "upload.fileError": "Could not open the MP3. Check its format and size (up to 200 MB).",
+    "upload.choose": "Choose MP3",
+    "upload.hint": "Choose your MP3 (up to 200 MB), check the artist and title, then upload it to your VK music.",
+    "upload.submit": "Upload to VK",
+    "upload.cancel": "Cancel upload",
+    "upload.uncertain": "VK may have saved the track, but confirmation was not received. Refresh Library before uploading again.",
+    "upload.cancelled": "Stop requested. If saving already finished, the track will appear in Library. Check it before uploading again.",
+    "upload.choosing": "Opening file…",
+    "upload.sending": "Uploading MP3…",
+    "upload.done": "Track uploaded to VK.",
+
     "later.title": "Listen later",
     "later.save": "Save queue for later",
     "later.saved": "Queue saved in Library",

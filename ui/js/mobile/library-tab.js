@@ -188,6 +188,7 @@ export function createLibraryTab({ libraryView, push, newPlaylist, toast }) {
       button("history", t("history.title"), () => push("history")),
       button("plus-circle", t("lib.actions"), () => openMenu({ x: 0, y: 0 }, [
         { label: t("pl.new"), action: "new-playlist", icon: "plus", run: () => newPlaylist() },
+        { label: t("upload.title"), action: "upload-audio", icon: "plus", run: () => push("audioUpload") },
         { label: t("import.title"), action: "import-playlist", icon: "playlist", run: () => push("playlistImport") },
         { label: t("nav.smart"), action: "smart", icon: "sparkles", run: () => push("smart") },
         { label: t("nav.friends"), action: "friends", icon: "friends", run: () => push("friends") },

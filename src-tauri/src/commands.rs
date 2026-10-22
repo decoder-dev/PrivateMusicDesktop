@@ -709,3 +709,21 @@ pub async fn export_track(track: Track) -> CommandResult<bool> {
     let _ = track;
     Err(CommandError { kind: "unsupported".into(), message: "Export is not available on this device".into(), retry_after: None })
 }
+
+
+#[tauri::command]
+pub async fn choose_audio(handle: AppHandle, state: TauriState<'_, AppState>) -> CommandResult<Option<crate::audio_upload::AudioFileInfo>> {
+    let app = state.app.clone();
+    blocking(move || crate::audio_upload::choose(&handle, &app)).await
+}
+
+#[tauri::command]
+pub async fn upload_audio(handle: AppHandle, state: TauriState<'_, AppState>, file_id: String, artist: String, title: String) -> CommandResult<Track> {
+    let app = state.app.clone();
+    blocking(move || crate::audio_upload::upload(&handle, &app, &file_id, &artist, &title)).await
+}
+
+#[tauri::command]
+pub async fn discard_audio(handle: AppHandle, file_id: String) -> CommandResult<()> {
+    blocking(move || { crate::audio_upload::discard(&handle, &file_id); Ok(()) }).await
+}
