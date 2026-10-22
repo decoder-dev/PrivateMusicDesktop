@@ -88,6 +88,44 @@ and signing in again.
   `preventDefault()` to handle it; otherwise the app moves to the background).
 * Remote debugging of the WebView (`chrome://inspect`) is on in debug builds only.
 
+## The phone UI
+
+The same `ui/` serves the wide (desktop) layout and a phone layout; `js/mobile/layout.js` sets
+`data-platform` (`android` from the user agent or `app_info.platform`), `data-layout`
+(`phone` on Android, or a narrow window with a touch pointer; `?layout=phone` /
+`?platform=android` force it for trying it in a desktop browser), `data-orientation` and
+`data-keyboard`. Everything phone-specific is scoped to `html[data-layout="phone"]`, so the
+desktop UI and its tests are unchanged.
+
+* **Frame** (`js/mobile/phone-shell.js`, `css/mobile.css`): the bottom dock (Home, Library,
+  Profile and a round Search button), an iOS-style navigation bar with a large title that shrinks
+  into it, one push stack per tab (tapping the active tab pops to its root, then scrolls to the top).
+  Screens scroll as a whole; the virtual track list measures itself against the screen.
+* **Screens**: Home (`js/mobile/home.js`: the stage, continue card, recommendations, mix and release
+  shelves on the Studio mix cards, recently played), Library hub (`library-tab.js`: Downloads, Liked,
+  Smart playlists, playlists, albums, and "My music" as the Tracks section), Profile (`profile.js`);
+  everything else (Explore = "For you", Search, playlist, album, artist, friends, history, stats,
+  settings, smart playlists) is the existing 0.6.0 view pushed onto the stack.
+* **Player**: a mini player above the dock (tap or swipe up opens, swipe left/right is next/previous)
+  and the full-screen player as a draggable sheet (`np-sheet.js`) with the cover, lyrics (with timing
+  edit chips), queue and the track menu.
+* **Gestures and sheets**: long press and swipe on rows (`row-gestures.js`), pull to refresh
+  (`pull-refresh.js`), bottom action sheets instead of pop-up menus (`sheet.js`, used by `openMenu`),
+  alert-style dialogs.
+* **Back**: `js/mobile/back.js` listens to `pm-back` and closes layers top-down (dialogs and sheets,
+  the player, an open mix tuning, the page stack); unhandled, the app goes to the background.
+* **Safe areas**: `css/mobile.css` uses `--sat --sab --sal --sar` (set by `MainActivity`) with
+  `env(safe-area-inset-*)` as the fallback, and `--kb` (keyboard) for sheets and the dock.
+* **Studio look**: `css/mobile-studio.css` adapts the 0.6.0 tokens, Onest and radii to the phone.
+* **Hidden on Android** (`[data-desktop-only]`, `.desktop-only`, or not built): updates, window size
+  and the mini window, close to tray, keyboard shortcuts, output device, the visualizer, export of a
+  track to a file; the engine commands behind them are not called. Downloads and offline playlist sync,
+  the equaliser, lyrics, friends, history, statistics, mixes and radio, smart playlists, Selena's tastes,
+  the VPN card and bulk actions work as on the desktop.
+* **Tests**: `ui-tests/phone.test.js` (touch emulation of a Pixel 7, a 360 px and a 430 px phone, and
+  landscape) includes the audits: every pressable at least 44 px, no hover-only control, no horizontal
+  overflow on any screen, safe-area variables, reduced motion.
+
 ## Logs
 
     adb logcat -s RustStdoutStderr PrivateMusic
@@ -111,5 +149,6 @@ tests. To check on a phone:
   notification permission;
 * OEM battery savers (they can kill a foreground service), and the CSP
   (`connect-src ipc: http://ipc.localhost`) with Tauri's IPC;
-* the desktop-oriented parts of the UI (window size, updates, output device, export) are
-  not adapted for a phone yet: they are harmless but pointless there.
+* the phone layout on a real WebView: insets from `MainActivity`, the `pm-back` handling, touch
+  gestures and the on-screen keyboard (`--kb`) behave as in the Chromium emulation of the tests,
+  but only a device proves it.
