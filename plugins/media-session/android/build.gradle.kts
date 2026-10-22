@@ -1,11 +1,11 @@
 plugins {
-    id("com.android.library") version "8.9.3"
-    id("org.jetbrains.kotlin.android") version "2.1.21"
+    id("com.android.library")
+    id("org.jetbrains.kotlin.android")
 }
 
 android {
     namespace = "com.dec.privatemusic.mediasession"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 26

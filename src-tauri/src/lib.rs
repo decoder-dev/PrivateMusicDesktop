@@ -24,7 +24,9 @@ mod updater;
 #[cfg(desktop)]
 mod window_smoke;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
+#[cfg(desktop)]
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use pm_engine::app::{App, AppOptions};
