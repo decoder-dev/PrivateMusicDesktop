@@ -185,16 +185,29 @@ pub fn choose(handle: &AppHandle, app: &App) -> Result<Option<AudioFileInfo>> {
     Ok(Some(info))
 }
 
-pub fn discard(handle: &AppHandle, id: &str) {
-    if let Some(entry) = handle
-        .state::<AudioUploads>()
-        .0
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .remove(id)
-    {
-        entry.stop.store(true, Ordering::Release);
+impl AudioUploads {
+    fn discard(&self, id: &str) {
+        if let Some(entry) = self.0.lock().unwrap_or_else(|p| p.into_inner()).remove(id) {
+            entry.stop.store(true, Ordering::Release);
+        }
     }
+
+    fn completed(&self, id: &str, entry: &PendingAudio, answer: &Result<Track>) {
+        entry.uploading.store(false, Ordering::Release);
+        if answer.is_ok()
+            || matches!(
+                answer,
+                Err(Error::UnconfirmedWrite | Error::Unauthorized | Error::Cancelled)
+            )
+            || entry.stop.load(Ordering::Acquire)
+        {
+            self.discard(id);
+        }
+    }
+}
+
+pub fn discard(handle: &AppHandle, id: &str) {
+    handle.state::<AudioUploads>().discard(id);
 }
 
 pub fn upload(handle: &AppHandle, app: &App, id: &str, artist: &str, title: &str) -> Result<Track> {
@@ -218,10 +231,9 @@ pub fn upload(handle: &AppHandle, app: &App, id: &str, artist: &str, title: &str
         return Err(Error::InvalidRequest);
     }
     let answer = app.upload_audio(&entry.path, artist, title, entry.epoch, entry.stop.clone());
-    entry.uploading.store(false, Ordering::Release);
-    if answer.is_ok() || entry.stop.load(Ordering::Acquire) {
-        discard(handle, id);
-    }
+    handle
+        .state::<AudioUploads>()
+        .completed(id, &entry, &answer);
     answer
 }
 
@@ -255,5 +267,31 @@ mod tests {
         assert!(!path.exists());
         assert!(source.path().exists());
         assert!(second.path.exists());
+    }
+    #[test]
+    fn transient_upload_failure_can_retry_but_ambiguous_or_revoked_handles_are_destroyed() {
+        let mut source = tempfile::NamedTempFile::new().unwrap();
+        source.write_all(b"ID3some audio").unwrap();
+        let folder = tempfile::tempdir().unwrap();
+        for terminal in [
+            Error::UnconfirmedWrite,
+            Error::Unauthorized,
+            Error::Cancelled,
+        ] {
+            let state = AudioUploads::default();
+            let entry = stage(source.path(), "song.mp3", folder.path(), 7).unwrap();
+            let id = entry.info.id.clone();
+            let path = entry.path.clone();
+            state.0.lock().unwrap().insert(id.clone(), entry.clone());
+            entry.uploading.store(true, Ordering::Release);
+            state.completed(&id, &entry, &Err(Error::Offline));
+            assert!(state.0.lock().unwrap().contains_key(&id));
+            assert!(path.exists());
+            assert!(!entry.uploading.load(Ordering::Acquire));
+            state.completed(&id, &entry, &Err(terminal));
+            assert!(!state.0.lock().unwrap().contains_key(&id));
+            drop(entry);
+            assert!(!path.exists());
+        }
     }
 }
