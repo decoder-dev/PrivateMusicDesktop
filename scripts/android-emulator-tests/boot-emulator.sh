@@ -112,3 +112,7 @@ adb logcat -G 16M || true
 adb logcat -c || true
 echo "emulator ready: API $(adb shell getprop ro.build.version.sdk | tr -d '\r'), $(adb shell getprop ro.product.model | tr -d '\r'), $(adb shell wm size | tr -d '\r')"
 echo "$emulator_pid" > "$out/emulator.pid"
+# A live copy of the log, written on the host: if the emulator dies mid-test, this is all that is left of it.
+nohup adb logcat -v threadtime > "$out/logcat-live.txt" 2>&1 &
+# Host-side watchdog: one line every 5 s about the emulator process and memory (a vanished emulator shows up here).
+nohup bash -c 'while true; do echo "$(date +%T) emu=$(pgrep -f qemu-system -c) $(free -m | awk "NR==2{print \"mem_used_mb=\"\$3\" avail_mb=\"\$7}")"; sleep 5; done' > "$out/host-watch.txt" 2>&1 &

@@ -6,7 +6,10 @@ mkdir -p "$out"
 # Любая команда adb может зависнуть, если эмулятор мёртв: каждая ограничена по времени.
 T() { timeout "${1}" "${@:2}"; }
 pkg="${PM_PACKAGE:-com.dec.privatemusic2.android}"
+{ date; ps aux | grep -E "qemu|emulator|adb" | grep -v grep | cut -c1-200; free -m; df -h / | tail -1; } > "$out/host-state.txt" 2>&1
 T 20 adb devices -l > "$out/adb-devices.txt" 2>&1
+# If adb lost the device but the emulator process still runs, restarting the server brings it back.
+if ! grep -q "device " "$out/adb-devices.txt"; then T 20 adb kill-server; T 20 adb start-server; sleep 3; T 20 adb devices -l >> "$out/adb-devices.txt" 2>&1; fi
 T 60 adb logcat -d -v threadtime > "$out/logcat-full.txt" 2>&1
 T 30 adb exec-out screencap -p > "$out/screenshot-final.png" 2>/dev/null
 T 30 adb shell dumpsys window 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp' > "$out/window-focus.txt"
