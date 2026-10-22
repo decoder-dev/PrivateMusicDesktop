@@ -116,3 +116,18 @@ html[data-layout="phone"] .palette-opt { min-height: 88px; min-width: 0; }
 /* Вкусы Selena: ползунок на всю ширину карточки. */
 html[data-layout="phone"] .taste-panel { padding: 16px; }
 html[data-layout="phone"] .taste-panel input[type=range] { width: 100%; max-width: 100%; }
+
+/* Обложка не должна уходить под верхнюю панель на низких экранах (360×640): подписи снизу занимают место. */
+html[data-layout="phone"] .np-cover { width: min(100%, 42dvh); }
+html[data-layout="phone"] .np-main { gap: 12px; }
+@media (max-height: 700px) {
+  html[data-layout="phone"][data-orientation="portrait"] .np-cover { width: min(100%, 34dvh); }
+  html[data-layout="phone"][data-orientation="portrait"] .np-title { font-size: 21px; line-height: 25px; }
+  html[data-layout="phone"][data-orientation="portrait"] .np-artist { font-size: 16px; min-height: 36px; }
+}
+html[data-layout="phone"][data-orientation="landscape"] .np-quick { margin-top: 0; padding-bottom: 4px; }
+html[data-layout="phone"][data-orientation="landscape"] .np-quick button { min-height: 44px; }
+
+/* Ссылки в строках ошибок («Повторить», «Как проверить VPN») — тоже цели для пальца. */
+html[data-layout="phone"] .link-text, html[data-layout="phone"] .retry-link { display: inline-flex; align-items: center; min-height: 44px; padding-inline: 6px; }
+html[data-layout="phone"] .status.inline { align-items: center; flex-wrap: wrap; row-gap: 0; }
