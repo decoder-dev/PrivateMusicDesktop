@@ -129,5 +129,5 @@ html[data-layout="phone"][data-orientation="landscape"] .np-quick { margin-top: 
 html[data-layout="phone"][data-orientation="landscape"] .np-quick button { min-height: 44px; }
 
 /* Ссылки в строках ошибок («Повторить», «Как проверить VPN») — тоже цели для пальца. */
-html[data-layout="phone"] .link-text, html[data-layout="phone"] .retry-link { display: inline-flex; align-items: center; min-height: 44px; padding-inline: 6px; }
+html[data-layout="phone"] :is(.status, .net-hint, .login) :is(.link-text, .retry-link) { display: inline-flex; align-items: center; min-height: 44px; padding-inline: 6px; }
 html[data-layout="phone"] .status.inline { align-items: center; flex-wrap: wrap; row-gap: 0; }

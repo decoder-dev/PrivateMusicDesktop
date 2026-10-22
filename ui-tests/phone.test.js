@@ -1007,3 +1007,15 @@ test("error states are touchable too: the inline retry and VPN links of a failed
     }
   } finally { await app.close(); }
 });
+
+test("rows keep their height: the clickable artist name does not stretch a 56 px row (360 px phone)", async () => {
+  const app = await phoneApp({ phone: "small" });
+  try {
+    const { page } = app;
+    await openLibraryTracks(page);
+    const heights = await page.locator(".library-hub .row").evaluateAll((rows) => rows.slice(0, 5).map((r) => Math.round(r.getBoundingClientRect().height)));
+    assert.deepEqual(heights, [56, 56, 56, 56, 56]);
+    const overflow = await page.locator(".library-hub .row").first().evaluate((r) => [...r.children].every((c) => c.getBoundingClientRect().height <= r.getBoundingClientRect().height + 0.5));
+    assert.equal(overflow, true);
+  } finally { await app.close(); }
+});
