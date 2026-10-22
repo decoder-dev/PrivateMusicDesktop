@@ -130,9 +130,95 @@ jobs:
             target/**/release/bundle/**/*.AppImage
           if-no-files-found: error
 
+  android:
+    name: Android APK
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      NDK_VERSION: 27.2.12479018
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Rust and Android targets
+        run: |
+          set -euxo pipefail
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          rustup target add aarch64-linux-android
+
+      - name: Android SDK, NDK, JDK, environment
+        run: |
+          set -euxo pipefail
+          . scripts/android-ci-env.sh
+          scripts/android-ci-sdk.sh "ndk;${NDK_VERSION}" "platforms;android-35" "platforms;android-36" "build-tools;35.0.0" "build-tools;36.0.0"
+
+      # Подпись в CI необязательна. Владелец подписывает APK вне CI (docs/android.md, «Выпуск Android-версии»).
+      # Если заданы все четыре секрета, Gradle подписывает сам (переменные ANDROID_KEYSTORE_PATH и др.);
+      # иначе APK остаётся неподписанным. Ключ сохраняется только во временный файл и удаляется в конце.
+      - name: Signing key (only if all four secrets exist)
+        id: key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            path="$RUNNER_TEMP/release.jks"
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$path"
+            chmod 600 "$path"
+            echo "path=$path" >> "$GITHUB_OUTPUT"
+            echo "The four signing secrets are set: the APK will be signed by Gradle."
+          else
+            echo "path=" >> "$GITHUB_OUTPUT"
+            echo "::notice::Android signing secrets are not (all) set: the APK stays unsigned and must be signed outside CI."
+          fi
+
+      - name: Build release APK (arm64)
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ steps.key.outputs.path }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: scripts/android-build.sh release aarch64 dist
+
+      - name: Remove the signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
+
+      - name: Check the APK
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euxo pipefail
+          . scripts/android-ci-env.sh >/dev/null
+          scripts/android-verify-apk.sh dist/*.apk arm64-v8a release
+          aapt2="$(find "$ANDROID_HOME/build-tools" -name aapt2 -type f | sort -V | tail -1)"
+          name="$("$aapt2" dump badging dist/*.apk | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -1)"
+          [ "$name" = "$VERSION" ] || { echo "APK versionName $name differs from the tag version $VERSION" >&2; exit 1; }
+          if ls dist/*-unsigned.apk >/dev/null 2>&1; then
+            echo "::notice::The APK is unsigned (expected without signing secrets)."
+          else
+            "$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)" verify --verbose dist/*.apk
+          fi
+          sha256sum dist/*.apk
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: android-apk
+          path: dist/*.apk
+          if-no-files-found: error
+
   publish:
     name: Publish release
-    needs: [version, build]
+    needs: [version, build, android]
+    # The desktop release does not depend on the Android build: if that job fails, the installers are still
+    # published (with a warning) and the APK can be added later with `gh release upload`.
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -142,7 +228,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-        run: gh run download "$GITHUB_RUN_ID" --repo "$REPO" --pattern 'installers-*' --dir parts
+        run: |
+          gh run download "$GITHUB_RUN_ID" --repo "$REPO" --pattern 'installers-*' --dir parts
+          mkdir -p android-parts
+          if [ "${{ needs.android.result }}" = success ]; then
+            gh run download "$GITHUB_RUN_ID" --repo "$REPO" --name android-apk --dir android-parts
+          else
+            echo "::warning::The Android job finished as '${{ needs.android.result }}': the release is published without the APK."
+          fi
 
       - name: Give the files plain names and checksum them
         env:
@@ -159,9 +252,18 @@ jobs:
             esac
             cp "$file" "out/$name"
           done
+          # The Android APK is named by the build script (…_android-arm64-unsigned.apk, or …_android-arm64.apk when
+          # CI signed it); the owner replaces the unsigned one with a signed upload (docs/android.md).
+          android=$(find android-parts -type f -name 'PrivateMusic_*_android-arm64*.apk')
+          expected=4
+          if [ -n "$android" ]; then
+            [ "$(printf '%s\n' "$android" | grep -c .)" -eq 1 ] || { echo "expected exactly one Android APK, found: $android" >&2; exit 1; }
+            cp "$android" "out/$(basename "$android")"
+            expected=5
+          fi
           cd out
           ls -l
-          [ "$(ls | wc -l)" -eq 4 ] || { echo "expected four installers" >&2; exit 1; }
+          [ "$(ls | wc -l)" -eq "$expected" ] || { echo "expected $expected files (four installers, plus the Android APK when it was built)" >&2; exit 1; }
           sha256sum * > SHA256SUMS.txt
 
       - name: Create the draft release
