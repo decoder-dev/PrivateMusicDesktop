@@ -6,7 +6,7 @@ import { icon } from "./icons.js";
 import { t, errorText, addStrings } from "./i18n.js";
 import { api, trackKey } from "./api.js";
 import { listen } from "./bridge.js";
-import { store, set, publish, subscribe, withScope } from "./store.js";
+import { store, set, publish, subscribe, withScope, own } from "./store.js";
 import { toast } from "./toast.js";
 import { installTooltips } from "./tooltip.js";
 import { createPlayerBar } from "./player-bar.js";
@@ -39,10 +39,21 @@ import { formDialog } from "./dialog.js";
 import { ensurePlaylists, ownPlaylists, addPlaylist, changeCount, forgetPlaylists } from "./my-playlists.js";
 import { loadSettings, saveSettings, saveQueue, loadQueue, clearQueue } from "./persist.js";
 import { handleBackendEvent as networkEvent, isNetworkError, setReloader, initNetwork, resetNetwork } from "./network.js";
+import { initLayout, isPhone, isAndroid, onLayoutChange, setPlatform } from "./mobile/layout.js";
+import { onBack } from "./mobile/back.js";
+import { createPhoneShell } from "./mobile/phone-shell.js";
+import { createHomeView } from "./mobile/home.js";
+import { createLibraryTab } from "./mobile/library-tab.js";
+import { createProfileView } from "./mobile/profile.js";
+import { lazyView } from "./mobile/lazy.js";
+import { attachPullToRefresh } from "./mobile/pull-refresh.js";
+import { closeMenu } from "./menu.js";
+
 
 
 addStrings({ ru: { "export.audio": "Сохранить аудиофайл…", "export.saved": "Аудиофайл сохранён" }, en: { "export.audio": "Save audio file…", "export.saved": "Audio file saved" } });
 
+initLayout();
 const root = document.getElementById("app");
 // Сохраняйте собственные меню треков приложения; подавлять команды браузера веб-просмотра (Сохранить
 // как, Печать, Обновить, инструменты разработчика) везде.
@@ -185,7 +196,7 @@ async function openTrackMenu(track, at, extra = []) {
   openMenu(at, [
     { label: t("playNext"), action: "play-next", icon: "play-next", run: () => onTrackAction("play-next", track) },
     { label: t("playLast"), action: "play-last", icon: "queue-add", run: () => onTrackAction("play-last", track) },
-    { label: t("export.audio"), action: "export", icon: "download", run: async () => { try { if (await api.exportTrack(track)) toast(t("export.saved")); await refreshDownloads(); } catch (error) { toast(errorText(error), { error: true }); } } },
+    ...(isAndroid() ? [] : [{ label: t("export.audio"), action: "export", icon: "download", run: async () => { try { if (await api.exportTrack(track)) toast(t("export.saved")); await refreshDownloads(); } catch (error) { toast(errorText(error), { error: true }); } } }]),
     { label: t("radio"), action: "radio", icon: "radio", run: () => playSimilar(track) },
     { label:ft("Предпочтения Selena"),action:"taste",icon:"sparkles",items:[
       {label:ft("Меньше такого"),action:"taste-less",run:()=>dislike(track,"less").catch(error=>toast(errorText(error),{error:true}))},
@@ -267,9 +278,18 @@ function buildShellParts() {
   // сохраняются). Боковая панель начинается заново с чистого стека.
   let stack = [];
   let current = { id: "library", payload: null };
-  const ctx = { play, onTrackAction, toast, openTrackMenu, newPlaylist, back };
+  // `push` and `openPlayer` are for the phone's screens (Home, Library, Profile).
+  const ctx = {
+    play, onTrackAction, toast, openTrackMenu, newPlaylist, back, like,
+    push: (id, payload) => (phone.active ? phone.push(id, payload) : navigate(id, payload)),
+    openPlayer: () => nowPlaying?.show(),
+  };
+  const libraryView = createLibraryView(ctx);
   const views = {
-    library: createLibraryView(ctx),
+    library: libraryView,
+    home: lazyView(() => createHomeView(ctx)),
+    libraryHub: lazyView(() => createLibraryTab({ libraryView, push: ctx.push, newPlaylist, toast })),
+    profile: lazyView(() => createProfileView({ push: ctx.push, onSignOut: signOut })),
     forYou: createForYouView(ctx),
     downloads: createDownloadsView(ctx),
     playlists: createPlaylistsView(ctx),
@@ -315,13 +335,18 @@ function buildShellParts() {
         h("span", { class: "ico" }, icon("logout", 16)), h("span", { class: "txt", text: t("account.signOut") }))));
   nowPlaying = createNowPlaying({ settings, onSettingsChange: persistSettings, onLike: like, onMenu: (track, at) => openTrackMenu(track, at) });
   const bar = createPlayerBar({ onSettingsChange: persistSettings, onExpand: () => nowPlaying.show(), onLike: like });
+  // «Моя музыка» переезжает во вкладку «Библиотека» телефона; в остальных макетах это страница основной колонки.
+  libraryView.embedded = () => isPhone();
   const main = h("main", { class: "main" }, ...Object.values(views).map((v) => v.element), h("div", { class:"player-dock" },bar.element));
+  const phone = createPhoneShell({ main, views, display: (id, direction) => display(id, direction), activeId: () => store.view });
+  main.prepend(phone.navbar);
 
   const element = h("div", { class: "shell" },
     h("aside", { class: "sidebar" },
       h("div", { class: "brand" }, h("span", { class: "brand-mark", "aria-hidden": "true" }, h("img", { src: "assets/app-icon.png", alt: "", width: "32", height: "32" })), h("span", { class: "brand-name", text: t("app.name") })),
       nav, h("div", { class: "spacer" }), account),
     main,
+    phone.dock,
     nowPlaying.element,createMiniPlayer(like));
 
   function display(id, direction = "") {
@@ -329,7 +354,12 @@ function buildShellParts() {
     if (direction) main.dataset.dir = direction;
     else delete main.dataset.dir;
     set("view", id);
-    for (const [key, view] of Object.entries(views)) view.element.hidden = key !== id;
+    main.dataset.view = id;
+    // Вкладка «Библиотека» телефона держит экран «Моя музыка» внутри себя: отдельной страницей он там не бывает.
+    for (const [key, view] of Object.entries(views)) {
+      if (view.embedded?.()) continue;
+      view.element.hidden = key !== id;
+    }
     // Страница, открытая с экрана, сохраняет свое место на боковой панели.
     const section = stack[0]?.id ?? id;
     for (const button of nav.querySelectorAll("button")) {
@@ -344,6 +374,7 @@ function buildShellParts() {
    * вкладки.
    */
   function show(id) {
+    if (phone.active) { phone.showView(id); return; }
     stack = [];
     current = { id, payload: null };
     display(id);
@@ -352,6 +383,7 @@ function buildShellParts() {
 
   function navigate(id, payload) {
     nowPlaying?.close();
+    if (phone.active) { phone.push(id, payload); return; }
     stack.push(current);
     current = { id, payload };
     display(id, "push");
@@ -359,6 +391,7 @@ function buildShellParts() {
   }
 
   function back() {
+    if (phone.active) { phone.pop(); return; }
     const previous = stack.pop() ?? { id: "library", payload: null };
     current = previous;
     display(previous.id, "back");
@@ -367,13 +400,53 @@ function buildShellParts() {
 
   setRouter({ openArtist: (artist) => navigate("artist", artist), openAlbum: (album) => navigate("album", album) });
 
+  // ---- the phone layout: bottom tabs on the same views
+  /** The wide layout has no Home, Library hub or Profile: the nearest sidebar screen stands in. */
+  const WIDE_FOR = { home: "forYou", libraryHub: "library", profile: "settings" };
+  function adapt(layout) {
+    if (layout === "phone") { views.libraryHub.ensure(); attachPull(); }
+    views.libraryHub.embed(layout === "phone", main);
+    if (layout === "phone") {
+      phone.enter(store.view);
+      views.library.show?.(); // hearts need the library, whichever tab is open
+    } else {
+      phone.leave();
+      show(WIDE_FOR[store.view] ?? store.view);
+    }
+  }
+  own(onLayoutChange(adapt));
+  // Rows of data that a pull down at the top of a screen reloads.
+  let pullAttached = false;
+  function attachPull() {
+    if (pullAttached) return;
+    pullAttached = true;
+    for (const id of ["home", "libraryHub", "history", "forYou", "friends", "downloads"]) {
+      attachPullToRefresh(views[id].element, () => (views[id].reload ?? views[id].show)?.call(views[id]));
+    }
+  }
+  // Content clears the mini player only while there is a track for it.
+  subscribe("player", (player) => { document.documentElement.dataset.mini = player.track ? "on" : "off"; });
+  own(() => { delete document.documentElement.dataset.mini; });
+
   return {
-    element, views, bar, show,
+    element, views, bar, show, phone,
+    /** The first screen after signing in: Home on a phone, "My music" beside the sidebar. */
+    start() {
+      if (isPhone()) { views.libraryHub.ensure(); attachPull(); }
+      views.libraryHub.embed(isPhone(), main);
+      if (isPhone()) {
+        phone.start();
+        views.library.show?.();
+      } else {
+        show("library");
+      }
+    },
     setProfile(profile) {
       const full = profile ? `${profile.first_name} ${profile.last_name}`.trim() : "";
       name.textContent = full;
       avatar.textContent = [...full.split(/\s+/).filter(Boolean).slice(0, 2).map((word) => [...word][0].toUpperCase())].join("");
       views.settings.setProfile(profile);
+      views.profile.setProfile(profile);
     },
   };
 }
@@ -401,7 +474,7 @@ async function showApp() {
   shell = buildShell();
   setReloader(() => shell?.views[store.view]?.show?.());
   root.append(shell.element);
-  shell.show("library");
+  shell.start();
   const activeShell = shell;
   api.profile().then((profile) => {
     if (shell !== activeShell || !store.session.signed_in) return;
@@ -428,11 +501,12 @@ window.addEventListener("focus", () => { if (shell) syncTimeZone(); });
 async function applyStartupState() {
   const activeShell = shell;
   try {
-    api.setCloseToTray(settings.closeToTray).catch(() => {});
+    // Окно, лоток и устройство вывода — дело рабочего стола; у телефона их нет.
+    if (!isAndroid()) api.setCloseToTray(settings.closeToTray).catch(() => {});
     api.setTransitions(settings.prefetch,settings.gapless,settings.crossfade).catch(()=>{});
     api.setNormalization(settings.normalization).catch(()=>{});
     syncTimeZone();
-    if (settings.outputDevice) await api.setOutputDevice(settings.outputDevice).catch(() => {});
+    if (settings.outputDevice && !isAndroid()) await api.setOutputDevice(settings.outputDevice).catch(() => {});
     if (settings.eq.on) api.setEqualizer(settings.eq.gains).catch(() => {});
     await api.setVolume(settings.volume);
     await api.setShuffle(settings.shuffle);
@@ -525,7 +599,8 @@ function typing(event) {
 }
 
 document.addEventListener("keydown", (event) => {
-  if (!shell || typing(event) || event.altKey) return;
+  // Горячие клавиши — для окна на компьютере; у телефона клавиатуры нет (физическая ничего не меняет).
+  if (!shell || isAndroid() || typing(event) || event.altKey) return;
   // Сфокусированный ползунок (объем, положение) сам использует клавиши со стрелками.
   if (event.target instanceof HTMLInputElement && event.target.type === "range" && event.key.startsWith("Arrow")) return;
   const mod = event.ctrlKey || event.metaKey;
@@ -577,9 +652,27 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+// ------------------------------------------------------- кнопка «Назад» Android
+// Слои закрываются сверху вниз (панели и диалоги — в mobile/back.js и mobile/sheet.js): полноэкранный
+// плеер, затем стек страниц. Если нажатие не обработано, приложение уходит в фон.
+onBack(20, () => {
+  if (!nowPlaying?.isOpen()) return false;
+  nowPlaying.close();
+  return true;
+});
+onBack(25, () => {
+  const tuning = document.querySelector("details.mix-tuning[open]");
+  if (!tuning) return false;
+  tuning.open = false;
+  return true;
+});
+onBack(30, () => !!shell?.phone.active && shell.phone.pop());
+
 // -------------------------------------------------------------------- Начни
 
 async function start() {
+  // The backend says what it runs on (an Android build reports "android").
+  api.appInfo().then((info) => setPlatform(info.platform)).catch(() => {});
   unlisten = await Promise.all([
     listen("pm-event", onBackendEvent),
     listen("pm-login", async (result) => {
@@ -608,7 +701,7 @@ window.addEventListener("beforeunload", () => unlisten.forEach((fn) => fn()));
 
 // Ярлыки окон также работают за пределами текущего представления и внутри элементов управления формой.
 document.addEventListener("keydown",event=>{
- if(event.key!=="F11" && !(event.key==="Escape" && isWindowFullscreen()))return;
+ if(isAndroid() || (event.key!=="F11" && !(event.key==="Escape" && isWindowFullscreen())))return;
  event.preventDefault();event.stopImmediatePropagation();
  toggleWindowFullscreen(event.key==="Escape"?false:undefined).catch(error=>toast(errorText(error),{error:true}));
 },true);

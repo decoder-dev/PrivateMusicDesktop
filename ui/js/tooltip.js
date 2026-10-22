@@ -3,6 +3,8 @@
 // короткого нажатия мыши, а не при касании, и возвращает заголовок, когда он скрывается, поэтому
 // программы чтения с экрана и клавиатура продолжают работать, как и раньше.
 
+import { isPhone } from "./mobile/layout.js";
+
 const DELAY = 450;
 let timer = 0;
 let active = null; // { target, text, bubble }
@@ -24,6 +26,7 @@ function hide() {
 }
 
 function show(target) {
+  if (isPhone()) return; // no hover on a phone
   const text = target.getAttribute("title") || target.dataset.tip;
   if (!text) return;
   target.dataset.tip = text;

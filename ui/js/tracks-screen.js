@@ -140,6 +140,13 @@ export function createTracksScreen({ title, filterable = false, playable = true,
       } else if (type === "click" && button) {
         event.stopPropagation();
         hooks.onAction?.(button.dataset.action, track, index);
+      } else if (type === "pm-row-longpress") {
+        // Касание: долгое нажатие открывает то же меню, что и правый щелчок, в виде нижней панели.
+        (hooks.onMenu ?? defaultMenu)?.(track, { x: event.detail.x, y: event.detail.y }, index);
+      } else if (type === "pm-row-swipe") {
+        // Свайп вправо: «Далее», дальше: «В конец». Свайп влево: нравится.
+        const { dir, far } = event.detail;
+        hooks.onAction?.(dir === "lead" ? (far ? "play-last" : "play-next") : "like", track, index);
       } else if (type === "click" && !button && event.detail <= 1) {
         const key = `${trackKey(track)}|${index}`;
         const now = performance.now();

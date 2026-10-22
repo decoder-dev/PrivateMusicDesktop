@@ -11,6 +11,8 @@ import { hasArtist, openArtistOf } from "./navigation.js";
 import { motionOk, onMotionChange, afterAnimation, morph } from "./motion.js";
 import { coverPalette } from "./palette.js";
 import { artBox, bindRange, syncRange } from "./ui-parts.js";
+import { isPhone, isAndroid } from "./mobile/layout.js";
+import { attachSheetDrag } from "./mobile/np-sheet.js";
 
 const IDLE_MS = 3000;
 const QUEUE_ROWS = 100;
@@ -47,7 +49,8 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   let coverUrl = null;
   let windowFullscreen = false;
   let lyricsOn = settings.lyrics !== false;
-  let mode = MODES.includes(settings.visualizer) ? settings.visualizer : motionOk() ? "bars" : "off";
+  // The spectrum needs the desktop engine's analyser; an Android phone shows the cover and the lyrics.
+  let mode = isAndroid() ? "off" : MODES.includes(settings.visualizer) ? settings.visualizer : motionOk() ? "bars" : "off";
 
   // Две сложенные друг на друга копии обложки размером 240 пикселей каждая, размытые и увеличенные; они
   // плавно исчезают при смене трека.
@@ -78,11 +81,11 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   }
 
   const closeButton = h("button", { class: "np-btn", type: "button", title: t("np.close"), "aria-label": t("np.close"), onclick: () => close() }, icon("chevron", 22));
-  const modeButton = h("button", { class: "np-btn", type: "button", onclick: () => cycleMode() }, icon("visualizer", 20));
+  const modeButton = h("button", { class: "np-btn desktop-only", type: "button", onclick: () => cycleMode() }, icon("visualizer", 20));
   const lyricsButton = h("button", { class: "np-btn", type: "button", title: t("ly.toggle"), "aria-label": t("ly.toggle"), "aria-pressed": String(lyricsOn),
     onclick: () => (queueOpen ? showLyricsPanel() : setLyrics(!lyricsOn)) }, icon("lyrics", 20));
   const lyrics = createLyricsPanel();
-  const windowButton = h("button", { class: "np-btn", type: "button", title: t("np.fullscreen"), "aria-label": t("np.fullscreen"), "aria-pressed": "false",
+  const windowButton = h("button", { class: "np-btn desktop-only", type: "button", title: t("np.fullscreen"), "aria-label": t("np.fullscreen"), "aria-pressed": "false",
     onclick: () => toggleWindowFullscreen() }, icon("expand", 20));
 
   const shuffleButton = h("button", { class: "np-btn", type: "button", title: t("shuffle.toggle"), "aria-label": t("shuffle.toggle"), "aria-pressed": "false",
@@ -125,9 +128,12 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     if (row) api.jump(Number(row.dataset.index));
   });
 
+  // The sheet's grabber (phone layout only): drag it, or anything not a control, down to close.
+  const grab = h("div", { class: "np-grab", "aria-hidden": "true" }, h("i"));
   const element = h("div", { class: "np", role: "dialog", "aria-modal": "true", "aria-label": t("np.open"), hidden: true },
     backdrop,
     canvas,
+    grab,
     h("div", { class: "np-top" }, closeButton, h("div", { class: "np-kicker" }, h("div", { class: "k1", text: t("np.nowPlaying") }), kickerAlbum), lyricsButton, modeButton, windowButton),
     h("div", { class: "np-stage" },
       h("div", { class: "np-main" }, coverBox, h("div", { class: "np-info" }, title, h("div", { class: "np-artist-row" }, artist), upNext)),
@@ -161,11 +167,14 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   }
 
   function syncEngine() {
+    // На Android нет анализатора звука настольного движка.
+    if (isAndroid()) return;
     // Движок анализирует звук только тогда, когда кто-то смотрит на результат.
     api.setVisualizer(open && mode !== "off" && !document.hidden).catch(() => {});
   }
 
   function cycleMode() {
+    if (isAndroid()) return;
     mode = MODES[(MODES.indexOf(mode) + 1) % MODES.length];
     userChoseMode = true;
     visualizer.setMode(mode);
@@ -344,7 +353,8 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   function wake() {
     clearTimeout(idleTimer);
     element.classList.remove("idle");
-    if (open && store.player.status === "playing") {
+    // A finger has no "still pointer": on the phone the controls stay.
+    if (open && store.player.status === "playing" && !isPhone()) {
       idleTimer = setTimeout(() => element.classList.add("idle"), IDLE_MS);
     }
   }
@@ -352,6 +362,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   element.addEventListener("pointermove", wake);
   element.addEventListener("pointerdown", wake);
   element.addEventListener("dblclick", (event) => {
+    if (isPhone()) return;
     if (event.target === element || event.target === backdrop || event.target === canvas || event.target.closest(".np-stage")) toggleWindowFullscreen();
   });
 
@@ -403,7 +414,12 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   function show() {
     if (open) return;
     open = true;
+    // The phone's player opens on the cover; lyrics and the queue are one tap away.
+    if (isPhone()) { lyricsOn = false; queueOpen = false; }
     element.classList.remove("closing");
+    document.documentElement.dataset.np = "open";
+    element.style.removeProperty("--dy");
+    element.classList.remove("dragging");
     element.hidden = false;
     layoutBackdrop();
     renderMode();
@@ -432,6 +448,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
       if (open) return;
       element.hidden = true;
       element.classList.remove("closing");
+      delete document.documentElement.dataset.np;
     }, 450);
   }
 
@@ -442,6 +459,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   const onWindowMode = () => { windowFullscreen=isWindowFullscreen();windowButton.setAttribute("aria-pressed",String(windowFullscreen));windowButton.replaceChildren(icon(windowFullscreen?"collapse":"expand",20)); };
   window.addEventListener("pm-window-mode",onWindowMode);
   own(()=>window.removeEventListener("pm-window-mode",onWindowMode));
+  attachSheetDrag(element, () => close());
   const onResize = () => { if (open) layoutBackdrop(); };
   window.addEventListener("resize", onResize);
   // Уменьшение движения можно включить во время работы приложения: затем остановите спектр.

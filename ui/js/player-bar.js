@@ -8,6 +8,8 @@ import { isLiked, isBusy } from "./likes.js";
 import { hasArtist, openArtistOf } from "./navigation.js";
 import { artBox, bindRange, syncRange, swapArt } from "./ui-parts.js";
 import { coverPalette } from "./palette.js";
+import { isPhone } from "./mobile/layout.js";
+import { attachMiniGestures } from "./mobile/mini-gestures.js";
 
 /** Нижняя панель: что играет, транспорт, позиция и громкость. */
 export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
@@ -89,6 +91,14 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
         h("div", { class: "seek" }, elapsed, seek, total),
         buffering),
       h("div", { class: "volume" }, muteButton, volume, expandButton)));
+
+  // The phone's mini player: a tap anywhere but a button opens the player, and the
+  // swipes of the iOS MiniPlayerGesturePolicy work (left/right = next/previous, up = open).
+  element.addEventListener("click", (event) => {
+    // composedPath: a button that re-draws its glyph while it handles the click has already detached its target.
+    if (isPhone() && !event.composedPath().some((node) => node.matches?.("button, input"))) onExpand?.();
+  });
+  attachMiniGestures(element, { onNext: () => api.next(), onPrevious: () => api.previous(), onOpen: () => onExpand?.() });
 
   let coverUrl;
   let tintToken = 0;

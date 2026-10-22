@@ -1,5 +1,7 @@
 import { own } from "./store.js";
 import { h } from "./dom.js";
+import { isPhone } from "./mobile/layout.js";
+import { attachRowGestures } from "./mobile/row-gestures.js";
 
 /**
  * Список, который в DOM сохраняет на экране только строки, поэтому библиотека из десятков тысяч треков
@@ -7,6 +9,10 @@ import { h } from "./dom.js";
  *
  * `renderRow(item, index)` возвращает элемент строки. Клики обрабатываются одним делегированным
  * прослушивателем; строки содержат `data-index`.
+ *
+ * На широком макете список сам себе прокрутка. На телефоне прокручивается весь экран (крупный
+ * заголовок, кнопки и строки двигаются вместе, как SwiftUI List), поэтому список измеряет себя
+ * относительно экрана, в котором стоит: то же окно строк, другой скроллер.
  */
 export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
   const spacer = h("div", { class: "spacer" });
@@ -16,17 +22,51 @@ export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
   let items = [];
   let scheduled = false;
   let header = null;
+  let pageScroller = null; // экран, который прокручивается на телефоне
+  const nearEnd = [];
+
+  /** Элемент, по прокрутке которого решается, какие строки рисовать. */
+  const scroller = () => (isPhone() ? root.closest(".main > .view") ?? root : root);
+
+  function watch() {
+    const next = scroller();
+    const outer = next === root ? null : next;
+    if (outer === pageScroller) return;
+    pageScroller?.removeEventListener("scroll", schedule);
+    pageScroller = outer;
+    if (outer) {
+      outer.addEventListener("scroll", schedule, { passive: true });
+      observer.observe(outer);
+    }
+  }
+
+  /** Где начинаются строки внутри прокручиваемого содержимого экрана (после шапки списка). */
+  function rowsOffset(scrolling) {
+    return spacer.getBoundingClientRect().top - scrolling.getBoundingClientRect().top + scrolling.scrollTop;
+  }
 
   function render() {
     scheduled = false;
+    // Высота списка известна, даже когда он скрыт: при показе размер меняется и ResizeObserver перерисовывает.
+    spacer.style.height = `${items.length * rowHeight}px`;
     // Список, которого нет на экране (отображение: нет), ничего не рисует; ResizeObserver ниже
     // перерисовывает его в тот момент, когда он становится видимым.
     if (!root.offsetParent) return;
-    const viewport = root.clientHeight || 600;
-    const offset = header?.offsetHeight ?? 0;
-    const top = Math.max(0, root.scrollTop - offset);
+    watch();
+    const scrolling = scroller();
+    const own = scrolling === root;
+    let top;
+    let viewport;
+    if (own) {
+      viewport = root.clientHeight || 600;
+      top = Math.max(0, root.scrollTop - (header?.offsetHeight ?? 0));
+    } else {
+      viewport = scrolling.clientHeight || 600;
+      top = Math.max(0, scrolling.scrollTop - rowsOffset(scrolling));
+      // Конец окна считается от верха экрана, а не от верха списка.
+    }
     const first = Math.max(0, Math.floor(top / rowHeight) - 4);
-    const last = Math.min(items.length, Math.max(4, Math.ceil((root.scrollTop + viewport - offset) / rowHeight) + 4));
+    const last = Math.max(first, Math.min(items.length, Math.max(4, Math.ceil((top + viewport) / rowHeight) + 4)));
     spacer.style.height = `${items.length * rowHeight}px`;
     windowEl.style.top = `${first * rowHeight}px`;
     const rows = [];
@@ -36,6 +76,12 @@ export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
       rows.push(row);
     }
     windowEl.replaceChildren(...rows);
+    // Широкий макет слушает собственную прокрутку списка (см. экраны); помощь нужна только режиму прокрутки страницы.
+    if (!own) {
+      for (const { margin, fn } of nearEnd) {
+        if (top + viewport > items.length * rowHeight - margin) fn();
+      }
+    }
   }
 
   function schedule() {
@@ -49,7 +95,7 @@ export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
   observer.observe(root);
   own(() => observer.disconnect());
 
-  for (const type of ["click", "dblclick", "keydown", "contextmenu"]) {
+  for (const type of ["click", "dblclick", "keydown", "contextmenu", "pm-row-longpress", "pm-row-swipe"]) {
     root.addEventListener(type, (event) => {
       const row = event.target.closest?.(".row");
       if (!row || !windowEl.contains(row)) return;
@@ -57,6 +103,7 @@ export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
       if (index >= 0 && index < items.length) onRowEvent?.(type, event, items[index], index);
     });
   }
+  attachRowGestures(root);
 
   return {
     element: root,
@@ -68,7 +115,11 @@ export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
       spacer.setAttribute("role", header ? "listbox" : "presentation");
       schedule();
     },
-    scrollToRows() { root.scrollTop = header?.offsetHeight ?? 0; },
+    scrollToRows() {
+      const scrolling = scroller();
+      if (scrolling === root) root.scrollTop = header?.offsetHeight ?? 0;
+      else scrolling.scrollTop = rowsOffset(scrolling);
+    },
     setItems(next) {
       items = next;
       render();
@@ -79,7 +130,15 @@ export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
     /** Повторно отображает видимые строки (выбор или данные изменены). */
     refresh: render,
     scrollToTop() {
-      root.scrollTop = 0;
+      const scrolling = scroller();
+      if (scrolling === root) { root.scrollTop = 0; return; }
+      // Часть длинного экрана: назад к началу списка, но не дальше его шапки.
+      const offset = root.getBoundingClientRect().top - scrolling.getBoundingClientRect().top + scrolling.scrollTop;
+      if (scrolling.scrollTop > offset) scrolling.scrollTop = offset;
+    },
+    /** On the phone layout: calls `fn` (on every draw) while the end of the list is within `margin` px of the screen. */
+    onNearEnd(fn, margin = 400) {
+      nearEnd.push({ fn, margin });
     },
     get length() {
       return items.length;

@@ -14,12 +14,19 @@ import { addStrings } from "../i18n.js";
 import { createTastePanel } from "../tastes.js";
 import { createAudioOptions } from "../audio-options.js";
 addStrings({ru:{"window.mini":"Мини-плеер"},en:{"window.mini":"Mini player"}});
+import { isAndroid } from "../mobile/layout.js";
 
 const IS_MAC = /Mac/i.test(navigator.platform || navigator.userAgent);
 const MOD = IS_MAC ? "⌘" : "Ctrl";
 
 function section(title, ...rows) {
   return h("section", { class: "set-section" }, h("h2", { text: title }), h("div", { class: "set-card" }, ...rows));
+}
+
+/** Отмечает то, что имеет смысл только в настольном окне (на Android скрыто: css/mobile.css). */
+function desktopOnly(node) {
+  node.dataset.desktopOnly = "";
+  return node;
 }
 
 /** Небольшая акцентная плитка с глифом: ведущим значком строки настроек. */
@@ -101,31 +108,31 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
     h("header", { class: "view-header" }, h("div", { class: "vh-text" }, h("h1", { text: t("set.title") }))),
     h("div", { class: "set-body" },
       section(t("set.sound"),
-        row(t("set.output"), h("div", { class: "set-inline" }, deviceSelect, refreshButton), t("set.output.note"), "volume"),createAudioOptions(settings,onSettingsChange)),
+        desktopOnly(row(t("set.output"), h("div", { class: "set-inline" }, deviceSelect, refreshButton), t("set.output.note"), "volume")),createAudioOptions(settings,onSettingsChange)),
       section(t("set.appearance"),
         row(t("set.theme"), themePicker, null, "sparkles"),
         row(t("palette.title"), paletteGrid, null, "sparkles"),
         row(t("set.accent"), accentGrid, null, "album"),
         h("div", { class: "set-row" },
           h("label", { class: "set-check", for: "set-flat" }, h("span", { class: "set-label" }, tile("settings"), h("span", { class: "set-text" }, t("set.flat"), h("div", { class: "set-note", text: t("set.flat.note") }))), flatBox))),
-      section(t("eq.title"), equalizer.element),
+      Object.assign(section(t("eq.title"), equalizer.element), { id: "set-eq" }),
       section("Selena",createTastePanel()),
       section(t("sleep.title"), row(t("sleep.action"),createSleepTimer(),t("sleep.note"),"moon")),
-      section(t("set.window"),
+      desktopOnly(section(t("set.window"),
         row(t("window.mode"),windowModes,t("window.note"),"expand"),
         h("div", { class: "set-row" },
           h("label", { class: "set-check", for: "set-tray" }, h("span", { class: "set-label" }, tile("collapse"), h("span", { class: "set-text", text: t("set.tray") })), trayBox),
-          trayNote)),
+          trayNote))),
       section(t("set.np"),
-        row(t("set.visualizer"), visualizerSelect, null, "visualizer"),
+        desktopOnly(row(t("set.visualizer"), visualizerSelect, null, "visualizer")),
         h("div", { class: "set-row" }, h("label", { class: "set-check", for: "set-lyrics" }, h("span", { class: "set-label" }, tile("lyrics"), h("span", { class: "set-text", text: t("set.lyrics") })), lyricsBox))),
-      section(t("set.keys"),
+      desktopOnly(section(t("set.keys"),
         h("table", { class: "set-keys" }, h("tbody", {},
-          keys.map(([combo, label]) => h("tr", {}, h("td", {}, h("kbd", { text: combo })), h("td", { text: t(label) })))))),
+          keys.map(([combo, label]) => h("tr", {}, h("td", {}, h("kbd", { text: combo })), h("td", { text: t(label) }))))))),
       section(t("set.account"),
         h("div", { class: "set-row" }, accountName, h("button", { class: "btn", type: "button", onclick: () => onSignOut(), text: t("account.signOut") })),
         persistNote),
-      section(t("update.title"), updater.element),
+      desktopOnly(section(t("update.title"), updater.element)),
       section(t("set.about"),
         h("div", { class: "set-row" }, h("div", {}, h("strong", { text: "Private Music" }), version,
           h("div", { class: "set-note", text: t("set.disclaimer") }))))));
@@ -142,7 +149,7 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
     section.id = `settings-${key.replaceAll(".", "-")}`;
     heading.tabIndex = -1;
     settingsNav.append(h("button", {
-      type:"button", class:"btn", text:t(key), "aria-controls":section.id,
+      type:"button", class:"btn", text:t(key), "aria-controls":section.id, ...(section.hasAttribute("data-desktop-only") ? { "data-desktop-only":"" } : {}),
       onclick:() => {
         const top = section.getBoundingClientRect().top - settingsBody.getBoundingClientRect().top + settingsBody.scrollTop;
         settingsBody.scrollTo({ top:Math.max(0, top - 12), behavior:"instant" });
@@ -214,10 +221,15 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
 
   return {
     element,
+    /** The phone's Profile opens Settings at a section ("eq"). */
+    open(payload) {
+      if (payload?.section !== "eq") return;
+      requestAnimationFrame(() => element.querySelector("#set-eq")?.scrollIntoView({ block: "start" }));
+    },
     async show() {
       render();
-      loadDevices();
-      updater.show();
+      // На телефоне нет ни выбора устройства вывода, ни установщика обновлений (их команды-заглушки).
+      if (!isAndroid()) { loadDevices(); updater.show(); }
       try {
         const info = await api.appInfo();
         version.textContent = t("set.version", { version: info.version });

@@ -1,0 +1,197 @@
+/* Phone layout, part three: the screens. Home, Library, Profile are new; the rest are
+   the desktop screens set for a narrow, finger-driven column (iOS grouped lists,
+   2-column grids, centred hero headers). */
+
+/* ---------- Home ---------- */
+.home-view .home-body { display: flex; flex-direction: column; padding-bottom: 8px; }
+html[data-layout="phone"] .home-body > * { flex: none; }
+.stage { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 4px var(--gutter) 0; }
+.stage-chip {
+  display: inline-flex; align-items: center; min-height: 34px; padding: 0 14px; border-radius: var(--r-pill);
+  font: 600 13px/18px var(--font); letter-spacing: -0.08px; color: var(--accent); background: var(--accent-wash);
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.stage-chip.quiet { color: var(--text-2); background: color-mix(in srgb, var(--text) 7%, transparent); }
+.stage-headline {
+  margin: 20px 0 22px; max-width: 100%; font: 700 34px/40px var(--font); letter-spacing: -0.5px; text-wrap: balance; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.stage-art { display: block; border-radius: 28px; }
+.stage-cover { display: block; line-height: 0; }
+.stage-cover .art-box { --art-size: 144px; box-shadow: 0 8px 28px rgb(0 0 0 / 0.2), inset 0 0 0 var(--hair) var(--line-placeholder); }
+.stage[data-state="idle"] .stage-cover .art-box { background-image: linear-gradient(135deg, var(--role-station), color-mix(in srgb, var(--role-station) 55%, transparent)); }
+.stage[data-state="idle"] .stage-cover .art-ph { color: #fff; }
+.stage-cta { margin-top: 24px; min-width: 220px; min-height: 52px; font-size: 17px; }
+.stage-controls { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 22px; }
+.stage-btn {
+  flex: none; width: 52px; height: 52px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--glass); border: var(--hair) solid var(--line-glass); color: var(--text);
+}
+.stage-btn.on { color: var(--accent); }
+.stage-btn:disabled { opacity: 0.5; }
+.stage-track { flex: 1 1 auto; min-width: 0; min-height: 52px; padding: 0 8px; font: 600 17px/22px var(--font); letter-spacing: -0.4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.resume-card {
+  display: flex; align-items: center; gap: 12px; width: calc(100% - 2 * var(--gutter)); margin: 24px var(--gutter) 0; padding: 12px; text-align: left;
+  border-radius: var(--r-card); background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+.resume-art .art-box { --art-size: 56px; }
+.resume-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.resume-kicker { font: 600 12px/16px var(--font); color: var(--accent); }
+.resume-title { font: 600 15px/20px var(--font); letter-spacing: -0.2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.resume-artist, .resume-at { font: 400 13px/18px var(--font); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.resume-go { flex: none; color: var(--accent); }
+.home-recs .compact-list { margin: 0; }
+.home-recs .status { padding: 8px var(--gutter); }
+.explore-row {
+  display: flex; align-items: center; justify-content: space-between; width: calc(100% - 2 * var(--gutter)); margin: 4px var(--gutter) 0; min-height: 48px;
+  padding: 0 4px; text-align: left; font: 600 15px/20px var(--font); color: var(--text-2); letter-spacing: -0.2px;
+}
+.explore-row .chev, .shelf-more .chev { color: var(--text-3); display: inline-flex; }
+/* Mix tiles on a phone: roomy squares, like the Home shelf. */
+html[data-layout="phone"] .mix-tile { width: 140px; height: 112px; padding: 12px; border-radius: var(--r-compact); }
+html[data-layout="phone"] .mix-tile .art-box { --art-size: 28px; }
+html[data-layout="phone"] .mix-tile-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 16px; line-height: 20px; }
+html[data-layout="phone"] .mix-tile { min-height: 44px; }
+.track-card .card-art .art-box { --art-size: 100%; }
+html[data-layout="phone"] .recent-row .card { width: 128px; }
+.home-recs .shelf-title { margin-top: 24px; }
+
+/* ---------- Library tab ---------- */
+.lib-sections { flex: 1 1 100%; display: flex; gap: 0; margin: 4px -4px 0; order: 3; justify-content: space-between; }
+.lib-sections button {
+  position: relative; flex: 1 1 auto; min-width: 0; min-height: 44px; padding: 0 4px; font: 600 14px/20px var(--font); letter-spacing: -0.3px;
+  color: var(--text-2); white-space: nowrap; overflow: visible;
+}
+.lib-sections button[aria-selected="true"] { color: var(--accent); }
+.lib-sections button[aria-selected="true"]::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 3px; height: 2px; border-radius: 2px; background: var(--accent); }
+.library-hub .lib-pane { display: block; }
+.lib-summary {
+  display: flex; align-items: center; gap: 12px; width: calc(100% - 2 * var(--gutter)); min-height: 56px; margin: 10px var(--gutter) 0; padding: 12px; text-align: left;
+  border-radius: var(--r-card); background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+.lib-summary-ico { flex: none; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: var(--accent); background: var(--accent-wash); }
+.lib-summary.liked .lib-summary-ico { color: var(--role-artist); background: color-mix(in srgb, var(--role-artist) 16%, transparent); }
+.lib-summary-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.lib-summary-title { font: 600 15px/20px var(--font); letter-spacing: -0.2px; }
+.lib-summary-detail { font: 400 13px/18px var(--font); color: var(--text-2); }
+.lib-summary-detail:empty { display: none; }
+.lib-summary .chev { color: var(--text-3); display: inline-flex; }
+.shelf-head { display: flex; align-items: center; justify-content: space-between; padding-right: 4px; }
+.shelf-head .shelf-title { margin-right: 0; }
+.shelf-more { display: inline-flex; align-items: center; gap: 2px; min-height: 44px; padding: 0 12px; margin-top: 14px; font: 500 15px/20px var(--font); color: var(--accent); }
+.lib-row { padding-top: 2px; }
+.library-hub .lib-new { margin: 12px var(--gutter) 0; width: calc(100% - 2 * var(--gutter)); }
+.library-hub .lib-grid { padding-top: 14px; }
+.library-hub .status { padding-top: 24px; }
+/* "My music" inside the tab: the tab owns the title, the screen keeps its filter and buttons. */
+html[data-layout="phone"] .lib-pane > .view.embedded { display: block; }
+html[data-layout="phone"] .view.embedded > .view-header { padding-top: 8px; }
+html[data-layout="phone"] .view.embedded > .view-header .vh-text { flex: 0 0 auto; margin-right: auto; }
+html[data-layout="phone"] .view.embedded > .view-header h1 { display: none; }
+html[data-layout="phone"] .view.embedded > .view-header .meta { display: block; font-size: 15px; color: var(--text-2); }
+
+/* ---------- Profile and grouped lists ---------- */
+.profile-body { display: flex; flex-direction: column; gap: 22px; padding: 4px var(--gutter) 0; }
+.profile-identity { display: flex; align-items: center; gap: 16px; }
+.profile-avatar {
+  flex: none; width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; font: 600 22px/1 var(--font); color: var(--accent);
+  background: var(--accent-wash); box-shadow: inset 0 0 0 var(--hair) var(--line);
+}
+.profile-who { min-width: 0; }
+.profile-name { font: 600 22px/28px var(--font); letter-spacing: -0.3px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.profile-app { font: 400 15px/20px var(--font); color: var(--text-2); }
+.group-section { display: flex; flex-direction: column; }
+.group-label { font: 600 13px/18px var(--font); letter-spacing: 0.3px; text-transform: uppercase; color: var(--text-2); margin: 0 16px 8px; }
+.group { border-radius: var(--r-card); background: var(--surface); border: var(--hair) solid var(--line-card); overflow: hidden; }
+.group-row { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 8px 14px; text-align: left; }
+.group-row + .group-row::before { content: ""; position: absolute; top: 0; left: 54px; right: 0; height: var(--hair); background: var(--line); }
+.group-ico { flex: none; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--accent); background: var(--accent-wash); }
+.group-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.group-title { font: 600 16px/21px var(--font); letter-spacing: -0.3px; }
+.group-note { font: 400 13px/18px var(--font); color: var(--text-2); }
+.group-row .chev { flex: none; color: var(--text-3); display: inline-flex; }
+.group-row.destructive .group-title { color: var(--danger); }
+.group-row.destructive .group-ico { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.group-row.static { cursor: default; }
+.group-foot { margin: 8px 16px 0; font: 400 12px/16px var(--font); color: var(--text-2); }
+
+/* ---------- Settings ---------- */
+html[data-layout="phone"] .settings .set-body { padding: 4px var(--gutter) 0; max-width: none; gap: 24px; }
+html[data-layout="phone"] .set-section > h2 { font: 600 13px/18px var(--font); letter-spacing: 0.3px; text-transform: uppercase; color: var(--text-2); margin: 0 16px 8px; }
+html[data-layout="phone"] .set-card { padding: 0; border-radius: var(--r-card); overflow: hidden; box-shadow: none; }
+html[data-layout="phone"] .set-row { padding: 8px 14px; min-height: 56px; gap: 10px 16px; }
+html[data-layout="phone"] .set-row + .set-row::before { left: 54px; right: 0; }
+html[data-layout="phone"] .set-label { flex: 1 1 140px; }
+html[data-layout="phone"] .set-control { min-width: 0; flex: 1 1 100%; justify-content: flex-start; }
+html[data-layout="phone"] .set-check { min-height: 44px; flex: 1 1 100%; }
+html[data-layout="phone"] .set-ico { margin-top: 0; }
+html[data-layout="phone"] .theme-picker { justify-content: space-between; width: 100%; }
+html[data-layout="phone"] .theme-opt { width: 30%; min-height: 44px; }
+html[data-layout="phone"] .accent-grid { justify-content: flex-start; margin: -4px; gap: 0; }
+html[data-layout="phone"] .eq-bands { overflow-x: auto; grid-template-columns: repeat(10, 44px); gap: 0; padding-inline: 8px; scrollbar-width: none; touch-action: pan-x; }
+html[data-layout="phone"] .eq-slider { width: 44px !important; height: 148px; }
+html[data-layout="phone"] input[type="checkbox"][role="switch"] { box-sizing: border-box; width: 64px; height: 44px; border: 6.5px solid transparent; background-clip: padding-box; border-radius: 22px; }
+html[data-layout="phone"] input[type="checkbox"][role="switch"]::before { top: 2px; left: 2px; }
+html[data-layout="phone"] .set-account { flex: 1 1 auto; }
+html[data-layout="phone"] .set-inline { gap: 8px; }
+
+/* ---------- search ---------- */
+html[data-layout="phone"] .tab-bar { padding: 0 var(--gutter) 8px; }
+html[data-layout="phone"] .tab-bar .tabs { display: flex; width: 100%; }
+html[data-layout="phone"] .tab-bar .tabs button { flex: 1 1 0; }
+html[data-layout="phone"] .search-recents-head { padding: 0 var(--gutter); }
+html[data-layout="phone"] .search-recents-head .shelf-title { margin: 16px 0 8px; }
+html[data-layout="phone"] .search-recents { padding: 0 var(--gutter) 8px; }
+html[data-layout="phone"] .search-recent { min-height: 44px; }
+html[data-layout="phone"] .search-recent-query, html[data-layout="phone"] .search-recent-remove { min-height: 44px; }
+html[data-layout="phone"] .search-recent-remove { min-width: 44px; justify-content: center; padding: 0; }
+
+/* ---------- For you / Explore ---------- */
+html[data-layout="phone"] .fy-shelves { border-bottom: 0; }
+html[data-layout="phone"] .mix-tuning { flex: 1 1 auto; }
+html[data-layout="phone"] .mix-tuning > summary { min-height: 44px; justify-content: center; }
+html[data-layout="phone"] .mix-tuning-content { position: fixed; left: 12px; right: 12px; top: auto; bottom: calc(12px + var(--safe-bottom)); width: auto; max-height: 70dvh; z-index: 70; border-radius: 26px; }
+html[data-layout="phone"] .mix-tuning-option { min-height: 44px; }
+html[data-layout="phone"] .mix-tuning-option input { width: 22px; height: 22px; }
+html[data-layout="phone"] .view-header .set-inline > .tabs { flex: 1 1 100%; }
+html[data-layout="phone"] .view-header .set-inline > .tabs button { flex: 1 1 0; }
+html[data-layout="phone"] .view-header .set-inline > .btn { flex: 1 1 0; }
+
+/* ---------- hero pages: artist, album, playlist, friend ---------- */
+html[data-layout="phone"] .view-header.page-head { padding: 0 var(--gutter) 12px; gap: 0; }
+html[data-layout="phone"] .hero-card { flex-direction: column; align-items: center; text-align: center; gap: 16px; padding: 0; }
+html[data-layout="phone"] .hero-art .art-box { --art-size: min(232px, 62vw); }
+html[data-layout="phone"] .hero-art.round .art-box { --art-size: min(168px, 46vw); }
+html[data-layout="phone"] .friend-photo .art-box { --art-size: 96px; }
+html[data-layout="phone"] .hero-body { align-items: center; width: 100%; gap: 4px; }
+html[data-layout="phone"] .hero-body h1, html[data-layout="phone"] .page-head h1 { font: 700 26px/31px var(--font); letter-spacing: -0.4px; text-align: center; -webkit-line-clamp: 3; }
+html[data-layout="phone"] .kicker { text-transform: uppercase; letter-spacing: 0.4px; }
+html[data-layout="phone"] .page-artists { white-space: normal; text-align: center; }
+html[data-layout="phone"] .page-artists .link-text { display: inline-flex; align-items: center; min-height: 44px; }
+html[data-layout="phone"] .hero-actions { width: 100%; justify-content: center; gap: 10px; margin-top: 12px; }
+html[data-layout="phone"] .hero-actions .btn.primary { flex: 1 1 150px; max-width: 220px; min-height: 48px; }
+html[data-layout="phone"] .hero-actions .set-inline { justify-content: center; width: 100%; }
+html[data-layout="phone"] .page-head .set-inline > .btn { flex: 1 1 0; }
+html[data-layout="phone"] .page-note { text-align: center; }
+html[data-layout="phone"] .artist-view .grid, html[data-layout="phone"] .artist-albums { padding-bottom: 8px; }
+html[data-layout="phone"] .view-header h2 + .meta { display: block; }
+
+/* ---------- friends, history, downloads, statistics ---------- */
+html[data-layout="phone"] .friend { width: calc(100% - 8px); margin: 0 4px; min-height: 64px; padding: 8px 12px; }
+html[data-layout="phone"] .friend-list { padding-top: 4px; }
+html[data-layout="phone"] .dl-summary { margin: 4px var(--gutter) 12px; }
+html[data-layout="phone"] .stats-view .page-scroll { padding: 0 var(--gutter); }
+html[data-layout="phone"] .stat-controls { gap: 8px; }
+html[data-layout="phone"] .stat-totals { gap: 20px 28px; }
+html[data-layout="phone"] .stat-big { font-size: 34px; line-height: 40px; }
+html[data-layout="phone"] .set-keys { display: none; }
+html[data-layout="phone"] .btn.danger-text { min-height: 44px; }
+html[data-layout="phone"] .net-hint { margin-inline: var(--gutter); }
+
+/* ---------- sign-in ---------- */
+html[data-layout="phone"] .login { padding: calc(24px + var(--safe-top)) calc(24px + var(--safe-right)) calc(24px + var(--safe-bottom)) calc(24px + var(--safe-left)); }
+html[data-layout="phone"] .login .btn.primary { min-height: 54px; }
+
+/* ---------- connection hint (VPN card) and inline retry links ---------- */
+html[data-layout="phone"] .net-hint-actions { flex-wrap: wrap; }
+html[data-layout="phone"] .net-hint .btn, html[data-layout="phone"] .net-how, html[data-layout="phone"] .retry-link { min-height: 44px; display: inline-flex; align-items: center; }

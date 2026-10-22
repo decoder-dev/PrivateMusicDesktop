@@ -23,7 +23,11 @@
 @import url("css/polish.css");
 @import url("css/nowplaying.css");
 @import url("css/login.css");
-
 @import url("css/discovery.css");
 @import url("css/product.css");
 @import url("css/studio.css");
+
+@import url("css/mobile.css");
+@import url("css/mobile-player.css");
+@import url("css/mobile-screens.css");
+@import url("css/mobile-studio.css");
