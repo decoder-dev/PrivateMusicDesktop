@@ -35,7 +35,7 @@ export function swapArt(slot, url, options, current) {
 
 /** Поле поиска с ведущим глифом и кнопкой очистки. Возвращает {элемент, ввод}. */
 export function searchField({ placeholder, label, className = "", ...handlers }) {
-  const input = h("input", { class: "field", type: "search", placeholder, "aria-label": label ?? placeholder, ...handlers });
+  const input = h("input", { class: "field", type: "search", placeholder, "aria-label": label ?? placeholder, inputmode: "search", enterkeyhint: "search", ...handlers });
   const clear = h("button", { class: "clear", type: "button", hidden: true, title: t("field.clear"), "aria-label": t("field.clear"),
     onclick: () => { input.value = ""; sync(); input.dispatchEvent(new Event("input", { bubbles: true })); input.focus(); } }, icon("clear", 16));
   const sync = () => { clear.hidden = !input.value; };

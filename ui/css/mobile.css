@@ -1,0 +1,244 @@
+/* Phone layout: the bottom dock, the navigation bar, screens that scroll as a whole,
+   rows made for fingers. Everything here hangs on <html data-layout="phone"> (set by
+   js/mobile/layout.js), so the wide layout is never touched by a line of it.
+
+   Parts: this file is the frame and the lists; mobile-player.css the mini player,
+   the full-screen sheet, action sheets, dialogs and toasts; mobile-screens.css the
+   screens (Home, Library, Profile, Settings and the rest). */
+
+/* ---------- system insets ----------
+   The Android shell may set --sat/--sab/--sal/--sar (it knows the real status bar and
+   gesture-bar sizes); otherwise the browser's own env() values apply. */
+:root {
+  --safe-top: var(--sat, env(safe-area-inset-top, 0px));
+  --safe-bottom: var(--sab, env(safe-area-inset-bottom, 0px));
+  --safe-left: var(--sal, env(safe-area-inset-left, 0px));
+  --safe-right: var(--sar, env(safe-area-inset-right, 0px));
+}
+
+/* Phone-only parts do not exist in the wide layout. */
+.dock, .navbar, .ptr, .np-grab { display: none; }
+
+html[data-layout="phone"] {
+  --gutter: 16px;
+  --row: 56px;
+  --nav-h: 44px;
+  --dock-h: 58px;
+  --dock-gap: 6px;
+  --dock-total: calc(var(--dock-h) + var(--dock-gap) + var(--safe-bottom));
+  --mini-h: 58px;
+  --mini-gap: 10px;
+  --bar-h: var(--mini-h);
+  --bar-gap: var(--mini-gap);
+  /* Room at the end of a scrolling screen: the dock, and the mini player while one is shown. */
+  --clear: calc(var(--dock-total) + 20px);
+  --hit: 44px;
+}
+html[data-layout="phone"][data-mini="on"] { --clear: calc(var(--dock-total) + var(--mini-gap) + var(--mini-h) + 20px); }
+html[data-layout="phone"][data-keyboard="open"] { --clear: calc(var(--kb, 0px) + 24px); }
+
+/* ---------- touch basics ---------- */
+html[data-layout="phone"], html[data-layout="phone"] body {
+  touch-action: manipulation;          /* no double-tap zoom, no 300 ms wait */
+  overscroll-behavior: none;           /* no browser pull-to-refresh, no rubber band on the page */
+  -webkit-text-size-adjust: 100%;
+  position: fixed; inset: 0; width: 100%;
+}
+html[data-layout="phone"] * { -webkit-tap-highlight-color: transparent; }
+html[data-layout="phone"] body { -webkit-touch-callout: none; }
+html[data-layout="phone"] .field, html[data-layout="phone"] .ly-text, html[data-layout="phone"] textarea { -webkit-touch-callout: default; }
+/* Press feedback is a dim, as in the iOS app (nothing scales or moves). */
+html[data-layout="phone"] :is(.btn, .icon-btn, .card, .group-row, .lib-summary, .resume-card, .explore-row, .friend, .nav-btn, .nav-back, .dock-tab, .mix-tile, .stage-btn, .stage-track, .stage-art, .shelf-more, .sheet-item, .sheet-back, .toast-action, .lib-sections button, .tabs button, .search-recent-query, .search-recent-remove, .np-btn, .np-play, .np-quick button, .ly-line, .nq-row):active {
+  opacity: 0.6; transform: none; transition-duration: 40ms;
+}
+html[data-layout="phone"] .row:active { background: var(--pressed); }
+/* Hover is not a thing: keep the states a stuck hover would leave behind out of the picture. */
+@media (hover: none) {
+  html[data-layout="phone"] .card:hover { transform: none; }
+}
+html[data-layout="phone"] .card:hover { transform: none; }
+html[data-layout="phone"] .mix-tile:not(:disabled):hover { transform: none; }
+html[data-layout="phone"] .play-chip { display: none; }
+
+/* ---------- the frame ---------- */
+html[data-layout="phone"] .shell { display: block; position: relative; height: 100%; }
+html[data-layout="phone"] .sidebar { display: none; }
+html[data-layout="phone"] .main { height: 100%; padding-left: var(--safe-left); padding-right: var(--safe-right); }
+html[data-layout="phone"] .main > .view {
+  flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; position: relative;
+  overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  padding-bottom: var(--clear); scroll-behavior: auto;
+}
+html[data-layout="phone"] .main > .view::-webkit-scrollbar { display: none; }
+/* A screen is one scroller: its parts stack and scroll together. */
+html[data-layout="phone"] .main > .view > * { flex: none; }
+html[data-layout="phone"] .main .view .view { flex: none; min-height: 0; overflow: visible; }
+html[data-layout="phone"] :is(.list, .page-scroll, .set-body, .grid, .friend-list, .fy-shelves, .tab-pane, .stats-view .page-scroll) {
+  flex: none; overflow: visible; max-height: none; padding-bottom: 0;
+}
+html[data-layout="phone"] .tab-pane { display: block; }
+html[data-layout="phone"] .artist-tracks .list { height: auto !important; }
+html[data-layout="phone"] .view > .status:not(.progress):not(.loading), html[data-layout="phone"] .view > .empty-state,
+html[data-layout="phone"] .tab-pane > .status:not(.progress):not(.loading), html[data-layout="phone"] .tab-pane > .empty-state { flex: none; padding-top: 48px; }
+/* Dragging a screen down from its top is pull to refresh (js/mobile/pull-refresh.js). */
+html[data-layout="phone"] .main > .view > :not(.ptr) { transform: translateY(var(--pull, 0px)); }
+html[data-layout="phone"] .main > .view:not(.pulling) > :not(.ptr) { transition: transform 280ms var(--ease-ios); }
+html[data-layout="phone"] .main > .view.pulling { overflow-y: hidden; }
+html[data-layout="phone"] .ptr {
+  position: absolute; top: 0; left: 0; right: 0; height: 52px; display: flex; align-items: center; justify-content: center; gap: 8px;
+  color: var(--text-2); font: 500 13px/18px var(--font); opacity: 0; pointer-events: none;
+}
+html[data-layout="phone"] .main > .view.pulling .ptr, html[data-layout="phone"] .ptr[data-state="loading"] { opacity: 1; }
+.ptr .spinner { display: none; }
+.ptr[data-state="loading"] .spinner { display: inline-block; }
+.ptr[data-state="loading"] .ptr-arrow { display: none; }
+.ptr-arrow { display: inline-flex; transition: transform 180ms var(--ease-std); }
+.ptr[data-state="ready"] .ptr-arrow { transform: rotate(180deg); }
+
+/* ---------- navigation bar ---------- */
+html[data-layout="phone"] .navbar {
+  display: flex; align-items: center; flex: none; position: relative; z-index: 6;
+  height: calc(var(--safe-top) + var(--nav-h)); padding: var(--safe-top) 4px 0;
+}
+.navbar::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: var(--hair); background: var(--line); opacity: 0;
+  transition: opacity 120ms var(--ease-std);
+}
+.navbar.is-scrolled::after { opacity: 1; }
+.nav-back, .nav-btn {
+  flex: none; width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; color: var(--accent);
+}
+.nav-title {
+  position: absolute; left: 64px; right: 64px; bottom: 0; height: var(--nav-h); display: flex; align-items: center; justify-content: center;
+  font: 600 17px/22px var(--font); letter-spacing: -0.4px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  opacity: 0; pointer-events: none; transition: opacity 140ms var(--ease-std);
+}
+.navbar.has-title .nav-title { opacity: 1; }
+.nav-actions { margin-left: auto; display: flex; align-items: center; position: relative; z-index: 1; }
+.nav-btn { color: var(--text); }
+
+/* ---------- dock ---------- */
+html[data-layout="phone"] .dock {
+  position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 10px; pointer-events: none;
+  padding: 0 calc(12px + var(--safe-right)) calc(var(--dock-gap) + var(--safe-bottom)) calc(12px + var(--safe-left));
+  transition: transform 220ms var(--ease-ios), opacity 160ms var(--ease-std);
+}
+html[data-layout="phone"] .dock > * { pointer-events: auto; }
+html[data-layout="phone"][data-keyboard="open"] .dock { transform: translateY(140%); opacity: 0; pointer-events: none; }
+html[data-layout="phone"][data-keyboard="open"] .dock > * { pointer-events: none; }
+.dock-tabs {
+  flex: 1 1 auto; min-width: 0; display: flex; gap: 4px; padding: 5px; border-radius: var(--r-pill); height: var(--dock-h);
+  box-shadow: 0 4px 20px rgb(0 0 0 / 0.08);
+  background-color: color-mix(in srgb, var(--accent) 5%, color-mix(in srgb, var(--surface) 95%, transparent));
+}
+.dock-searchwrap { background-color: color-mix(in srgb, var(--surface) 95%, transparent); flex: none; width: var(--dock-h); height: var(--dock-h); border-radius: 50%; box-shadow: 0 4px 20px rgb(0 0 0 / 0.08); }
+.dock-searchwrap:has([aria-current]) { background-color: color-mix(in srgb, var(--accent) 16%, var(--glass)); }
+.dock-tab {
+  flex: 1 1 0; min-width: 44px; height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  border-radius: var(--r-pill); color: color-mix(in srgb, var(--text) 72%, transparent);
+}
+.dock-tab .dock-ico { width: 34px; height: 26px; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center; }
+.dock-label { font: 500 10px/12px var(--font); letter-spacing: 0.1px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.dock-tab[aria-current="page"] { color: var(--accent); }
+.dock-tab[aria-current="page"] .dock-ico { background: var(--accent-fill); }
+.dock-tab[aria-current="page"] .dock-label { font-weight: 600; }
+.dock-tab.dock-search { width: 100%; height: 100%; flex: 1 1 auto; }
+.dock-tab.dock-search .dock-ico { width: 100%; height: 100%; background: none; border-radius: 50%; }
+.dock-tab:focus-visible { outline-offset: -3px; }
+
+/* ---------- large titles and headers ---------- */
+html[data-layout="phone"] .view-header { padding: 0 var(--gutter) 8px; gap: 10px 12px; flex-wrap: wrap; align-items: center; }
+html[data-layout="phone"] .view-header::after { display: none; }
+html[data-layout="phone"] .view-header h1 {
+  font: 700 34px/41px var(--font); letter-spacing: -0.7px; white-space: normal; overflow: visible; text-overflow: clip; text-wrap: balance;
+  display: block; overflow-wrap: anywhere;
+}
+html[data-layout="phone"] .view-header h2 { font: 600 20px/25px var(--font); }
+html[data-layout="phone"] .vh-text { flex: 1 1 100%; min-width: 0; }
+html[data-layout="phone"] .view-header .meta { font-size: 13px; }
+html[data-layout="phone"] .view-header .search-field { flex: 1 1 100%; max-width: none; order: 5; }
+html[data-layout="phone"] .view-header .vh-actions { flex: 1 1 100%; order: 6; margin: 0; display: flex; gap: 10px; }
+html[data-layout="phone"] .view-header .vh-actions .btn.primary { flex: 1 1 auto; }
+html[data-layout="phone"] .view-header .set-inline { flex: 1 1 100%; }
+html[data-layout="phone"] .view-header > .back, html[data-layout="phone"] .page-nav { display: none; }
+html[data-layout="phone"] .page-note.footer-note, html[data-layout="phone"] .footer-note { padding: 0 var(--gutter) 8px; }
+
+/* ---------- buttons, fields: finger sized ---------- */
+html[data-layout="phone"] .btn { min-height: 44px; padding: 0 18px; font-size: 15px; }
+html[data-layout="phone"] .btn.small { min-height: 44px; }
+html[data-layout="phone"] .icon-btn { width: 44px; height: 44px; }
+html[data-layout="phone"] .field { min-height: 44px; font-size: 16px; }   /* 16 px: the keyboard does not zoom the page */
+html[data-layout="phone"] .search-field { height: 44px; border-radius: 12px; border-color: transparent; background: color-mix(in srgb, var(--text) 7%, transparent); }
+html[data-layout="phone"] .search-field .field { min-height: 44px; height: 44px; font-size: 16px; }
+html[data-layout="phone"] .search-field .clear { width: 44px; height: 44px; margin-right: 0; position: relative; }
+html[data-layout="phone"] .search-field .clear svg { opacity: 0.8; }
+html[data-layout="phone"] .search-field { overflow: visible; }
+html[data-layout="phone"] .search-field .clear { margin-top: -2px; margin-bottom: -2px; }
+html[data-layout="phone"] .tabs button { min-height: 44px; padding: 0 14px; font-size: 14px; }
+html[data-layout="phone"] .tabs { padding: 2px; border-radius: 12px; }
+html[data-layout="phone"] select.field { padding-right: 34px; }
+html[data-layout="phone"] .link { min-height: 44px; }
+html[data-layout="phone"] .link-text { min-height: 0; }
+
+/* ---------- rows ---------- */
+html[data-layout="phone"] .row {
+  --act-w: 44px;
+  grid-template-columns: 44px minmax(0, 1fr) auto auto 44px; column-gap: 12px; margin: 0 4px; padding: 0 0 0 12px; border-radius: 12px;
+  touch-action: pan-y; user-select: none; -webkit-user-select: none; overflow: hidden; border-radius: 0;
+}
+html[data-layout="phone"] .row .art-box { --art-size: 44px; }
+html[data-layout="phone"] .row .badges { grid-column: 3; }
+html[data-layout="phone"] .row .time { grid-column: 4; opacity: 1 !important; }
+html[data-layout="phone"] .row .actions { grid-column: 5; opacity: 1; pointer-events: auto; gap: 0; justify-self: stretch; justify-content: center; }
+html[data-layout="phone"] .row .actions .icon-btn { width: 44px; height: 44px; display: none; }
+html[data-layout="phone"] .row .actions .icon-btn[data-action="menu"] { display: inline-flex; color: var(--text-2); }
+html[data-layout="phone"] .row .actions .icon-btn[data-action="remove"] { display: inline-flex; }
+html[data-layout="phone"] .row:hover { background: none; }
+html[data-layout="phone"] .row:hover .time { opacity: 1; }
+html[data-layout="phone"] .row[aria-selected="true"] { background: var(--accent-row); }
+html[data-layout="phone"] .row .artist { pointer-events: none; }
+html[data-layout="phone"] .row .title { font-size: 16px; }
+html[data-layout="phone"] .row[aria-selected="true"]::before { left: 0; }
+/* The hairline between rows begins at the text, like an inset iOS list. */
+html[data-layout="phone"] .row + .row::after, html[data-layout="phone"] .window > .row:not(:first-child)::after {
+  content: ""; position: absolute; left: 68px; right: 0; top: 0; height: var(--hair); background: var(--line);
+}
+html[data-layout="phone"] .list { margin-top: 4px; }
+html[data-layout="phone"] .compact-list { position: relative; }
+html[data-layout="phone"] .row[data-swipe] { transform: translateX(var(--sx, 0px)); z-index: 1; background: var(--page-top); }
+.swipe-bg {
+  position: absolute; left: 0; right: 0; z-index: 0; display: flex; align-items: center; gap: 8px; padding: 0 20px; color: #fff; font: 600 14px/18px var(--font);
+}
+.swipe-bg[data-side="lead"] { background: var(--accent); color: var(--on-accent); justify-content: flex-start; }
+.swipe-bg[data-side="lead"][data-far] { background: var(--role-mix); color: #fff; }
+.swipe-bg[data-side="trail"] { background: var(--role-artist); justify-content: flex-end; flex-direction: row-reverse; }
+.swipe-bg.near { opacity: 0.75; }
+.swipe-ico { display: inline-flex; }
+
+/* ---------- inline states ---------- */
+html[data-layout="phone"] .sk-row { margin: 0 4px; padding: 4px 12px; }
+html[data-layout="phone"] .sk-cards { padding: 0 var(--gutter); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+html[data-layout="phone"] .status.progress, html[data-layout="phone"] .status.inline { padding: 4px var(--gutter) 8px; }
+
+/* ---------- shelves, grids ---------- */
+html[data-layout="phone"] .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; padding: 8px var(--gutter) 8px; }
+html[data-layout="phone"] .release-row, html[data-layout="phone"] .mix-grid {
+  scroll-snap-type: x proximity; padding: 2px var(--gutter) 8px; scroll-padding-inline: var(--gutter);
+  overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y;
+}
+html[data-layout="phone"] .release-row::-webkit-scrollbar, html[data-layout="phone"] .mix-grid::-webkit-scrollbar { display: none; }
+html[data-layout="phone"] .release-row .card { width: 136px; }
+html[data-layout="phone"] .shelf-title { margin: 24px var(--gutter) 10px; font: 700 20px/25px var(--font); letter-spacing: -0.3px; }
+html[data-layout="phone"] .mix-catalog .shelf-title { font-size: 20px; line-height: 25px; margin: 24px var(--gutter) 10px; }
+html[data-layout="phone"] .card .name { font-size: 15px; }
+html[data-layout="phone"] .card { min-height: 44px; }
+html[data-layout="phone"] .card:hover { transform: none; }
+html[data-layout="phone"] .release-row > *, html[data-layout="phone"] .mix-grid > *, html[data-layout="phone"] .grid > .card, html[data-layout="phone"] .friend-list > .friend { animation: none; }
+
+/* ---------- reduced motion: the screens just change ---------- */
+@media (prefers-reduced-motion: reduce) {
+  html[data-layout="phone"] .main > .view > :not(.ptr) { transition: none !important; }
+}
+
+/* ---------- desktop-only parts are not shown on Android ---------- */
+html[data-platform="android"] .desktop-only, html[data-platform="android"] [data-desktop-only] { display: none !important; }

@@ -28,8 +28,10 @@ export function playlistCard(playlist, open) {
     h("div", { class: "count", text: tn("playlists.tracks", playlist.count) }));
 }
 
-export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu, newPlaylist }) {
+export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu, newPlaylist, back }) {
   let loaded = false;
+  // A playlist opened from a card on another screen (the phone's navigation stack): Back leaves the view.
+  let pushed = false;
   let generation = 0;
   let detailGeneration = 0;
   let current = null; // открытый плейлист
@@ -66,7 +68,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
       onMenu: (track, at, index) => openTrackMenu(track, at, current && isOwn(current)
         ? [{ label: t("menu.removeFrom"), action: "remove-from-playlist", icon: "trash", destructive: true, run: () => removeTrack(track, index) }]
         : []),
-      back: backButton(t("playlists.back"), () => showList()),
+      back: backButton(t("playlists.back"), () => leave()),
       headerExtra: h("div", { class: "set-inline pl-owner" }, editButton, deleteButton, followButton,syncButton),
     },
   });
@@ -122,6 +124,10 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
     }
   }
 
+  function leave() {
+    if (pushed) { pushed = false; detailGeneration++; current = null; back?.(); } else showList();
+  }
+
   function showList() {
     detailGeneration++;
     current = null;
@@ -132,6 +138,8 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
   }
 
   async function open(playlist, shared = null) {
+    // Возврат к открытому плейлисту, который ещё на экране, сохраняет место.
+    if (pushed && current && same(current, playlist) && !detail.element.hidden) return;
     sharedAlbum = shared;
     current = playlist;
     renderOwner();
@@ -216,7 +224,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
     try {
       await api.deletePlaylist(playlist);
       dropPlaylist(playlist);
-      showList();
+      leave();
       toast(t("pl.deleted"));
     } catch (error) {
       toast(errorText(error), { error: true });
@@ -277,6 +285,8 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
     },
     /** Щелчок на боковой панели, когда список воспроизведения открыт, позволяет вернуться к списку. */
     root() { if (current) showList(); },
+    /** The phone opens a playlist as a page of its own (see mobile/phone-shell.js). */
+    open(playlist, shared) { pushed = true; return open(playlist, shared); },
     reset() {
       generation++;
       loaded = false;
@@ -284,6 +294,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
       albumsGrid.replaceChildren();
       forgetPlaylists();
       grid.replaceChildren();
+      pushed = false;
       showList();
     },
   };

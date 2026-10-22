@@ -39,7 +39,7 @@ export function trackRow(track, { selected = false, paused = false, actions, lik
     liked && pinLiked ? h("span", { class: "badge-liked", "aria-hidden": "true" }, icon("heart-on", 12)) : null,
     downloaded ? h("span", { "aria-hidden": "true" }, icon("downloaded", 12)) : null,
     downloading ? h("span", { class: "spinner", "aria-hidden": "true" }) : null);
-  return h("div", { class: "row", role: "option", "aria-selected": selected ? "true" : "false", tabindex: "0" },
+  return h("div", { class: "row", role: "option", "aria-selected": selected ? "true" : "false", tabindex: "0", "data-liked": liked ? "1" : null },
     artBox(track.artwork_url),
     h("div", { class: "titles" },
       h("div", { class: "title", text: track.title }),

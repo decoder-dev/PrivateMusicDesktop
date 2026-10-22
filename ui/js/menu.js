@@ -1,5 +1,7 @@
 import { h } from "./dom.js";
 import { icon } from "./icons.js";
+import { isPhone } from "./mobile/layout.js";
+import { openActionSheet } from "./mobile/sheet.js";
 
 let current = null;
 
@@ -15,6 +17,12 @@ export function closeMenu() {
  */
 export function openMenu({ x, y }, items, { label } = {}) {
   closeMenu();
+  // A phone has no pointer to anchor a pop-up to: the same items rise as a bottom sheet.
+  if (isPhone()) {
+    const sheet = openActionSheet(items, { label, onClose: () => { if (current === sheet) current = null; } });
+    current = sheet;
+    return sheet;
+  }
   const stack = [];
   document.body.classList.add("overlay-open");
 

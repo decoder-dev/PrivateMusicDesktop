@@ -6,6 +6,7 @@ import { icon } from "../icons.js";
 import { searchField, paintStatus, fillPanel, watchSegmented } from "../ui-parts.js";
 import { albumCard, artistCard } from "../album-card.js";
 import { openAlbum, openArtist } from "../navigation.js";
+import { isPhone } from "../mobile/layout.js";
 
 addStrings({ru:{"search.more":"Показать ещё", "search.found":"Найдено треков: {count}"},en:{"search.more":"Show more", "search.found":"Tracks found: {count}"}});
 const normalize = raw => raw.trim().replace(/\s+/gu," ");
@@ -246,7 +247,8 @@ export function createSearchView({ play, onTrackAction, toast }) {
   renderTabs();
   return {
     element: screen.element,
-    show() { input.focus(); },
+    // A phone keeps its keyboard down until the field is tapped.
+    show() { if (!isPhone()) input.focus(); },
     focus() { input.focus(); input.select(); },
     reset() {
       clearTimeout(debounce);

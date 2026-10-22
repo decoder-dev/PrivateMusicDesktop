@@ -1,0 +1,118 @@
+/* Телефон в дизайне «Студия» (css/studio.css): тот же шрифт Onest, те же радиусы, веса и межбуквенные
+   интервалы, но без рамки окна и боковой панели. Файл подключается последним и целиком держится на
+   html[data-layout="phone"], поэтому широкий макет остаётся таким, каким его задаёт студия. */
+
+html[data-layout="phone"] {
+  --r-control: 12px;
+  --r-card: 20px;
+  --studio-card: color-mix(in srgb, var(--surface) 82%, var(--page-top));
+}
+
+/* Рамка окна студии на телефоне не нужна: экран занимает всё. */
+html[data-layout="phone"] .shell { padding: 0; gap: 0; background: var(--page-top); }
+html[data-layout="phone"] .main { border: 0; border-radius: 0; background: var(--page-top); }
+
+/* Плеер лежит в .player-dock (студия); на телефоне док ничего не занимает, мини-плеер парит над вкладками. */
+html[data-layout="phone"] .player-dock { display: contents; padding: 0; background: none; border: 0; }
+html[data-layout="phone"] .player { background: var(--studio-card); border: 1px solid var(--line); }
+
+/* Заголовки: тот же характер, что у студии (750, плотный трекинг). */
+html[data-layout="phone"] .view-header h1, html[data-layout="phone"] .navbar .nav-title { font-weight: 750; letter-spacing: -0.8px; }
+html[data-layout="phone"] .view-header h1 { font-size: 30px; line-height: 38px; }
+html[data-layout="phone"] .shelf-title, html[data-layout="phone"] .set-section > h2, html[data-layout="phone"] .group-label { font-weight: 700; letter-spacing: -0.45px; }
+html[data-layout="phone"] .btn { min-height: 44px; border-radius: 12px; }
+html[data-layout="phone"] .btn.primary { font-weight: 700; }
+html[data-layout="phone"] .tabs, html[data-layout="phone"] .lib-sections { border-radius: 12px; }
+html[data-layout="phone"] .row .title { font-weight: 600; letter-spacing: -0.15px; }
+html[data-layout="phone"] .row .art-box { border-radius: 8px; }
+html[data-layout="phone"] .row[aria-selected="true"] { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+
+/* Экран настроек: заголовок слева, ссылки на разделы — одной прокручиваемой строкой. */
+html[data-layout="phone"] .settings .view-header { align-items: stretch; }
+html[data-layout="phone"] .settings .view-header .vh-text { text-align: left; }
+html[data-layout="phone"] .settings-nav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+html[data-layout="phone"] .settings-nav::-webkit-scrollbar { display: none; }
+html[data-layout="phone"] .settings-nav .btn { flex: none; min-height: 44px; }
+
+/* Умные плейлисты: выбор правила на всю ширину, кнопки ниже. */
+html[data-layout="phone"] .smart-tools { gap: 8px; }
+html[data-layout="phone"] .view-header .smart-tools > select { flex: 1 0 100%; max-width: none; min-height: 44px; }
+html[data-layout="phone"] .view-header .smart-tools > .btn { flex: 1 1 0; min-width: 0; padding-inline: 10px; font-size: 14px; }
+html[data-layout="phone"] .smart-view > .view-header .smart-tools { flex-basis: 100%; }
+html[data-layout="phone"] .page-note.footer-note { text-align: left; }
+
+/* Синхронизация плейлистов офлайн: карточка, а не россыпь элементов. */
+html[data-layout="phone"] .sync-panel { margin: 4px var(--gutter) 12px; padding: 14px 16px; max-height: none; border: 1px solid var(--line); border-radius: 16px; background: var(--studio-card); }
+html[data-layout="phone"] .sync-panel > .set-inline { flex-wrap: nowrap; gap: 12px; }
+html[data-layout="phone"] .sync-panel > .set-inline strong { flex: 1 1 auto; min-width: 0; }
+html[data-layout="phone"] .sync-panel label.set-inline { display: flex; align-items: center; gap: 12px; min-height: 44px; font-size: 14px; line-height: 20px; }
+html[data-layout="phone"] .sync-panel input[type="checkbox"] { flex: none; width: 22px; height: 22px; }
+html[data-layout="phone"] .sync-panel .set-note { margin: 6px 0 0; }
+html[data-layout="phone"] .sync-row { min-height: 52px; }
+
+/* Массовые действия: одна прокручиваемая строка с числом выбранных слева. */
+html[data-layout="phone"] .selection-bar { flex-wrap: nowrap; overflow-x: auto; gap: 8px; padding: 10px var(--gutter); scrollbar-width: none; border-block: 1px solid var(--line); }
+html[data-layout="phone"] .selection-bar::-webkit-scrollbar { display: none; }
+html[data-layout="phone"] .selection-bar > * { flex: none; }
+html[data-layout="phone"] .selection-bar strong { margin-right: 4px; font-size: 14px; }
+html[data-layout="phone"] .row.multi-selected { outline: 0; background: color-mix(in srgb, var(--accent) 14%, transparent); }
+
+/* Нижние панели непрозрачны: строки под ними не просвечивают. */
+html[data-layout="phone"] .sheet, .sheet { background-color: var(--page-top); }
+
+/* Вход: крупная основная кнопка, «Начать заново» и подсказка про VPN доступны пальцем. */
+html[data-layout="phone"] .login .box { max-width: 420px; }
+html[data-layout="phone"] .login .btn.primary { min-height: 56px; font-size: 17px; font-weight: 700; }
+html[data-layout="phone"] .login-restart { min-height: 48px; padding-inline: 22px; }
+html[data-layout="phone"] .login .net-hint-slot { width: 100%; text-align: left; }
+
+/* Мини-плеер: ширину задают поля слева и справа, а не 100 % из студийного .player. */
+html[data-layout="phone"] .player { width: auto; max-width: none; margin: 0; }
+
+/* Развёрнутый плеер: у быстрых действий есть подписи (иначе текст и очередь не отличить), правка текста — одной строкой. */
+html[data-layout="phone"] .np-quick { align-items: flex-start; }
+html[data-layout="phone"] .np-quick button { flex-direction: column; gap: 2px; min-width: 72px; }
+html[data-layout="phone"] .np-quick button span:not(.q-ico) { display: block; font: 600 11px/14px var(--font); color: var(--np-fg-2); }
+html[data-layout="phone"][data-orientation="landscape"] .np-quick button span:not(.q-ico) { display: none; }
+html[data-layout="phone"] .ly-edit-controls { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; gap: 4px; padding: 4px 12px; scrollbar-width: none; }
+html[data-layout="phone"] .ly-edit-controls > * { flex: none; }
+html[data-layout="phone"] .ly-edit-controls::-webkit-scrollbar { display: none; }
+html[data-layout="phone"] .ly-controls { justify-content: flex-end; }
+
+/* Узкий телефон (360 px): в студии в ряду управления на одну кнопку больше (избранное), поэтому кнопки чуть меньше. */
+@media (max-width: 400px) {
+  html[data-layout="phone"] .np-controls .np-btn { width: 44px; height: 44px; }
+  html[data-layout="phone"] .np-controls .np-btn:nth-child(2), html[data-layout="phone"] .np-controls .np-btn:nth-child(4) { width: 52px; height: 52px; }
+  html[data-layout="phone"] .np-play { width: 64px; height: 64px; }
+  html[data-layout="phone"] .np-bottom, html[data-layout="phone"] .np-stage { padding-inline: 20px; }
+  html[data-layout="phone"] .np-quick button { min-width: 64px; }
+}
+html[data-layout="phone"] .np-top, html[data-layout="phone"] .np-stage, html[data-layout="phone"] .np-bottom { min-width: 0; max-width: 100%; }
+html[data-layout="phone"] .ly-edit-controls, html[data-layout="phone"] .ly-controls { min-width: 0; max-width: 100%; }
+
+/* Для вас: кнопки панели и закрепление микса достаточно крупные для пальца. */
+html[data-layout="phone"] .discovery-view .fy-toolbar .btn, html[data-layout="phone"] .discovery-view .mix-tuning > summary { min-height: 44px; }
+html[data-layout="phone"] .discovery-view .mix-card .mix-pin { width: 44px; height: 44px; top: 4px; right: 4px; }
+html[data-layout="phone"] .discovery-view .mix-card .mix-text { padding-right: 20px; }
+html[data-layout="phone"] .discovery-view .view-header { align-items: stretch; }
+html[data-layout="phone"] .fy-heading-row, html[data-layout="phone"] .fy-toolbar, html[data-layout="phone"] .fy-tools { min-width: 0; }
+html[data-layout="phone"] .fy-heading-row .tabs { flex: 1 1 100%; }
+html[data-layout="phone"] .discovery-view .selena-row { scrollbar-width: none; }
+
+/* Настройки: строки с широким элементом (палитра, тема, акцент) складываются в колонку. */
+html[data-layout="phone"] .set-row:has(.palette-grid), html[data-layout="phone"] .set-row:has(.theme-picker), html[data-layout="phone"] .set-row:has(.accent-grid) { flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
+html[data-layout="phone"] .set-row:has(.palette-grid) .set-control, html[data-layout="phone"] .set-row:has(.palette-grid) .palette-grid { width: 100%; min-width: 0; }
+html[data-layout="phone"] .palette-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+html[data-layout="phone"] .palette-opt { min-height: 88px; min-width: 0; }
+
+/* Уменьшение движения: страницы, листы и плеер появляются сразу (в студии push-анимация страниц это не учитывала). */
+@media (prefers-reduced-motion: reduce) {
+  html[data-layout="phone"] .main > .view, html[data-layout="phone"] .main[data-dir] > .view:not([hidden]),
+  html[data-layout="phone"] .np, html[data-layout="phone"] .np.closing, html[data-layout="phone"][data-np="open"] .shell::after,
+  .sheet, .sheet-root.closing .sheet, .sheet-scrim, .sheet-root.closing .sheet-scrim, html[data-layout="phone"] .dock-tab { animation: none !important; transition: none !important; }
+  html[data-layout="phone"] .np.closing { visibility: hidden; }
+}
+
+/* Вкусы Selena: ползунок на всю ширину карточки. */
+html[data-layout="phone"] .taste-panel { padding: 16px; }
+html[data-layout="phone"] .taste-panel input[type=range] { width: 100%; max-width: 100%; }

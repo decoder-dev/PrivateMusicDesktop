@@ -25,7 +25,7 @@ function present(dialog, resolve) {
 export function formDialog({ title, fields, confirm }) {
   return new Promise((resolve) => {
     const inputs = fields.map((field) => {
-      const attrs = { class: "field", name: field.name, "aria-label": field.label, maxlength: String(field.max ?? 128) };
+      const attrs = { class: "field", name: field.name, "aria-label": field.label, maxlength: String(field.max ?? 128), enterkeyhint: field.multiline ? "enter" : "done", autocomplete: "off" };
       const input = field.options ? h("select",attrs,field.options.map(([value,label])=>h("option",{value,text:label}))) : field.multiline ? h("textarea", { ...attrs, rows: "3" }) : h("input", { ...attrs, type: field.type ?? "text", ...(field.min != null ? {min:String(field.min)} : {}), ...(field.maxValue != null ? {max:String(field.maxValue)} : {}) });
       input.value = field.value ?? "";
       return { field, input };

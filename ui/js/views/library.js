@@ -65,6 +65,8 @@ export function createLibraryView({ play, onTrackAction, toast }) {
     show() {
       if (!loaded) load();
     },
+    /** How many liked tracks are loaded (the phone's Library tab shows it). */
+    count: () => tracks.length,
     reload() {
       loaded = false;
       loading = false;
