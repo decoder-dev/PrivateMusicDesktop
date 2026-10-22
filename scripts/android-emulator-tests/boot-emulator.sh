@@ -59,7 +59,7 @@ attempt() { # <number>
   local log="$out/emulator-boot-$1.log"
   echo "--- boot attempt $1 (log: $log)"
   adb start-server
-  nohup "$emulator_bin" -avd "$avd" -no-window -no-audio -no-boot-anim -gpu guest \
+  nohup "$emulator_bin" -avd "$avd" -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect \
     -no-snapshot -wipe-data -memory 3072 -cores 4 -accel on -netdelay none -netspeed full \
     > "$log" 2>&1 &
   emulator_pid=$!
@@ -101,6 +101,8 @@ echo "--- settings for stable tests"
 adb shell settings put global window_animation_scale 0
 adb shell settings put global transition_animation_scale 0
 adb shell settings put global animator_duration_scale 0
+# A slow software-rendered emulator makes system apps (the launcher) miss ANR deadlines; their dialogs would steal the focus.
+adb shell settings put global hide_error_dialogs 1 || true
 adb shell settings put global stay_on_while_plugged_in 7
 adb shell settings put system screen_off_timeout 1800000
 adb shell settings put system accelerometer_rotation 0
