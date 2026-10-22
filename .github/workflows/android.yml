@@ -1,0 +1,264 @@
+name: Android
+
+# Android-версия: сборка APK (release arm64 без подписи, debug x86_64 для эмулятора), проверка содержимого APK,
+# тесты Kotlin-плагинов, clippy под Android и прогон настоящего приложения в эмуляторе (Playwright через
+# DevTools WebView). Описание, артефакты и как читать журналы: docs/android.md, раздел «CI».
+on:
+  push:
+    branches: ["android", "android-**"]
+  pull_request:
+    paths:
+      - "src-tauri/**"
+      - "plugins/**"
+      - "engine/**"
+      - "native/**"
+      - "ui/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "scripts/android-*"
+      - "scripts/android-emulator-tests/**"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NDK_VERSION: 27.2.12479018
+  CARGO_TERM_COLOR: never
+
+jobs:
+  build:
+    name: Build APK, checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    outputs:
+      debug_ready: ${{ steps.uploaded.outputs.debug_ready }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      # Свободное место: NDK, Gradle и два набора Rust-артефактов занимают много. Удаляем только то, что точно
+      # не нужно (.NET, Haskell, CodeQL); Android SDK не трогаем.
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      - name: Rust and Android targets
+        run: |
+          set -euxo pipefail
+          rustup toolchain install stable --profile minimal --component clippy --no-self-update
+          rustup default stable
+          rustup target add aarch64-linux-android x86_64-linux-android
+          rustc -Vv
+          cargo -V
+
+      # SDK на раннерах GitHub уже стоит в $ANDROID_HOME; здесь только то, чего не хватает. Лицензии принимаются
+      # автоматически. Скрипт сам объясняет, чего нет и что установлено.
+      - name: Android SDK, NDK, JDK, environment
+        run: |
+          set -euxo pipefail
+          echo "ANDROID_HOME on the runner: ${ANDROID_HOME:-<unset>}"
+          . scripts/android-ci-env.sh
+          scripts/android-ci-sdk.sh "ndk;${NDK_VERSION}" "platforms;android-35" "platforms;android-36" "build-tools;35.0.0" "build-tools;36.0.0"
+          # Повторно: теперь NDK точно есть, переменные для следующих шагов.
+          . scripts/android-ci-env.sh
+          node --version
+          npm --version
+          "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/clang" --version | head -1
+          ls "$ANDROID_HOME/build-tools" "$ANDROID_HOME/platforms"
+
+      # Release arm64: подписывается только вне CI (владелец проекта), см. docs/android.md.
+      - name: Build release APK (arm64, unsigned)
+        run: scripts/android-build.sh release aarch64 dist/release
+
+      - name: Check the release APK
+        run: |
+          . scripts/android-ci-env.sh >/dev/null
+          scripts/android-verify-apk.sh dist/release/*.apk arm64-v8a release
+
+      - name: Checksum
+        working-directory: dist/release
+        run: |
+          set -euxo pipefail
+          for apk in *.apk; do sha256sum "$apk" | tee "$apk.sha256"; done
+
+      # Для эмулятора: x86_64 debug (debuggable: DevTools и run-as нужны тестам).
+      - name: Build debug APK (x86_64, for the emulator)
+        run: scripts/android-build.sh debug x86_64 dist/debug
+
+      - name: Check the debug APK
+        run: |
+          . scripts/android-ci-env.sh >/dev/null
+          scripts/android-verify-apk.sh dist/debug/*-debug.apk x86_64 debug
+
+      # Тот же код с большим versionCode: «обновление поверх» для scripts/android-upgrade-check.sh. Rust уже собран,
+      # так что это в основном Gradle.
+      - name: Build debug APK with a higher versionCode (for the update test)
+        run: |
+          set -euxo pipefail
+          . scripts/android-ci-env.sh >/dev/null
+          aapt2="$(find "$ANDROID_HOME/build-tools" -name aapt2 -type f | sort -V | tail -1)"
+          current="$("$aapt2" dump badging dist/debug/*-debug.apk | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -1)"
+          echo "current versionCode: $current"
+          ANDROID_VERSION_CODE_OVERRIDE=$((current + 1)) scripts/android-build.sh debug x86_64 dist/debug
+          ls -l dist/debug
+          sha256sum dist/debug/*.apk
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: android-release-unsigned
+          path: |
+            dist/release/*.apk
+            dist/release/*.sha256
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: android-debug-x86_64
+          path: dist/debug/*.apk
+          if-no-files-found: error
+
+      # Эмулятор не ждёт clippy и Kotlin-тесты: ему нужны только готовые APK.
+      - id: uploaded
+        run: echo "debug_ready=true" >> "$GITHUB_OUTPUT"
+
+      # Rust под Android (код cfg(target_os = "android") на хосте не компилируется). Три крейта одной командой:
+      # зависимости общие, поэтому это быстрее, чем по отдельности. Если станет слишком долго, оставьте
+      # `-p private-music-desktop`: в нём всё Android-специфичное приложение. Заодно build.rs плагинов
+      # создаёт plugins/*/android/.tauri для тестов Kotlin ниже.
+      - name: Clippy for Android
+        timeout-minutes: 30
+        run: |
+          set -euxo pipefail
+          . scripts/android-ci-env.sh >/dev/null
+          cargo clippy --target aarch64-linux-android -p private-music-desktop -p tauri-plugin-vk-login -p tauri-plugin-media-session --locked -- -D warnings
+
+      # JUnit без эмулятора. Обёртка Gradle 8.14.3 от плагина media-session подходит и vk-login (AGP 8.9.3 в обоих).
+      - name: Kotlin unit tests (media-session)
+        timeout-minutes: 20
+        run: |
+          set -euxo pipefail
+          . scripts/android-ci-env.sh >/dev/null
+          plugins/media-session/scripts/android-test.sh testDebugUnitTest
+
+      - name: Kotlin unit tests (vk-login)
+        timeout-minutes: 20
+        run: |
+          set -euxo pipefail
+          . scripts/android-ci-env.sh >/dev/null
+          test -d plugins/vk-login/android/.tauri/tauri-api || { echo "::error::plugins/vk-login/android/.tauri/tauri-api is missing: the cargo step above should have created it (build.rs)"; ls -la plugins/vk-login/android; exit 1; }
+          plugins/media-session/android/gradlew -p plugins/vk-login/android --no-daemon testDebugUnitTest
+
+      - name: Kotlin test reports
+        if: always()
+        run: |
+          mkdir -p kotlin-reports
+          for plugin in media-session vk-login; do
+            [ -d "plugins/$plugin/android/build/reports" ] && cp -r "plugins/$plugin/android/build/reports" "kotlin-reports/$plugin" || true
+          done
+          ls kotlin-reports || true
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        if: always()
+        with:
+          name: android-kotlin-test-reports
+          path: kotlin-reports
+          if-no-files-found: ignore
+
+  emulator:
+    name: Emulator (API 34)
+    needs: build
+    # Даже если clippy или Kotlin-тесты упали, APK уже собраны и их можно проверить на эмуляторе.
+    if: ${{ !cancelled() && needs.build.outputs.debug_ready == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+    env:
+      PM_OUT: ${{ github.workspace }}/emulator-out
+      PM_PACKAGE: com.dec.privatemusic2.android
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Download the debug APKs built above
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euxo pipefail
+          gh run download "$GITHUB_RUN_ID" --repo "$REPO" --name android-debug-x86_64 --dir apk
+          ls -l apk
+
+      - name: Enable KVM
+        run: |
+          set -euxo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+
+      - name: Emulator, system image, tools
+        run: |
+          set -euxo pipefail
+          . scripts/android-ci-env.sh
+          scripts/android-ci-sdk.sh "emulator" "platform-tools" "build-tools;35.0.0" "system-images;android-34;google_apis;x86_64"
+          adb version
+          emulator -version | head -3 || true
+
+      - name: Test dependencies
+        working-directory: scripts/android-emulator-tests
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        # connectOverCDP говорит с WebView самого эмулятора: собственный Chromium Playwright не нужен.
+        run: npm install --no-audit --no-fund
+
+      - name: Boot the emulator
+        run: |
+          . scripts/android-ci-env.sh >/dev/null
+          scripts/android-emulator-tests/boot-emulator.sh
+
+      - name: Install the debug APK
+        run: |
+          set -euxo pipefail
+          . scripts/android-ci-env.sh >/dev/null
+          first="$(ls apk/*.apk | grep -v versioncode | head -1)"
+          echo "installing $first"
+          adb install -r -g "$first"
+          adb shell pm list packages | grep "$PM_PACKAGE"
+
+      - name: Emulator tests (the real app, over WebView DevTools)
+        working-directory: scripts/android-emulator-tests
+        env:
+          PM_CLEAR: "1"
+          PM_REQUIRE_NETWORK: "1"
+        run: |
+          . ../android-ci-env.sh >/dev/null
+          node run.mjs
+
+      - name: Update check (install a newer APK over the old one)
+        if: ${{ !cancelled() }}
+        run: |
+          . scripts/android-ci-env.sh >/dev/null
+          old="$(ls apk/*.apk | grep -v versioncode | head -1)"
+          new="$(ls apk/*versioncode*.apk | head -1)"
+          scripts/android-upgrade-check.sh "$old" "$new"
+
+      - name: Collect logs
+        if: always()
+        run: |
+          . scripts/android-ci-env.sh >/dev/null || true
+          scripts/android-emulator-tests/collect-artifacts.sh "$PM_OUT"
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        if: always()
+        with:
+          name: android-emulator-logs
+          path: emulator-out
+          if-no-files-found: warn
