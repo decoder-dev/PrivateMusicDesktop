@@ -59,7 +59,7 @@ service_block="$(printf '%s\n' "$manifest" | awk '
   /^ *E: / { match($0, /^ */); if (f && RLENGTH <= ind) { flush(); f = 0 } if ($0 ~ /^ *E: service/) { f = 1; ind = RLENGTH } }
   f { buf = buf $0 "\n" }
   END { flush() }')"
-if printf '%s\n' "$service_block" | grep -Eq 'foregroundServiceType[^=]*=(\(type 0x[0-9a-f]+\))?((0x)?2( |$)|"?mediaPlayback)'; then
+if printf '%s\n' "$service_block" | grep -Eq 'foregroundServiceType[^=]*=(\(type 0x[0-9a-f]+\))?((0x0*)?2( |$)|"?mediaPlayback)'; then
   ok "PlaybackService foregroundServiceType = mediaPlayback"
 else
   fail "PlaybackService is not declared as a mediaPlayback foreground service. Its block was:"
