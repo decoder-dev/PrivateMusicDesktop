@@ -132,6 +132,17 @@ desktop UI and its tests are unchanged.
   track to a file; the engine commands behind them are not called. Downloads and offline playlist sync,
   the equaliser, lyrics, friends, history, statistics, mixes and radio, smart playlists, Selena's tastes,
   the VPN card and bulk actions work as on the desktop.
+* **Listen later**: the current track's menu can save up to 200 queue entries, shuffle/repeat and
+  the playback position. Library shows the saved session above its shortcuts, with resume/remove
+  actions. Streams are stripped before saving; snapshots are local and isolated by account. Resuming
+  restores a regular queue, without the original radio's automatic continuation.
+* **Playlist import**: Library's actions menu opens a TXT/CSV importer (1 MB / 500 unique entries).
+  It recognises numbered `Artist — Title` lists and CSV headers in English/Russian, searches VK
+  sequentially, and lets the user review recording variants before creating a playlist. Stop keeps
+  the confirmed partial playlist and prevents subsequent additions; leaving during matching cancels
+  the search, and account changes clear the form and invalidate pending replies. No third-party
+  streaming-service login is needed. File picking still needs verification on an Android device.
+* **Collection search**: Playlists and Albums have local filters; album searches include artists.
 * **Tests**: `ui-tests/phone.test.js` (touch emulation of a Pixel 7, a 360 px and a 430 px phone, and
   landscape) includes the audits: every pressable at least 44 px, no hover-only control, no horizontal
   overflow on any screen, safe-area variables, reduced motion.

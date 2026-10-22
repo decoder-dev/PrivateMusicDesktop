@@ -544,7 +544,17 @@ async function everyScreen(page, check) {
   await check("explore");
   await back();
   await tab(page, "library");
+  await page.evaluate(async()=>{(await import('/js/listen-later.js')).saveForLater();});
   await check("library-all");
+  await tap(page, '.nav-btn[aria-label="Действия"]');
+  await tap(page, '.sheet-item[data-action="import-playlist"]');
+  await check("playlist-import-input");
+  await page.locator('.import-text').fill('Singer — One');
+  await page.locator('.import-text').blur();
+  await tap(page, '.import-input .btn.primary');
+  await see(page, '.import-review');
+  await check("playlist-import-review");
+  await back();
   for (const section of ["tracks", "playlists", "albums"]) {
     await tap(page, `.lib-sections [data-section="${section}"]`);
     await page.waitForTimeout(200);
@@ -1098,4 +1108,141 @@ test("player: releasing a sheet drag does not activate the content under the fin
     });
     assert.deepEqual(result, {afterDrag:0,afterTap:1});
   } finally { await app.close(); }
+});
+
+const IMPORT_RESULTS = {
+  "Singer One": [{track_id:8001,artist:"Singer",title:"One"}],
+  "Singer Two": [{track_id:8002,artist:"Singer",title:"Two"}],
+  "Singer Three": [{track_id:8003,artist:"Singer",title:"Three"}],
+};
+async function openImport(page) {
+  await tab(page,"library");
+  await tap(page,'.nav-actions .nav-btn:last-child');
+  await tap(page,'.sheet [data-action="import-playlist"]');
+  await see(page,'.playlist-import-view textarea');
+}
+test("listen later: save the current queue and position, restore it after reload, then remove it", async()=>{
+  const app=await phoneApp();
+  try {
+    const {page}=app;
+    await playFromHome(page);
+    await page.evaluate(async()=>{await (await import('/js/api.js')).api.seek(42);});
+    await tap(page,'.player .now');
+    await tap(page,'.np-quick button:last-child');
+    await tap(page,'.sheet [data-action="listen-later"]');
+    await pressBack(page);
+    await page.reload(); await see(page,'.dock');
+    await tab(page,'library');
+    await see(page,'.later-card');
+    assert.match(await page.locator('.later-detail').innerText(),/0:42/);
+    await tap(page,'.later-play');
+    const restored=await page.evaluate(()=>window.__mock.last('load_queue'));
+    assert.equal(restored.args.position,42);
+    assert.equal(await page.evaluate(()=>window.__mock.last('toggle').command),'toggle');
+    await tap(page,'.later-remove');
+    assert.equal(await page.locator('.later-section').isVisible(),false);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("playlist import: review matches before writing, exclude a track, and open the created playlist", async()=>{
+  const app=await phoneApp({phone:'small',config:{...CONFIG,searchResults:IMPORT_RESULTS}});
+  try {
+    const {page}=app; await openImport(page);
+    await page.locator('.import-text').fill('Singer — One\nSinger — Two');
+    await tap(page,'.import-input .btn.primary');
+    await see(page,'.import-review');
+    assert.equal(await page.evaluate(()=>window.__mock.count('create_playlist')),0);
+    await page.locator('.import-choice input').last().uncheck();
+    await tap(page,'.import-review .btn.primary');
+    await see(page,'.import-body > .btn.primary');
+    assert.equal(await page.evaluate(()=>window.__mock.count('add_to_playlist')),1);
+    assert.equal(await page.evaluate(()=>window.__mock.last('add_to_playlist').args.track.title),'One');
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    await tap(page,'.import-body > .btn.primary');
+    assert.equal(await view(page),'playlists');
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("playlist import: leaving during search cancels remaining work and never creates a playlist", async()=>{
+  const app=await phoneApp({config:{...CONFIG,searchDelay:300,searchResults:IMPORT_RESULTS}});
+  try {
+    const {page}=app; await openImport(page);
+    await page.locator('.import-text').fill('Singer — One\nSinger — Two');
+    await tap(page,'.import-input .btn.primary');
+    await pressBack(page);await page.waitForTimeout(400);
+    assert.equal(await page.evaluate(()=>window.__mock.count('search')),1);
+    assert.equal(await page.evaluate(()=>window.__mock.count('create_playlist')),0);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("playlist import: Stop keeps the partial playlist and sends no further additions", async()=>{
+  const app=await phoneApp({config:{...CONFIG,importAddDelay:400,searchResults:IMPORT_RESULTS}});
+  try {
+    const {page}=app;await openImport(page);
+    await page.locator('.import-text').fill('Singer — One\nSinger — Two\nSinger — Three');
+    await tap(page,'.import-input .btn.primary');await see(page,'.import-review');
+    await tap(page,'.import-review .btn.primary');
+    await page.waitForFunction(()=>window.__mock.count('add_to_playlist')===1);
+    await tap(page,'.import-body > .btn:not(.primary)');
+    await page.waitForTimeout(500);
+    assert.equal(await page.evaluate(()=>window.__mock.count('add_to_playlist')),1);
+    assert.match(await page.locator('.import-status').innerText(),/Добавлено: 1.*Не обработано: 2/);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+
+test("collections: search filters playlists without losing focus and clearing restores every card", async()=>{
+  const app=await phoneApp({phone:'small'});
+  try {
+    const {page}=app;await tab(page,'library');
+    await tap(page,'.lib-sections [data-section="playlists"]');
+    const search=page.locator('[data-pane="playlists"] .lib-collection-search input');
+    await search.fill('РАБОТА');
+    assert.equal(await page.locator('[data-pane="playlists"] .lib-grid .card').count(),1);
+    assert.equal(await search.evaluate(el=>document.activeElement===el),true);
+    await search.fill('нет такого');
+    assert.equal(await page.locator('[data-pane="playlists"] .lib-grid .card').count(),0);
+    await tap(page,'[data-pane="playlists"] .lib-collection-search .clear');
+    assert.equal(await page.locator('[data-pane="playlists"] .lib-grid .card').count(),3);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("listen later: another account cannot see the saved snapshot or its stream URL", async()=>{
+  const app=await phoneApp();
+  try {
+    const {page}=app;await playFromHome(page);
+    await page.evaluate(async()=>{const {store}=await import('/js/store.js');store.queue.tracks[store.queue.current].stream_url='https://private.invalid/stream';(await import('/js/listen-later.js')).saveForLater();});
+    assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('pm.personal.7.listenLater')).tracks[0].stream_url),null);
+    await tab(page,'library');await see(page,'.later-card');
+    await page.evaluate(async()=>{const {store,set}=await import('/js/store.js');set('session',{...store.session,profile:{id:8}});});
+    assert.equal(await page.locator('.later-section').isVisible(),false);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+
+test("playlist import: a failed addition keeps confirmed tracks and reports unprocessed rows",async()=>{
+  const app=await phoneApp({config:{...CONFIG,importAddFails:8002,searchResults:IMPORT_RESULTS}});
+  try {
+    const {page}=app;await openImport(page);
+    await page.locator('.import-text').fill('Singer — One\nSinger — Two\nSinger — Three');
+    await tap(page,'.import-input .btn.primary');await see(page,'.import-review');
+    await tap(page,'.import-review .btn.primary');await see(page,'.import-body > .btn.primary');
+    assert.equal(await page.evaluate(()=>window.__mock.count('add_to_playlist')),2);
+    assert.match(await page.locator('.import-status').innerText(),/Добавлено: 1.*Ошибок: 1.*Не обработано: 1/);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("playlist import: account changes erase input and invalidate a pending match",async()=>{
+  const app=await phoneApp({config:{...CONFIG,searchDelay:300,searchResults:IMPORT_RESULTS}});
+  try {
+    const {page}=app;await openImport(page);
+    await page.locator('.import-text').fill('Singer — One\nSinger — Two');await tap(page,'.import-input .btn.primary');
+    await page.evaluate(async()=>{const {store,set}=await import('/js/store.js');set('session',{...store.session,profile:{id:8}});});
+    await page.waitForTimeout(400);
+    assert.equal(await page.locator('.import-text').inputValue(),'');
+    assert.equal(await page.locator('.import-rows > *').count(),0);
+    assert.equal(await page.evaluate(()=>window.__mock.count('create_playlist')),0);
+    assert.equal(await page.evaluate(()=>window.__mock.count('search')),1);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
 });

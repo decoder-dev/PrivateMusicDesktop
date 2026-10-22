@@ -25,7 +25,7 @@ export const TABS = [
 /** Where each view lives when something asks to "show" it by name (shortcuts, deep links). */
 const TAB_OF = {
   home: "home", forYou: "home",
-  libraryHub: "library", library: "library", playlists: "library", smart: "library", downloads: "library", friends: "library", history: "library",
+  playlistImport: "library", libraryHub: "library", library: "library", playlists: "library", smart: "library", downloads: "library", friends: "library", history: "library",
   profile: "profile", settings: "profile", stats: "profile",
   search: "search",
 };

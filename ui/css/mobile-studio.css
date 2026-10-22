@@ -192,3 +192,34 @@ html[data-layout="phone"] .stage-cta { width: 100%; min-width: 0; margin-top: 22
 html[data-layout="phone"] .stage-cover .art-box { box-shadow: 0 10px 24px rgb(0 0 0 / .12); }
 html[data-layout="phone"] .profile-avatar { overflow: hidden; }
 html[data-layout="phone"] .profile-avatar .art-box { width: 100%; height: 100%; border-radius: inherit; }
+
+/* Saved listening session: the whole card resumes; removal is a separate target. */
+html[data-layout="phone"] .later-card { display: flex; gap: 4px; align-items: center; margin: 0 var(--gutter); padding: 8px; background: var(--studio-card); border: 1px solid var(--line); border-radius: 20px; }
+html[data-layout="phone"] .later-play { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 64px; text-align: left; padding: 4px; }
+html[data-layout="phone"] .later-art { flex: none; }
+html[data-layout="phone"] .later-art .art-box { width: 56px; height: 56px; border-radius: 12px; }
+html[data-layout="phone"] .later-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+html[data-layout="phone"] .later-title, html[data-layout="phone"] .later-detail { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html[data-layout="phone"] .later-title { font: 700 15px/21px var(--font); }
+html[data-layout="phone"] .later-detail { color: var(--text-2); font: 400 12px/18px var(--font); }
+html[data-layout="phone"] .later-play > svg { flex: none; color: var(--accent); }
+html[data-layout="phone"] .later-remove { flex: none; display: grid; place-items: center; width: 44px; height: 44px; color: var(--text-2); }
+html[data-layout="phone"] .later-note { margin: 8px var(--gutter) 0; font: 400 12px/18px var(--font); color: var(--text-2); }
+
+/* Import is a full phone page: content wraps, choices remain touchable. */
+.playlist-import-view .import-body { display: grid; gap: 16px; padding: 0 var(--gutter, 24px) 24px; }
+.import-input, .import-review { display: grid; gap: 16px; min-width: 0; }
+.import-input > label { display: grid; gap: 8px; font-weight: 600; }
+.import-input .field { width: 100%; min-width: 0; }
+.import-text { min-height: 180px; resize: vertical; line-height: 1.6; }
+.import-note, .import-status { margin: 0; color: var(--text-2); font: 400 14px/21px var(--font); overflow-wrap: anywhere; }
+.import-status:empty { display: none; }
+.import-rows { display: grid; gap: 10px; }
+.import-row { padding: 12px; border: 1px solid var(--line); background: var(--studio-card, var(--surface)); border-radius: 16px; min-width: 0; }
+.import-choice { display: flex; align-items: center; gap: 12px; min-height: 44px; overflow-wrap: anywhere; }
+.import-choice input { flex: none; width: 22px; height: 22px; accent-color: var(--accent); }
+.import-choice span { min-width: 0; }
+.import-row select { margin-top: 8px; width: 100%; max-width: 100%; min-height: 44px; }
+.import-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+html[data-layout="phone"] .import-body .btn { min-height: 44px; white-space: normal; padding: 10px 14px; }
+html[data-layout="phone"] .lib-collection-search { margin: 0 var(--gutter) 4px; width: calc(100% - 2 * var(--gutter)); }

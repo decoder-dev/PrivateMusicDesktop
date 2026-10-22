@@ -6,7 +6,7 @@
 // The track list is the existing "My music" screen, moved into the Tracks
 // section: it keeps its filter, its play and shuffle buttons and its virtual list.
 
-import { h } from "../dom.js";
+import { h, fold } from "../dom.js";
 import { icon } from "../icons.js";
 import { errorText, t, tn } from "../i18n.js";
 import { subscribe } from "../store.js";
@@ -16,9 +16,10 @@ import { playlistCard } from "../views/playlists.js";
 import { albumCard } from "../album-card.js";
 import { openAlbum } from "../navigation.js";
 import { downloads, formatSize } from "../downloads.js";
-import { paintStatus } from "../ui-parts.js";
+import { paintStatus, searchField } from "../ui-parts.js";
 import { openMenu } from "../menu.js";
 import { pinnedCollections, isCollectionPinned, toggleCollectionPin, collectionLayout, setCollectionLayout, collectionKey } from "./collections.js";
+import { createListenLaterCard } from "./listen-later-card.js";
 import "./strings.js";
 
 const SECTIONS = ["all", "tracks", "playlists", "albums"];
@@ -26,6 +27,7 @@ const SECTIONS = ["all", "tracks", "playlists", "albums"];
 export function createLibraryTab({ libraryView, push, newPlaylist, toast }) {
   let section = "all";
   let loadingData = 0;
+  const queries = { playlist: "", album: "" };
 
   const heading = h("h1", { text: t("tab.library") });
   const sections = h("div", { class: "lib-sections", role: "tablist", "aria-label": t("tab.library") },
@@ -48,13 +50,14 @@ export function createLibraryTab({ libraryView, push, newPlaylist, toast }) {
     h("span", { class: "chev" }, icon("chevronRight", 16)));
   const pinnedRow = h("div", { class: "lib-pinned", hidden: true });
   const pinnedHead = h("h2", { class: "shelf-title lib-pinned-title", hidden: true, text: t("lib.pinned") });
+  const later = createListenLaterCard({ toast });
   const summaries = h("div", { class: "lib-shortcuts" }, likedRow, offlineCard, smartRow);
   const playlistRow = h("div", { class: "release-row lib-row" });
   const albumRow = h("div", { class: "release-row lib-row" });
   const playlistHead = shelfHead(t("lib.playlists"), () => select("playlists"));
   const albumHead = shelfHead(t("lib.albums"), () => select("albums"));
   const dataStatus = h("div", { class: "status", role: "status", hidden: true });
-  const allPane = h("div", { class: "lib-pane", "data-pane": "all" }, summaries, pinnedHead, pinnedRow, dataStatus,
+  const allPane = h("div", { class: "lib-pane", "data-pane": "all" }, pinnedHead, pinnedRow, later.element, summaries, dataStatus,
     playlistHead.element, playlistRow, albumHead.element, albumRow);
 
   // ---- Tracks: the existing screen moves in here
@@ -68,13 +71,17 @@ export function createLibraryTab({ libraryView, push, newPlaylist, toast }) {
     try { setCollectionLayout(collectionLayout() === "grid" ? "list" : "grid"); }
     catch (error) { toast(errorText(error), { error: true }); }
   } });
+  const collectionSearch = (kind) => searchField({ className: "lib-collection-search", placeholder: t("lib.searchCollections"),
+    oninput: event => { queries[kind] = fold(event.target.value.trim()); renderData(); } });
+  const playlistSearch = collectionSearch("playlist");
+  const albumSearch = collectionSearch("album");
   const playlistLayout = layoutButton("playlist");
   const albumLayout = layoutButton("album");
   const playlistsPane = h("div", { class: "lib-pane", "data-pane": "playlists", hidden: true },
-    h("div", { class: "lib-collection-tools" }, h("button", { class: "btn lib-new", type: "button", onclick: () => newPlaylist() }, icon("plus", 14), t("pl.new")), playlistLayout), playlistsStatus, playlistGrid);
+    h("div", { class: "lib-collection-tools" }, h("button", { class: "btn lib-new", type: "button", onclick: () => newPlaylist() }, icon("plus", 14), t("pl.new")), playlistLayout), playlistSearch.element, playlistsStatus, playlistGrid);
   const albumGrid = h("div", { class: "grid lib-grid" });
   const albumsStatus = h("div", { class: "status", role: "status", hidden: true });
-  const albumsPane = h("div", { class: "lib-pane", "data-pane": "albums", hidden: true }, h("div", { class: "lib-collection-tools" }, albumLayout), albumsStatus, albumGrid);
+  const albumsPane = h("div", { class: "lib-pane", "data-pane": "albums", hidden: true }, h("div", { class: "lib-collection-tools" }, albumLayout), albumSearch.element, albumsStatus, albumGrid);
 
   const panes = { all: allPane, tracks: tracksPane, playlists: playlistsPane, albums: albumsPane };
   const element = h("section", { class: "view library-hub", hidden: true }, header, allPane, tracksPane, playlistsPane, albumsPane);
@@ -123,15 +130,17 @@ export function createLibraryTab({ libraryView, push, newPlaylist, toast }) {
     albumRow.replaceChildren(...albums.map((a) => albumCard(a, openAlbum)));
     playlistHead.element.hidden = playlistRow.hidden = playlists.length === 0;
     albumHead.element.hidden = albumRow.hidden = albums.length === 0;
-    playlistGrid.replaceChildren(...playlists.map((p) => collection(p, "playlist")));
-    albumGrid.replaceChildren(...albums.map((a) => collection(a, "album")));
+    const shownPlaylists = playlists.filter(item => fold(item.title).includes(queries.playlist));
+    const shownAlbums = albums.filter(item => fold(`${item.title} ${(item.artists ?? []).map(artist=>artist.name).join(" ")}`).includes(queries.album));
+    playlistGrid.replaceChildren(...shownPlaylists.map((p) => collection(p, "playlist")));
+    albumGrid.replaceChildren(...shownAlbums.map((a) => collection(a, "album")));
     const pins = pinnedCollections();
     pinnedRow.replaceChildren(...pins.map(({ kind, item, key }) => collection(
       (kind === "album" ? albums : playlists).find((fresh) => collectionKey(kind, fresh) === key) ?? item, kind)));
     pinnedHead.hidden = pinnedRow.hidden = pins.length === 0;
     renderLayout();
-    paintStatus(playlistsStatus, playlists.length || loadingData ? "" : t("lib.noPlaylists"), { art: "playlist", extra: "compact" });
-    paintStatus(albumsStatus, albums.length || loadingData ? "" : t("lib.noAlbums"), { art: "album", extra: "compact" });
+    paintStatus(playlistsStatus, shownPlaylists.length || loadingData ? "" : t(queries.playlist ? "lib.noMatches" : "lib.noPlaylists"), { art: "playlist", extra: "compact" });
+    paintStatus(albumsStatus, shownAlbums.length || loadingData ? "" : t(queries.album ? "lib.noMatches" : "lib.noAlbums"), { art: "album", extra: "compact" });
   }
 
   function renderSummary() {
@@ -158,7 +167,11 @@ export function createLibraryTab({ libraryView, push, newPlaylist, toast }) {
 
   subscribe("personal.pinnedCollections", renderData);
   subscribe("personal.collectionLayout", renderLayout);
-  subscribe("session", renderData);
+  subscribe("session", () => {
+    queries.playlist = queries.album = "";
+    for (const search of [playlistSearch, albumSearch]) { search.input.value=""; search.sync(); }
+    renderData();
+  });
   subscribe("playlists", renderData);
   subscribe("albums", renderData);
   subscribe("downloads", renderSummary);
@@ -175,6 +188,7 @@ export function createLibraryTab({ libraryView, push, newPlaylist, toast }) {
       button("history", t("history.title"), () => push("history")),
       button("plus-circle", t("lib.actions"), () => openMenu({ x: 0, y: 0 }, [
         { label: t("pl.new"), action: "new-playlist", icon: "plus", run: () => newPlaylist() },
+        { label: t("import.title"), action: "import-playlist", icon: "playlist", run: () => push("playlistImport") },
         { label: t("nav.smart"), action: "smart", icon: "sparkles", run: () => push("smart") },
         { label: t("nav.friends"), action: "friends", icon: "friends", run: () => push("friends") },
       ], { label: t("lib.actions") })),

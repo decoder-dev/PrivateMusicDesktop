@@ -148,6 +148,8 @@
       playlists.splice(index, 1);
     },
     add_to_playlist: async ({ playlist, track }) => {
+      if(config.importAddDelay) await delay(config.importAddDelay);
+      if(config.importAddFails === track.track_id) throw {kind:"network",message:"Network error"};
       if (playlist.owner_id !== 7) throw { kind: "invalid", message: "Invalid request." };
       const key = `${playlist.owner_id}_${playlist.playlist_id}`;
       playlistTracks.set(key, [...(playlistTracks.get(key) ?? []), track]);
@@ -158,7 +160,8 @@
       playlistTracks.set(key, (playlistTracks.get(key) ?? []).filter((t) => t.track_id !== track.track_id || t.owner_id !== track.owner_id));
     },
     search: async ({ query, offset, count }) => {
-      await delay(query === "slow" ? 300 : 10);
+      await delay(config.searchDelay ?? (query === "slow" ? 300 : 10));
+      if (config.searchResults) return page((config.searchResults[query] ?? []).map((item,i)=>makeTrack(5000+i,item)),offset,count);
       const all = query === "empty" ? [] : Array.from({ length: 120 }, (_, i) => makeTrack(5000 + i, { title: `${query} ${i + 1}` }));
       return page(all, offset, count);
     },

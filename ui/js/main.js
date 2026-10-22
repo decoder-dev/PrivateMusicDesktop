@@ -11,6 +11,8 @@ import { toast } from "./toast.js";
 import { installTooltips } from "./tooltip.js";
 import { createPlayerBar } from "./player-bar.js";
 import { setDefaultTrackMenu, setDefaultBatchAction } from "./tracks-screen.js";
+import { saveForLater } from "./listen-later.js";
+import { createPlaylistImportView } from "./views/playlist-import.js";
 import { rememberQueue } from "./queue-history.js";
 import { createSmartView } from "./views/smart.js";
 import { createMiniPlayer } from "./mini-player.js";
@@ -208,6 +210,11 @@ async function openTrackMenu(track, at, extra = []) {
     ...(goTo.length ? ["-", ...goTo] : []),
     "-",
     { label: t("menu.addTo"), action: "add-to-playlist", icon: "playlist", items: targets },
+    ...(store.player.track && trackKey(track) === trackKey(store.player.track) ? [
+      { label: t("later.save"), action: "listen-later", icon: "history", run: () => {
+        try { saveForLater(); toast(t("later.saved")); } catch (error) { toast(errorText(error), { error: true }); }
+      } },
+    ] : []),
     ...(extra.length ? ["-", ...extra] : []),
   ], { label: track.title });
 }
@@ -291,6 +298,7 @@ function buildShellParts() {
     library: libraryView,
     home: lazyView(() => createHomeView(ctx)),
     libraryHub: lazyView(() => createLibraryTab({ libraryView, push: ctx.push, newPlaylist, toast })),
+    playlistImport: lazyView(() => createPlaylistImportView(ctx)),
     profile: lazyView(() => createProfileView({ push: ctx.push, onSignOut: signOut })),
     forYou: createForYouView(ctx),
     downloads: createDownloadsView(ctx),
