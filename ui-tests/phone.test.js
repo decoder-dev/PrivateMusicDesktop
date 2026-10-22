@@ -1021,3 +1021,81 @@ test("rows keep their height: the clickable artist name does not stretch a 56 px
     assert.equal(overflow, true);
   } finally { await app.close(); }
 });
+
+test("collections: pinning survives reload, opens the playlist and stays private to the account", async () => {
+  const app = await phoneApp();
+  try {
+    const { page } = app;
+    await tab(page, "library");
+    await tap(page, '.lib-sections [data-section="playlists"]');
+    await see(page, '.lib-grid .lib-pin');
+    await tap(page, '.lib-grid .lib-pin');
+    await tap(page, '.lib-sections [data-section="all"]');
+    assert.equal(await page.locator('.lib-pinned .lib-collection').count(), 1);
+    await page.reload();
+    await see(page, '.dock');
+    await tab(page, "library");
+    await see(page, '.lib-pinned .card');
+    await tap(page, '.lib-pinned .card');
+    assert.equal(await view(page), "playlists");
+    await pressBack(page);
+    await page.evaluate(async () => {
+      const {store, set} = await import('/js/store.js');
+      set('session', {...store.session, profile:{id:8, first_name:'Другой', last_name:'Аккаунт'}});
+    });
+    assert.equal(await page.locator('.lib-pinned').isVisible(), false);
+    await page.evaluate(async () => {
+      const {store, set} = await import('/js/store.js');
+      set('session', {...store.session, profile:{id:7, first_name:'Иван', last_name:'Петров'}});
+    });
+    await tap(page, '.lib-pinned .lib-pin');
+    assert.equal(await page.locator('.lib-pinned').isVisible(), false);
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("collections: list layout persists for both albums and playlists", async () => {
+  const app = await phoneApp({phone:"small"});
+  try {
+    const {page} = app;
+    await tab(page,"library");
+    await tap(page, '.lib-sections [data-section="playlists"]');
+    await tap(page, '.lib-layout[data-layout-kind="playlist"]');
+    assert.equal(await page.locator('.lib-grid.list-layout').count(),2);
+    await page.reload();
+    await see(page,'.dock');
+    await tab(page,"library");
+    await tap(page, '.lib-sections [data-section="playlists"]');
+    await see(page, '.lib-grid.list-layout .card');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),false);
+    await tap(page, '.lib-layout[data-layout-kind="playlist"]');
+    assert.equal(await page.locator('.lib-grid.list-layout').count(),0);
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
+test("player: releasing a sheet drag does not activate the content under the finger", async () => {
+  const app = await phoneApp();
+  try {
+    const result = await app.page.evaluate(async () => {
+      const {attachSheetDrag} = await import('/js/mobile/np-sheet.js');
+      const sheet = document.createElement('div');
+      const content = document.createElement('span');
+      sheet.append(content); document.body.append(sheet);
+      let clicks = 0;
+      content.addEventListener('click', () => clicks++);
+      attachSheetDrag(sheet, () => {});
+      const pointer = (type, y) => content.dispatchEvent(new PointerEvent(type, {bubbles:true,pointerId:99,pointerType:'touch',clientX:50,clientY:y}));
+      pointer('pointerdown', 50); pointer('pointermove', 65); pointer('pointerup', 65);
+      content.dispatchEvent(new MouseEvent('click', {bubbles:true,cancelable:true,detail:1}));
+      const afterDrag = clicks;
+      const button = document.createElement('button');
+      sheet.append(button); button.addEventListener('click', () => clicks++);
+      button.dispatchEvent(new PointerEvent('pointerdown', {bubbles:true,pointerId:100,pointerType:'touch'}));
+      button.dispatchEvent(new MouseEvent('click', {bubbles:true,cancelable:true,detail:1}));
+      sheet.remove();
+      return {afterDrag, afterTap:clicks};
+    });
+    assert.deepEqual(result, {afterDrag:0,afterTap:1});
+  } finally { await app.close(); }
+});

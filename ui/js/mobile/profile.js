@@ -6,6 +6,7 @@ import { api } from "../api.js";
 import { icon } from "../icons.js";
 import { t } from "../i18n.js";
 import { store, subscribe } from "../store.js";
+import { artBox } from "../ui-parts.js";
 import { confirmDialog } from "../dialog.js";
 import "./strings.js";
 
@@ -47,11 +48,12 @@ export function createProfileView({ push, onSignOut }) {
 
   function render() {
     const profile = store.session.profile;
-    const full = profile ? `${profile.first_name} ${profile.last_name}`.trim() : "";
+    const full = profile ? `${profile.first_name ?? ""} ${profile.last_name ?? ""}`.trim() : "";
     name.textContent = full || t("profile.listener");
     avatar.textContent = [...full.split(/\s+/).filter(Boolean).slice(0, 2).map((word) => [...word][0].toUpperCase())].join("");
     avatar.classList.toggle("empty", !full);
-    if (!full) avatar.replaceChildren(icon("artist", 28));
+    if (profile?.photo_url) avatar.replaceChildren(artBox(profile.photo_url, { glyph: "artist", size: 28, eager: true }));
+    else if (!full) avatar.replaceChildren(icon("artist", 28));
   }
   subscribe("session", render);
   render();

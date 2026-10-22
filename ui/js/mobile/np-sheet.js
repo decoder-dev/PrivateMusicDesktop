@@ -11,9 +11,11 @@ const IGNORE = "button, input, textarea, a, .ly-body, .nq-list, .np-seek, [role=
 
 export function attachSheetDrag(sheet, close) {
   let drag = null;
+  let suppressClick = false;
 
   sheet.addEventListener("pointerdown", (event) => {
     if (!isPhone() || (event.pointerType === "mouse" && event.button !== 0)) return;
+    suppressClick = false;
     if (event.target.closest?.(IGNORE)) return;
     drag = { id: event.pointerId, x: event.clientX, y: event.clientY, last: event.clientY, t: performance.now(), v: 0, on: false };
   });
@@ -42,6 +44,7 @@ export function attachSheetDrag(sheet, close) {
     const { on, v, y } = drag;
     drag = null;
     if (!on) return;
+    suppressClick = !cancelled;
     sheet.classList.remove("dragging");
     const dy = Math.max(0, event.clientY - y);
     if (!cancelled && (dy > DISMISS || (v > VELOCITY && dy > 24))) {
@@ -55,6 +58,10 @@ export function attachSheetDrag(sheet, close) {
   sheet.addEventListener("pointercancel", (event) => release(event, true));
   // The drag must not turn into a tap on whatever was under the finger.
   sheet.addEventListener("click", (event) => {
-    if (sheet.classList.contains("dragging")) { event.stopPropagation(); event.preventDefault(); }
+    if ((suppressClick && event.detail > 0) || sheet.classList.contains("dragging")) {
+      suppressClick = false;
+      event.stopImmediatePropagation();
+      event.preventDefault();
+    }
   }, true);
 }

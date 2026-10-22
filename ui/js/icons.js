@@ -6,6 +6,7 @@ const ICONS = {
   moon: { fill: true, d: ["M20.5 14A9 9 0 0110 3a9 9 0 1010.5 11z"] },
   rain: { d: ["M6 15a4 4 0 010-8 6 6 0 0111-1 4.5 4.5 0 011 9", "M7 18l-1 3", "M12 17l-1 3", "M17 18l-1 3"] },
   smile: { d: ["M12 21a9 9 0 100-18 9 9 0 000 18z", "M8 14s1 3 4 3 4-3 4-3", "M8 9h.01", "M16 9h.01"] },
+  grid: { d: ["M3 3h7v7H3z", "M14 3h7v7h-7z", "M3 14h7v7H3z", "M14 14h7v7h-7z"] },
   pin: { d: ["M8 3h8l-1 6 4 4H5l4-4z", "M12 13v8"] },
   play: { fill: true, d: ["M8 5v14l11-7z"] },
   pause: { fill: true, d: ["M6 5h4v14H6z", "M14 5h4v14h-4z"] },

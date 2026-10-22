@@ -131,3 +131,64 @@ html[data-layout="phone"][data-orientation="landscape"] .np-quick button { min-h
 /* Ссылки в строках ошибок («Повторить», «Как проверить VPN») — тоже цели для пальца. */
 html[data-layout="phone"] :is(.status, .net-hint, .login) :is(.link-text, .retry-link) { display: inline-flex; align-items: center; min-height: 44px; padding-inline: 6px; }
 html[data-layout="phone"] .status.inline { align-items: center; flex-wrap: wrap; row-gap: 0; }
+
+/* Phone library: a compact dashboard, with the collection shelves below it. */
+html[data-layout="phone"] .lib-shortcuts {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+  margin: 12px var(--gutter) 8px;
+}
+html[data-layout="phone"] .lib-shortcuts .lib-summary {
+  width: 100%; margin: 0; padding: 16px; min-height: 132px;
+  flex-direction: column; align-items: flex-start; gap: 12px;
+  background: var(--studio-card); border: 1px solid var(--line); border-radius: 20px;
+}
+html[data-layout="phone"] .lib-shortcuts .lib-summary-text { gap: 3px; }
+html[data-layout="phone"] .lib-shortcuts .lib-summary .chev { display: none; }
+html[data-layout="phone"] .lib-shortcuts .lib-summary.smart {
+  grid-column: 1 / -1; flex-direction: row; align-items: center; min-height: 76px;
+}
+html[data-layout="phone"] .lib-shortcuts .smart .chev { display: inline-flex; }
+html[data-layout="phone"] .lib-summary-ico { width: 42px; height: 42px; border-radius: 14px; }
+html[data-layout="phone"] .lib-summary-title { font-weight: 700; }
+html[data-layout="phone"] .lib-summary-detail { line-height: 19px; }
+html[data-layout="phone"] .lib-sections { background: var(--studio-card); border: 1px solid var(--line); padding: 4px; gap: 2px; }
+html[data-layout="phone"] .lib-sections button { border-radius: 9px; }
+html[data-layout="phone"] .lib-sections button[aria-selected="true"] { background: var(--accent-wash); }
+html[data-layout="phone"] .lib-sections button[aria-selected="true"]::after { display: none; }
+html[data-layout="phone"] .lib-collection-tools { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 12px var(--gutter); }
+html[data-layout="phone"] .lib-collection-tools .lib-new { margin: 0 auto 0 0; }
+html[data-layout="phone"] .lib-layout { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding-inline: 14px; }
+html[data-layout="phone"] .lib-collection { position: relative; min-width: 0; }
+html[data-layout="phone"] .lib-collection > .card { width: 100%; min-width: 0; text-align: left; }
+html[data-layout="phone"] .lib-collection > .card .name { padding-right: 4px; }
+html[data-layout="phone"] .lib-pin {
+  position: absolute; right: 5px; top: 5px; display: grid; place-items: center; width: 44px; height: 44px;
+  color: var(--text-2); background: var(--page-top); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / .08);
+}
+html[data-layout="phone"] .lib-pin[aria-pressed="true"] { color: var(--accent); background: var(--accent-wash); }
+html[data-layout="phone"] .lib-pinned { margin: 0 var(--gutter); display: grid; gap: 8px; }
+html[data-layout="phone"] :is(.lib-pinned, .lib-grid.list-layout) .lib-collection {
+  display: flex; align-items: center; gap: 4px; padding: 8px; border: 1px solid var(--line); border-radius: 16px; background: var(--studio-card);
+}
+html[data-layout="phone"] .lib-grid.list-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+html[data-layout="phone"] :is(.lib-pinned, .lib-grid.list-layout) .card {
+  display: grid; grid-template-columns: 56px minmax(0, 1fr); column-gap: 12px; align-items: center;
+  flex: 1; padding: 0; background: none; box-shadow: none; border: 0;
+}
+html[data-layout="phone"] :is(.lib-pinned, .lib-grid.list-layout) .card-art { grid-row: 1 / 3; width: 56px; height: 56px; margin: 0; border-radius: 10px; }
+html[data-layout="phone"] :is(.lib-pinned, .lib-grid.list-layout) .card .name { align-self: end; margin: 0; -webkit-line-clamp: 1; }
+html[data-layout="phone"] :is(.lib-pinned, .lib-grid.list-layout) .card .count { align-self: start; margin: 3px 0 0; }
+html[data-layout="phone"] :is(.lib-pinned, .lib-grid.list-layout) .lib-pin { position: static; flex: none; box-shadow: none; background: none; border: 0; }
+
+/* Give the personal station a visual home without introducing a second palette. */
+html[data-layout="phone"] .stage {
+  margin: 8px var(--gutter) 4px; padding: 20px 16px;
+  border: 1px solid var(--line); border-radius: 28px;
+  background: radial-gradient(ellipse at 50% 0%, var(--accent-wash), transparent 75%), var(--studio-card);
+}
+html[data-layout="phone"] .stage-headline { margin: 14px 0 20px; font-size: 30px; line-height: 36px; }
+html[data-layout="phone"] .stage-cta { width: 100%; min-width: 0; margin-top: 22px; border-radius: 16px; }
+html[data-layout="phone"] .stage-cover .art-box { box-shadow: 0 10px 24px rgb(0 0 0 / .12); }
+html[data-layout="phone"] .profile-avatar { overflow: hidden; }
+html[data-layout="phone"] .profile-avatar .art-box { width: 100%; height: 100%; border-radius: inherit; }

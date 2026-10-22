@@ -117,6 +117,16 @@ desktop UI and its tests are unchanged.
 * **Safe areas**: `css/mobile.css` uses `--sat --sab --sal --sar` (set by `MainActivity`) with
   `env(safe-area-inset-*)` as the fallback, and `--kb` (keyboard) for sheets and the dock.
 * **Studio look**: `css/mobile-studio.css` adapts the 0.6.0 tokens, Onest and radii to the phone.
+  Home has a station card; Library uses a two-column shortcut dashboard and segmented filters.
+  The existing accent and theme preferences are preserved.
+* **Collection parity with iPhone**: Library's Playlists and Albums sections have a List/Grid switch
+  and visible pin buttons. Up to 24 collections can be pinned to the All section, with snapshots
+  retained for navigation when a collection is absent from a fresh shelf response. Pins and layout
+  are device-local and account-scoped (`js/mobile/collections.js`, via `personal.js`); they are not
+  synced to VK or the iPhone. Profile uses the account photo when supplied, with a fallback avatar.
+  Reference: `PrivateMusic2` commit `ecf7adb` (`LibraryView.swift`, `ProfileView.swift`).
+  Preview screenshots in [design/android](design/android/) use the UI-test mock backend and generated
+  placeholder covers: light at 360×640, dark at 412×915. These are browser previews, not device captures.
 * **Hidden on Android** (`[data-desktop-only]`, `.desktop-only`, or not built): updates, window size
   and the mini window, close to tray, keyboard shortcuts, output device, the visualizer, export of a
   track to a file; the engine commands behind them are not called. Downloads and offline playlist sync,
