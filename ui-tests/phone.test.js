@@ -491,7 +491,7 @@ test("the keyboard: a focused text field hides the dock and the mini player, blu
   } finally { await app.close(); }
 });
 
-test("Android: desktop-only settings and the visualizer are not offered, and no desktop commands are sent", async () => {
+test("Android: desktop-only settings are not offered, and no desktop commands are sent; the player has the visualizer", async () => {
   const app = await openApp({ config: { ...CONFIG, platform: "android" }, phone: true, query: "?platform=android" });
   try {
     const { page } = app;
@@ -506,12 +506,14 @@ test("Android: desktop-only settings and the visualizer are not offered, and no 
     for (const word of ["горячие клавиши", "устройство вывода", "визуализация"]) assert.ok(!texts.includes(word), `${word} is not shown`);
     assert.ok(texts.includes("эквалайзер"), "the equaliser stays");
     const calls = await page.evaluate(() => window.__mock.calls.map((c) => c.command));
-    for (const command of ["output_devices", "set_output_device", "set_close_to_tray", "set_visualizer", "set_fullscreen"]) assert.ok(!calls.includes(command), `${command} was not called`);
+    for (const command of ["output_devices", "set_output_device", "set_close_to_tray", "set_fullscreen"]) assert.ok(!calls.includes(command), `${command} was not called`);
     await playFromHome(page).catch(async () => { await tab(page, "home"); await playFromHome(page); });
     await tap(page, ".player .now");
     await page.waitForSelector(".np:not([hidden])");
     assert.equal(await page.locator(".np-top .desktop-only").evaluateAll((nodes) => nodes.every((n) => getComputedStyle(n).display === "none")), true);
-    assert.equal(await page.evaluate(() => window.__mock.count("set_visualizer")), 0);
+    // The spectrum comes from the engine on Android too: the mode button is on the phone player, the analyser is asked for.
+    assert.equal(await page.locator(".np-top .np-mode").isVisible(), true);
+    assert.ok(await page.evaluate(() => window.__mock.count("set_visualizer")) >= 1, "the analyser is switched on while the player is open");
     // No tooltips on a phone, no shortcut hints.
     assert.equal(await page.locator(".tooltip").count(), 0);
   } finally { await app.close(); }

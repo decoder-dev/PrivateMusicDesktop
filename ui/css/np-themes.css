@@ -32,6 +32,6 @@ html[data-np-theme="plain"] .np-backdrop .np-bd { display: none; }
 html[data-np-theme="plain"] .np-backdrop { background: color-mix(in srgb, var(--np-a) 8%, var(--page-top)); }
 html[data-np-theme="plain"] .np-backdrop::after { display: none; }
 
-/* Эквалайзер в листе плеера: десять полос помещаются по ширине, без прокрутки. */
-html[data-layout="phone"] .eq-sheet .eq-bands { grid-template-columns: repeat(10, minmax(0, 1fr)); overflow: visible; padding-inline: 0; }
+/* Эквалайзер в листе плеера: полосы прокручиваются, как в настройках (кнопки не меньше 44 px). */
 html[data-layout="phone"] .eq-sheet .eq { padding: 0 4px 8px; }
+html[data-layout="phone"] .eq-value { min-width: 44px; min-height: 44px; }
