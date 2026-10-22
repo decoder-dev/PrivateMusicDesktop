@@ -78,6 +78,9 @@ hash_before="$(shell_app "sha256sum files/secure/session.bin" | cut -d' ' -f1)"
 say "session.bin sha256 before: $hash_before"
 
 say "installing the new build over the old one"
+# WebView commits localStorage to disk after a short delay (about 5 s); a force-stop before that loses the write
+# and would look like the update lost data.
+sleep 10
 adb shell am force-stop "$pkg"
 adb shell logcat -c
 adb install "${install_flags[@]}" "$new"
