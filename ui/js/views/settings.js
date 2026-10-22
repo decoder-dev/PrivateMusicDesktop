@@ -15,6 +15,8 @@ import { createTastePanel } from "../tastes.js";
 import { createAudioOptions } from "../audio-options.js";
 addStrings({ru:{"window.mini":"Мини-плеер"},en:{"window.mini":"Mini player"}});
 import { isAndroid } from "../mobile/layout.js";
+import { STYLES, currentStyle, setStyle } from "../mobile/style.js";
+addStrings({ ru: { "set.style": "Вид приложения", "set.style.ios": "Как в iOS", "set.style.material": "Material 3" }, en: { "set.style": "App style", "set.style.ios": "Like iOS", "set.style.material": "Material 3" } });
 
 const IS_MAC = /Mac/i.test(navigator.platform || navigator.userAgent);
 const MOD = IS_MAC ? "⌘" : "Ctrl";
@@ -110,6 +112,8 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
       section(t("set.sound"),
         desktopOnly(row(t("set.output"), h("div", { class: "set-inline" }, deviceSelect, refreshButton), t("set.output.note"), "volume")),createAudioOptions(settings,onSettingsChange)),
       section(t("set.appearance"),
+        isAndroid() ? row(t("set.style"), h("select", { class: "field", "aria-label": t("set.style"), onchange: (event) => setStyle(event.target.value) },
+          STYLES.map((value) => h("option", { value, selected: value === currentStyle(), text: t(`set.style.${value}`) }))), null, "sparkles") : null,
         row(t("set.theme"), themePicker, null, "sparkles"),
         row(t("palette.title"), paletteGrid, null, "sparkles"),
         row(t("set.accent"), accentGrid, null, "album"),

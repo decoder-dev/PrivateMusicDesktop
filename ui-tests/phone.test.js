@@ -452,14 +452,14 @@ test("safe areas: --sat/--sab/--sal/--sar from the shell move the chrome, env() 
     });
     const plain = await metrics();
     const settle = () => page.waitForTimeout(250);
-    assert.equal(plain.navbar, 64);
+    assert.equal(plain.navbar, 44);
     await page.evaluate(() => {
       const root = document.documentElement.style;
       root.setProperty("--sat", "32px"); root.setProperty("--sab", "24px"); root.setProperty("--sal", "10px"); root.setProperty("--sar", "10px");
     });
     await settle();
     const inset = await metrics();
-    assert.equal(inset.navbar, 64 + 32);
+    assert.equal(inset.navbar, 44 + 32);
     assert.equal(inset.dockBottom, plain.dockBottom + 24);
     assert.equal(inset.dockLeft, plain.dockLeft + 10);
     // Content still clears the dock and the mini player.
