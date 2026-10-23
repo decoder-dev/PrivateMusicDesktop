@@ -322,6 +322,7 @@
     set_output_device: ({ name }) => { state.outputDevice = name; },
     set_close_to_tray: ({ on }) => { state.closeToTray = on; },
     network_usage: async () => { if(config.networkUsageDelay)await delay(config.networkUsageDelay);if(config.networkUsageFails) throw {kind:"offline"}; return {connected:config.networkConnected !== false,metered:!!config.metered}; },
+    crash_report: async () => config.crashReport ?? "Private Music crash report\napp: test",
     network_focus: ({ focused }) => { state.focused = focused; },
     network_check: () => {},
     network_probe: async () => { await delay(config.probeDelay ?? 5); },

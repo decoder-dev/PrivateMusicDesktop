@@ -17,6 +17,7 @@ addStrings({ru:{"window.mini":"Мини-плеер"},en:{"window.mini":"Mini pla
 import { isAndroid } from "../mobile/layout.js";
 import { STYLES, currentStyle, setStyle } from "../mobile/style.js";
 import { NP_THEMES, currentNpTheme, setNpTheme } from "../mobile/np-theme.js";
+import { openDiagnostics } from "../diagnostics.js";
 addStrings({ ru: { "set.nptheme": "Фон плеера", "set.nptheme.cover": "Обложка", "set.nptheme.aurora": "Аврора", "set.nptheme.plain": "Однотонный" }, en: { "set.nptheme": "Player background", "set.nptheme.cover": "Cover", "set.nptheme.aurora": "Aurora", "set.nptheme.plain": "Plain" } });
 addStrings({ ru: { "set.style": "Вид приложения", "set.style.ios": "Как в iOS", "set.style.material": "Material 3" }, en: { "set.style": "App style", "set.style.ios": "Like iOS", "set.style.material": "Material 3" } });
 
@@ -143,7 +144,8 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
       desktopOnly(section(t("update.title"), updater.element)),
       section(t("set.about"),
         h("div", { class: "set-row" }, h("div", {}, h("strong", { text: "Private Music" }), version,
-          h("div", { class: "set-note", text: t("set.disclaimer") }))))));
+          h("div", { class: "set-note", text: t("set.disclaimer") }))),
+        row(t("diag.title"), h("button", { class: "btn", type: "button", onclick: () => openDiagnostics(), text: t("diag.open") }), t("diag.note"), "info"))));
 
   // Переходы ведут к настоящим разделам этой же прокручиваемой страницы.
   // Клавиатурный фокус переносится на заголовок, чтобы переход был понятен и без мыши.
