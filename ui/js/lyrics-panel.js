@@ -1,3 +1,6 @@
+import { installLyricsCopy, copyLyricsText } from "./lyrics-copy.js";
+import { icon } from "./icons.js";
+import { own } from "./store.js";
 import { ft } from "./feature-i18n.js";
 import { h } from "./dom.js";
 import { t } from "./i18n.js";
@@ -36,10 +39,16 @@ export function createLyricsPanel() {
   let displayed=null;
 
   const body = h("div", { class: "ly-body" });
+  const copier=installLyricsCopy(body,()=>current && currentAccount===accountId()?`${currentAccount}:${trackKey(current)}:${token}`:null);
+  own(copier.dispose);
   const source = h("div", { class: "ly-source" });
   const currentButton = h("button", { class: "ly-control", type: "button", text: t("ly.current"), hidden: true, onclick: () => snap(lastPosition) });
   const followButton = h("button", { class: "ly-control", type: "button", onclick: () => setAutoFollow(!autoFollow) });
-  const controls = h("div", { class: "ly-controls" }, source, currentButton, followButton);
+  const copyButton=h("button",{class:"ly-control ly-copy",type:"button",title:t("lyrics.copy"),"aria-label":t("lyrics.copy"),disabled:true,onclick:()=>{
+    const track=current,id=accountId(),text=displayed?.text;
+    if(track && text)copyLyricsText(text,()=>current===track && accountId()===id);
+  }},icon("copy",18));
+  const controls = h("div", { class: "ly-controls" }, source, currentButton, followButton,copyButton);
   const offsetText=h("span",{class:"ly-offset"});
   function changeOffset(delta){if(!current)return;try{offset=Math.round(Math.max(-30,Math.min(30,offset+delta))*10)/10;savePersonalLyrics(current,{...personalLyrics(current),offset});offsetText.textContent=`${offset>0?"+":""}${offset.toFixed(1)} с`;snap(lastPosition);}catch(error){toast(errorText(error),{error:true});}}
   const file=h("input",{type:"file",accept:".lrc,text/plain",hidden:true,onchange:async()=>{
@@ -58,6 +67,7 @@ export function createLyricsPanel() {
   let lastPosition = 0;
 
   function renderControls() {
+    copyButton.disabled=!displayed?.text?.trim();
     followButton.textContent = autoFollow ? t("ly.followOn") : t("ly.followOff");
     followButton.setAttribute("aria-pressed", String(autoFollow));
     currentButton.hidden = autoFollow || lines.length === 0;
@@ -76,6 +86,7 @@ export function createLyricsPanel() {
   body.addEventListener("pointerdown", markHandScroll);
 
   function message(text, retry) {
+    displayed=null;copier.cancel();
     lines = [];
     active = -1;
     source.textContent = "";
@@ -85,7 +96,7 @@ export function createLyricsPanel() {
   }
 
   function show(lyrics) {
-    displayed=lyrics;
+    copier.cancel();displayed=lyrics;
     if(current)rememberLyrics(current,lyrics);
     active = -1;
     source.textContent = t("ly.source", { source: lyrics.source });
@@ -93,7 +104,7 @@ export function createLyricsPanel() {
       lines = lyrics.lines.map((line, index) => ({
         time: line.time,
         node: h("button", {
-          type: "button", class: line.text ? "ly-line" : "ly-line gap", "data-i": String(index),
+          type: "button", class: line.text ? "ly-line" : "ly-line gap", "data-i": String(index), title:t("lyrics.copyHint"),
           onclick: () => api.seek(Math.max(0,line.time+offset)),
         }, line.text || "♪"),
       }));
@@ -173,17 +184,17 @@ export function createLyricsPanel() {
     element,
     /** Показывает текст песни `track` (или удаляет его, если его нет). */
     setTrack(track) {
-      if (!track) { token += 1; current = null; message(""); return; }
+      if (!track) { copier.cancel();token += 1; current = null; message(""); return; }
       if (current && currentAccount === accountId() && trackKey(current) === trackKey(track)) return;
-      current = track;
+      copier.cancel();current = track;
       currentAccount = accountId();
       load(track);
     },
-    setVisible(on) { element.hidden = !on; },
+    setVisible(on) { if(!on)copier.cancel();element.hidden = !on; },
     update(position) { follow(position); },
     /** После поиска или появления панели: прыгайте, не планируя. */
     snap,
-    forget() { current = null; token += 1; },
+    forget() { copier.cancel();current = null; token += 1; },
   };
 }
 

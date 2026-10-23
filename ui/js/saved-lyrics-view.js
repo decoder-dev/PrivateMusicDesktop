@@ -1,3 +1,4 @@
+import { copyLyricsText } from "./lyrics-copy.js";
 import { h } from './dom.js';
 import { t, addStrings } from './i18n.js';
 import { findSavedLyrics } from './saved-lyrics.js';
@@ -20,10 +21,13 @@ export function createSavedLyricsView(play) {
   function read(entry) {
     close();
     const button=h('button',{class:'btn',type:'button',text:t('savedLyrics.close'),onclick:close});
-    dialog=h('dialog',{class:'dialog saved-lyrics-reader','aria-label':entry.track.title},h('div',{class:'dialog-form'},
+    const id=accountId();
+    const copy=h('button',{class:'btn saved-lyrics-copy',type:'button',text:t('lyrics.copy'),onclick:()=>copyLyricsText(entry.lyrics.text,()=>dialog===reader && id===accountId())});
+    dialog=h('dialog',{class:'dialog saved-lyrics-reader','aria-label':entry.track.title},h('div',{class:'dialog-form'},h('div',{class:'saved-lyrics-reader-body'},
       h('h2',{text:entry.track.title}),h('p',{class:'saved-lyrics-artist',text:entry.track.artist}),
-      h('div',{class:'saved-lyrics-text',text:entry.lyrics.text}),h('p',{class:'saved-lyrics-hint',text:entry.lyrics.source}),
-      h('div',{class:'dialog-actions'},button)));
+      h('div',{class:'saved-lyrics-text',text:entry.lyrics.text}),h('p',{class:'saved-lyrics-hint',text:entry.lyrics.source})),
+      h('div',{class:'dialog-actions'},copy,button)));
+    const reader=dialog;
     dialog.addEventListener('cancel',event=>{event.preventDefault();close();});
     document.body.classList.add('overlay-open');document.body.append(dialog);dialog.showModal();button.focus();
   }

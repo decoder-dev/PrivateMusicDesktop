@@ -158,6 +158,14 @@ await step("5b. native cover decoding preserves orientation and strips source me
   return "generated JPEG: mirrored/rotated square crops and metadata removal";
 });
 
+await step("5c. native clipboard accepts explicit generated lyric text",async()=>{
+  await call(page,"copy_text",{text:"Private Music generated clipboard check\nТестовая строка"});
+  let rejected=false;
+  try{await invoke(page,"copy_text",{text:" \n\t"});}catch{rejected=true;}
+  if(!rejected)throw new Error("empty clipboard text was accepted");
+  return "generated text copied through Android IPC; empty text rejected";
+});
+
 await step("6a. VK sign-in page loads in the native Activity (smoke hook)", async () => {
   if (!(await needNetwork())) return "skipped: no network";
   await disconnect();

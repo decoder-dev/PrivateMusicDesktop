@@ -32,6 +32,9 @@ class StartArgs {
 class AudioShareArgs { lateinit var path: String }
 
 @InvokeArg
+class ClipboardTextArgs { lateinit var text: String }
+
+@InvokeArg
 class ShareArgs {
     lateinit var url: String
     var title: String = ""
@@ -253,6 +256,17 @@ class LoginPlugin(private val activity: Activity) : Plugin(activity) {
             activity.startActivity(Intent.createChooser(intent, null))
             invoke.resolve()
         } catch (_: Exception) { invoke.reject("Could not open sharing") }
+    }
+
+    @Command
+    fun copyText(invoke: Invoke) {
+        val args = invoke.parseArgs(ClipboardTextArgs::class.java)
+        if (!ClipboardTextPolicy.accepts(args.text)) { invoke.reject("Invalid clipboard text"); return }
+        try {
+            val clipboard = activity.getSystemService(ClipboardManager::class.java) ?: throw IllegalStateException("Clipboard unavailable")
+            clipboard.setPrimaryClip(ClipData.newPlainText("Private Music", args.text))
+            invoke.resolve()
+        } catch (_: Exception) { invoke.reject("Could not copy text") }
     }
 
     @Command

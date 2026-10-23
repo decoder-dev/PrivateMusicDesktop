@@ -91,6 +91,11 @@ impl<R: Runtime> VkLogin<R> {
             .map(|_|()).map_err(|error|Error::Native(error.to_string()))
     }
 
+    pub fn copy_text(&self, text: &str) -> Result<()> {
+        self.plugin.run_mobile_plugin::<serde_json::Value>("copyText", serde_json::json!({"text":text}))
+            .map(|_|()).map_err(|error|Error::Native(error.to_string()))
+    }
+
     pub fn copy_link(&self, url: &str) -> Result<()> {
         self.plugin.run_mobile_plugin::<serde_json::Value>("copyLink", serde_json::json!({"url":url}))
             .map(|_|()).map_err(|error|Error::Native(error.to_string()))

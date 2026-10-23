@@ -426,3 +426,14 @@ startup, Keystore and generated cover decoder checks passed before the host disa
 rendering alone did not resolve it. CI now disables guest Vulkan following Android's Chromium
 compatibility guidance, and retains privileged kernel tail/limited emulator Crashpad dumps for a
 further diagnosis. This is a test-environment workaround, not evidence of a fixed app bug.
+
+### Copying lyrics
+
+Hold a timed lyric line for 550 ms or use its context-menu gesture to copy that line as plain text.
+The release is consumed so it does not also seek. Moving, changing tracks, hiding the panel or changing
+accounts cancels an unfinished hold. Regular player-state updates leave the hold intact. A separately
+labelled copy button copies the currently displayed version; the saved-lyrics reader has its own Copy
+lyrics action and a fixed footer. Plain text can also be selected. Android uses a dedicated clipboard
+command bounded to 150 KB UTF-8; the stricter VK-link clipboard command remains separate. The emulator
+run exercises the native write with generated text and rejects an empty copy, without reading the
+user's clipboard.

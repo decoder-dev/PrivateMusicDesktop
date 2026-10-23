@@ -7,6 +7,7 @@ mod audio_upload;
 mod audio_share;
 mod playlist_cover;
 mod share;
+mod clipboard;
 mod diagnostics;
 #[cfg(desktop)]
 mod login;
@@ -301,7 +302,7 @@ pub fn run() {
             commands::set_visualizer,
             commands::set_equalizer,commands::set_taste,commands::set_transitions,commands::set_normalization,commands::month_plays,
             commands::lyrics, commands::lyrics_versions,
-            commands::choose_cover, commands::set_playlist_cover, commands::discard_cover, commands::share_audio, commands::share_link, commands::copy_link, commands::network_usage, commands::crash_report,
+            commands::choose_cover, commands::set_playlist_cover, commands::discard_cover, commands::share_audio, commands::share_link, commands::copy_link, commands::copy_text, commands::network_usage, commands::crash_report,
             commands::choose_audio, commands::upload_audio, commands::discard_audio,
             commands::create_playlist,
             commands::edit_playlist,

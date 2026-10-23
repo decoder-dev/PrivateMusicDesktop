@@ -113,7 +113,9 @@
 .saved-lyrics-excerpt { text-align: left; color: var(--text); background: transparent; border: 0; padding: 10px 0; min-height: 44px; line-height: 1.5; cursor: pointer; }
 .saved-lyrics-excerpt:hover { text-decoration: underline; }
 .saved-lyrics-reader { max-width: 640px; width: calc(100% - 32px); }
-.saved-lyrics-reader .dialog-form { max-height: 80dvh; overflow: auto; }
+.saved-lyrics-reader .dialog-form { max-height: 80dvh; overflow: hidden; }
+.saved-lyrics-reader-body { min-height: 0; overflow-y: auto; }
+.saved-lyrics-reader .dialog-actions { flex-shrink: 0; }
 .saved-lyrics-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; font-size: 17px; }
 
 html[data-layout="phone"] .saved-lyrics-pane { padding: 0 var(--gutter) 24px; }
@@ -132,3 +134,7 @@ html[data-layout="phone"] .saved-lyrics-pane { padding: 0 var(--gutter) 24px; }
 .file-details-body { min-height: 0; overflow-y: auto; }
 .file-details-dialog .dialog-actions { flex-shrink: 0; }
 .file-details-dialog .file-actions .file-confirm-remove { color: var(--danger); border-color: var(--danger); }
+
+.ly-controls { flex-wrap: wrap; }
+.ly-copy { min-width: 44px; display: grid; place-items: center; }
+.ly-text, .saved-lyrics-text { -webkit-user-select: text; user-select: text; }

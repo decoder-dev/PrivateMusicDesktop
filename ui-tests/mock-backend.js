@@ -242,6 +242,7 @@
     },
     stop: () => { state.player.status = "idle"; emitState(); },
     downloads: () => ({ tracks: state.downloads ?? [], bytes: (state.downloads ?? []).length * 4_200_000 }),
+    copy_text:()=>null,
     download_details: async ({trackId}) => {
       await delay(config.downloadDetailsDelay ?? 10);
       return (state.downloads ?? []).some(track=>`${track.owner_id}_${track.track_id}`===trackId) ? {bytes:4_200_000,added:1792700000,format:'AAC',available:!config.downloadFileMissing} : null;

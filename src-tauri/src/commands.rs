@@ -856,3 +856,8 @@ pub async fn debug_cover_selftest(handle: AppHandle) -> CommandResult<String> {
         Err(CommandError {kind:"unsupported".into(),message:"available in Android debug builds only".into(),retry_after:None})
     }
 }
+
+#[tauri::command]
+pub async fn copy_text(handle: AppHandle, text: String) -> CommandResult<()> {
+    blocking(move || crate::clipboard::copy(&handle, &text)).await
+}
