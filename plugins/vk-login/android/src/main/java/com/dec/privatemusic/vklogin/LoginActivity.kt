@@ -365,6 +365,27 @@ class LoginActivity : Activity() {
         finish()
     }
 
+    /** Starts the VK app for an `intent:` link that [VkAppIntentPolicy] accepts. False: not such a link. */
+    private fun openVkApp(url: String): Boolean {
+        val pkg = VkAppIntentPolicy.vkPackage(url) ?: return false
+        try {
+            val intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME).apply {
+                // Only the VK app may receive it, through its public browsable entry point.
+                `package` = pkg
+                component = null
+                selector = null
+                addCategory(Intent.CATEGORY_BROWSABLE)
+                flags = flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION).inv()
+            }
+            startActivity(intent)
+            LoginTrace.note("opened the VK app for confirmation")
+        } catch (e: Exception) {
+            // The VK app is not installed: the page offers the other ways (code, password).
+            LoginTrace.note("VK app not available: ${e.javaClass.simpleName}")
+        }
+        return true
+    }
+
     // ---- the WebView ----------------------------------------------------------------
 
     private fun createWebView(): WebView {
@@ -405,6 +426,9 @@ class LoginActivity : Activity() {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val url = request.url.toString()
             if (VkUrlPolicy.isAllowedNavigation(url)) return false
+            // "Sign in with the VK app": open VK's own app (and only it), the page here keeps waiting for the
+            // confirmation and signs in by itself once the app approves.
+            if (openVkApp(url)) return true
             // Only the host: sign-in addresses can carry one-time codes. This also
             // stops intent:, market: and every custom scheme.
             Log.w(TAG, "blocked a navigation: ${VkUrlPolicy.describeForLog(url)}")

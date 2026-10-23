@@ -15,17 +15,20 @@ html[data-layout="phone"] .np-quick button { min-width: 0; flex: 1 1 0; }
 
 /* Тема «Аврора»: крупные размытые пятна цвета обложки медленно плывут. */
 html[data-np-theme="aurora"] .np-backdrop .np-bd { display: none; }
-html[data-np-theme="aurora"] .np-backdrop {
+/* Пятна лежат на отдельном слое и двигаются трансформацией: видеокарта сдвигает готовую картинку, а не
+   перерисовывает весь экран каждый кадр (на телефоне это заметно по батарее). */
+html[data-np-theme="aurora"] .np-backdrop { background: var(--page-bottom); }
+html[data-np-theme="aurora"] .np-backdrop::before {
+  content: ""; position: absolute; inset: -20%; will-change: transform;
   background:
-    radial-gradient(60% 45% at 20% 18%, color-mix(in srgb, var(--np-a) 85%, transparent), transparent 70%),
-    radial-gradient(55% 45% at 85% 40%, color-mix(in srgb, var(--np-b) 75%, transparent), transparent 70%),
-    radial-gradient(70% 50% at 35% 95%, color-mix(in srgb, var(--np-a) 60%, var(--np-b)), transparent 70%),
-    var(--page-bottom);
-  background-size: 140% 140%; animation: np-aurora 18s ease-in-out infinite alternate;
+    radial-gradient(45% 35% at 25% 22%, color-mix(in srgb, var(--np-a) 85%, transparent), transparent 70%),
+    radial-gradient(40% 35% at 80% 42%, color-mix(in srgb, var(--np-b) 75%, transparent), transparent 70%),
+    radial-gradient(55% 40% at 38% 88%, color-mix(in srgb, var(--np-a) 60%, var(--np-b)), transparent 70%);
+  animation: np-aurora 18s ease-in-out infinite alternate;
 }
-@keyframes np-aurora { from { background-position: 0% 0%; } to { background-position: 100% 100%; } }
-html[data-np-theme="aurora"] .np[data-playing="false"] .np-backdrop { animation-play-state: paused; }
-@media (prefers-reduced-motion: reduce) { html[data-np-theme="aurora"] .np-backdrop { animation: none; } }
+@keyframes np-aurora { from { transform: translate3d(-6%, -4%, 0) scale(1); } to { transform: translate3d(6%, 5%, 0) scale(1.08); } }
+html[data-np-theme="aurora"] .np[data-playing="false"] .np-backdrop::before { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) { html[data-np-theme="aurora"] .np-backdrop::before { animation: none; } }
 
 /* Тема «Однотонная»: без обложки на фоне, только лёгкий оттенок акцента. */
 html[data-np-theme="plain"] .np-backdrop .np-bd { display: none; }
