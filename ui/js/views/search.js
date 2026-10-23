@@ -1,3 +1,4 @@
+import { createSavedLyricsView } from "../saved-lyrics-view.js";
 import { api } from "../api.js";
 import { createTracksScreen } from "../tracks-screen.js";
 import { errorText, t, addStrings } from "../i18n.js";
@@ -14,7 +15,7 @@ const uniqueTracks = items => [...new Map(items.map(item => [`${item.owner_id}_$
 const advancingOffset = (next, current) => Number.isInteger(next) && next > current ? next : null;
 const PAGE = 50;
 const SHELF = 30;
-const TABS = ["tracks", "artists", "albums"];
+const TABS = ["tracks", "artists", "albums", "lyrics"];
 const HISTORY_KEY = "search.recent.queries.v1";
 const HISTORY_LIMIT = 10;
 
@@ -58,7 +59,7 @@ export function createSearchView({ play, onTrackAction, toast }) {
   const header = screen.element.querySelector(".view-header");
   header.insertBefore(field.element, header.querySelector(".vh-actions"));
 
-  const tabs = h("div", { class: "tabs", role: "tablist", "aria-label": t("search.title") },
+  const tabs = h("div", { class: "tabs search-tabs", role: "tablist", "aria-label": t("search.title") },
     TABS.map((id) => h("button", { type: "button", role: "tab", "data-tab": id, onclick: () => select(id), text: t(`search.tab.${id}`) })));
   watchSegmented(tabs);
   const recentHeading = h("div", { class: "search-recents-head" },
@@ -68,7 +69,8 @@ export function createSearchView({ play, onTrackAction, toast }) {
   // Список треков, его статус и пустая заметка перемещаются на отдельную панель, чтобы другие вкладки
   // могли занять свое место.
   const tracksPane = h("div", { class: "tab-pane" }, ...[...screen.element.children].filter((child) => child !== header));
-  const panes = { tracks: tracksPane };
+  const savedLyrics=createSavedLyricsView(play);
+  const panes = { tracks: tracksPane, lyrics:savedLyrics.element };
   const shelfParts = {};
   for (const id of ["artists", "albums"]) {
     const status = h("div", { class: "empty-state", role: "status", hidden: true });
@@ -77,7 +79,7 @@ export function createSearchView({ play, onTrackAction, toast }) {
     shelfParts[id] = { status, grid, more };
     panes[id] = h("div", { class: "tab-pane", hidden: true }, status, grid, more);
   }
-  screen.element.append(h("div", { class: "tab-bar" }, tabs), recentHeading, recentList, tracksPane, panes.artists, panes.albums);
+  screen.element.append(h("div", { class: "tab-bar" }, tabs), recentHeading, recentList, tracksPane, panes.artists, panes.albums, panes.lyrics);
   const summary=h("div",{class:"search-summary",role:"status",hidden:true});
   tracksPane.prepend(summary);
   renderRecent();
@@ -134,9 +136,13 @@ export function createSearchView({ play, onTrackAction, toast }) {
   }
 
   function select(id) {
+    const previous=tab;
     tab = id;
     renderTabs();
-    if (id !== "tracks") loadShelf(id);
+    savedLyrics.close();
+    if(id === 'lyrics'){sequence++;savedLyrics.render(query);}
+    else if(previous === 'lyrics')run(input.value);
+    else if (id !== "tracks") loadShelf(id);
   }
 
   function setShelfStatus(id, text, { error = false } = {}) {
@@ -199,6 +205,8 @@ export function createSearchView({ play, onTrackAction, toast }) {
     loadingMore = false;
     nextOffset = null;
     renderRecent();
+    savedLyrics.render(text);
+    if(tab === "lyrics")return;
     if (tab !== "tracks") loadShelf(tab);
     if (!text) {
       results = [];
@@ -258,6 +266,7 @@ export function createSearchView({ play, onTrackAction, toast }) {
       summary.hidden=true;
       nextOffset = null;
       query = "";
+      savedLyrics.close();savedLyrics.render("");
       renderRecent();
       input.value = "";
       field.sync();

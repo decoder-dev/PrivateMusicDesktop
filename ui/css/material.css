@@ -230,3 +230,5 @@ html[data-platform="android"][data-style="material"][data-layout="phone"] .np in
 /* Выбранная вкладка: только подчеркивание, без «таблетки» из базового стиля. */
 html[data-platform="android"][data-style="material"][data-layout="phone"] .tabs button[aria-selected="true"],
 html[data-platform="android"][data-style="material"][data-layout="phone"] .tabs button[aria-selected="true"]:hover { background: none; box-shadow: none; border: 0; }
+
+html[data-layout="phone"] .dialog.saved-lyrics-reader { background: var(--surface); width: min(640px, calc(100vw - 32px)); }

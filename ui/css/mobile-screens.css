@@ -199,3 +199,5 @@ html[data-layout="phone"] .net-hint .btn, html[data-layout="phone"] .net-how, ht
 /* Owner actions keep their labels and wrap as groups instead of shrinking into overlapping text. */
 html[data-layout="phone"] .page-head .pl-owner > .btn { flex:0 1 auto; min-width:0; max-width:100%; white-space:normal; line-height:20px; }
 html[data-layout="phone"] .page-head .pl-owner > .icon-btn { flex:0 0 44px; width:44px; min-width:44px; }
+
+html[data-layout="phone"] .tab-bar .search-tabs button { min-width: 0; padding-inline: 8px; font-size: 13px; }

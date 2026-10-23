@@ -4,6 +4,7 @@ import { t } from "./i18n.js";
 import { api, trackKey } from "./api.js";
 import { motionOk } from "./motion.js";
 import { parseLocalLrc,personalLyrics,savePersonalLyrics } from "./lyrics-personal.js";
+import { savedLyrics, rememberLyrics, forgetSavedLyrics } from "./saved-lyrics.js";
 import { accountId } from "./personal.js";
 import { toast } from "./toast.js";
 import { errorText } from "./i18n.js";
@@ -25,6 +26,7 @@ const HAND_SCROLL_MS = 4000;
 export function createLyricsPanel() {
   const cache = new Map();
   let token = 0;
+  let currentAccount = null;
   let current = null; // трек, который показывается
   let lines = []; // [{ время, узел }]
   let active = -1;
@@ -51,7 +53,7 @@ export function createLyricsPanel() {
     h("button",{type:"button",class:"ly-control",text:ft("Версии"),onclick:async event=>{
       if(!current)return;const track=current,id=accountId(),button=event.currentTarget;button.disabled=true;
       try{const versions=await api.lyricsVersions(track);if(track!==current || id!==accountId())return;if(displayed && !versions.some(v=>v.text===displayed.text))versions.unshift(displayed);if(!versions.length)throw new Error(ft("Другие версии не найдены"));const box=button.getBoundingClientRect();openMenu({x:box.left,y:box.top-versions.length*40},versions.map((lyrics,index)=>({label:`${index+1}. ${lyrics.source} · ${lyrics.lines.length?`${lyrics.lines.length} строк с таймингом`:"без тайминга"}`,action:"lyrics-version",run:()=>{if(track!==current || id!==accountId())return;try{savePersonalLyrics(track,{...personalLyrics(track),lyrics});show(lyrics);snap(lastPosition);}catch(error){toast(errorText(error),{error:true});}}})),{label:ft("Версия текста")});}catch(error){toast(errorText(error),{error:true});}finally{button.disabled=false;}
-    }}),h("button",{type:"button",class:"ly-control",text:ft("Сбросить"),onclick:()=>{if(!current)return;try{savePersonalLyrics(current,{});offset=0;cache.delete(trackKey(current));load(current);}catch(error){toast(errorText(error),{error:true});}}}),file);
+    }}),h("button",{type:"button",class:"ly-control",text:ft("Сбросить"),onclick:()=>{if(!current)return;try{savePersonalLyrics(current,{});offset=0;cache.delete(`${accountId()}:${trackKey(current)}`);forgetSavedLyrics(current);load(current);}catch(error){toast(errorText(error),{error:true});}}}),file);
   const element = h("section", { class: "ly", "aria-label": t("ly.label"), hidden: true }, body, controls,editControls);
   let lastPosition = 0;
 
@@ -84,6 +86,7 @@ export function createLyricsPanel() {
 
   function show(lyrics) {
     displayed=lyrics;
+    if(current)rememberLyrics(current,lyrics);
     active = -1;
     source.textContent = t("ly.source", { source: lyrics.source });
     if (lyrics.lines.length) {
@@ -107,12 +110,14 @@ export function createLyricsPanel() {
 
   async function load(track) {
     displayed=null;
-    const key = trackKey(track);
+    const key = `${accountId()}:${trackKey(track)}`;
     const mine = ++token;
     const id=accountId();
     const personal=personalLyrics(track);offset=Number.isFinite(personal.offset)?Math.max(-30,Math.min(30,personal.offset)):0;
     offsetText.textContent=`${offset>0?"+":""}${offset.toFixed(1)} с`;
     if(personal.lyrics?.lines && typeof personal.lyrics.text === "string"){show(personal.lyrics);return;}
+    const saved=savedLyrics(track);
+    if(saved){show(saved);return;}
     if (cache.has(key)) {
       const cached = cache.get(key);
       if (cached) show(cached); else message(t("ly.none"));
@@ -121,12 +126,12 @@ export function createLyricsPanel() {
     message(t("ly.loading"));
     try {
       const lyrics = await api.lyrics(track);
+      if (mine !== token || id!==accountId()) return;
       if (cache.size >= CACHE_LIMIT) cache.clear();
       cache.set(key, lyrics ?? null);
-      if (mine !== token || id!==accountId()) return;
       if (lyrics) show(lyrics); else message(t("ly.none"));
     } catch (error) {
-      if (mine !== token) return;
+      if (mine !== token || id!==accountId()) return;
       const unreachable = ["offline", "timeout", "network"].includes(error && error.kind);
       message(t(unreachable ? "ly.errorNetwork" : "ly.error"), () => load(track));
     }
@@ -169,8 +174,9 @@ export function createLyricsPanel() {
     /** Показывает текст песни `track` (или удаляет его, если его нет). */
     setTrack(track) {
       if (!track) { token += 1; current = null; message(""); return; }
-      if (current && trackKey(current) === trackKey(track)) return;
+      if (current && currentAccount === accountId() && trackKey(current) === trackKey(track)) return;
       current = track;
+      currentAccount = accountId();
       load(track);
     },
     setVisible(on) { element.hidden = !on; },

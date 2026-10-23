@@ -380,3 +380,18 @@ runner disappearance. Losing adb fails the active step and skips dependent check
 cannot report a clean crash check. Guest artifact collection stops promptly when the device is gone;
 host/live logs remain available. Run the supervisor regression checks without an SDK using
 `node --test scripts/android-emulator-tests/supervisor.test.mjs`.
+
+### Saved lyrics and offline search
+
+Opening a nonempty lyric automatically keeps an account-local copy (including a chosen version or
+personal LRC). Search → Lyrics finds all query words across artist, title and text, ignoring case and
+accents; it makes no VK request. The excerpt opens a read-only reader, so reading another song never
+seeks the currently playing track. Playback has its own button and resolves current library/queue
+metadata first. The reader closes on navigation or account change.
+
+The index keeps at most 150 tracks within one million UTF-16 code units; each lyric is limited to
+150 KB UTF-8, with bounded timing lines. Track snapshots contain no playback URLs or VK access keys.
+If browser storage fills up, older cached lyrics are evicted first; a failed write preserves the previous
+cache. These are local cached copies, not a backup or a sync service. Older personal LRC files join the
+index when opened. Reset removes the saved copy before fetching a fresh version. Offline availability
+of lyrics does not imply that the audio file is downloaded.

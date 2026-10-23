@@ -101,3 +101,19 @@
 
 .mix-continuation { display:flex; justify-content:center; padding:20px var(--gutter) 28px; }
 .mix-continuation[hidden] { display:none; }
+
+/* Saved lyrics stay readable as text, with separate playback and reader actions. */
+.saved-lyrics-pane { padding: 4px 0 24px; overflow: auto; min-height: 0; }
+.saved-lyrics-hint, .saved-lyrics-status, .saved-lyrics-artist { color: var(--text-2); }
+.saved-lyrics-hint, .saved-lyrics-status { margin: 12px 0 18px; line-height: 1.5; }
+.saved-lyrics-list { display: grid; gap: 12px; }
+.saved-lyrics-card { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; }
+.saved-lyrics-play { flex: 0 0 44px; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; background: var(--surface); color: var(--text); border: 1px solid var(--line); cursor: pointer; }
+.saved-lyrics-result { display: flex; flex-direction: column; gap: 5px; min-width: 0; overflow-wrap: anywhere; }
+.saved-lyrics-excerpt { text-align: left; color: var(--text); background: transparent; border: 0; padding: 10px 0; min-height: 44px; line-height: 1.5; cursor: pointer; }
+.saved-lyrics-excerpt:hover { text-decoration: underline; }
+.saved-lyrics-reader { max-width: 640px; width: calc(100% - 32px); }
+.saved-lyrics-reader .dialog-form { max-height: 80dvh; overflow: auto; }
+.saved-lyrics-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; font-size: 17px; }
+
+html[data-layout="phone"] .saved-lyrics-pane { padding: 0 var(--gutter) 24px; }
