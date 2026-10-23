@@ -62,3 +62,4 @@ html[data-layout="phone"] .empty-state svg { opacity: 0.6; }
 .diag-text { width: 100%; height: min(46dvh, 360px); resize: none; font: 12px/16px var(--mono); white-space: pre; overflow: auto; user-select: text; -webkit-user-select: text; }
 html[data-layout="phone"] .diag-dialog { width: min(420px, calc(100vw - 24px)); text-align: left; }
 html[data-layout="phone"] .diag-dialog h2, html[data-layout="phone"] .diag-dialog .dialog-text { margin-inline: 0; }
+.login-log { display: block; margin: 18px auto 0; color: var(--text-2); font: 500 13px/18px var(--font); }

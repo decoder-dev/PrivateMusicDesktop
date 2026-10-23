@@ -101,6 +101,7 @@ class LoginActivity : Activity() {
     private var manual = false
     private var exchanging = false
     private var failures = 0
+    private var lastCookieCount = -1
     private var lastHeader: String? = null
     private var notBefore = 0L
 
@@ -241,7 +242,15 @@ class LoginActivity : Activity() {
         }
         if (smoke || exchanging || now < notBefore) return
 
-        val pairs = SessionCookies.parse(CookieManager.getInstance().getCookie(VkUrlPolicy.TOKEN_COOKIE_URL))
+        val manager = CookieManager.getInstance()
+        val loginCookies = manager.getCookie(VkUrlPolicy.TOKEN_COOKIE_URL)
+        val pageCookies = manager.getCookie(VkUrlPolicy.PAGE_COOKIE_URL)
+        val pairs = SessionCookies.merge(loginCookies, pageCookies)
+        if (pairs.size != lastCookieCount) {
+            lastCookieCount = pairs.size
+            LoginTrace.note("cookie names: login.vk.ru=[" + SessionCookies.parse(loginCookies).joinToString(",") { it.first } +
+                "] vk.ru=[" + SessionCookies.parse(pageCookies).joinToString(",") { it.first } + "]")
+        }
         val wasManual = manual
         manual = false
         val header = SessionCookies.sessionHeader(pairs, wasManual)

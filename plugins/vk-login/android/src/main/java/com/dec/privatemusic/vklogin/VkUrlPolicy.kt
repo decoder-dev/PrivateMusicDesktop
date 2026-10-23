@@ -14,6 +14,9 @@ object VkUrlPolicy {
     /** The host whose cookies carry the session (login.vk.ru is vk.ru's). */
     const val TOKEN_COOKIE_URL = "https://login.vk.ru/"
 
+    /** The page host, whose cookies (possibly host-only) belong to the session too. */
+    const val PAGE_COOKIE_URL = "https://vk.ru/"
+
     private const val MAX_URL = 8192
 
     /** vk.ru, vk.com and their subdomains, nothing else. `host` must be ASCII. */
