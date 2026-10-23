@@ -265,15 +265,17 @@ pub fn set_close_to_tray(state: TauriState<'_, AppState>, on: bool) {
 /// Окно привлекало или теряло внимание пользователя: движок наблюдает за сетью (дешево) только пока она
 /// у нее есть или пока воспроизводится звук.
 #[tauri::command]
-pub fn network_focus(state: TauriState<'_, AppState>, focused: bool) {
-    state.app.set_window_focused(focused);
+pub async fn network_focus(state: TauriState<'_, AppState>, focused: bool) -> CommandResult<()> {
+    let app = state.app.clone();
+    blocking(move || { app.set_window_focused(focused); Ok(()) }).await
 }
 
 /// «Повторить» после сбоя соединения: удалите соединения из пула и посмотрите на сеть сейчас. Затем окно
 /// повторяет саму неудачную загрузку.
 #[tauri::command]
-pub fn network_check(state: TauriState<'_, AppState>) {
-    state.app.check_network();
+pub async fn network_check(state: TauriState<'_, AppState>) -> CommandResult<()> {
+    let app = state.app.clone();
+    blocking(move || { app.check_network(); Ok(()) }).await
 }
 
 #[tauri::command]
@@ -404,28 +406,41 @@ pub async fn similar(state: TauriState<'_, AppState>, track: Track) -> CommandRe
 }
 
 /// Усиление эквалайзера dB для десяти полос; `None` выключает его.
+// Команды ниже трогают контроллер, который может ненадолго ждать блокировку движка. На Android синхронная
+// команда выполняется в главном потоке (там же живет интерфейс), поэтому все они асинхронные.
 #[tauri::command]
-pub fn set_equalizer(state: TauriState<'_, AppState>, gains: Option<[f32; 10]>) {
-    state.app.controller().set_equalizer(gains);
+pub async fn set_equalizer(state: TauriState<'_, AppState>, gains: Option<[f32; 10]>) -> CommandResult<()> {
+    let app = state.app.clone();
+    blocking(move || { app.controller().set_equalizer(gains); Ok(()) }).await
 }
 
 #[tauri::command]
-pub fn set_taste(state:TauriState<'_,AppState>,taste:pm_engine::taste::Taste,user_id:i64)->CommandResult<()> {
-    if state.app.controller().session().and_then(|session|session.user_id)!=Some(user_id){return Err(CommandError::from(pm_engine::Error::Unauthorized));}
-    state.app.controller().set_taste(taste).map_err(CommandError::from)
+pub async fn set_taste(state:TauriState<'_,AppState>,taste:pm_engine::taste::Taste,user_id:i64)->CommandResult<()> {
+    let app = state.app.clone();
+    blocking(move || {
+        if app.controller().session().and_then(|session|session.user_id)!=Some(user_id){return Err(pm_engine::Error::Unauthorized.into());}
+        app.controller().set_taste(taste).map_err(Into::into)
+    }).await
 }
 
 #[tauri::command]
-pub fn set_transitions(state:TauriState<'_,AppState>,prefetch:bool,gapless:bool,crossfade:f64)->CommandResult<()> {
+pub async fn set_transitions(state:TauriState<'_,AppState>,prefetch:bool,gapless:bool,crossfade:f64)->CommandResult<()> {
     if !crossfade.is_finite() || !(0.0..=8.0).contains(&crossfade){return Err(CommandError::from(pm_engine::Error::InvalidRequest));}
-    state.app.controller().set_transitions(prefetch,gapless,crossfade);Ok(())
+    let app = state.app.clone();
+    blocking(move || { app.controller().set_transitions(prefetch,gapless,crossfade); Ok(()) }).await
 }
 
 #[tauri::command]
-pub fn set_normalization(state:TauriState<'_,AppState>,on:bool){state.app.controller().set_normalization(on);}
+pub async fn set_normalization(state:TauriState<'_,AppState>,on:bool)->CommandResult<()>{
+    let app = state.app.clone();
+    blocking(move || { app.controller().set_normalization(on); Ok(()) }).await
+}
 
 #[tauri::command]
-pub fn month_plays(state:TauriState<'_,AppState>)->std::collections::HashMap<String,u32>{state.app.month_plays()}
+pub async fn month_plays(state:TauriState<'_,AppState>)->CommandResult<std::collections::HashMap<String,u32>>{
+    let app = state.app.clone();
+    blocking(move || Ok(app.month_plays())).await
+}
 
 #[derive(Serialize)]
 pub struct Downloads {

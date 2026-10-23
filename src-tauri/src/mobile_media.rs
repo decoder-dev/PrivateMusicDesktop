@@ -27,11 +27,28 @@ pub fn publisher(handle: &AppHandle) -> Option<StatePublisher> {
 /// Кнопки уведомления, гарнитуры и аудиофокус управляют движком так же, как медиаклавиши на десктопе.
 /// Вызывается после `manage(AppState)` и до первого обновления.
 pub fn attach_actions(handle: &AppHandle) {
-    let ducker = bridge::Ducker::default();
+    // Кнопки уведомления, гарнитуры и аудиофокус приходят из Kotlin в главном потоке Android. Операции
+    // контроллера могут ждать блокировку движка (и сеть при переходе к следующему треку), а движок в это время
+    // может ждать главный поток (обновление уведомления): выполнять их прямо здесь значит рисковать
+    // «приложение не отвечает». Обработчик только ставит действие в очередь; выполняет отдельный поток по порядку.
+    let (queue, actions) = std::sync::mpsc::channel();
     let target = handle.clone();
+    let worker = std::thread::Builder::new().name("media-actions".into()).spawn(move || {
+        let ducker = bridge::Ducker::default();
+        for action in actions {
+            if let Some(state) = target.try_state::<AppState>() {
+                bridge::dispatch(state.app.controller(), &ducker, action);
+            }
+        }
+    });
+    if let Err(error) = worker {
+        log::warn!("media session: action thread unavailable: {error}");
+        return;
+    }
+    let queue = Mutex::new(queue);
     let result = handle.media_session().set_action_handler(move |action| {
-        if let Some(state) = target.try_state::<AppState>() {
-            bridge::dispatch(state.app.controller(), &ducker, action);
+        if let Ok(queue) = queue.lock() {
+            let _ = queue.send(action);
         }
     });
     if let Err(error) = result {
@@ -39,7 +56,6 @@ pub fn attach_actions(handle: &AppHandle) {
     }
 }
 
-/// Выход из приложения: убрать уведомление и сервис.
 pub fn stop(handle: &AppHandle) {
     let _ = handle.media_session().stop();
 }
