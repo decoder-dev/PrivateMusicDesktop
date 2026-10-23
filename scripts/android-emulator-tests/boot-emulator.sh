@@ -40,12 +40,12 @@ set_config hw.ramSize 2048
 set_config disk.dataPartition.size 6G
 set_config hw.keyboard yes
 set_config hw.gpu.enabled yes
-set_config hw.gpu.mode swiftshader_indirect
+set_config hw.gpu.mode software
 echo "--- AVD config"; cat "$config"
 
 emulator_pid=""
 stop_emulator() {
-  adb emu kill >/dev/null 2>&1 || true
+  timeout 10 adb emu kill >/dev/null 2>&1 || true
   if [ -n "$emulator_pid" ] && kill -0 "$emulator_pid" 2>/dev/null; then
     kill "$emulator_pid" 2>/dev/null || true
     sleep 3
@@ -59,10 +59,19 @@ attempt() { # <number>
   local log="$out/emulator-boot-$1.log"
   echo "--- boot attempt $1 (log: $log)"
   adb start-server
-  nohup "$emulator_bin" -avd "$avd" -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect \
+  local pid_file="$out/emulator-attempt-$1.pid"
+  rm -f "$pid_file" "$out/emulator-exit-$1.txt"
+  nohup setsid bash "$(dirname "$0")/emulator-supervise.sh" "$out/emulator-exit-$1.txt" "$pid_file" "$emulator_bin" -avd "$avd" -no-window -no-audio -no-boot-anim -gpu software \
     -no-snapshot -wipe-data -memory 3072 -cores 4 -accel on -netdelay none -netspeed full \
-    > "$log" 2>&1 &
-  emulator_pid=$!
+    > "$log" 2>&1 </dev/null &
+  local supervisor_pid=$!
+  for _ in {1..50}; do
+    [ -s "$pid_file" ] && break
+    kill -0 "$supervisor_pid" 2>/dev/null || break
+    sleep 0.1
+  done
+  [ -s "$pid_file" ] || { echo "emulator supervisor failed to start" >&2; return 1; }
+  emulator_pid="$(cat "$pid_file")"
   echo "emulator pid $emulator_pid"
 
   local waited=0
@@ -115,6 +124,12 @@ adb logcat -c || true
 echo "emulator ready: API $(adb shell getprop ro.build.version.sdk | tr -d '\r'), $(adb shell getprop ro.product.model | tr -d '\r'), $(adb shell wm size | tr -d '\r')"
 echo "$emulator_pid" > "$out/emulator.pid"
 # A live copy of the log, written on the host: if the emulator dies mid-test, this is all that is left of it.
-nohup adb logcat -v threadtime > "$out/logcat-live.txt" 2>&1 &
+nohup adb logcat -v threadtime > "$out/logcat-live.txt" 2>&1 </dev/null &
 # Host-side watchdog: one line every 5 s about the emulator process and memory (a vanished emulator shows up here).
-nohup bash -c 'while true; do echo "$(date +%T) emu=$(pgrep -f qemu-system -c) $(free -m | awk "NR==2{print \"mem_used_mb=\"\$3\" avail_mb=\"\$7}")"; sleep 5; done' > "$out/host-watch.txt" 2>&1 &
+nohup bash -c 'while kill -0 "$1" 2>/dev/null; do
+  date -u +%FT%TZ
+  ps -p "$1" -o pid=,stat=,rss=,comm=
+  free -m
+  sleep 5
+done
+echo "emulator pid $1 disappeared at $(date -u +%FT%TZ)"' _ "$emulator_pid" > "$out/host-watch.txt" 2>&1 </dev/null &

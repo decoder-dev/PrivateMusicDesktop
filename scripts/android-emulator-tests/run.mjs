@@ -311,7 +311,8 @@ await step("10. no crash in the whole log, no uncaught page errors", async () =>
 // ------------------------------------------------------------------------------------------- the end
 
 await disconnect();
-fs.writeFileSync(path.join(OUT, "logcat-after-tests.txt"), await logcat());
+try { fs.writeFileSync(path.join(OUT, "logcat-after-tests.txt"), await logcat()); }
+catch (error) { fs.writeFileSync(path.join(OUT, "logcat-unavailable.txt"), String(error)); }
 await screencap("99-final");
 const ok = finish();
 process.exit(ok ? 0 : 1);

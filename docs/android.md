@@ -369,3 +369,14 @@ VK HTTPS hosts without following redirects, and binds its opaque `photo`/`hash` 
 checked again after ownership resolution. A confirmed save is kept distinct from a later list
 refresh failure. VK may take time to return the new artwork URL. Preview images are not persisted
 in pins or web storage. Phone owner actions wrap without overlapping neighboring hit targets.
+
+### Emulator host failures
+
+CI starts the emulator in its own session with a supervisor. Each attempt writes the real child PID
+and an exit record (`emulator-exit-N.txt`), including signal-derived status. The host watcher follows
+that PID rather than matching its own command line. Rendering uses the current `software` backend;
+`swiftshader_indirect` is deprecated by Android. This change does not establish the cause of an earlier
+runner disappearance. Losing adb fails the active step and skips dependent checks. Failed log retrieval
+cannot report a clean crash check. Guest artifact collection stops promptly when the device is gone;
+host/live logs remain available. Run the supervisor regression checks without an SDK using
+`node --test scripts/android-emulator-tests/supervisor.test.mjs`.

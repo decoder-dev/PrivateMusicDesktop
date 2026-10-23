@@ -10,6 +10,12 @@ pkg="${PM_PACKAGE:-com.dec.privatemusic2.android}"
 T 20 adb devices -l > "$out/adb-devices.txt" 2>&1
 # If adb lost the device but the emulator process still runs, restarting the server brings it back.
 if ! grep -q "device " "$out/adb-devices.txt"; then T 20 adb kill-server; T 20 adb start-server; sleep 3; T 20 adb devices -l >> "$out/adb-devices.txt" 2>&1; fi
+# Host evidence survives loss of the guest; never collect unrelated temporary files.
+T 5 dmesg --ctime 2>&1 | tail -200 > "$out/host-kernel-tail.txt"
+if ! T 5 adb get-state 2>/dev/null | grep -qx device; then
+  echo "adb device unavailable; guest artifacts skipped" > "$out/guest-unavailable.txt"
+  exit 0
+fi
 T 60 adb logcat -d -v threadtime > "$out/logcat-full.txt" 2>&1
 T 30 adb exec-out screencap -p > "$out/screenshot-final.png" 2>/dev/null
 T 30 adb shell dumpsys window 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp' > "$out/window-focus.txt"

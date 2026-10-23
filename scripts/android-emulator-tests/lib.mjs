@@ -61,7 +61,7 @@ export const appIsFocused = async (activity = "MainActivity") => {
 };
 
 export async function logcat() {
-  try { return await run(["logcat", "-d", "-v", "threadtime"], { timeout: 120_000 }); } catch (error) { log(`logcat failed: ${error.message}`); return ""; }
+  return run(["logcat", "-d", "-v", "threadtime"], { timeout: 20_000 });
 }
 
 /** Crash evidence for our package in a logcat dump: Java crashes, native crashes, ANRs. */
@@ -114,7 +114,7 @@ export async function disconnect() {
     try { await connection.device.close(); } catch { /* the app may be gone */ }
     connection = null;
   }
-  await run(["forward", "--remove", `tcp:${CDP_PORT}`]).catch(() => {});
+  await run(["forward", "--remove", `tcp:${CDP_PORT}`], { timeout: 5_000 }).catch(() => {});
 }
 
 async function socketName() {
@@ -242,8 +242,12 @@ export async function step(name, fn, { critical = false } = {}) {
     results.push({ name, status: extra.length ? "warn" : "pass", detail: [detail, ...extra].filter(Boolean).join("; "), ms: Date.now() - started });
     log(`${extra.length ? "WARN" : "PASS"}  ${name}`);
   } catch (error) {
-    results.push({ name, status: "fail", critical, detail: error.message, ms: Date.now() - started });
+    let deviceAvailable = false;
+    try { deviceAvailable = (await adb(["get-state"], { timeout: 5_000 })).trim() === "device"; } catch { /* infrastructure failure */ }
+    results.push({ name, status: "fail", critical: critical || !deviceAvailable,
+      detail: `${error.message}${deviceAvailable ? "" : "; adb device unavailable; remaining device checks skipped"}`, ms: Date.now() - started });
     log(`FAIL  ${name}\n${error.stack ?? error.message}`);
+    if (!deviceAvailable) return;
     log(`focused window: ${await focusedWindow()}`);
     log(`process: ${(await pid()) || "NOT RUNNING"}`);
     await screencap(`fail-${index}`);
