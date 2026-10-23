@@ -3,6 +3,18 @@ import { addStrings } from "../i18n.js";
 
 addStrings({
   ru: {
+    "cover.title": "Обложка плейлиста",
+    "cover.preview": "Предпросмотр обложки",
+    "cover.choose": "Выбрать другое изображение",
+    "cover.hint": "Изображение обрезано по центру. Проверьте обложку перед сохранением.",
+    "cover.pickFailed": "Не удалось открыть изображение. Выберите JPEG, PNG или WebP до 10 МБ.",
+    "cover.saving": "Сохраняем обложку…",
+    "cover.saved": "Обложка сохранена",
+    "cover.refreshFailed": "Обложка сохранена, но список не обновился. Обновите плейлисты позже.",
+    "cover.cancel": "Остановить",
+    "cover.stop": "Остановка запрошена. Если VK уже принял обложку, изменение может сохраниться.",
+    "cover.unconfirmed": "Не удалось подтвердить сохранение. Обновите плейлисты перед повторной попыткой.",
+
     "share.audio": "Поделиться аудиофайлом",
     "share.audioPreparing": "Готовим аудиофайл…",
     "share.audioFailed": "Не удалось подготовить аудиофайл или открыть меню «Поделиться». Повторите попытку.",
@@ -126,6 +138,18 @@ addStrings({
     "np.grab": "Потяните вниз, чтобы свернуть",
   },
   en: {
+    "cover.title": "Playlist cover",
+    "cover.preview": "Cover preview",
+    "cover.choose": "Choose another image",
+    "cover.hint": "The image is cropped from the center. Check the cover before saving.",
+    "cover.pickFailed": "Could not open the image. Choose a JPEG, PNG or WebP up to 10 MB.",
+    "cover.saving": "Saving cover…",
+    "cover.saved": "Cover saved",
+    "cover.refreshFailed": "Cover saved, but the list could not refresh. Reload playlists later.",
+    "cover.cancel": "Stop",
+    "cover.stop": "Stop requested. The cover may still change if VK already accepted it.",
+    "cover.unconfirmed": "Could not confirm the save. Refresh playlists before trying again.",
+
     "share.audio": "Share audio file",
     "share.audioPreparing": "Preparing audio file…",
     "share.audioFailed": "Could not prepare the audio file or open sharing. Please try again.",

@@ -645,7 +645,7 @@ impl VkClient {
         self.playlists_of(session, owner_id, offset, count)
     }
 
-    fn own_playlist(&self, session: &Session, playlist: &Playlist) -> Result<()> {
+    pub(super) fn own_playlist(&self, session: &Session, playlist: &Playlist) -> Result<()> {
         let user = self.user_id(session)?;
         if playlist.owner_id != user || playlist.playlist_id <= 0 {
             return Err(Error::InvalidRequest);

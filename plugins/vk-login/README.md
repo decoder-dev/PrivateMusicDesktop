@@ -212,3 +212,18 @@ cache directories and symlinks outside that subtree. `AudioShareProvider` is not
 read access only to the chosen file. Its XML exposes just `audio-share/`. Rust prepares private copies
 and removes failures; the successful chooser launch retains its payload for delayed recipient reads.
 No raw path is returned to JavaScript. No storage permission is requested.
+
+
+## Playlist cover picker
+
+`pickCover` opens the system document picker for JPEG, PNG or WebP. Input reads are bounded to 10 MB;
+`CoverImagePolicy` validates dimensions and selects a power-of-two sample size before decoding.
+`CoverImageDecoder` applies EXIF orientation with AndroidX ExifInterface, crops a square and exports
+JPEG at quality 88, bounded to 2 MB. Recompression strips original metadata. The native reply carries
+only this JPEG as base64, or cancellation. Rust validates it and exposes an opaque account-scoped
+handle plus a temporary preview to the app; no source path or URI is returned. Android bitmap decode
+and provider compatibility still need a device smoke check; unit tests cover read bounds, sampling,
+orientation policy and Rust upload lifecycle. The emulator suite also calls `debug_cover_selftest`:
+three generated JPEG fixtures check native pixel rotation/mirroring, square crops and removal of a
+source comment. The command is debug-only in Rust and checks `FLAG_DEBUGGABLE` again in Kotlin;
+it reads no user image or account and removes its fixture files.

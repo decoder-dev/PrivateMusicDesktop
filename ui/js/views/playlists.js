@@ -1,3 +1,5 @@
+import { createCoverEditor } from "../playlist-cover.js";
+import { isAndroid } from "../mobile/layout.js";
 import { accountId } from "../personal.js";
 import { discoveryField, discoveryChoice } from "../playlist-discovery.js";
 import { collectionShareLink } from "../share-links.js";
@@ -55,6 +57,10 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
   const listScreen = h("section", { class: "view" }, header, shelves);
   headerOnScroll(header, shelves);
 
+  const coverEditor=createCoverEditor({getPlaylist:()=>current,isSame:(a,b)=>!!a && !!b && same(a,b),toast,
+    onBusy:busy=>{coverButton.disabled=busy;},
+    onSaved:async playlist=>{const account=accountId();forgetPlaylists();await ensurePlaylists();if(account===accountId() && current && same(current,playlist)){const fresh=allPlaylists().find(item=>same(item,playlist));if(fresh){current=fresh;detail.setCover(fresh.artwork_url);renderOwner();}}}});
+  const coverButton=h("button",{class:"icon-btn circle-btn playlist-cover",type:"button",title:t("cover.title"),"aria-label":t("cover.title"),onclick:()=>{if(current && isOwn(current))coverEditor.open(current);}},icon("image",18));
   const editButton = h("button", { class: "btn", type: "button", onclick: () => edit(), text: t("pl.edit") });
   const syncButton=h("button",{class:"btn",type:"button",text:ft("Сохранять офлайн"),onclick:async()=>{if(!current)return;try{setPlaylistSync(current,!isSynced(current));renderOwner();await syncPlaylists();}catch(error){toast(errorText(error),{error:true});}}});
   const deleteButton = h("button", { class: "btn danger-text", type: "button", onclick: () => remove(), text: t("pl.delete") });
@@ -74,7 +80,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
         ? [{ label: t("menu.removeFrom"), action: "remove-from-playlist", icon: "trash", destructive: true, run: () => removeTrack(track, index) }]
         : []),
       back: backButton(t("playlists.back"), () => leave()),
-      headerExtra: h("div", { class: "set-inline pl-owner" }, editButton, deleteButton, followButton,syncButton,links.copy,links.share),
+      headerExtra: h("div", { class: "set-inline pl-owner" }, editButton, deleteButton, followButton,syncButton,coverButton,links.copy,links.share),
     },
   });
   detail.element.hidden = true;
@@ -95,6 +101,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
     syncButton.setAttribute("aria-pressed",String(!!current && isSynced(current)));
     const own = current && isOwn(current);
     editButton.hidden = deleteButton.hidden = !own;
+    coverButton.hidden=!own || !isAndroid();
     followButton.hidden = !sharedAlbum || own || sharedAlbum.is_followed;
   }
 
@@ -131,10 +138,12 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
   }
 
   function leave() {
+    coverEditor.cancel();
     if (pushed) { pushed = false; detailGeneration++; current = null; back?.(); } else showList();
   }
 
   function showList() {
+    coverEditor.cancel();
     detailGeneration++;
     current = null;
     sharedAlbum = null;
@@ -146,6 +155,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
   async function open(playlist, shared = null) {
     // Возврат к открытому плейлисту, который ещё на экране, сохраняет место.
     if (pushed && current && same(current, playlist) && !detail.element.hidden) return;
+    coverEditor.cancel();
     sharedAlbum = shared;
     current = playlist;
     renderOwner();

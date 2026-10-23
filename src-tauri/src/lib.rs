@@ -5,6 +5,7 @@
 mod commands;
 mod audio_upload;
 mod audio_share;
+mod playlist_cover;
 mod share;
 mod diagnostics;
 #[cfg(desktop)]
@@ -104,7 +105,8 @@ fn start_login_smoke_test(handle: &tauri::AppHandle, report: std::path::PathBuf)
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri::Builder::default().manage(audio_upload::AudioUploads::default());
+    let builder = tauri::Builder::default().manage(audio_upload::AudioUploads::default())
+        .manage(playlist_cover::CoverUploads::default());
     // First: a second launch hands over to the running app and exits.
     #[cfg(desktop)]
     let builder = builder
@@ -288,7 +290,7 @@ pub fn run() {
             commands::set_visualizer,
             commands::set_equalizer,commands::set_taste,commands::set_transitions,commands::set_normalization,commands::month_plays,
             commands::lyrics, commands::lyrics_versions,
-            commands::share_audio, commands::share_link, commands::copy_link, commands::network_usage,
+            commands::choose_cover, commands::set_playlist_cover, commands::discard_cover, commands::share_audio, commands::share_link, commands::copy_link, commands::network_usage,
             commands::choose_audio, commands::upload_audio, commands::discard_audio,
             commands::create_playlist,
             commands::edit_playlist,
@@ -318,7 +320,7 @@ pub fn run() {
             commands::output_devices,
             commands::set_output_device,
             commands::app_info,
-            commands::debug_secure_selftest,
+            commands::debug_secure_selftest, commands::debug_cover_selftest,
             commands::set_shuffle,
             commands::set_repeat,
             commands::jump,

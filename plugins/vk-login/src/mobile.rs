@@ -89,6 +89,21 @@ impl<R: Runtime> VkLogin<R> {
             .map(|_|()).map_err(|error|Error::Native(error.to_string()))
     }
 
+    pub fn cover_selftest(&self) -> Result<String> {
+        let reply:serde_json::Value=self.plugin.run_mobile_plugin("coverSelfTest",())
+            .map_err(|error|Error::Native(error.to_string()))?;
+        reply.get("status").and_then(serde_json::Value::as_str).map(str::to_owned)
+            .ok_or_else(||Error::Native("invalid cover self-test reply".into()))
+    }
+
+    pub fn pick_cover(&self) -> Result<Option<String>> {
+        let reply: serde_json::Value = self.plugin.run_mobile_plugin("pickCover", ())
+            .map_err(|error| Error::Native(error.to_string()))?;
+        if reply.get("cancelled").and_then(serde_json::Value::as_bool)==Some(true) {return Ok(None);}
+        reply.get("jpeg").and_then(serde_json::Value::as_str).filter(|value|value.len()<=3_000_000)
+            .map(|value|Some(value.to_owned())).ok_or_else(||Error::Native("invalid image picker reply".into()))
+    }
+
     pub fn pick_audio(&self) -> Result<Option<crate::PickedAudio>> {
         let reply: serde_json::Value = self.plugin.run_mobile_plugin("pickAudio", ())
             .map_err(|error| Error::Native(error.to_string()))?;

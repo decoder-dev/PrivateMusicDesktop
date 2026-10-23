@@ -3669,6 +3669,7 @@ dependencies = [
 name = "private-music-desktop"
 version = "0.6.0"
 dependencies = [
+ "base64 0.22.1",
  "block2",
  "env_logger",
  "log",

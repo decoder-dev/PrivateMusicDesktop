@@ -362,6 +362,18 @@ impl App {
 }
 
 impl App {
+    pub fn set_playlist_cover(&self, playlist: &Playlist, jpeg: Vec<u8>, epoch: u64,
+        stop: std::sync::Arc<std::sync::atomic::AtomicBool>) -> Result<()> {
+        use std::sync::atomic::Ordering;
+        if self.session_epoch()? != epoch {return Err(Error::Unauthorized);}
+        crate::vk::cover::checked_jpeg(&jpeg)?;
+        let core=self.core.clone();
+        let cancelled:crate::vk::upload::CancelUpload=std::sync::Arc::new(move ||stop.load(Ordering::Acquire) || *core.generation.lock().unwrap_or_else(|p|p.into_inner())!=epoch);
+        let url=self.api(|client,session|{if cancelled(){return Err(Error::Cancelled);}client.playlist_cover_server(session,playlist)})?;
+        let uploaded=self.controller.client().upload_playlist_cover(url,jpeg,cancelled.clone())?;
+        self.api(|client,session|{if cancelled(){return Err(Error::Cancelled);}client.save_playlist_cover(session,playlist,&uploaded,cancelled.as_ref())})
+    }
+
     pub fn upload_audio(&self, path: &std::path::Path, artist: &str, title: &str, epoch: u64,
         stop: std::sync::Arc<std::sync::atomic::AtomicBool>) -> Result<Track> {
         use std::sync::atomic::Ordering;

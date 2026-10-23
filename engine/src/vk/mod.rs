@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod client;
+pub mod cover;
 pub mod model;
 pub mod upload;
 

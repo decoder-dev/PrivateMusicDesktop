@@ -107,6 +107,43 @@ class LoginPlugin(private val activity: Activity) : Plugin(activity) {
         invoke.resolve()
     }
 
+    @Command
+    fun coverSelfTest(invoke: Invoke) {
+        if((activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) == 0) {invoke.reject("Debug builds only");return}
+        try {invoke.resolve(JSObject().put("status",CoverImageSelfTest.run(activity.cacheDir)))}
+        catch(error: Exception) {invoke.reject(error.message ?: "Cover image self-test failed")}
+    }
+
+    private val coverPickerRunning = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    @Command
+    fun pickCover(invoke: Invoke) {
+        if(!coverPickerRunning.compareAndSet(false,true)) {invoke.reject("An image picker is already open");return}
+        try {
+            val intent=Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type="image/*"
+                putExtra(Intent.EXTRA_MIME_TYPES,arrayOf("image/jpeg","image/png","image/webp"))
+            }
+            startActivityForResult(invoke,intent,"onCoverPicked")
+        } catch(_: Exception) {coverPickerRunning.set(false);invoke.reject("Could not open the image picker")}
+    }
+
+    @ActivityCallback
+    fun onCoverPicked(invoke: Invoke,result: ActivityResult) {
+        val uri=result.data?.data
+        if(result.resultCode!=Activity.RESULT_OK || uri==null) {coverPickerRunning.set(false);invoke.resolve(JSObject().put("cancelled",true));return}
+        Thread({
+            try {
+                require(uri.scheme=="content")
+                val bytes=activity.contentResolver.openInputStream(uri)?.use {CoverImagePolicy.read(it)} ?: error("Image unavailable")
+                val jpeg=CoverImageDecoder.jpeg(bytes)
+                invoke.resolve(JSObject().put("jpeg",android.util.Base64.encodeToString(jpeg,android.util.Base64.NO_WRAP)))
+            } catch(_: Exception) {invoke.reject("Could not read image (JPEG, PNG or WebP, maximum 10 MB)")}
+            finally {coverPickerRunning.set(false)}
+        },"pm-cover-picker").start()
+    }
+
     private val audioPickerRunning = java.util.concurrent.atomic.AtomicBoolean(false)
 
     @Command

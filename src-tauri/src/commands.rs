@@ -773,3 +773,35 @@ pub async fn share_audio(handle: AppHandle, state: TauriState<'_, AppState>, tra
     let app=state.app.clone();
     blocking(move || crate::audio_share::share(&handle,&app,&track,allow_download.unwrap_or(false))).await
 }
+
+
+#[tauri::command]
+pub async fn choose_cover(handle: AppHandle, state: TauriState<'_, AppState>) -> CommandResult<Option<crate::playlist_cover::CoverInfo>> {
+    let app=state.app.clone();blocking(move ||crate::playlist_cover::choose(&handle,&app)).await
+}
+#[tauri::command]
+pub async fn set_playlist_cover(handle: AppHandle, state: TauriState<'_, AppState>, file_id:String, playlist:Playlist) -> CommandResult<()> {
+    let app=state.app.clone();blocking(move ||crate::playlist_cover::upload(&handle,&app,&file_id,&playlist)).await
+}
+#[tauri::command]
+pub async fn discard_cover(handle:AppHandle,file_id:String)->CommandResult<()> {
+    blocking(move ||{crate::playlist_cover::discard(&handle,&file_id);Ok(())}).await
+}
+
+
+/// Generated image fixtures only; no user image or account is needed by the emulator check.
+#[tauri::command]
+pub async fn debug_cover_selftest(handle: AppHandle) -> CommandResult<String> {
+    #[cfg(all(target_os="android",debug_assertions))]
+    {
+        use tauri_plugin_vk_login::VkLoginExt;
+        tauri::async_runtime::spawn_blocking(move ||handle.vk_login().cover_selftest())
+            .await.map_err(|_|CommandError {kind:"cover_selftest".into(),message:"image check interrupted".into(),retry_after:None})?
+            .map_err(|error|CommandError {kind:"cover_selftest".into(),message:error.to_string(),retry_after:None})
+    }
+    #[cfg(not(all(target_os="android",debug_assertions)))]
+    {
+        let _=handle;
+        Err(CommandError {kind:"unsupported".into(),message:"available in Android debug builds only".into(),retry_after:None})
+    }
+}

@@ -1542,3 +1542,92 @@ test("audio sharing: preparation errors leave an error toast and allow a retry",
     assert.equal(await page.evaluate(()=>window.__mock.count('share_audio')),4);assert.deepEqual(app.problems,[]);
   } finally {await app.close();}
 });
+
+async function openCoverPlaylist(page) {
+  await tab(page,'library');await tap(page,'.lib-sections [data-section="playlists"]');
+  await visible(page,'.lib-grid .card').filter({hasText:'Работа'}).tap();await see(page,'.playlist-cover');
+}
+test("playlist cover: native selection is previewed before an explicit save; Cancel writes nothing",async()=>{
+  const app=await phoneApp({phone:'small'});
+  try {
+    const {page}=app;await openCoverPlaylist(page);await tap(page,'.playlist-cover');await see(page,'.cover-dialog[open]');
+    await page.waitForFunction(()=>document.querySelector('.cover-preview')?.naturalWidth>0);
+    assert.equal(await page.evaluate(()=>window.__mock.count('set_playlist_cover')),0);
+    const rect=await page.locator('.cover-preview').boundingBox();assert.equal(rect.width,rect.height);
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    await tap(page,'.cover-dialog .dialog-actions .btn:not(.primary)');
+    assert.equal(await page.evaluate(()=>window.__mock.count('discard_cover')),1);
+    assert.equal(await page.evaluate(()=>window.__mock.count('set_playlist_cover')),0);
+    await tap(page,'.playlist-cover');await see(page,'.cover-dialog[open]');await tap(page,'.cover-save');
+    await page.waitForFunction(()=>!document.querySelector('.cover-dialog'));
+    const saved=await page.evaluate(()=>window.__mock.last('set_playlist_cover').args);
+    assert.equal(saved.fileId,'cover-2');assert.equal(saved.playlist.playlist_id,2);
+    assert.match(await page.locator('.toast-text').innerText(),/Обложка сохранена/);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("playlist cover: leaving a pending picker discards its late image handle",async()=>{
+  const app=await phoneApp({config:{...CONFIG,coverPickDelay:400}});
+  try {
+    const {page}=app;await openCoverPlaylist(page);await tap(page,'.playlist-cover');
+    await page.evaluate(async()=>{const {set}=await import('/js/store.js');set('view','library');});
+    await page.waitForFunction(()=>window.__mock.count('discard_cover')===1);
+    assert.equal(await page.locator('.cover-dialog').count(),0);
+    assert.equal(await page.evaluate(()=>window.__mock.count('set_playlist_cover')),0);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("playlist cover: stopping an upload cannot turn its late result into success",async()=>{
+  const app=await phoneApp({config:{...CONFIG,coverUploadDelay:500}});
+  try {
+    const {page}=app;await openCoverPlaylist(page);await tap(page,'.playlist-cover');await see(page,'.cover-dialog[open]');await tap(page,'.cover-save');
+    await tap(page,'.cover-dialog .dialog-actions .btn:not(.primary)');await page.waitForTimeout(550);
+    assert.equal(await page.evaluate(()=>window.__mock.count('discard_cover')),1);
+    assert.equal(await page.locator('.cover-dialog').count(),0);
+    assert.match(await page.locator('.toast-text').innerText(),/Остановка запрошена/);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("playlist cover: an ambiguous write requires a fresh selection and foreign playlists have no cover action",async()=>{
+  const app=await phoneApp({config:{...CONFIG,coverUploadFails:'unconfirmed'}});
+  try {
+    const {page}=app;await openCoverPlaylist(page);await tap(page,'.playlist-cover');await see(page,'.cover-dialog[open]');await tap(page,'.cover-save');
+    assert.equal(await page.locator('.cover-save').isDisabled(),true);
+    assert.match(await page.locator('.cover-status').innerText(),/Не удалось подтвердить/);
+    await page.evaluate(()=>window.__mock.config.coverUploadFails=false);await tap(page,'.cover-change');
+    await page.waitForFunction(()=>!document.querySelector('.cover-save').disabled);await tap(page,'.cover-save');
+    await page.waitForFunction(()=>!document.querySelector('.cover-dialog'));
+    assert.equal(await page.evaluate(()=>window.__mock.last('set_playlist_cover').args.fileId),'cover-2');
+    await pressBack(page);await visible(page,'.lib-grid .card').filter({hasText:'Чужой'}).tap();
+    assert.equal(await page.locator('.playlist-cover').isVisible(),false);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("playlist owner actions: long labels never cover neighboring hit targets on a small phone",async()=>{
+  const app=await phoneApp({phone:'small'});
+  try {
+    const {page}=app;await openCoverPlaylist(page);
+    const hits=await page.locator('.pl-owner').evaluate(async owner=>{
+      const results=[];
+      for(const button of owner.querySelectorAll('button:not([hidden])')) {
+        button.scrollIntoView({block:'center'});await new Promise(requestAnimationFrame);
+        const box=button.getBoundingClientRect();const hit=document.elementFromPoint(box.x+box.width/2,box.y+box.height/2)?.closest('button');
+        results.push({label:button.getAttribute('aria-label') || button.textContent,correct:hit===button,width:box.width,height:box.height});
+      }
+      return results;
+    });
+    for(const hit of hits){assert.equal(hit.correct,true,hit.label);assert.ok(hit.width>=44 && hit.height>=44,hit.label);}
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("playlist cover: switching accounts removes the preview and invalidates the handle",async()=>{
+  const app=await phoneApp();
+  try {
+    const {page}=app;await openCoverPlaylist(page);await tap(page,'.playlist-cover');await see(page,'.cover-dialog[open]');
+    await page.evaluate(async()=>{const {store,set}=await import('/js/store.js');set('session',{...store.session,profile:{id:99}});});
+    await page.waitForFunction(()=>!document.querySelector('.cover-dialog'));
+    assert.equal(await page.evaluate(()=>window.__mock.count('discard_cover')),1);
+    assert.equal(await page.evaluate(()=>window.__mock.count('set_playlist_cover')),0);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});

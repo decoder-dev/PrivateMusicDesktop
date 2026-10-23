@@ -4,6 +4,7 @@
 (() => {
   const calls = [];
   let nextAudioFile = 0;
+  let nextCoverFile = 0;
   const cancelledAudioFiles = new Set();
   const handlers = new Map();
   const delay = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -133,6 +134,14 @@
       if (!playlistTracks.has(key)) playlistTracks.set(key, library.slice(0, playlist.count).map((t) => ({ ...t, title: `${playlist.title}: ${t.title}` })));
       return page(playlistTracks.get(key), offset, count);
     },
+    choose_cover: async () => {
+      await delay(config.coverPickDelay??5);if(config.coverPickCancelled)return null;
+      const canvas=document.createElement('canvas');canvas.width=canvas.height=128;const ctx=canvas.getContext('2d');
+      const gradient=ctx.createLinearGradient(0,0,128,128);gradient.addColorStop(0,'#7350ac');gradient.addColorStop(1,'#d36b85');ctx.fillStyle=gradient;ctx.fillRect(0,0,128,128);
+      return {id:`cover-${++nextCoverFile}`,preview:canvas.toDataURL('image/jpeg',0.88)};
+    },
+    discard_cover: () => {},
+    set_playlist_cover: async () => {await delay(config.coverUploadDelay??5);if(config.coverUploadFails)throw {kind:config.coverUploadFails};},
     share_audio: async ({track,allowDownload}) => {
       if(!allowDownload && (config.audioShareMissingCache || !(state.downloads??[]).some(saved=>saved.track_id===track.track_id && saved.owner_id===track.owner_id)))return false;
       await delay(config.audioShareDelay ?? 5);if(config.audioShareFails)throw {kind:"unavailable"};return true;

@@ -152,6 +152,12 @@ await step("5. the Keystore secure store works", async () => {
   return `signed out, persistent store, round trip: ${selftest}`;
 });
 
+await step("5b. native cover decoding preserves orientation and strips source metadata",async()=>{
+  const result=await call(page,"debug_cover_selftest");
+  if(result!=="ok")throw new Error(`debug_cover_selftest returned ${JSON.stringify(result)}`);
+  return "generated JPEG: mirrored/rotated square crops and metadata removal";
+});
+
 await step("6a. VK sign-in page loads in the native Activity (smoke hook)", async () => {
   if (!(await needNetwork())) return "skipped: no network";
   await disconnect();

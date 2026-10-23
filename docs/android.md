@@ -348,3 +348,21 @@ shared copies remain available for a day and are cleaned during later preparatio
 chooser does not mean a file was sent. This shares the downloaded elementary audio; iOS-style
 embedded artwork/lyrics and M4A conversion are not included yet. Verify recipient app compatibility
 on a real Android device; local tests cover staging, access boundaries, native compilation and UI.
+
+### Own playlist covers
+
+Android owners can choose a JPEG/PNG/WebP image (up to 10 MB) through the system document picker.
+The native decoder checks bounds before allocating pixels, samples to roughly 1024 px, applies
+camera rotation/mirroring, crops the center square and recompresses JPEG without the source metadata.
+The dialog previews that exact image and requires Save. No image path reaches the WebView; the small
+preview and an account-scoped upload handle are temporary. Cancel/navigation/account changes discard
+the handle and prevent late picker/upload results from changing the interface. Stop during upload
+is best effort: a binding already accepted by VK can still finish. Ambiguous writes invalidate the
+handle and ask the user to refresh before trying again.
+
+The engine gets `photos.getAudioPlaylistCoverUploadServer`, posts field `photo` only to the accepted
+VK HTTPS hosts without following redirects, and binds its opaque `photo`/`hash` via a single
+`audio.setPlaylistCoverPhoto` call. Ownership is checked before upload and binding; cancellation is
+checked again after ownership resolution. A confirmed save is kept distinct from a later list
+refresh failure. VK may take time to return the new artwork URL. Preview images are not persisted
+in pins or web storage. Phone owner actions wrap without overlapping neighboring hit targets.

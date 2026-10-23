@@ -209,3 +209,7 @@ kbd {
 
 /* Used only during a direct Copy-link gesture on older desktop WebViews. */
 .clipboard-copy-proxy { position: fixed; left: -10000px; top: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+.cover-dialog .cover-preview { display:block; width:min(100%,200px); aspect-ratio:1; height:auto; object-fit:cover; border-radius:16px; margin:0 auto; }
+.cover-dialog .cover-hint, .cover-dialog .cover-status { margin:0; font-size:13px; line-height:1.45; color:var(--text-2); }
+.cover-dialog .cover-change { width:100%; }

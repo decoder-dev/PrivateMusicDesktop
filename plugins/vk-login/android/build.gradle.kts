@@ -34,6 +34,7 @@ kotlin {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.9.0")
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
     implementation("androidx.appcompat:appcompat:1.6.0")
     implementation(project(":tauri-android"))
 
