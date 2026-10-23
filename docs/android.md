@@ -414,3 +414,9 @@ copy from a regular local file. Sync cleanup rechecks changed manual retention b
 calls, preserving a copy marked manually while an earlier deletion was in flight. Explicit removal
 and Clear downloads still remove files at the user's request. The footer stays visible while long
 file details scroll independently on a small screen.
+
+Android CI caches Cargo registry data and build outputs using compiler, runner architecture, pinned NDK
+and Cargo manifest/lockfile keys. Each source revision gets a new cache entry, with dependency-compatible
+fallbacks for later revisions. Cargo still checks changed Rust/UI assets. SDK installations, account
+credentials and signed APKs are outside these paths. The first run has no cache; savings can only be
+measured after a later cache hit.
