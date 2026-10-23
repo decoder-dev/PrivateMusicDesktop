@@ -32,6 +32,7 @@ export const api = {
   clearUpcoming: () => invoke("clear_upcoming"),
   moveUpcoming: (from, to) => invoke("move_upcoming", { from, to }),
   shareLink: (url, title) => invoke("share_link", { url, title }),
+  downloadDetails: trackId => invoke("download_details", {trackId}),
   shareAudio: (track, allowDownload = false) => invoke("share_audio", {track,allowDownload}),
   networkUsage: () => invoke("network_usage"),
   copyLink: (url) => invoke("copy_link", { url }),

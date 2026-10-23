@@ -440,6 +440,13 @@ pub async fn downloads(state: TauriState<'_, AppState>) -> CommandResult<Downloa
 }
 
 #[tauri::command]
+pub async fn download_details(state: TauriState<'_, AppState>, track_id: String) -> CommandResult<Option<pm_engine::offline::DownloadDetails>> {
+    if track_id.len() > 64 || !track_id.chars().all(|c| c.is_ascii_digit() || c == '_' || c == '-') { return Err(Error::InvalidRequest.into()); }
+    let app = state.app.clone();
+    blocking(move || Ok(app.download_details(&track_id))).await
+}
+
+#[tauri::command]
 pub async fn download(state: TauriState<'_, AppState>, track: Track) -> CommandResult<Track> {
     let app = state.app.clone();
     blocking(move || app.download(&track).map(|d| d.track)).await

@@ -298,6 +298,7 @@ pub fn run() {
             commands::add_to_playlist,
             commands::remove_from_playlist,
             commands::downloads,
+            commands::download_details,
             commands::download,
             commands::remove_download,
             commands::mix,

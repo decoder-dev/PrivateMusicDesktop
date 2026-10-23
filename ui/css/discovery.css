@@ -117,3 +117,16 @@
 .saved-lyrics-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; font-size: 17px; }
 
 html[data-layout="phone"] .saved-lyrics-pane { padding: 0 var(--gutter) 24px; }
+.file-artist { color: var(--text-2); overflow-wrap: anywhere; }
+.file-status { color: var(--text-2); line-height: 1.5; }
+.file-status[data-available="true"] { color: var(--text); font-weight: 600; }
+.file-status[data-available="true"]::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: var(--success); }
+.file-facts { margin: 0; }
+.file-facts > div { display: grid; grid-template-columns: 1fr minmax(0, 1.5fr); gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.file-facts dt { color: var(--text-2); }
+.file-facts dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+.file-actions { display: grid; gap: 10px; }
+.file-actions .btn { min-height: 44px; }
+.file-confirm-text { line-height: 1.5; }
+.file-details-dialog .dialog-form { max-height: 80dvh; overflow: auto; }
+.file-details-dialog .file-actions .file-confirm-remove { color: var(--danger); border-color: var(--danger); }

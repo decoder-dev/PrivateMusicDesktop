@@ -635,6 +635,10 @@ impl Core {
         self.offline.as_ref().map(|o| o.list()).unwrap_or_default()
     }
 
+    pub fn download_details(&self, track_id: &str) -> Option<crate::offline::DownloadDetails> {
+        self.offline.as_ref()?.details(track_id)
+    }
+
     pub fn downloads_size(&self) -> u64 {
         self.offline.as_ref().map(|o| o.total_bytes()).unwrap_or(0)
     }

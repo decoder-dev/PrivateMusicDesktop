@@ -28,6 +28,15 @@ pub struct OfflineTrack {
     pub added: u64,
 }
 
+/// Public file facts; private cache names and paths are never serialized to the UI.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct DownloadDetails {
+    pub bytes: u64,
+    pub added: u64,
+    pub format: String,
+    pub available: bool,
+}
+
 pub struct OfflineStore {
     writes: Mutex<()>,
     dir: PathBuf,
@@ -73,6 +82,19 @@ impl OfflineStore {
         let mut all: Vec<OfflineTrack> = self.lock().values().cloned().collect();
         all.sort_by(|a, b| b.added.cmp(&a.added).then(a.file.cmp(&b.file)));
         all
+    }
+
+    pub fn details(&self, track_id: &str) -> Option<DownloadDetails> {
+        let entry = self.lock().get(track_id)?.clone();
+        if !safe_offline_name(&entry.file) { return None; }
+        let format = match Path::new(&entry.file).extension()?.to_str()? {
+            "mp3" => "MP3",
+            "aac" => "AAC",
+            _ => return None,
+        };
+        let available = fs::symlink_metadata(self.dir.join(&entry.file))
+            .is_ok_and(|file| file.is_file() && file.len() > 0 && file.len() == entry.bytes);
+        Some(DownloadDetails { bytes: entry.bytes, added: entry.added, format: format.into(), available })
     }
 
     pub fn contains(&self, track_id: &str) -> bool {
@@ -211,6 +233,41 @@ mod tests {
         std::fs::create_dir_all(&sub).unwrap();
         std::fs::write(sub.join("index.json"), hostile.to_string()).unwrap();
         assert!(OfflineStore::open(&sub).unwrap().list().is_empty());
+    }
+
+    #[test]
+    fn details_detect_removed_truncated_or_replaced_files_without_exposing_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = OfflineStore::open(dir.path()).unwrap();
+        store.save(&track(7, 1), ElementaryKind::Mp3, b"audio").unwrap();
+        let details = store.details("7_1").unwrap();
+        assert!(details.available);
+        assert_eq!(details.bytes, 5);
+        assert_eq!(details.format, "MP3");
+        let json = serde_json::to_value(details).unwrap();
+        assert_eq!(json.as_object().unwrap().len(), 4);
+        assert!(json.get("file").is_none());
+        assert!(json.get("track").is_none());
+        fs::write(dir.path().join("7_1.mp3"), b"a").unwrap();
+        assert!(!store.details("7_1").unwrap().available);
+        fs::remove_file(dir.path().join("7_1.mp3")).unwrap();
+        assert!(!store.details("7_1").unwrap().available);
+        fs::create_dir(dir.path().join("7_1.mp3")).unwrap();
+        assert!(!store.details("7_1").unwrap().available);
+        assert!(store.details("../secret").is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn details_do_not_treat_a_symlink_as_downloaded_audio() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = OfflineStore::open(dir.path()).unwrap();
+        store.save(&track(7, 1), ElementaryKind::AdtsAac, b"audio").unwrap();
+        let outside = dir.path().join("outside");
+        fs::write(&outside, b"audio").unwrap();
+        fs::remove_file(dir.path().join("7_1.aac")).unwrap();
+        std::os::unix::fs::symlink(outside, dir.path().join("7_1.aac")).unwrap();
+        assert!(!store.details("7_1").unwrap().available);
     }
 
     #[test]

@@ -395,3 +395,14 @@ If browser storage fills up, older cached lyrics are evicted first; a failed wri
 cache. These are local cached copies, not a backup or a sync service. Older personal LRC files join the
 index when opened. Reset removes the saved copy before fetching a fresh version. Offline availability
 of lyrics does not imply that the audio file is downloaded.
+
+### Downloaded audio file details
+
+Downloaded tracks expose **Audio file details** in the track menu. The native store supplies AAC/MP3
+format, recorded size, save date and current file availability. A missing, truncated, replaced directory
+or symlink is not reported as playable. No cache filename/path crosses IPC. Reading the details never
+starts playback or a network download. Play rechecks the file; Android sharing uses the cached-only
+native call and disables itself if that copy disappears. Removal requires a separate confirmation inside
+the same window, removes only the downloaded copy and refreshes Downloads. Account changes/navigation
+close the window and invalidate delayed metadata responses. The availability check is a snapshot; a file
+can still change after checking.

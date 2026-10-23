@@ -40,7 +40,8 @@ import { createHistoryView } from "./views/history.js";
 import { createStatsView } from "./views/stats.js";
 import { setRouter, hasArtist, hasAlbum, linkedArtists, openArtist, openArtistOf, openAlbumOf } from "./navigation.js";
 import { forgetAlbums } from "./my-albums.js";
-import { toggleDownload, refreshDownloads } from "./downloads.js";
+import { createDownloadDetails } from "./download-details.js";
+import { toggleDownload, refreshDownloads, isDownloaded } from "./downloads.js";
 import { openMenu } from "./menu.js";
 import { formDialog } from "./dialog.js";
 import { ensurePlaylists, ownPlaylists, addPlaylist, changeCount, forgetPlaylists } from "./my-playlists.js";
@@ -214,6 +215,7 @@ async function openTrackMenu(track, at, extra = []) {
       { label:t("share.copy"),action:"copy-link",icon:"copy",run:()=>copyLink(trackShareLink(track),toast) },
       ...(isAndroid() ? [{label:t("share.open"),action:"share-link",icon:"share",run:()=>shareLink(trackShareLink(track),`${track.artist} — ${track.title}`,toast)}] : []),
     ] : []),
+    ...(isDownloaded(track) ? [{label:t("file.details"),action:"file-details",icon:"downloaded",run:()=>shell?.fileDetails.open(track)}] : []),
     ...(isAndroid() ? [{label:t("share.audio"),action:"share-audio",icon:"note",run:()=>shareAudio(track,toast)}] : []),
     { label:ft("Предпочтения Selena"),action:"taste",icon:"sparkles",items:[
       {label:ft("Меньше такого"),action:"taste-less",run:()=>dislike(track,"less").catch(error=>toast(errorText(error),{error:true}))},
@@ -293,6 +295,7 @@ function buildShell() {
 }
 
 function buildShellParts() {
+  const fileDetails=createDownloadDetails({play,toast});
   installPlaylistSync();
   installTastes();
   // Страницы исполнителя и альбома располагаются поверх всего, что было на экране: «Назад» возвращается
@@ -454,7 +457,7 @@ function buildShellParts() {
   own(() => { delete document.documentElement.dataset.mini; });
 
   return {
-    element, views, bar, show, phone,
+    element, views, bar, show, phone, fileDetails,
     /** The first screen after signing in: Home on a phone, "My music" beside the sidebar. */
     start() {
       if (isPhone()) { views.libraryHub.ensure(); attachPull(); }
