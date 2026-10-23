@@ -61,10 +61,12 @@ class LoginActivity : Activity() {
             "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
 
         /**
-         * Third-party cookies are off. If a real-device sign-in needs them (a
-         * vk.com <-> vk.ru hop inside an iframe), this is the one switch to flip.
+         * Third-party cookies are ON. VK's sign-in hands the session between its own domains (vk.com, id.vk.com,
+         * login.vk.com, vk.ru) inside frames; without them the page says "signed in" while the cookie that the
+         * app needs (remixsid on vk.ru) is never set, and sign-in hangs. Desktop browsers allow them by default;
+         * Android's WebView does not. Only VK hosts can be navigated to, and the browser is wiped afterwards.
          */
-        const val ALLOW_THIRD_PARTY_COOKIES = false
+        const val ALLOW_THIRD_PARTY_COOKIES = true
 
         private const val TAG = "VkLogin"
         private const val POLL_MS = 1500L
@@ -251,6 +253,7 @@ class LoginActivity : Activity() {
             failures = 0
             lastHeader = header
             Log.i(TAG, "session detected, exchanging token")
+            LoginTrace.note("session cookies seen: " + pairs.joinToString(",") { it.first } + " (third-party cookies " + (if (ALLOW_THIRD_PARTY_COOKIES) "on" else "off") + ")")
         }
         exchanging = true
         worker.execute {
@@ -265,6 +268,7 @@ class LoginActivity : Activity() {
 
     private fun onExchange(outcome: ExchangeOutcome, header: String, wasManual: Boolean) {
         exchanging = false
+        LoginTrace.note("token exchange: " + when (outcome) { is ExchangeOutcome.Okay -> "okay"; ExchangeOutcome.Unauthorized -> "not signed in yet"; is ExchangeOutcome.Failed -> "failed (${outcome.kind})" })
         // Closing the screen during the request cancels adoption.
         if (finished) return
         when (outcome) {
@@ -395,6 +399,7 @@ class LoginActivity : Activity() {
             // Only the host: sign-in addresses can carry one-time codes. This also
             // stops intent:, market: and every custom scheme.
             Log.w(TAG, "blocked a navigation: ${VkUrlPolicy.describeForLog(url)}")
+            LoginTrace.note("BLOCKED navigation: ${VkUrlPolicy.describeForLog(url)}")
             return true
         }
 
@@ -420,6 +425,7 @@ class LoginActivity : Activity() {
         override fun onPageFinished(view: WebView, url: String?) {
             if (finished) return
             Log.i(TAG, "page loaded: ${VkUrlPolicy.describeForLog(url)}")
+            LoginTrace.note("page loaded: ${VkUrlPolicy.describeForLog(url)}")
             val host = VkUrlPolicy.vkHostOf(url)
             if (host != null && !(mainHttpError && !pageLoaded)) {
                 pageLoaded = true

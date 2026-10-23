@@ -86,12 +86,14 @@ object WebTokenExchange {
     internal fun retryDelayMs(attempt: Int): Long = 1000L * (1L shl (attempt - 1).coerceIn(0, 4))
 
     internal fun classify(reply: HttpReply): ExchangeOutcome {
+        LoginTrace.note("web_token answered HTTP ${reply.status}")
         if (reply.status !in 200..299) return ExchangeOutcome.Failed("format")
         val type = try {
             JSONObject(reply.body).optString("type", "")
         } catch (_: Exception) {
             return ExchangeOutcome.Failed("format")
         }
+        LoginTrace.note("web_token type=" + type.take(40))
         // Anything but "okay" means the page is not signed in (or VK refused).
         if (type != "okay") return ExchangeOutcome.Unauthorized
         return ExchangeOutcome.Okay(reply.body, reply.setCookies)
