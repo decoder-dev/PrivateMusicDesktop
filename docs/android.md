@@ -322,7 +322,10 @@ Android reads the active network’s metered flag locally (`ACCESS_NETWORK_STATE
 Manual downloads ask before using metered traffic or when cost cannot be determined. Consent lasts
 for the current action; batch downloads recheck before each new file. Offline requests stop before
 starting a file. Automatic playlist sync waits on metered/unknown networks without opening prompts;
-retry the sync after connecting to an unmetered network. Cancelling consent or changing accounts
+paused rules are checked locally every 30 seconds while the app is visible, and again on focus/visibility
+return. Once Android reports an unmetered connection, sync resumes without a background consent
+dialog. While waiting, these probes do not contact VK. The pause reason appears in Downloads;
+unknown network cost remains paused. Cancelling consent or changing accounts
 prevents pending downloads from starting. Already downloaded files can still be removed or manually
 protected from sync cleanup without a network request. An in-flight file may finish if the network
 changes while that file is downloading.

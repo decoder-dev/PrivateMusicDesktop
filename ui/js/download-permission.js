@@ -8,7 +8,7 @@ import "./mobile/strings.js";
 
 // Consent belongs to this download action only. Recheck cost between tracks so a
 // batch started on Wi-Fi cannot silently continue on a newly metered connection.
-export function downloadPermission({ interactive = true, isCancelled = () => false } = {}) {
+export function downloadPermission({ interactive = true, isCancelled = () => false, onBlocked = () => {} } = {}) {
   const account = accountId();
   let consent = false;
   const current = () => account && account === accountId() && store.session.signed_in && !isCancelled();
@@ -23,7 +23,7 @@ export function downloadPermission({ interactive = true, isCancelled = () => fal
     if (!current()) return false;
     if (network?.connected === false) throw { kind: "offline", message: "No active network" };
     if (network?.metered === false) return true;
-    if (!interactive) return false; // Automatic playlist sync waits for an unmetered network.
+    if (!interactive) {onBlocked(network ? "metered" : "unknown");return false;} // Never prompt for automatic sync.
     if (consent) return true;
     consent = await confirmDialog({text:t(network ? "download.metered" : "download.unknownNetwork"), confirm:t("download.continue")});
     return consent && current();

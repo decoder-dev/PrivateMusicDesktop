@@ -67,7 +67,7 @@ export async function downloadAll(items, { isCancelled = () => false, onProgress
   if (job?.running) return null;
   const unique = [...new Map(items.map(track => [trackKey(track),track])).values()].slice(0,20000);
   const state = { running:true,cancelled:false,completed:0,total:unique.length,failed:0,current:null,errors:[] };
-  const allowed=downloadPermission({interactive:!managed,isCancelled:()=>state.cancelled || isCancelled()});
+  const allowed=downloadPermission({interactive:!managed,isCancelled:()=>state.cancelled || isCancelled(),onBlocked:reason=>{state.blocked=reason;}});
   job=state;
   publish("downloadJob");
   try {
@@ -89,7 +89,7 @@ export async function downloadAll(items, { isCancelled = () => false, onProgress
       onProgress(state.completed,state.total,state.failed);
       publish("downloadJob");
     }
-    return {completed:state.completed,failed:state.failed,cancelled:state.cancelled};
+    return {completed:state.completed,failed:state.failed,cancelled:state.cancelled,...(state.blocked ? {blocked:state.blocked} : {})};
   } finally {
     state.running=false; state.current=null;
     await refreshDownloads();

@@ -1,3 +1,5 @@
+import { isAndroid } from "./mobile/layout.js";
+import { t } from "./i18n.js";
 import { ft } from "./feature-i18n.js";
 import { api, loadAllPages, trackKey } from "./api.js";
 import {
@@ -67,6 +69,8 @@ export async function syncPlaylists() {
           managed: true,
           isCancelled: () => id !== accountId() || !isSynced(rule.playlist),
         });
+        // Another job may have started while metadata was loading. Keep this rule pending.
+        if (!result) break;
         if (id !== accountId()) break;
         const existing = new Set(downloads().tracks.map(trackKey));
         const wanted = new Set(items.map(trackKey));
@@ -98,12 +102,16 @@ export async function syncPlaylists() {
         }
         rule.wanted = [...wanted];
         rule.last = Date.now();
-        rule.error = result?.cancelled
+        rule.blocked = ["metered","unknown"].includes(result?.blocked) ? result.blocked : null;
+        rule.error = rule.blocked
+          ? t(rule.blocked === "metered" ? "sync.waitMetered" : "sync.waitUnknown")
+          : result?.cancelled
           ? ft("Остановлено")
           : result?.failed
             ? ft("Не загружено: {n}",{n:result.failed})
             : null;
       } catch (error) {
+        rule.blocked = null;
         rule.error = error.kind
           ? ft("Ошибка: {kind}",{kind:error.kind})
           : String(error.message || ft("Не удалось синхронизировать"));
@@ -125,6 +133,22 @@ export async function syncPlaylists() {
 }
 export const syncRunning = () => running;
 export function installPlaylistSync() {
+  let disposed=false,checking=false;
+  const resumeBlocked = async () => {
+    if(disposed || checking || !isAndroid() || document.hidden || running || downloadJob()?.running)return;
+    const account=accountId();
+    if(!account || !syncRules().some(rule=>["metered","unknown"].includes(rule.blocked)))return;
+    checking=true;
+    try {
+      // A local system query only: waiting on mobile data never polls VK.
+      const network=await api.networkUsage();
+      if(!disposed && account===accountId() && network?.connected===true && network?.metered===false)await syncPlaylists();
+    } catch { /* Keep the existing pause reason; no background consent dialog or repeated toast. */ }
+    finally {checking=false;}
+  };
+  const costTimer=isAndroid() ? setInterval(resumeBlocked,30_000) : null;
+  window.addEventListener("focus",resumeBlocked);
+  document.addEventListener("visibilitychange",resumeBlocked);
   const timer = setInterval(
     () => syncPlaylists().catch(() => {}),
     15 * 60 * 1000,
@@ -135,7 +159,10 @@ export function installPlaylistSync() {
     if (accountId()) online();
   });
   own(() => {
-    clearInterval(timer);
+    disposed=true;
+    clearInterval(timer);if(costTimer!==null)clearInterval(costTimer);
+    window.removeEventListener("focus",resumeBlocked);
+    document.removeEventListener("visibilitychange",resumeBlocked);
     window.removeEventListener("online", online);
   });
   online();

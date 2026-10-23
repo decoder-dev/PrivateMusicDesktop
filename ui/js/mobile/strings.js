@@ -3,6 +3,9 @@ import { addStrings } from "../i18n.js";
 
 addStrings({
   ru: {
+    "sync.waitMetered": "Ожидание сети без оплаты трафика",
+    "sync.waitUnknown": "Не удалось определить стоимость трафика. Автоматическая загрузка на паузе.",
+
     "cover.title": "Обложка плейлиста",
     "cover.preview": "Предпросмотр обложки",
     "cover.choose": "Выбрать другое изображение",
@@ -138,6 +141,9 @@ addStrings({
     "np.grab": "Потяните вниз, чтобы свернуть",
   },
   en: {
+    "sync.waitMetered": "Waiting for an unmetered network",
+    "sync.waitUnknown": "Network cost is unknown. Automatic downloads are paused.",
+
     "cover.title": "Playlist cover",
     "cover.preview": "Cover preview",
     "cover.choose": "Choose another image",

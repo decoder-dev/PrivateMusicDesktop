@@ -1631,3 +1631,63 @@ test("playlist cover: switching accounts removes the preview and invalidates the
     assert.deepEqual(app.problems,[]);
   } finally {await app.close();}
 });
+
+async function pauseCostSync(page) {
+  return page.evaluate(async()=>{const {setPlaylistSync,syncPlaylists,syncRules,syncRunning}=await import('/js/playlist-sync.js');window.__syncIdle=()=>!syncRunning();setPlaylistSync({owner_id:7,playlist_id:2,title:'Work',count:2},true);await syncPlaylists();return syncRules()[0];});
+}
+test("sync network cost: a metered pause is explicit and focus resumes only on an unmetered network",async()=>{
+  const app=await phoneApp({config:{...CONFIG,metered:true}});
+  try {
+    const {page}=app;const paused=await pauseCostSync(page);
+    assert.equal(paused.blocked,'metered');assert.match(paused.error,/Ожидание сети/);
+    const before=await page.evaluate(()=>window.__mock.count('playlist_tracks'));
+    await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await page.waitForTimeout(80);
+    assert.equal(await page.evaluate(()=>window.__mock.count('playlist_tracks')),before);
+    assert.equal(await page.evaluate(()=>window.__mock.count('download')),0);
+    await page.evaluate(()=>{window.__mock.config.metered=false;window.dispatchEvent(new Event('focus'));window.dispatchEvent(new Event('focus'));});
+    await page.waitForFunction(()=>window.__mock.count('download')===2);
+    await page.waitForFunction(()=>JSON.parse(localStorage.getItem('pm.personal.7.playlistSync'))?.[0]?.blocked===null);
+    assert.equal((await page.evaluate(async()=>(await import('/js/playlist-sync.js')).syncRules()[0])).blocked,null);
+    assert.equal(await page.locator('dialog').count(),0);assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("sync network cost: unknown network cost stays paused without background consent dialogs",async()=>{
+  const app=await phoneApp({config:{...CONFIG,networkUsageFails:true}});
+  try {
+    const {page}=app;const paused=await pauseCostSync(page);assert.equal(paused.blocked,'unknown');assert.match(paused.error,/стоимость трафика/);
+    await page.evaluate(()=>{window.__mock.config.networkUsageFails=false;window.__mock.config.metered=true;window.dispatchEvent(new Event('focus'));});await page.waitForTimeout(80);
+    assert.equal(await page.evaluate(()=>window.__mock.count('download')),0);assert.equal(await page.locator('dialog').count(),0);
+    await page.evaluate(()=>{window.__mock.config.metered=false;window.dispatchEvent(new Event('focus'));});await page.waitForFunction(()=>JSON.parse(localStorage.getItem('pm.personal.7.playlistSync'))?.[0]?.blocked===null);
+    assert.equal(await page.evaluate(()=>window.__mock.count('download')),2);assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("sync network cost: an account switch invalidates a pending resume check",async()=>{
+  const app=await phoneApp({config:{...CONFIG,metered:true}});
+  try {
+    const {page}=app;await pauseCostSync(page);
+    await page.evaluate(async()=>{window.__mock.config.metered=false;window.__mock.config.networkUsageDelay=200;window.dispatchEvent(new Event('focus'));const {store,set}=await import('/js/store.js');set('session',{...store.session,profile:{id:99}});});
+    await page.waitForTimeout(260);
+    assert.equal(await page.evaluate(()=>window.__mock.count('download')),0);
+    assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('pm.personal.7.playlistSync'))[0].blocked),'metered');
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+
+test("sync network cost: a competing download cannot mark a paused playlist as checked",async()=>{
+  const app=await phoneApp({config:{...CONFIG,metered:true}});
+  try {
+    const {page}=app;const paused=await pauseCostSync(page);
+    const requests=await page.evaluate(()=>window.__mock.count('playlist_tracks'));
+    await page.evaluate(()=>{window.__mock.config.metered=false;window.__mock.config.playlistTracksDelay=200;window.__mock.config.downloadDelay=500;window.dispatchEvent(new Event('focus'));});
+    await page.waitForFunction(before=>window.__mock.count('playlist_tracks')>before,requests);
+    await page.evaluate(async()=>{const {downloadAll}=await import('/js/downloads.js');window.__manualSyncJob=downloadAll([{owner_id:7,track_id:999,title:'Manual',artist:'Artist',duration:12}]);});
+    await page.waitForFunction(()=>window.__syncIdle());
+    const unchanged=await page.evaluate(()=>JSON.parse(localStorage.getItem('pm.personal.7.playlistSync'))[0]);
+    assert.equal(unchanged.blocked,'metered');assert.equal(unchanged.last,paused.last);assert.deepEqual(unchanged.owned,[]);
+    await page.evaluate(()=>window.__manualSyncJob);
+    await page.evaluate(()=>{window.__mock.config.playlistTracksDelay=0;window.__mock.config.downloadDelay=5;window.dispatchEvent(new Event('focus'));});
+    await page.waitForFunction(()=>JSON.parse(localStorage.getItem('pm.personal.7.playlistSync'))?.[0]?.blocked===null);
+    assert.equal(await page.evaluate(()=>window.__mock.count('download')),3);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});

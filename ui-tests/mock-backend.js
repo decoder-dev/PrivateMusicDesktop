@@ -129,6 +129,7 @@
     library: async ({ offset, count }) => { await delay(config.pageDelay ?? 5); return page(library, offset, count); },
     playlists: async ({ offset, count }) => page(playlists, offset, count),
     playlist_tracks: async ({ playlist, offset, count }) => {
+      if(config.playlistTracksDelay)await delay(config.playlistTracksDelay);
       if(Array.isArray(config.playlistTrackIds))return page(config.playlistTrackIds.map(n=>makeTrack(n)),offset,count);
       const key = `${playlist.owner_id}_${playlist.playlist_id}`;
       if (!playlistTracks.has(key)) playlistTracks.set(key, library.slice(0, playlist.count).map((t) => ({ ...t, title: `${playlist.title}: ${t.title}` })));
@@ -316,7 +317,7 @@
     output_devices: async () => { await delay(5); return config.devices ?? ["Динамики", "Наушники"]; },
     set_output_device: ({ name }) => { state.outputDevice = name; },
     set_close_to_tray: ({ on }) => { state.closeToTray = on; },
-    network_usage: () => { if(config.networkUsageFails) throw {kind:"offline"}; return {connected:config.networkConnected !== false,metered:!!config.metered}; },
+    network_usage: async () => { if(config.networkUsageDelay)await delay(config.networkUsageDelay);if(config.networkUsageFails) throw {kind:"offline"}; return {connected:config.networkConnected !== false,metered:!!config.metered}; },
     network_focus: ({ focused }) => { state.focused = focused; },
     network_check: () => {},
     network_probe: async () => { await delay(config.probeDelay ?? 5); },
