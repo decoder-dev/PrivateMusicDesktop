@@ -1,3 +1,4 @@
+import { radioSnapshot } from "./radio-snapshot.js";
 import { ft } from "./feature-i18n.js";
 import { api } from "./api.js";
 import { store, publish } from "./store.js";
@@ -34,6 +35,7 @@ export function rememberQueue() {
     position: store.player.position || 0,
     shuffle: store.player.shuffle,
     repeat: store.player.repeat,
+    radio: radioSnapshot(store.player.radio_context),
   };
   let entries=[snapshot,...queueHistory()].slice(0,10);
   for(;;){try{writePersonal("queues",entries);break;}catch{if(entries.length>1){entries.pop();continue;}toast(ft("История очереди не сохранена: локальное хранилище заполнено"),{error:true});return;}}
@@ -52,7 +54,9 @@ export async function restoreQueue(at) {
     ["off", "all", "one"].includes(entry.repeat) ? entry.repeat : "off",
   );
   if (id !== accountId()) return;
-  await api.loadQueue(entry.tracks, entry.index, entry.position);
+  const radio=radioSnapshot(entry.radio);
+  if(radio)await api.restoreRadio(radio,entry.tracks,entry.index,entry.position);
+  else await api.loadQueue(entry.tracks, entry.index, entry.position);
   if (id !== accountId()) return;
   writePersonal(
     "queues",

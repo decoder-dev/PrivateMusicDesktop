@@ -135,7 +135,12 @@ desktop UI and its tests are unchanged.
 * **Listen later**: the current track's menu can save up to 200 queue entries, shuffle/repeat and
   the playback position. Library shows the saved session above its shortcuts, with resume/remove
   actions. Streams are stripped before saving; snapshots are local and isolated by account. Resuming
-  restores a regular queue, without the original radio's automatic continuation.
+  restores a paused queue before starting playback. Radio bookmarks also keep the personal/catalog
+  mix options and page cursor, or the similar-track seed; their queues continue filling on resume.
+  Old snapshots without a valid radio source still restore as regular queues. Radio seeds omit stream
+  addresses; fresh tracks require an internet connection. Similar-radio recommendations rebuild
+  their seed rotation from the saved source and queue. Queue history preserves the same radio
+  context and restores it on pause.
 * **Playlist import**: Library's actions menu opens a TXT/CSV importer (1 MB / 500 unique entries).
   It recognises numbered `Artist — Title` lists and CSV headers in English/Russian, searches VK
   sequentially, and lets the user review recording variants before creating a playlist. Stop keeps

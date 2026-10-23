@@ -1,3 +1,4 @@
+import { radioSnapshot } from "./radio-snapshot.js";
 import { api, trackKey } from "./api.js";
 import { store } from "./store.js";
 import { accountId, readPersonal, writePersonal, cleanTrack } from "./personal.js";
@@ -11,7 +12,7 @@ export function listenLater() {
   if (!Array.isArray(value.tracks) || !value.tracks.length || value.tracks.length > LIMIT ||
       !Number.isInteger(value.index) || value.index < 0 || value.index >= value.tracks.length ||
       !value.tracks.every(track => track && Number.isInteger(track.owner_id) && Number.isInteger(track.track_id) && typeof track.title === "string")) return null;
-  return value;
+  return {...value,radio:radioSnapshot(value.radio)};
 }
 export function saveForLater() {
   const { tracks, current } = store.queue;
@@ -23,6 +24,7 @@ export function saveForLater() {
   writePersonal("listenLater", {
     tracks: tracks.slice(start, start + LIMIT).map(cleanTrack), index: current - start,
     position: duration > 0 ? Math.min(position, duration) : position,
+    radio: radioSnapshot(store.player.radio_context),
     shuffle: !!store.player.shuffle, repeat: store.player.repeat, savedAt: Date.now(),
   });
 }
@@ -37,7 +39,9 @@ export async function resumeLater() {
   if (!current()) return;
   await api.setRepeat(["off", "all", "one"].includes(entry.repeat) ? entry.repeat : "off");
   if (!current()) return;
-  await api.loadQueue(entry.tracks, entry.index, Number.isFinite(entry.position) ? Math.max(0, entry.position) : 0);
+  const position=Number.isFinite(entry.position) ? Math.max(0, entry.position) : 0;
+  if(entry.radio) await api.restoreRadio(entry.radio,entry.tracks,entry.index,position);
+  else await api.loadQueue(entry.tracks, entry.index, position);
   if (!current()) return;
   await api.toggle();
   // Keep the saved queue available until the user explicitly removes or replaces it.

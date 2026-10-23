@@ -22,7 +22,7 @@ use crate::net::{self, NetState};
 use crate::audio::{PlayerEvent, PlayerHandle, Remote, Sink};
 use crate::offline::OfflineStore;
 use crate::queue::{Queue, Repeat};
-use crate::radio::{self, Radio, RadioFetch, RadioKind};
+use crate::radio::{self, Radio, RadioFetch, RadioKind, RadioContinuation, RadioSetup};
 use crate::stream::FetchConfig;
 use crate::vk::{Session, Track, VkClient};
 use crate::Error;
@@ -54,6 +54,7 @@ pub struct State {
     pub queue_len: usize,
     /// Установите, пока очередь пополняется из микса или радиоприемника.
     pub radio: Option<RadioKind>,
+    pub radio_context: Option<RadioContinuation>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -292,6 +293,7 @@ impl Inner {
             queue_index: self.queue.current_index(),
             queue_len: self.queue.len(),
             radio: self.radio.as_ref().map(|r| r.kind),
+            radio_context: self.radio.as_ref().and_then(Radio::continuation),
         }
     }
 
@@ -540,7 +542,8 @@ impl Shared {
             let Some(radio) = inner.radio.as_mut().filter(|r| r.generation == generation) else { return };
             radio.in_flight = false;
             radio.finish_round(added_total, failure.as_ref());
-            if std::mem::take(&mut radio.waiting) {
+            let waiting = std::mem::take(&mut radio.waiting);
+            if waiting {
                 // Пока этот раунд был в пути, очередь иссякла.
                 if added_total > 0 && inner.queue.advance(false).is_some() {
                     inner.failures = 0;
@@ -556,6 +559,7 @@ impl Shared {
                 // После этой страницы все еще мало: попросите следующую.
                 self.maybe_refill(inner);
             }
+            if !waiting { events.push(UiEvent::State(inner.state())); }
         });
     }
 
@@ -1107,6 +1111,11 @@ impl Controller {
     /// `offset` — это место, где продолжается микс потока, `seeds` — треки, о которых начинает
     /// спрашивать радиостанция; `tracks` считайте, как уже слышали.
     pub fn play_radio(&self, tracks: Vec<Track>, index: usize, kind: RadioKind, fetch: RadioFetch, offset: u32, seeds: Vec<Track>) {
+        self.radio_queue(tracks, index, RadioSetup { kind, fetch, offset, seeds, source: None }, None);
+    }
+
+    /// `position` restores a paused queue; no stream starts before the caller resumes.
+    pub fn radio_queue(&self, tracks: Vec<Track>, index: usize, setup: RadioSetup, position: Option<f64>) {
         let selected=tracks.get(index).map(Track::id);
         let tracks=self.recommendations(tracks);
         let index=tracks.iter().position(|track|Some(track.id())==selected).unwrap_or_default();
@@ -1114,11 +1123,23 @@ impl Controller {
             let Inner { queue, rng, .. } = inner;
             queue.replace(tracks, index, rng);
             inner.radio_generation += 1;
-            inner.radio = Some(Radio::new(kind, inner.radio_generation, fetch, offset, seeds, inner.queue.tracks()));
+            let mut radio = Radio::new(setup.kind, inner.radio_generation, setup.fetch, setup.offset, setup.seeds, inner.queue.tracks());
+            radio.source = setup.source;
+            inner.radio = Some(radio);
             inner.failures = 0;
             inner.refreshed.clear();
             events.push(inner.queue_event());
-            self.shared.start_current(inner, events);
+            if let Some(position) = position {
+                self.shared.remote().stop();
+                self.shared.cancel_recovery(inner, events);
+                inner.status = Status::Idle;
+                inner.pending_start = if inner.queue.current().map(Track::id) == selected { position } else { 0.0 };
+                inner.position = inner.pending_start;
+                inner.duration = inner.queue.current().map(|track| f64::from(track.duration)).unwrap_or_default();
+                events.push(UiEvent::State(inner.state()));
+            } else {
+                self.shared.start_current(inner, events);
+            }
         });
     }
 

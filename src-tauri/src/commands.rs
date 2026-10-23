@@ -757,3 +757,11 @@ pub async fn network_usage(handle: AppHandle) -> CommandResult<serde_json::Value
         }
     }).await
 }
+
+
+#[tauri::command]
+pub async fn restore_radio(state: TauriState<'_, AppState>, source: RadioSource, tracks: Vec<Track>, index: usize, position: f64, next_offset: Option<u32>) -> CommandResult<()> {
+    let tracks = checked_queue(tracks)?;
+    let app = state.app.clone();
+    blocking(move || app.restore_radio(source, tracks, index, position, next_offset)).await
+}

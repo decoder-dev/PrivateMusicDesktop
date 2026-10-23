@@ -20,13 +20,15 @@ export function createListenLaterCard({ toast }) {
   const remove = h("button", { type: "button", class: "later-remove", "aria-label": t("later.remove"), onclick: () => {
     try { clearListenLater(); } catch (error) { toast(errorText(error), { error: true }); }
   } }, icon("close", 18));
+  const note = h("p", { class: "later-note" });
   const element = h("section", { class: "later-section", hidden: true },
     h("h2", { class: "shelf-title", text: t("later.title") }), h("div", { class: "later-card" }, play, remove),
-    h("p", { class: "later-note", text: t("later.note") }));
+    note);
   function render() {
     const entry = listenLater();
     element.hidden = !entry;
     if (!entry) return;
+    note.textContent=t(entry.radio ? "later.radioNote" : "later.note");
     const track = entry.tracks[entry.index];
     artwork.replaceChildren(artBox(track.artwork_url, { size: 24 }));
     title.textContent = track.title;

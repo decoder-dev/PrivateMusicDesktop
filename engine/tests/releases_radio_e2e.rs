@@ -379,8 +379,60 @@ fn radio_requests_are_validated_before_anything_changes() {
     ];
     for source in bad {
         assert_eq!(app.play_radio(source.clone(), one.clone(), 0), Err(Error::InvalidRequest), "{source:?}");
+        assert_eq!(app.restore_radio(source.clone(), one.clone(), 0, 0.0, Some(400)), Err(Error::InvalidRequest), "{source:?}");
     }
     assert_eq!(app.play_radio(RadioSource::Personal { options: None }, Vec::new(), 0), Err(Error::InvalidRequest));
+    for position in [-1.0, f64::NAN, f64::INFINITY] {
+        assert_eq!(app.restore_radio(RadioSource::Personal {options:None},one.clone(),0,position,Some(400)),Err(Error::InvalidRequest));
+    }
+    assert_eq!(app.restore_radio(RadioSource::Personal {options:None},one.clone(),1,0.0,Some(400)),Err(Error::InvalidRequest));
+    assert_eq!(app.restore_radio(RadioSource::Personal {options:None},one,0,0.0,Some(1_000_001)),Err(Error::InvalidRequest));
     assert_eq!(app.controller().state().queue_len, 0);
     assert_eq!(app.controller().state().radio, None);
+}
+
+#[test]
+fn restoring_radio_keeps_position_and_source_without_starting_network_work() {
+    let api = FakeApi::start(|_, _, _| panic!("a restored radio must stay idle"));
+    let app = app(&api.base);
+    let seed = Track { track_id: 1, owner_id: 7, title: "Saved".into(), artist: "Artist".into(),
+        album_title: None, duration: 100, stream_url: Some("https://media.invalid/private-stream".into()),
+        artwork_url: None, access_key: None, lyrics_id: None, is_hq: false, track_code: None, artists: vec![], album: None };
+    for source in [RadioSource::Personal {options:None}, RadioSource::Catalog {mix_id:"saved-mix".into(),options:Some(r#"{"mood":["calm"]}"#.into())}, RadioSource::Similar {seed:seed.clone()}] {
+        app.restore_radio(source, vec![seed.clone()], 0, 42.0, Some(700)).unwrap();
+        let state=app.controller().state();
+        assert_eq!(state.status,Status::Idle);
+        assert_eq!(state.position,42.0);
+        assert_eq!(state.track.as_ref().unwrap().track_id,1);
+        let context=state.radio_context.unwrap();
+        assert_eq!(context.next_offset,if matches!(context.source,RadioSource::Similar {..}) {0} else {700});
+        let json=serde_json::to_string(&context).unwrap();
+        assert!(!json.contains("private-stream"));
+        assert!(!json.contains("access_token"));
+    }
+    app.controller().load_queue(vec![seed],0,10.0);
+    assert!(app.controller().state().radio_context.is_none());
+}
+
+#[test]
+fn resumed_radio_refills_from_the_saved_cursor_without_repeating_saved_tracks() {
+    if !require_ffmpeg() { return; }
+    let (_dir,media)=media_dir();
+    let base=media.base.clone();
+    let api=FakeApi::start(move |url,body,_| {
+        assert_eq!(method(url),"audio.getStreamMixAudios");
+        assert_eq!(param(body,"mix_id"),Some("saved"));
+        if param(body,"offset")==Some("700") {(200,tracks_json(&base,&[1,2,3,4,5,6,7,8,9]))}
+        else {(200,r#"{"response":{"items":[]}}"#.into())}
+    });
+    let app=app(&api.base);
+    let value:serde_json::Value=serde_json::from_str(&tracks_json(&media.base,&[1,2])).unwrap();
+    let first=value["response"]["items"].as_array().unwrap().iter().filter_map(|item|pm_engine::vk::model::parse_track(item,Some(7))).collect();
+    app.restore_radio(RadioSource::Catalog {mix_id:"saved".into(),options:None},first,0,0.0,Some(700)).unwrap();
+    assert_eq!(api.call_count("getStreamMixAudios"),0);
+    app.controller().toggle();
+    wait(&app,"restored radio refill",|state|state.queue_len==9);
+    assert_eq!(app.controller().state().queue_len,9,"saved tracks are deduplicated from the refill");
+    let calls=api.calls.lock().unwrap();
+    assert_eq!(param(&calls[0].1,"offset"),Some("700"));
 }

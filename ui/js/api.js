@@ -54,6 +54,7 @@ export const api = {
    * Воспроизводит очередь, которая продолжает пополняться из `source`: { kind:
    * "personal"|"catalog"|"similar", … }.
    */
+  restoreRadio: (context, tracks, index, position) => invoke("restore_radio", {source:context.source,tracks,index,position,nextOffset:context.next_offset}),
   playRadio: (source, tracks, index) => { const { next_offset, ...radio } = source; return invoke("play_radio", { source:radio, tracks, index, nextOffset:next_offset ?? null }); },
   recommendations: () => invoke("recommendations"),
   similar: (track) => invoke("similar", { track }),

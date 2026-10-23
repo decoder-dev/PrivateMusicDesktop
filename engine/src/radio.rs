@@ -22,7 +22,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::vk::Track;
 use crate::{Error, Result};
@@ -71,9 +71,25 @@ pub enum RadioRequest {
 /// Выполняет один запрос к VK (с обновлением токена); построено приложением.
 pub type RadioFetch = Arc<dyn Fn(&RadioRequest) -> Result<Vec<Track>> + Send + Sync>;
 
+/// Metadata needed to resume a radio queue without storing playback addresses.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RadioContinuation {
+    pub source: crate::app::RadioSource,
+    pub next_offset: u32,
+}
+
+pub struct RadioSetup {
+    pub kind: RadioKind,
+    pub fetch: RadioFetch,
+    pub offset: u32,
+    pub seeds: Vec<Track>,
+    pub source: Option<crate::app::RadioSource>,
+}
+
 /// Работающее радио. Живет внутри состояния контроллера.
 pub struct Radio {
     pub kind: RadioKind,
+    pub source: Option<crate::app::RadioSource>,
     /// Сообщает залежавшемуся рабочему, что радио, которое он запускал, заменили.
     pub generation: u64,
     pub fetch: RadioFetch,
@@ -94,6 +110,7 @@ impl Radio {
     pub fn new(kind: RadioKind, generation: u64, fetch: RadioFetch, offset: u32, seeds: Vec<Track>, queued: &[Track]) -> Self {
         let mut radio = Self {
             kind,
+            source: None,
             generation,
             fetch,
             in_flight: false,
@@ -107,6 +124,11 @@ impl Radio {
         };
         radio.rotate_seeds(&seeds);
         radio
+    }
+
+    pub fn continuation(&self) -> Option<RadioContinuation> {
+        if self.done { return None; }
+        Some(RadioContinuation { source: self.source.clone()?, next_offset: self.offset })
     }
 
     /// Должен ли раунд начинаться сейчас, учитывая треки, оставшиеся в очереди.

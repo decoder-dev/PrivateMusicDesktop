@@ -1130,7 +1130,7 @@ test("listen later: save the current queue and position, restore it after reload
   try {
     const {page}=app;
     await playFromHome(page);
-    await page.evaluate(async()=>{await (await import('/js/api.js')).api.seek(42);});
+    await page.evaluate(async()=>{const {api}=await import('/js/api.js');await api.playTracks(window.__mock.state.queue,0);await api.seek(42);});
     await tap(page,'.player .now');
     await tap(page,'.np-quick button:last-child');
     await tap(page,'.sheet [data-action="listen-later"]');
@@ -1461,6 +1461,47 @@ test("playlist discovery: changing accounts while editing prevents a write",asyn
     await page.locator('dialog [name="discovery"]').selectOption('hide');
     await page.evaluate(async()=>{const {store}=await import('/js/store.js');store.session={signed_in:true,profile:{id:99}};});
     await tap(page,'dialog button[type="submit"]');assert.equal(await page.evaluate(()=>window.__mock.count('edit_playlist')),0);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+
+test("listen later: radio bookmarks preserve source and cursor across reload and restore before playback",async()=>{
+  const app=await phoneApp();
+  try {
+    const {page}=app;await playFromHome(page);
+    await page.evaluate(async()=>{const {api}=await import('/js/api.js');const tracks=window.__mock.state.queue;await api.playRadio({kind:'catalog',mix_id:'saved-mix',options:'{"mood":["calm"]}',next_offset:700},tracks,0);await api.seek(37);(await import('/js/listen-later.js')).saveForLater();});
+    await page.reload();await see(page,'.dock');await tab(page,'library');await see(page,'.later-card');
+    assert.match(await page.locator('.later-note').innerText(),/продолжит пополняться/);
+    const before=await page.evaluate(()=>window.__mock.calls.length);
+    await tap(page,'.later-play');
+    const calls=await page.evaluate(before=>window.__mock.calls.slice(before).filter(call=>['restore_radio','load_queue','toggle'].includes(call.command)),before);
+    assert.equal(calls[0].command,'restore_radio');assert.equal(calls[1].command,'toggle');
+    assert.equal(calls[0].args.position,37);assert.equal(calls[0].args.nextOffset,700);
+    assert.deepEqual(calls[0].args.source,{kind:'catalog',mix_id:'saved-mix',options:'{"mood":["calm"]}'});
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("listen later: similar-radio seeds strip stream and session fields; invalid old radio data falls back to its queue",async()=>{
+  const app=await phoneApp();
+  try {
+    const {page}=app;await playFromHome(page);
+    const saved=await page.evaluate(async()=>{const {store}=await import('/js/store.js');const {saveForLater}=await import('/js/listen-later.js');store.player.radio_context={source:{kind:'similar',seed:{...store.player.track,stream_url:'https://private.invalid/stream',access_token:'secret'}},next_offset:0};saveForLater();return JSON.parse(localStorage.getItem('pm.personal.7.listenLater'));});
+    assert.equal(saved.radio.source.seed.stream_url,null);assert.equal(saved.radio.source.seed.access_token,undefined);
+    await page.evaluate(async()=>{const entry=JSON.parse(localStorage.getItem('pm.personal.7.listenLater'));entry.radio.next_offset=-1;localStorage.setItem('pm.personal.7.listenLater',JSON.stringify(entry));await (await import('/js/listen-later.js')).resumeLater();});
+    assert.equal(await page.evaluate(()=>window.__mock.count('restore_radio')),0);
+    assert.equal(await page.evaluate(()=>window.__mock.count('load_queue')),1);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("queue history: a saved radio restores its source and position on pause",async()=>{
+  const app=await phoneApp();
+  try {
+    const {page}=app;await playFromHome(page);
+    await page.evaluate(async()=>{const {api}=await import('/js/api.js');const {rememberQueue,restoreQueue}=await import('/js/queue-history.js');await api.seek(25);const at=rememberQueue();await api.playTracks(window.__mock.state.queue,0);await restoreQueue(at);});
+    const restored=await page.evaluate(()=>window.__mock.last('restore_radio'));
+    assert.equal(restored.args.source.kind,'personal');assert.equal(restored.args.position,25);
+    assert.equal(await page.evaluate(()=>window.__mock.state.player.status),'idle');
+    assert.equal(await page.evaluate(()=>window.__mock.count('toggle')),0);
     assert.deepEqual(app.problems,[]);
   } finally {await app.close();}
 });

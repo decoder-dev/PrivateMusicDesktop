@@ -183,16 +183,20 @@
     },
     player_state: () => state.player,
     play_tracks: ({ tracks, index }) => {
-      state.queue = tracks; state.player.queue_index = index; state.player.radio = null; startCurrent(); emitQueue(); emitState();
+      state.queue = tracks; state.player.queue_index = index; state.player.radio = null; state.player.radio_context = null; startCurrent(); emitQueue(); emitState();
     },
     // Очередь, которая пополняется сама собой: на Rust тестируются собственные правила движка, тут
     // окошку остаётся только запросить и показать, что это микс.
-    play_radio: ({ source, tracks, index }) => {
+    play_radio: ({ source, tracks, index, nextOffset }) => {
       if (config.radioFails) throw { kind: "invalid", message: "Invalid request." };
-      state.queue = tracks; state.player.queue_index = index; state.player.radio = source.kind; startCurrent(); emitQueue(); emitState();
+      state.queue = tracks; state.player.queue_index = index; state.player.radio = source.kind; state.player.radio_context={source,next_offset:nextOffset ?? 100}; startCurrent(); emitQueue(); emitState();
+    },
+    restore_radio: ({source,tracks,index,position,nextOffset}) => {
+      state.queue=tracks;state.player.queue_index=index;startCurrent();state.player.status="idle";state.player.position=position;
+      state.player.radio=source.kind;state.player.radio_context={source,next_offset:nextOffset};emitQueue();emitState();
     },
     load_queue: ({ tracks, index, position }) => {
-      state.queue = tracks; state.player.queue_index = index; state.player.radio = null; startCurrent();
+      state.queue = tracks; state.player.queue_index = index; state.player.radio = null; state.player.radio_context = null; startCurrent();
       state.player.status = "idle"; state.player.position = position; emitQueue(); emitState();
     },
     toggle: () => {
@@ -211,7 +215,7 @@
     export_track: () => true,
     sleep_timer: () => state.sleepTimer ?? [null, false],
     set_sleep_timer: ({ seconds, endOfTrack }) => { state.sleepTimer = [seconds, endOfTrack]; emit("pm-event", { type: "sleep_timer", remaining: seconds, end_of_track: endOfTrack }); },
-    clear_upcoming: () => { state.queue = state.queue.slice(0, (state.player.queue_index ?? -1) + 1); state.player.radio = null; state.player.queue_len = state.queue.length; emitQueue(); emitState(); },
+    clear_upcoming: () => { state.queue = state.queue.slice(0, (state.player.queue_index ?? -1) + 1); state.player.radio = null; state.player.radio_context = null; state.player.queue_len = state.queue.length; emitQueue(); emitState(); },
     move_upcoming: ({ from, to }) => { if (from <= state.player.queue_index || to <= state.player.queue_index || to >= state.queue.length) return; const [track] = state.queue.splice(from, 1); state.queue.splice(to, 0, track); emitQueue(); emitState(); },
     jump: ({ index }) => { state.player.queue_index = index; startCurrent(); emitQueue(); emitState(); },
     play_next: ({ track }) => { state.queue.splice((state.player.queue_index ?? -1) + 1, 0, track); state.player.queue_len = state.queue.length; emitQueue(); emitState(); },

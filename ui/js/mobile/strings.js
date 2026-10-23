@@ -3,6 +3,7 @@ import { addStrings } from "../i18n.js";
 
 addStrings({
   ru: {
+    "later.radioNote": "Сохранены очередь, позиция и источник радио. Микс продолжит пополняться; для новых треков нужен интернет.",
     "pl.discovery": "Рекомендации VK (не меняет доступ по ссылке)",
     "pl.discovery.keep": "Не менять / по умолчанию",
     "pl.discovery.show": "Рекомендовать",
@@ -40,7 +41,7 @@ addStrings({
     "later.resume": "Продолжить сохранённую очередь",
     "later.remove": "Удалить сохранённую очередь",
     "later.noQueue": "Сначала включите музыку и дождитесь загрузки очереди",
-    "later.note": "Сохранено на устройстве: до 200 треков и позиция воспроизведения. Радио продолжится как обычная очередь.",
+    "later.note": "Сохранено на устройстве: до 200 треков и позиция воспроизведения.",
     "import.title": "Импорт плейлиста",
     "import.name": "Название плейлиста",
     "import.default": "Импортированная музыка",
@@ -122,6 +123,7 @@ addStrings({
     "np.grab": "Потяните вниз, чтобы свернуть",
   },
   en: {
+    "later.radioNote": "Queue, position and radio source saved. The mix will keep filling; new tracks need an internet connection.",
     "pl.discovery": "VK recommendations (link access stays the same)",
     "pl.discovery.keep": "Keep current / default",
     "pl.discovery.show": "Include in recommendations",
@@ -159,7 +161,7 @@ addStrings({
     "later.resume": "Resume saved queue",
     "later.remove": "Remove saved queue",
     "later.noQueue": "Start music and wait for the queue to load first",
-    "later.note": "Saved on this device: up to 200 tracks and playback position. Radio resumes as a regular queue.",
+    "later.note": "Saved on this device: up to 200 tracks and playback position.",
     "import.title": "Import playlist",
     "import.name": "Playlist name",
     "import.default": "Imported music",

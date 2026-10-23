@@ -104,7 +104,7 @@ fn describe_vk(error: &Error) -> String {
 }
 
 /// Откуда пополняется бесконечная очередь, как называет ее окно.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(clippy::large_enum_variant)] // передается один раз на радио
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum RadioSource {
@@ -299,6 +299,24 @@ impl App {
     }
 
     pub fn play_radio_from(&self, source: RadioSource, tracks: Vec<Track>, index: usize, next_offset: Option<u32>) -> Result<()> {
+        if tracks.is_empty() { return Err(Error::InvalidRequest); }
+        let setup = self.radio_setup(source, &tracks, next_offset)?;
+        self.controller.radio_queue(tracks, index, setup, None);
+        Ok(())
+    }
+
+    pub fn restore_radio(&self, source: RadioSource, tracks: Vec<Track>, index: usize, position: f64, next_offset: Option<u32>) -> Result<()> {
+        if tracks.is_empty() || index >= tracks.len() || !position.is_finite() || position < 0.0 {
+            return Err(Error::InvalidRequest);
+        }
+        let setup = self.radio_setup(source, &tracks, next_offset)?;
+        self.controller.radio_queue(tracks, index, setup, Some(position));
+        Ok(())
+    }
+
+    fn radio_setup(&self, source: RadioSource, tracks: &[Track], next_offset: Option<u32>) -> Result<radio::RadioSetup> {
+        let mut saved_source = source.clone();
+        if let RadioSource::Similar { seed } = &mut saved_source { seed.stream_url = None; }
         let next_offset = next_offset.unwrap_or(radio::FIRST_REFILL_OFFSET);
         if next_offset > 1_000_000 { return Err(Error::InvalidRequest); }
         let weak = Arc::downgrade(&self.core);
@@ -339,11 +357,7 @@ impl App {
                 (RadioKind::Similar, 0, seeds, fetch)
             }
         };
-        if tracks.is_empty() {
-            return Err(Error::InvalidRequest);
-        }
-        self.controller.play_radio(tracks, index, kind, fetch, offset, seeds);
-        Ok(())
+        Ok(radio::RadioSetup { kind, fetch, offset, seeds, source: Some(saved_source) })
     }
 }
 
