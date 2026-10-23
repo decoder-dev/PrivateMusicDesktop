@@ -46,6 +46,7 @@ class ShareArgs {
 @TauriPlugin
 class LoginPlugin(private val activity: Activity) : Plugin(activity) {
     override fun load(webView: WebView) {
+        CrashReport.install(activity)
         val debuggable = (activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
         val extras = activity.intent
         if (SmokeMode.requested(
@@ -201,6 +202,13 @@ class LoginPlugin(private val activity: Activity) : Plugin(activity) {
                 audioPickerRunning.set(false)
             }
         }, "pm-audio-picker").start()
+    }
+
+    @Command
+    fun crashReport(invoke: Invoke) {
+        try {
+            invoke.resolve(JSObject().put("text", CrashReport.text(activity)))
+        } catch (_: Exception) { invoke.reject("Crash report unavailable") }
     }
 
     @Command

@@ -73,8 +73,10 @@ android {
                         "Sign it with apksigner before installing (see docs/android.md)."
                 )
             }
+            // R8 stays off: the release build is never run by the emulator tests, and the plugins are found by
+            // name and by reflection (see the keep rules). A few MB of APK size is cheaper than a crash on a phone.
             optimization {
-               enable = true
+               enable = false
             }
             proguardFiles(
                 *fileTree(".") {

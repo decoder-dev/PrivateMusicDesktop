@@ -766,6 +766,32 @@ pub async fn network_usage(handle: AppHandle) -> CommandResult<serde_json::Value
 }
 
 
+/// Для отчета об ошибке: устройство, WebView и причины завершения процесса (Android), а также хвосты журнала
+/// этого и предыдущего запуска. Ничего не отправляется: текст показывается в приложении.
+#[tauri::command]
+pub async fn crash_report(handle: AppHandle) -> CommandResult<String> {
+    blocking(move || {
+        let mut text = String::new();
+        #[cfg(target_os = "android")]
+        {
+            use tauri_plugin_vk_login::VkLoginExt;
+            match handle.vk_login().crash_report() {
+                Ok(report) => text.push_str(&report),
+                Err(error) => text.push_str(&format!("android report unavailable: {error}\n")),
+            }
+        }
+        if let Ok(dir) = tauri::Manager::path(&handle).app_log_dir() {
+            for (title, name) in [("previous run", "private-music.previous.log"), ("this run", "private-music.log")] {
+                if let Ok(bytes) = std::fs::read(dir.join(name)) {
+                    let start = bytes.len().saturating_sub(16_000);
+                    text.push_str(&format!("\n== log: {title} ==\n{}", String::from_utf8_lossy(&bytes[start..])));
+                }
+            }
+        }
+        Ok(text)
+    }).await
+}
+
 #[tauri::command]
 pub async fn restore_radio(state: TauriState<'_, AppState>, source: RadioSource, tracks: Vec<Track>, index: usize, position: f64, next_offset: Option<u32>) -> CommandResult<()> {
     let tracks = checked_queue(tracks)?;

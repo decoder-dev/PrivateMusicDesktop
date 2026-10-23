@@ -76,6 +76,12 @@ fn init_logging(handle: &tauri::AppHandle) {
         }
     }
     let _ = builder.try_init();
+    // Паника в любом потоке попадает в журнал (с местом и потоком): иначе на телефоне она видна только в logcat.
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        log::error!("panic in thread {:?}: {info}", std::thread::current().name().unwrap_or("?"));
+        previous(info);
+    }));
 }
 
 #[cfg(desktop)]
@@ -290,7 +296,7 @@ pub fn run() {
             commands::set_visualizer,
             commands::set_equalizer,commands::set_taste,commands::set_transitions,commands::set_normalization,commands::month_plays,
             commands::lyrics, commands::lyrics_versions,
-            commands::choose_cover, commands::set_playlist_cover, commands::discard_cover, commands::share_audio, commands::share_link, commands::copy_link, commands::network_usage,
+            commands::choose_cover, commands::set_playlist_cover, commands::discard_cover, commands::share_audio, commands::share_link, commands::copy_link, commands::network_usage, commands::crash_report,
             commands::choose_audio, commands::upload_audio, commands::discard_audio,
             commands::create_playlist,
             commands::edit_playlist,

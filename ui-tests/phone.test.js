@@ -1691,3 +1691,21 @@ test("sync network cost: a competing download cannot mark a paused playlist as c
     assert.deepEqual(app.problems,[]);
   } finally {await app.close();}
 });
+
+test("settings: the report log opens, shows the backend's text and can be closed", async () => {
+  const app = await openApp({ config: { ...CONFIG, platform: "android", crashReport: "Private Music crash report\napp: 0.6.1\nwebview: test 120" }, phone: true, query: "?platform=android" });
+  try {
+    const { page } = app;
+    await page.waitForSelector(".dock");
+    await tab(page, "profile");
+    await tap(page, '[data-row="settings"]');
+    await page.waitForSelector(".settings .set-body");
+    await page.getByRole("button", { name: "Показать журнал" }).click();
+    await page.waitForSelector("dialog.diag-dialog textarea");
+    await page.waitForFunction(() => document.querySelector("dialog.diag-dialog textarea").value.includes("webview: test 120"));
+    const box = await page.locator("dialog.diag-dialog textarea").boundingBox();
+    assert.ok(box.width > 200 && box.height > 100, "the text field is large enough to read");
+    await page.getByRole("button", { name: "Закрыть" }).click();
+    await page.waitForSelector("dialog.diag-dialog", { state: "detached" });
+  } finally { await app.close(); }
+});

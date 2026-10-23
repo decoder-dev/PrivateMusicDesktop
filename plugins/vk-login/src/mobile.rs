@@ -73,6 +73,13 @@ impl<R: Runtime> VkLogin<R> {
             .map_err(|error| Error::Native(error.to_string()))
     }
 
+    /// Device, WebView and process-death report from the Android side (see `CrashReport.kt`).
+    pub fn crash_report(&self) -> Result<String> {
+        let reply: serde_json::Value = self.plugin.run_mobile_plugin("crashReport", ())
+            .map_err(|error| Error::Native(error.to_string()))?;
+        Ok(reply.get("text").and_then(serde_json::Value::as_str).unwrap_or_default().to_owned())
+    }
+
     pub fn share_audio(&self, path: &str) -> Result<()> {
         let _: serde_json::Value = self.plugin.run_mobile_plugin("shareAudio", serde_json::json!({"path":path}))
             .map_err(|error| Error::Native(error.to_string()))?;

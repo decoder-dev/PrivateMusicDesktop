@@ -35,6 +35,7 @@ export const api = {
   downloadDetails: trackId => invoke("download_details", {trackId}),
   shareAudio: (track, allowDownload = false) => invoke("share_audio", {track,allowDownload}),
   networkUsage: () => invoke("network_usage"),
+  crashReport: () => invoke("crash_report"),
   copyLink: (url) => invoke("copy_link", { url }),
   chooseCover: () => invoke("choose_cover"),
   setPlaylistCover: (fileId,playlist) => invoke("set_playlist_cover",{fileId,playlist}),
