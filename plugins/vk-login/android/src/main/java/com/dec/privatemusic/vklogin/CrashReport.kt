@@ -17,14 +17,33 @@ import java.util.Locale
  * low memory) and the stack of the last uncaught Java exception. Nothing is sent anywhere; the app shows it and
  * the user copies it.
  */
+/**
+ * A short, secret-free trail of the sign-in (hosts, cookie NAMES, VK's answer type), kept on the device and shown in
+ * the report: when sign-in "does nothing", this says where it stopped. The sink is set by [CrashReport.install];
+ * without it (JVM unit tests) every call is a no-op.
+ */
+object LoginTrace {
+    @Volatile var sink: ((String) -> Unit)? = null
+    fun note(message: String) { sink?.invoke(message) }
+}
+
 object CrashReport {
     private const val FILE = "pm-java-crash.txt"
+    private const val TRACE_FILE = "pm-login-trace.txt"
+    private const val MAX_TRACE_FILE = 12_000
     private const val MAX_FILE_BYTES = 24_000
     private const val MAX_TRACE_CHARS = 6_000
 
     /** Writes every uncaught Java exception to a file before the process dies. */
     fun install(context: Context) {
         val app = context.applicationContext
+        LoginTrace.sink = { message ->
+            try {
+                val file = File(app.filesDir, TRACE_FILE)
+                val old = if (file.exists()) file.readText() else ""
+                file.writeText((old + stamp(System.currentTimeMillis()) + " " + message.take(300) + "\n").takeLast(MAX_TRACE_FILE))
+            } catch (_: Throwable) { /* diagnostics must never break sign-in */ }
+        }
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
             try {
@@ -53,6 +72,8 @@ object CrashReport {
         out.append("webview: ").append(webViewVersion()).append("\n\n")
         if (Build.VERSION.SDK_INT >= 30) out.append(exitReasons(context))
         else out.append("process exit reasons: need Android 11 or newer\n")
+        val trace = File(context.filesDir, TRACE_FILE)
+        if (trace.exists()) out.append("\n== sign-in trail ==\n").append(trace.readText().takeLast(MAX_TRACE_FILE))
         val file = File(context.filesDir, FILE)
         if (file.exists()) out.append("\n== uncaught Java exceptions ==\n").append(file.readText().takeLast(MAX_FILE_BYTES))
         return out.toString()
