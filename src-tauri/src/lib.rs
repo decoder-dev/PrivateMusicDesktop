@@ -109,8 +109,12 @@ fn start_login_smoke_test(handle: &tauri::AppHandle, report: std::path::PathBuf)
     });
 }
 
+/// Момент запуска процесса: по нему журнал показывает, сколько заняли настройка и появление интерфейса.
+pub(crate) static STARTED: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let _ = STARTED.set(std::time::Instant::now());
     let builder = tauri::Builder::default().manage(audio_upload::AudioUploads::default())
         .manage(playlist_cover::CoverUploads::default());
     // First: a second launch hands over to the running app and exits.
@@ -265,6 +269,7 @@ pub fn run() {
             }
             #[cfg(mobile)]
             let _ = (window, &has_tray, &close_to_tray);
+            if let Some(started) = STARTED.get() { log::info!("startup: setup finished after {} ms", started.elapsed().as_millis()); }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

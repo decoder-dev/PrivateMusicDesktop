@@ -179,7 +179,7 @@ await step("6a. VK sign-in page loads in the native Activity (smoke hook)", asyn
   return `loaded ${match[1]}`;
 });
 
-await step("6b. sign-in from the UI button opens VK; a non-VK URL is blocked; Back returns", async () => {
+await step("6b. sign-in from the UI button opens VK; Back returns", async () => {
   if (!(await needNetwork())) return "skipped: no network";
   page = await freshPage();
   const button = await loginButton(page);
@@ -187,33 +187,21 @@ await step("6b. sign-in from the UI button opens VK; a non-VK URL is blocked; Ba
     window.__pmLogin = [];
     await window.__TAURI__.event.listen("pm-login", (event) => window.__pmLogin.push(String(event.payload).slice(0, 60)));
   });
+  await sh("logcat -c").catch(() => {});
   await button.click();
+  // DevTools stays detached while VK's page is open: with it attached the software-rendered emulator
+  // repeatedly crashed (qemu SIGSEGV) about 10 s after the second WebView appeared. The URL rules of the
+  // sign-in screen are covered by the Kotlin unit tests (VkUrlPolicyTest).
+  await disconnect();
   await waitFor("LoginActivity in the foreground", () => appIsFocused("LoginActivity"), { timeout: 30_000 });
   log("LoginActivity is in the foreground");
-  const events = await waitFor("the pm-login loadok / loadfailed event", async () => {
-    const seen = await page.evaluate(() => window.__pmLogin);
-    return seen.some((e) => e === "loadok" || e === "loadfailed") ? seen : null;
-  }, { timeout: 90_000, interval: 1000 });
-  log(`pm-login events: ${events.join(", ")}`);
-  if (!events.includes("loadok")) throw new Error(`VK did not load in the sign-in Activity; events: ${events.join(", ")}`);
-
-  // The Activity's WebView lives in the same process, so its page shows up on the same DevTools socket.
-  const listing = await dumpPages("devtools-pages-login");
-  const vkPage = await waitFor("the VK page among the DevTools pages", async () => (await refreshPages(), allPages()).find((p) => { try { return isVk(new URL(p.url()).host); } catch { return false; } }), { timeout: 20_000 })
-    .catch(() => null);
-  let detail = `events ${events.join(",")}`;
-  if (!vkPage) {
-    warn(`the VK page is not listed by DevTools (pages: ${listing.map((p) => p.url).join(", ")}); relying on the loadok event`);
-  } else {
-    detail += `, page ${safeUrl(vkPage.url())}`;
-    await vkPage.screenshot({ path: path.join(OUT, "06-vk-login-page.png"), timeout: 15_000 }).catch((e) => log(`VK page screenshot failed: ${e.message.split("\n")[0]}`));
-    // A page-initiated jump to a non-VK site must not happen (shouldOverrideUrlLoading / shouldInterceptRequest).
-    await vkPage.evaluate(() => { setTimeout(() => location.assign("https://example.org/pm-ci-blocked"), 0); }).catch(() => {});
-    await sleep(8000);
-    const hosts = allPages().map((p) => { try { return new URL(p.url()).host; } catch { return "?"; } });
-    if (hosts.includes("example.org")) warn("a non-VK URL (example.org) was NOT blocked in the sign-in Activity");
-    else detail += ", example.org blocked";
-  }
+  const loaded = await waitFor("VK's page in the sign-in Activity (logcat)", async () => {
+    const text = await shSafe("logcat -d -s VkLogin:I", { timeout: 20_000 });
+    const match = text.match(/page loaded: https page on ([a-z0-9.-]+)/);
+    return match ? match[1] : null;
+  }, { timeout: 90_000, interval: 2000 });
+  log(`VK page loaded: ${loaded}`);
+  if (!isVk(loaded)) throw new Error(`the sign-in Activity loaded a non-VK host: ${loaded}`);
 
   // Back: WebView history first, then the Activity closes (cancelled).
   let back = 0;
@@ -223,12 +211,13 @@ await step("6b. sign-in from the UI button opens VK; a non-VK URL is blocked; Ba
     await sleep(2000);
   }
   if (!(await appIsFocused("MainActivity"))) throw new Error(`Back (${back} presses) did not return to MainActivity. Focus: ${await focusedWindow()}`);
+  page = await freshPage();
   await waitFor("the sign-in button to be enabled again", async () => (await page.locator(LOGIN_BUTTON).first().isVisible()) && (await page.locator(LOGIN_BUTTON).first().isEnabled()), { timeout: 20_000 });
-  const after = await page.evaluate(() => window.__pmLogin);
-  log(`pm-login events after Back: ${after.join(", ")}`);
-  if (!after.includes("cancelled")) warn(`no "cancelled" event after Back (events: ${after.join(", ")})`);
+  const after = await page.evaluate(() => window.__pmLogin ?? []);
+  log(`pm-login events: ${after.join(", ")}`);
+  if (!after.includes("loadok") && !after.includes("cancelled")) warn(`no "loadok"/"cancelled" event reached the page (events: ${after.join(", ")})`);
   await assertNoCrash("after the sign-in Activity");
-  return `${detail}, back to the sign-in screen after ${back} press(es)`;
+  return `loaded ${loaded}, events ${after.join(",") || "none"}, back to the sign-in screen after ${back} press(es)`;
 });
 
 await step("7. hardware Back on the main screen sends the app to the background; relaunch works", async () => {
