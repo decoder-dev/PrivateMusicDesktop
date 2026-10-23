@@ -218,7 +218,9 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
         # connectOverCDP говорит с WebView самого эмулятора: собственный Chromium Playwright не нужен.
-        run: npm install --no-audit --no-fund
+        run: |
+          npm install --no-audit --no-fund
+          node --test ./*.test.mjs
 
       - name: Boot the emulator
         timeout-minutes: 20
