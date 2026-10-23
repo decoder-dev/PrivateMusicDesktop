@@ -1,3 +1,5 @@
+import { accountId } from "../personal.js";
+import { discoveryField, discoveryChoice } from "../playlist-discovery.js";
 import { collectionShareLink } from "../share-links.js";
 import { linkControls } from "../sharing.js";
 import { ft } from "../feature-i18n.js";
@@ -203,6 +205,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
   }
 
   async function edit() {
+    const account = accountId();
     const playlist = current;
     if (!playlist) return;
     const values = await formDialog({
@@ -211,11 +214,13 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
       fields: [
         { name: "title", label: t("pl.name"), value: playlist.title, required: true, max: 128 },
         { name: "description", label: t("pl.description"), value: playlist.description ?? "", multiline: true, max: 2000 },
+        discoveryField(),
       ],
     });
-    if (!values) return;
+    if (!values || !account || account !== accountId() || current !== playlist) return;
     try {
-      replacePlaylist(await api.editPlaylist(playlist, values.title, values.description));
+      const updated = await api.editPlaylist(playlist, values.title, values.description, discoveryChoice(values.discovery));
+      if (account === accountId()) replacePlaylist(updated);
     } catch (error) {
       toast(errorText(error), { error: true });
     }

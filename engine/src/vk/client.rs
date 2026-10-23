@@ -670,14 +670,17 @@ impl VkClient {
     }
 
     pub fn create_playlist(&self, session: &Session, title: &str, description: &str) -> Result<Playlist> {
+        self.create_playlist_with_discovery(session, title, description, None)
+    }
+
+    /// `None` preserves VK's default; this controls discovery, not access rights.
+    pub fn create_playlist_with_discovery(&self, session: &Session, title: &str, description: &str, hidden: Option<bool>) -> Result<Playlist> {
         let title = Self::clean_title(title)?;
         let description = Self::clean_description(description)?;
         let user = self.user_id(session)?;
-        let value = self.call_once(
-            session,
-            "audio.createPlaylist",
-            &[("owner_id", user.to_string()), ("title", title.clone()), ("description", description.clone())],
-        )?;
+        let mut params = vec![("owner_id", user.to_string()), ("title", title.clone()), ("description", description.clone())];
+        if let Some(hidden) = hidden { params.push(("no_discover", if hidden { "1" } else { "0" }.into())); }
+        let value = self.call_once(session, "audio.createPlaylist", &params)?;
         // VK отвечает новым плейлистом; заполните то, что может быть упущено.
         let mut playlist = model::parse_playlist(&value).ok_or_else(|| Error::Format("audio.createPlaylist".into()))?;
         playlist.owner_id = user;
@@ -691,19 +694,21 @@ impl VkClient {
     }
 
     pub fn edit_playlist(&self, session: &Session, playlist: &Playlist, title: &str, description: &str) -> Result<Playlist> {
+        self.edit_playlist_with_discovery(session, playlist, title, description, None)
+    }
+
+    pub fn edit_playlist_with_discovery(&self, session: &Session, playlist: &Playlist, title: &str, description: &str, hidden: Option<bool>) -> Result<Playlist> {
         self.own_playlist(session, playlist)?;
         let title = Self::clean_title(title)?;
         let description = Self::clean_description(description)?;
-        self.call_once(
-            session,
-            "audio.editPlaylist",
-            &[
-                ("owner_id", playlist.owner_id.to_string()),
-                ("playlist_id", playlist.playlist_id.to_string()),
-                ("title", title.clone()),
-                ("description", description.clone()),
-            ],
-        )?;
+        let mut params = vec![
+            ("owner_id", playlist.owner_id.to_string()),
+            ("playlist_id", playlist.playlist_id.to_string()),
+            ("title", title.clone()),
+            ("description", description.clone()),
+        ];
+        if let Some(hidden) = hidden { params.push(("no_discover", if hidden { "1" } else { "0" }.into())); }
+        self.call_once(session, "audio.editPlaylist", &params)?;
         Ok(Playlist { title, description: (!description.is_empty()).then_some(description), ..playlist.clone() })
     }
 

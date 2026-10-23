@@ -706,6 +706,14 @@ impl Core {
         self.api(|client, session| client.edit_playlist(session, playlist, title, description))
     }
 
+    pub fn create_playlist_with_discovery(&self, title: &str, description: &str, hidden: Option<bool>) -> Result<Playlist> {
+        self.api(|client, session| client.create_playlist_with_discovery(session, title, description, hidden))
+    }
+
+    pub fn edit_playlist_with_discovery(&self, playlist: &Playlist, title: &str, description: &str, hidden: Option<bool>) -> Result<Playlist> {
+        self.api(|client, session| client.edit_playlist_with_discovery(session, playlist, title, description, hidden))
+    }
+
     pub fn delete_playlist(&self, playlist: &Playlist) -> Result<()> {
         self.api(|client, session| client.delete_playlist(session, playlist))
     }

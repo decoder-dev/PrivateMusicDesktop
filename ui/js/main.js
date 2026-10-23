@@ -1,3 +1,5 @@
+import { accountId } from "./personal.js";
+import { discoveryField, discoveryChoice } from "./playlist-discovery.js";
 import { ft } from "./feature-i18n.js";
 import { toggleWindowFullscreen, isWindowFullscreen,setWindowMode } from "./window-mode.js";
 import { applyPalette } from "./themes.js";
@@ -152,17 +154,20 @@ async function playSimilar(track) {
 
 /** Запрашивает имя и создает список воспроизведения; разрешает это или ноль. */
 export async function newPlaylist() {
+  const account = accountId();
   const values = await formDialog({
     title: t("pl.new"),
     confirm: t("pl.create"),
     fields: [
       { name: "title", label: t("pl.name"), required: true, max: 128 },
       { name: "description", label: t("pl.description"), multiline: true, max: 2000 },
+      discoveryField(),
     ],
   });
-  if (!values) return null;
+  if (!values || !account || account !== accountId()) return null;
   try {
-    const playlist = await api.createPlaylist(values.title, values.description);
+    const playlist = await api.createPlaylist(values.title, values.description, discoveryChoice(values.discovery));
+    if (account !== accountId()) return null;
     addPlaylist(playlist);
     toast(t("pl.created", { title: playlist.title }));
     return playlist;

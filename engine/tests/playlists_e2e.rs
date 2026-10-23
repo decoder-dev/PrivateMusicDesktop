@@ -93,3 +93,39 @@ fn a_failed_change_is_not_retried() {
     assert!(app.add_to_playlist(&mine(5), &track()).is_err());
     assert_eq!(api.call_count("addToPlaylist"), 1, "a retry could add the track twice");
 }
+
+#[test]
+fn discovery_is_optional_and_sent_with_the_same_metadata_write() {
+    let (api, seen) = recording(r#"{"response":{"id":55,"owner_id":7}}"#);
+    let app = app(&api.base);
+    for hidden in [None, Some(true), Some(false)] {
+        app.create_playlist_with_discovery("Test", "Description", hidden).unwrap();
+        app.edit_playlist_with_discovery(&mine(5), "Renamed", "Description", hidden).unwrap();
+    }
+    let calls = seen.lock().unwrap();
+    assert_eq!(calls.len(), 6);
+    for (index, call) in calls.iter().enumerate() {
+        assert!(call.contains("title=") && call.contains("description=Description"), "{call}");
+        match index / 2 {
+            0 => assert!(!call.contains("no_discover"), "ordinary rename must preserve discovery"),
+            1 => assert!(call.contains("no_discover=1"), "{call}"),
+            _ => assert!(call.contains("no_discover=0"), "{call}"),
+        }
+    }
+}
+
+#[test]
+fn discovery_cannot_change_another_users_playlist() {
+    let api = FakeApi::start(|_, _, _| panic!("no request expected"));
+    let app = app(&api.base);
+    let theirs = Playlist { owner_id: 8, ..mine(5) };
+    assert_eq!(app.edit_playlist_with_discovery(&theirs, "Test", "", Some(true)).unwrap_err(), Error::InvalidRequest);
+}
+
+#[test]
+fn a_discovery_write_is_not_retried_after_an_uncertain_response() {
+    let api = FakeApi::start(|_, _, _| (503, "busy".into()));
+    let app = app(&api.base);
+    assert!(app.edit_playlist_with_discovery(&mine(5), "Test", "", Some(false)).is_err());
+    assert_eq!(api.call_count("editPlaylist"), 1);
+}

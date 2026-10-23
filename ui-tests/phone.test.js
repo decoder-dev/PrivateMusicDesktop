@@ -1429,3 +1429,38 @@ test("download cost: offline starts no request and already saved tracks can be r
     assert.equal(await page.locator('dialog').count(),0);assert.deepEqual(app.problems,[]);
   } finally {await app.close();}
 });
+
+test("playlist discovery: create and edit send an explicit choice; ordinary editing keeps the existing setting",async()=>{
+  const app=await phoneApp({phone:'small'});
+  try {
+    const {page}=app;await tab(page,'library');await tap(page,'.lib-sections [data-section="playlists"]');
+    await tap(page,'.lib-new');await see(page,'dialog[open]');
+    await page.locator('dialog [name="title"]').fill('Discovery test');await page.locator('dialog [name="discovery"]').selectOption('hide');
+    assert.match(await page.locator('dialog').innerText(),/не меняет доступ по ссылке/);
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    await tap(page,'dialog button[type="submit"]');
+    await page.waitForFunction(()=>window.__mock.count('create_playlist')===1);
+    assert.equal(await page.evaluate(()=>window.__mock.last('create_playlist').args.hidden),true);
+    await visible(page,'.lib-grid .card').filter({hasText:'Работа'}).tap();await see(page,'.pl-owner .btn');
+    await tap(page,'.pl-owner .btn:not(.danger-text)');await see(page,'dialog[open]');
+    assert.equal(await page.locator('dialog [name="discovery"]').inputValue(),'');
+    await page.locator('dialog [name="title"]').fill('Work renamed');await tap(page,'dialog button[type="submit"]');
+    await page.waitForFunction(()=>window.__mock.count('edit_playlist')===1);
+    assert.equal(await page.evaluate(()=>window.__mock.last('edit_playlist').args.hidden),null);
+    await tap(page,'.pl-owner .btn:not(.danger-text)');await see(page,'dialog[open]');await page.locator('dialog [name="discovery"]').selectOption('show');
+    await tap(page,'dialog button[type="submit"]');await page.waitForFunction(()=>window.__mock.count('edit_playlist')===2);
+    assert.equal(await page.evaluate(()=>window.__mock.last('edit_playlist').args.hidden),false);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("playlist discovery: changing accounts while editing prevents a write",async()=>{
+  const app=await phoneApp();
+  try {
+    const {page}=app;await tab(page,'library');await tap(page,'.lib-sections [data-section="playlists"]');
+    await visible(page,'.lib-grid .card').filter({hasText:'Работа'}).tap();await tap(page,'.pl-owner .btn:not(.danger-text)');await see(page,'dialog[open]');
+    await page.locator('dialog [name="discovery"]').selectOption('hide');
+    await page.evaluate(async()=>{const {store}=await import('/js/store.js');store.session={signed_in:true,profile:{id:99}};});
+    await tap(page,'dialog button[type="submit"]');assert.equal(await page.evaluate(()=>window.__mock.count('edit_playlist')),0);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});

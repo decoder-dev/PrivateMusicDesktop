@@ -454,9 +454,9 @@ pub async fn remove_download(state: TauriState<'_, AppState>, track_id: String) 
 }
 
 #[tauri::command]
-pub async fn create_playlist(state: TauriState<'_, AppState>, title: String, description: String) -> CommandResult<Playlist> {
+pub async fn create_playlist(state: TauriState<'_, AppState>, title: String, description: String, hidden: Option<bool>) -> CommandResult<Playlist> {
     let app = state.app.clone();
-    blocking(move || app.create_playlist(&title, &description)).await
+    blocking(move || app.create_playlist_with_discovery(&title, &description, hidden)).await
 }
 
 #[tauri::command]
@@ -465,9 +465,10 @@ pub async fn edit_playlist(
     playlist: Playlist,
     title: String,
     description: String,
+    hidden: Option<bool>,
 ) -> CommandResult<Playlist> {
     let app = state.app.clone();
-    blocking(move || app.edit_playlist(&playlist, &title, &description)).await
+    blocking(move || app.edit_playlist_with_discovery(&playlist, &title, &description, hidden)).await
 }
 
 #[tauri::command]

@@ -321,3 +321,11 @@ retry the sync after connecting to an unmetered network. Cancelling consent or c
 prevents pending downloads from starting. Already downloaded files can still be removed or manually
 protected from sync cleanup without a network request. An in-flight file may finish if the network
 changes while that file is downloading.
+
+### Playlist recommendations
+
+Creation and editing include an optional VK recommendations choice (`no_discover`), matching iOS.
+The default sends no flag, preserving VK's current/default policy. Excluding a playlist from
+recommendations does not make its link private. The choice travels in the same single-attempt
+metadata write; changing accounts while the dialog is open invalidates submission. VK does not
+consistently return this flag in playlist lists, so reopening the form offers “Keep current”.

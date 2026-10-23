@@ -3,6 +3,11 @@ import { addStrings } from "../i18n.js";
 
 addStrings({
   ru: {
+    "pl.discovery": "Рекомендации VK (не меняет доступ по ссылке)",
+    "pl.discovery.keep": "Не менять / по умолчанию",
+    "pl.discovery.show": "Рекомендовать",
+    "pl.discovery.hide": "Не рекомендовать",
+
     "download.metered": "Скачать через сеть с оплатой трафика? Это может израсходовать мобильный пакет.",
     "download.unknownNetwork": "Не удалось определить стоимость трафика. Скачать всё равно?",
     "download.continue": "Скачать",
@@ -117,6 +122,11 @@ addStrings({
     "np.grab": "Потяните вниз, чтобы свернуть",
   },
   en: {
+    "pl.discovery": "VK recommendations (link access stays the same)",
+    "pl.discovery.keep": "Keep current / default",
+    "pl.discovery.show": "Include in recommendations",
+    "pl.discovery.hide": "Exclude from recommendations",
+
     "download.metered": "Download over a metered network? This may use your mobile data allowance.",
     "download.unknownNetwork": "Could not determine network cost. Download anyway?",
     "download.continue": "Download",
