@@ -421,8 +421,8 @@ pub async fn set_equalizer(state: TauriState<'_, AppState>, gains: Option<[f32; 
 pub async fn set_taste(state:TauriState<'_,AppState>,taste:pm_engine::taste::Taste,user_id:i64)->CommandResult<()> {
     let app = state.app.clone();
     blocking(move || {
-        if app.controller().session().and_then(|session|session.user_id)!=Some(user_id){return Err(pm_engine::Error::Unauthorized.into());}
-        app.controller().set_taste(taste).map_err(Into::into)
+        if app.controller().session().and_then(|session|session.user_id)!=Some(user_id){return Err(pm_engine::Error::Unauthorized);}
+        app.controller().set_taste(taste)
     }).await
 }
 
