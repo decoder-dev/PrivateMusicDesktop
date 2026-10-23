@@ -1,0 +1,58 @@
+/* Телефон: отделка в стиле iOS-приложения. Все правила держатся на html[data-layout="phone"] и не действуют
+   в режиме Material 3 (html[data-style="material"], css/material.css) и в широком макете.
+   Что здесь: мягкое свечение акцента сверху экрана, стекло с тонкой кромкой у панели и мини-плеера, объем у
+   основной кнопки и обложек, спокойные пустые состояния, аккуратная строка правки текста песни. */
+
+/* ---- свечение акцента за большим заголовком ---- */
+html[data-layout="phone"]:not([data-style="material"]) .main { position: relative; isolation: isolate; }
+html[data-layout="phone"]:not([data-style="material"]) .main::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 340px; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(70% 90% at 12% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%),
+    radial-gradient(60% 80% at 100% 8%, color-mix(in srgb, var(--role-mix) 9%, transparent), transparent 72%);
+}
+html[data-layout="phone"]:not([data-style="material"])[data-np="open"] .main::before { opacity: 0; }
+
+/* ---- нижняя панель и мини-плеер: стекло с кромкой ---- */
+html[data-layout="phone"]:not([data-style="material"]) .dock-tabs,
+html[data-layout="phone"]:not([data-style="material"]) .dock-searchwrap {
+  -webkit-backdrop-filter: var(--glass-strong-blur); backdrop-filter: var(--glass-strong-blur);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.14), inset 0 0 0 var(--hair) var(--line-glass), inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent);
+}
+html[data-layout="phone"]:not([data-style="material"]) .dock-tab[aria-current="page"] .dock-ico {
+  background: color-mix(in srgb, var(--accent) 20%, transparent); box-shadow: inset 0 0 0 var(--hair) color-mix(in srgb, var(--accent) 28%, transparent);
+}
+html[data-layout="phone"]:not([data-style="material"]) .player {
+  -webkit-backdrop-filter: var(--glass-strong-blur); backdrop-filter: var(--glass-strong-blur);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.20), inset 0 0 0 var(--hair) var(--line-glass), inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent);
+}
+
+/* ---- основная кнопка и обложки: объем ---- */
+html[data-layout="phone"]:not([data-style="material"]) .btn.primary {
+  background-image: linear-gradient(180deg, color-mix(in srgb, #fff 16%, var(--accent)), var(--accent));
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 32%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 24%, transparent);
+}
+html[data-layout="phone"]:not([data-style="material"]) .stage-cover .art-box { box-shadow: 0 18px 44px -10px color-mix(in srgb, var(--accent) 45%, transparent), 0 8px 24px rgb(0 0 0 / 0.22); }
+html[data-layout="phone"]:not([data-style="material"]) .card .art-box { box-shadow: 0 8px 20px -8px rgb(0 0 0 / 0.35); }
+html[data-layout="phone"]:not([data-style="material"]) .row .art-box { box-shadow: 0 2px 8px rgb(0 0 0 / 0.22); }
+
+/* ---- карточки и группы ---- */
+html[data-layout="phone"]:not([data-style="material"]) :is(.lib-summary, .resume-card, .group, .set-card, .sync-panel) {
+  box-shadow: 0 1px 0 color-mix(in srgb, #fff 6%, transparent) inset, 0 6px 20px -12px rgb(0 0 0 / 0.30);
+}
+html[data-layout="phone"]:not([data-style="material"]) .shelf-title { letter-spacing: -0.5px; }
+
+/* ---- текст песни: строка правки не обрезается, а прокручивается и тает по краю ---- */
+html[data-layout="phone"] .ly-edit-controls, html[data-layout="phone"] .ly-controls {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 28px), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 28px), transparent 100%);
+}
+html[data-layout="phone"] .ly-controls { overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; justify-content: flex-start; padding-inline: 12px 28px; }
+html[data-layout="phone"] .ly-controls::-webkit-scrollbar { display: none; }
+html[data-layout="phone"] .ly-controls > * { flex: none; }
+
+/* ---- пустые состояния ---- */
+html[data-layout="phone"] .empty-state, html[data-layout="phone"] .view > .status:not(.progress):not(.loading) { color: var(--text-2); text-align: center; text-wrap: balance; }
+html[data-layout="phone"] .empty-state svg { opacity: 0.6; }
+
+@media (prefers-reduced-motion: reduce) { html[data-layout="phone"] .main::before { transition: none; } }
