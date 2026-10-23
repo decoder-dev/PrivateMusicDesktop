@@ -90,8 +90,18 @@ export async function syncPlaylists() {
             .every((other) => Array.isArray(other.wanted))
         ) {
           const {manual,protectedKeys}=protection;
+          let observedManual=null;
           for (const key of rule.owned) {
             if (id !== accountId() || !isSynced(rule.playlist)) break;
+            // A manual save may happen while an earlier removal is awaiting IPC.
+            // Reparse only when this account's stored list actually changed.
+            const raw=localStorage.getItem(`pm.personal.${id}.manualDownloads`);
+            if(raw!==observedManual){
+              const retained=JSON.parse(raw ?? "[]");
+              if(!Array.isArray(retained))throw new Error(ft("Не удалось синхронизировать"));
+              for(const saved of retained)manual.add(saved);
+              observedManual=raw;
+            }
             if (!wanted.has(key) && !manual.has(key) && !protectedKeys.has(key))
               await api.removeDownload(key);
           }

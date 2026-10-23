@@ -233,3 +233,4 @@ html[data-platform="android"][data-style="material"][data-layout="phone"] .tabs 
 
 html[data-layout="phone"] .dialog.saved-lyrics-reader { background: var(--surface); width: min(640px, calc(100vw - 32px)); }
 html[data-layout="phone"] .dialog.file-details-dialog { background: var(--surface); width: min(480px, calc(100vw - 32px)); }
+.file-details-dialog .dialog-actions .btn:focus-visible { outline-offset: -4px; box-shadow: none; }

@@ -1,11 +1,12 @@
 import { api, trackKey } from './api.js';
 import { h, formatTime } from './dom.js';
 import { t, addStrings, errorText } from './i18n.js';
-import { accountId } from './personal.js';
+import { syncRunning } from './playlist-sync.js';
+import { accountId, readPersonal, writePersonal } from './personal.js';
 import { store, own, subscribe } from './store.js';
 import { formatSize, refreshDownloads } from './downloads.js';
 import { isAndroid } from './mobile/layout.js';
-addStrings({ru:{'file.details':'Об аудиофайле','file.available':'Доступен без сети','file.missing':'Файл недоступен. Его можно скачать заново из списка треков.','file.format':'Формат','file.size':'Размер','file.saved':'Сохранён','file.duration':'Длительность','file.close':'Закрыть','file.remove':'Удалить с устройства','file.confirm':'Удалить этот аудиофайл с устройства? Музыка в VK сохранится.','file.removed':'Файл удалён с устройства','file.cancel':'Отмена'},en:{'file.details':'Audio file details','file.available':'Available offline','file.missing':'The file is unavailable. You can download it again from the track list.','file.format':'Format','file.size':'Size','file.saved':'Saved','file.duration':'Duration','file.close':'Close','file.remove':'Remove from device','file.confirm':'Remove this audio file from the device? Your VK library will be kept.','file.removed':'File removed from device','file.cancel':'Cancel'}});
+addStrings({ru:{'file.details':'Об аудиофайле','file.available':'Доступен без сети','file.missing':'Файл недоступен. Его можно скачать заново из списка треков.','file.format':'Формат','file.size':'Размер','file.saved':'Сохранён','file.duration':'Длительность','file.close':'Закрыть','file.remove':'Удалить с устройства','file.confirm':'Удалить этот аудиофайл с устройства? Музыка в VK сохранится.','file.removed':'Файл удалён с устройства','file.cancel':'Отмена','file.keep':'Хранить отдельно','file.kept':'Файл сохранён отдельно от плейлистов','file.storage':'Хранение','file.manual':'Сохранён отдельно','file.local':'На устройстве','file.syncBusy':'Дождитесь завершения синхронизации'},en:{'file.details':'Audio file details','file.available':'Available offline','file.missing':'The file is unavailable. You can download it again from the track list.','file.format':'Format','file.size':'Size','file.saved':'Saved','file.duration':'Duration','file.close':'Close','file.remove':'Remove from device','file.confirm':'Remove this audio file from the device? Your VK library will be kept.','file.removed':'File removed from device','file.cancel':'Cancel','file.keep':'Keep separately','file.kept':'File kept separately from playlists','file.storage':'Storage','file.manual':'Kept separately','file.local':'On this device','file.syncBusy':'Wait for playlist sync to finish'}});
 export function createDownloadDetails({play,toast}) {
   let active=null;
   const current=op=>active===op && op.account===accountId() && store.session.signed_in;
@@ -35,6 +36,12 @@ export function createDownloadDetails({play,toast}) {
       const opened=await api.shareAudio(track,false);
       if(current(op) && !opened){op.info.available=false;op.render();}
     })});
+    const keep=h('button',{class:'btn file-keep',type:'button',text:t('file.keep'),onclick:()=>act(op,async()=>{
+      if(syncRunning() || !await check(op))return;
+      if(syncRunning()){toast(t('file.syncBusy'));return;}
+      writePersonal('manualDownloads',[...new Set([...readPersonal('manualDownloads',[]),trackKey(track)])].slice(-20000));
+      toast(t('file.kept'));op.render();
+    })});
     const remove=h('button',{class:'btn danger-text file-remove',type:'button',text:t('file.remove'),onclick:()=>{op.confirming=true;op.render();}});
     const confirmText=h('p',{class:'file-confirm-text',text:t('file.confirm'),role:'alert',hidden:true});
     const cancelRemove=h('button',{class:'btn file-cancel-remove',type:'button',text:t('file.cancel'),hidden:true,onclick:()=>{op.confirming=false;op.render();}});
@@ -45,9 +52,9 @@ export function createDownloadDetails({play,toast}) {
       close();toast(t('file.removed'));await refreshDownloads();
     })});
     const done=h('button',{class:'btn',type:'button',text:t('file.close'),onclick:close});
-    op.dialog=h('dialog',{class:'dialog file-details-dialog','aria-label':t('file.details')},h('div',{class:'dialog-form'},
+    op.dialog=h('dialog',{class:'dialog file-details-dialog','aria-label':t('file.details')},h('div',{class:'dialog-form'},h('div',{class:'file-details-body'},
       h('h2',{text:track.title}),h('p',{class:'file-artist',text:track.artist}),status,facts,
-      confirmText,h('div',{class:'file-actions'},playButton,share,remove,confirmRemove,cancelRemove),h('div',{class:'dialog-actions'},done)));
+      confirmText,h('div',{class:'file-actions'},playButton,share,keep,remove,confirmRemove,cancelRemove)),h('div',{class:'dialog-actions'},done)));
     op.render=()=>{
       status.textContent=op.loading?t('loading'):t(op.info?.available?'file.available':'file.missing');
       status.dataset.available=String(op.info?.available===true);
@@ -55,15 +62,17 @@ export function createDownloadDetails({play,toast}) {
       remove.disabled=confirmRemove.disabled=cancelRemove.disabled=op.loading || op.busy;
       playButton.hidden=facts.hidden=!!op.confirming;share.hidden=!isAndroid() || !!op.confirming;
       remove.hidden=!!op.confirming;confirmRemove.hidden=cancelRemove.hidden=confirmText.hidden=!op.confirming;
+      const manual=readPersonal('manualDownloads',[]).includes(trackKey(track));
+      keep.hidden=manual || !!op.confirming;keep.disabled=op.loading || op.busy || !op.info?.available || syncRunning();keep.title=syncRunning()?t('file.syncBusy'):t('file.keep');
       const info=op.info;
       const saved=info?.added>0?new Date(info.added*1000):null;
       const date=saved && Number.isFinite(saved.getTime())?saved.toLocaleString():null;
-      facts.replaceChildren(...(info?[[t('file.format'),info.format],[t('file.duration'),formatTime(track.duration)],[t('file.size'),formatSize(info.bytes)],...(date?[[t('file.saved'),date]]:[])]:[]).map(([label,value])=>h('div',{},h('dt',{text:label}),h('dd',{text:value}))));
+      facts.replaceChildren(...(info?[[t('file.format'),info.format],[t('file.duration'),formatTime(track.duration)],[t('file.size'),formatSize(info.bytes)],[t('file.storage'),t(manual?'file.manual':'file.local')],...(date?[[t('file.saved'),date]]:[])]:[]).map(([label,value])=>h('div',{},h('dt',{text:label}),h('dd',{text:value}))));
     };
     op.dialog.addEventListener('cancel',event=>{event.preventDefault();close();});
     document.body.classList.add('overlay-open');document.body.append(op.dialog);op.render();op.dialog.showModal();done.focus();
     check(op).catch(error=>{if(current(op)){op.loading=false;op.render();toast(errorText(error),{error:true});}});
   }
-  own(close);subscribe('session',()=>{if(active && !current(active))close();});subscribe('view',close);
+  own(close);subscribe('personal.manualDownloads',()=>{if(active)active.render();});subscribe('playlistSync',()=>{if(active)active.render();});subscribe('session',()=>{if(active && !current(active))close();});subscribe('view',close);
   return {open,close};
 }

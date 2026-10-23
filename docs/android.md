@@ -406,3 +406,11 @@ native call and disables itself if that copy disappears. Removal requires a sepa
 the same window, removes only the downloaded copy and refreshes Downloads. Account changes/navigation
 close the window and invalidate delayed metadata responses. The availability check is a snapshot; a file
 can still change after checking.
+
+Downloaded file details also offer **Keep separately**, an account-local manual retention flag. This
+requires an existing native-verified file and does not download another copy. The action is disabled while
+playlist sync is running. Details distinguish a separately kept
+copy from a regular local file. Sync cleanup rechecks changed manual retention between deletion IPC
+calls, preserving a copy marked manually while an earlier deletion was in flight. Explicit removal
+and Clear downloads still remove files at the user's request. The footer stays visible while long
+file details scroll independently on a small screen.

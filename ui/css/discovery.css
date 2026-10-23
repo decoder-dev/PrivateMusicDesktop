@@ -128,5 +128,7 @@ html[data-layout="phone"] .saved-lyrics-pane { padding: 0 var(--gutter) 24px; }
 .file-actions { display: grid; gap: 10px; }
 .file-actions .btn { min-height: 44px; }
 .file-confirm-text { line-height: 1.5; }
-.file-details-dialog .dialog-form { max-height: 80dvh; overflow: auto; }
+.file-details-dialog .dialog-form { max-height: 80dvh; overflow: hidden; }
+.file-details-body { min-height: 0; overflow-y: auto; }
+.file-details-dialog .dialog-actions { flex-shrink: 0; }
 .file-details-dialog .file-actions .file-confirm-remove { color: var(--danger); border-color: var(--danger); }

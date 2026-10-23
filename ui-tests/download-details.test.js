@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { openApp } from './harness.js';
 async function setup(config={}) {
- const app=await openApp({phone:true,config:{signedIn:true,libraryTotal:5,...config}});
+ const app=await openApp({phone:'small',config:{signedIn:true,libraryTotal:5,...config}});
  app.page.setDefaultTimeout(10000);
  await app.page.waitForSelector('.row');
  await app.page.waitForFunction(()=>!!document.querySelector('.account .name')?.textContent);
@@ -25,6 +25,7 @@ test('audio file details show native facts and cached-only sharing never downloa
  const app=await setup();try{
   const {page}=app;await open(page);
   assert.match(await page.locator('.file-facts').textContent(),/AAC/);
+  assert.equal(await page.getByRole('button',{name:'Закрыть',exact:true}).evaluate(el=>el.getBoundingClientRect().bottom<=innerHeight),true);
   assert.match(await page.locator('.file-facts').textContent(),/4 МБ/);
   assert.equal(await page.evaluate(()=>window.__mock.count('play_tracks')),0);
   await page.locator('.file-share').click();
@@ -69,5 +70,34 @@ test('audio file details discard late metadata after account change',async()=>{
   await page.waitForTimeout(600);
   assert.equal(await page.locator('.file-details-dialog').count(),0);
   assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+test('keeping a downloaded copy separately changes only account-local retention metadata',async()=>{
+ const app=await setup();try{
+  const {page}=app;await open(page);
+  await page.locator('.file-keep').click();
+  await page.waitForFunction(()=>document.querySelector('.file-facts')?.textContent.includes('Сохранён отдельно'));
+  assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('pm.personal.7.manualDownloads'))),['7_1']);
+  assert.equal(await page.evaluate(()=>window.__mock.count('download')),0);
+  assert.equal(await page.locator('.file-keep').isVisible(),false);
+ }finally{await app.close();}
+});
+test('sync cleanup preserves a copy marked manual between two deletion calls',async()=>{
+ const app=await setup({playlistTrackIds:[1,2,3]});try{
+  const result=await app.page.evaluate(async()=>{
+   const {setPlaylistSync,syncPlaylists}=await import('/js/playlist-sync.js');
+   const {writePersonal}=await import('/js/personal.js');
+   const {api}=await import('/js/api.js');
+   const {downloads}=await import('/js/downloads.js');
+   window.__mock.state.downloads=[];
+   const playlist={owner_id:7,playlist_id:55,title:'Sync',count:3};
+   setPlaylistSync(playlist,true);await syncPlaylists();
+   writePersonal('syncRemoveObsolete',true);window.__mock.config.playlistTrackIds=[3];
+   const remove=api.removeDownload;
+   api.removeDownload=async key=>{if(key==='7_1')writePersonal('manualDownloads',['7_2']);return remove(key);};
+   try{await syncPlaylists();}finally{api.removeDownload=remove;}
+   return downloads().tracks.map(track=>track.track_id).sort();
+  });
+  assert.deepEqual(result,[2,3]);
  }finally{await app.close();}
 });
