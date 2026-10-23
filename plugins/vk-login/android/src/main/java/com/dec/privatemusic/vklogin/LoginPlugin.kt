@@ -1,6 +1,8 @@
 package com.dec.privatemusic.vklogin
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.util.Log
@@ -22,6 +24,12 @@ import app.tauri.plugin.Plugin
 class StartArgs {
     /** Native channel to Rust: every [LoginEvent] goes here, never to JavaScript. */
     lateinit var onEvent: Channel
+}
+
+@InvokeArg
+class ShareArgs {
+    lateinit var url: String
+    var title: String = ""
 }
 
 /**
@@ -151,6 +159,32 @@ class LoginPlugin(private val activity: Activity) : Plugin(activity) {
                 audioPickerRunning.set(false)
             }
         }, "pm-audio-picker").start()
+    }
+
+    @Command
+    fun shareLink(invoke: Invoke) {
+        val args = invoke.parseArgs(ShareArgs::class.java)
+        if (!ShareLinkPolicy.accepts(args.url)) { invoke.reject("Invalid VK share link"); return }
+        try {
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, args.url)
+                putExtra(Intent.EXTRA_SUBJECT, args.title.take(200))
+            }
+            activity.startActivity(Intent.createChooser(intent, null))
+            invoke.resolve()
+        } catch (_: Exception) { invoke.reject("Could not open sharing") }
+    }
+
+    @Command
+    fun copyLink(invoke: Invoke) {
+        val args = invoke.parseArgs(ShareArgs::class.java)
+        if (!ShareLinkPolicy.accepts(args.url)) { invoke.reject("Invalid VK share link"); return }
+        try {
+            val clipboard = activity.getSystemService(ClipboardManager::class.java) ?: throw IllegalStateException("Clipboard unavailable")
+            clipboard.setPrimaryClip(ClipData.newPlainText("Private Music", args.url))
+            invoke.resolve()
+        } catch (_: Exception) { invoke.reject("Could not copy the link") }
     }
 
     private companion object {

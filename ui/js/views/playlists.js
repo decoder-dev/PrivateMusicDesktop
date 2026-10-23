@@ -1,3 +1,5 @@
+import { collectionShareLink } from "../share-links.js";
+import { linkControls } from "../sharing.js";
 import { ft } from "../feature-i18n.js";
 import { playlistLink } from "../playlist-link.js";
 import { api } from "../api.js";
@@ -55,6 +57,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
   const syncButton=h("button",{class:"btn",type:"button",text:ft("Сохранять офлайн"),onclick:async()=>{if(!current)return;try{setPlaylistSync(current,!isSynced(current));renderOwner();await syncPlaylists();}catch(error){toast(errorText(error),{error:true});}}});
   const deleteButton = h("button", { class: "btn danger-text", type: "button", onclick: () => remove(), text: t("pl.delete") });
   const followButton = h("button", { class:"btn",type:"button",text:t("pl.follow"),hidden:true,onclick:followShared });
+  const links=linkControls(()=>collectionShareLink("playlist",current),()=>current?.title,toast);
   const detail = createTracksScreen({
     title: "",
     hero: true,
@@ -69,7 +72,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
         ? [{ label: t("menu.removeFrom"), action: "remove-from-playlist", icon: "trash", destructive: true, run: () => removeTrack(track, index) }]
         : []),
       back: backButton(t("playlists.back"), () => leave()),
-      headerExtra: h("div", { class: "set-inline pl-owner" }, editButton, deleteButton, followButton,syncButton),
+      headerExtra: h("div", { class: "set-inline pl-owner" }, editButton, deleteButton, followButton,syncButton,links.copy,links.share),
     },
   });
   detail.element.hidden = true;
@@ -85,6 +88,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
   }
 
   function renderOwner() {
+    links.refresh();
     syncButton.textContent=current && isSynced(current)?ft("Офлайн-синхронизация включена"):ft("Сохранять офлайн");
     syncButton.setAttribute("aria-pressed",String(!!current && isSynced(current)));
     const own = current && isOwn(current);

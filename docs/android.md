@@ -149,6 +149,12 @@ desktop UI and its tests are unchanged.
   errors. Cancel/account changes stop further work; temporary copies are removed after success,
   cancellation or disposal. A save already sent to VK may complete despite cancellation. Device
   picking and real VK upload still need a device/account smoke test; no real media is sent by tests.
+* **Share and Copy link**: track menus and playlist/album headers expose canonical VK links.
+  Android uses the system share chooser or clipboard; desktop Copy uses the WebView clipboard
+  with a fallback for older WebViews. Only collection access keys are retained where needed;
+  stream URLs, account tokens and cookies are never used as the share payload. Native Rust/Kotlin
+  restrict these actions to VK resource locators. Opening the share chooser does not mean a message
+  was delivered. The playlist-link opener understands shared `access_key` query parameters.
 * **Collection search**: Playlists and Albums have local filters; album searches include artists.
 * **Tests**: `ui-tests/phone.test.js` (touch emulation of a Pixel 7, a 360 px and a 430 px phone, and
   landscape) includes the audits: every pressable at least 44 px, no hover-only control, no horizontal

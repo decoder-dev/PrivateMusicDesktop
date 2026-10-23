@@ -1328,3 +1328,47 @@ test("row gestures: a rerender during a swipe keeps the same track and rejects a
     assert.deepEqual(app.problems,[]);
   } finally {await app.close();}
 });
+
+test("sharing: track copy and Android Share use a public VK locator, never its audio stream",async()=>{
+  const app=await phoneApp();
+  try {
+    const {page}=app;await openLibraryTracks(page);
+    const menu='.library-hub .row [data-action="menu"]';
+    await tap(page,menu);await tap(page,'.sheet [data-action="copy-link"]');
+    assert.equal(await page.evaluate(()=>window.__mock.last('copy_link').args.url),'https://vk.com/audio7_1');
+    await tap(page,menu);await tap(page,'.sheet [data-action="share-link"]');
+    assert.equal(await page.evaluate(()=>window.__mock.last('share_link').args.url),'https://vk.com/audio7_1');
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("sharing: playlist and album actions preserve collection identity and access key",async()=>{
+  const app=await phoneApp({phone:'small'});
+  try {
+    const {page}=app;await tab(page,'library');await tap(page,'.lib-sections [data-section="playlists"]');
+    await visible(page,'.lib-grid .card').filter({hasText:'Работа'}).tap();await see(page,'.pl-owner .collection-copy');
+    await tap(page,'.pl-owner .collection-copy');
+    assert.equal(await page.evaluate(()=>window.__mock.last('copy_link').args.url),'https://vk.com/music/playlist/7_2?access_key=k');
+    await tap(page,'.pl-owner .collection-share');
+    assert.equal(await page.evaluate(()=>window.__mock.last('share_link').args.url),'https://vk.com/music/playlist/7_2?access_key=k');
+    await tab(page,'search');await page.locator('input[placeholder^="Исполнитель"]').fill('тест');
+    await tap(page,'.tabs [data-tab="albums"]');await see(page,'.grid .album-card');await tap(page,'.grid .album-card');
+    await see(page,'.album-view .collection-copy');await tap(page,'.album-view .collection-copy');
+    assert.equal(await page.evaluate(()=>window.__mock.last('copy_link').args.url),'https://vk.com/music/album/-2000_20?access_key=resolved');
+    await tap(page,'.album-view .collection-share');
+    assert.equal(await page.evaluate(()=>window.__mock.last('share_link').args.url),'https://vk.com/music/album/-2000_20?access_key=resolved');
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("sharing: desktop Copy uses the browser clipboard without Android commands",async()=>{
+  const app=await openApp({config:{signedIn:true}});
+  try {
+    const {page}=app;await page.waitForSelector('.row');
+    await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.__copiedLink=value;}}}));
+    await page.locator('.row').first().click({button:'right'});await page.locator('.menu [data-action="copy-link"]').click();
+    assert.equal(await page.evaluate(()=>window.__copiedLink),'https://vk.com/audio7_1');
+    assert.equal(await page.evaluate(()=>window.__mock.count('copy_link')),0);
+    assert.equal(await page.locator('.menu [data-action="share-link"]').count(),0);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});

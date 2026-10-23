@@ -727,3 +727,14 @@ pub async fn upload_audio(handle: AppHandle, state: TauriState<'_, AppState>, fi
 pub async fn discard_audio(handle: AppHandle, file_id: String) -> CommandResult<()> {
     blocking(move || { crate::audio_upload::discard(&handle, &file_id); Ok(()) }).await
 }
+
+
+#[tauri::command]
+pub async fn share_link(handle: AppHandle, url: String, title: String) -> CommandResult<()> {
+    blocking(move || crate::share::share(&handle, &url, &title)).await
+}
+
+#[tauri::command]
+pub async fn copy_link(handle: AppHandle, url: String) -> CommandResult<()> {
+    blocking(move || crate::share::copy(&handle, &url)).await
+}

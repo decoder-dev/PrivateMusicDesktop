@@ -133,6 +133,8 @@
       if (!playlistTracks.has(key)) playlistTracks.set(key, library.slice(0, playlist.count).map((t) => ({ ...t, title: `${playlist.title}: ${t.title}` })));
       return page(playlistTracks.get(key), offset, count);
     },
+    share_link: () => {},
+    copy_link: () => {},
     choose_audio: async () => {
       const id=`audio-${++nextAudioFile}`;
       if(config.audioPickDelay) await delay(config.audioPickDelay);

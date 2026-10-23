@@ -11,6 +11,8 @@ import { toast } from "./toast.js";
 import { installTooltips } from "./tooltip.js";
 import { createPlayerBar } from "./player-bar.js";
 import { setDefaultTrackMenu, setDefaultBatchAction } from "./tracks-screen.js";
+import { trackShareLink } from "./share-links.js";
+import { copyLink, shareLink } from "./sharing.js";
 import { saveForLater } from "./listen-later.js";
 import { createAudioUploadView } from "./views/audio-upload.js";
 import { createPlaylistImportView } from "./views/playlist-import.js";
@@ -203,6 +205,10 @@ async function openTrackMenu(track, at, extra = []) {
     { label: t("playLast"), action: "play-last", icon: "queue-add", run: () => onTrackAction("play-last", track) },
     ...(isAndroid() ? [] : [{ label: t("export.audio"), action: "export", icon: "download", run: async () => { try { if (await api.exportTrack(track)) toast(t("export.saved")); await refreshDownloads(); } catch (error) { toast(errorText(error), { error: true }); } } }]),
     { label: t("radio"), action: "radio", icon: "radio", run: () => playSimilar(track) },
+    ...(trackShareLink(track) ? [
+      { label:t("share.copy"),action:"copy-link",icon:"copy",run:()=>copyLink(trackShareLink(track),toast) },
+      ...(isAndroid() ? [{label:t("share.open"),action:"share-link",icon:"share",run:()=>shareLink(trackShareLink(track),`${track.artist} — ${track.title}`,toast)}] : []),
+    ] : []),
     { label:ft("Предпочтения Selena"),action:"taste",icon:"sparkles",items:[
       {label:ft("Меньше такого"),action:"taste-less",run:()=>dislike(track,"less").catch(error=>toast(errorText(error),{error:true}))},
       {label:ft("Не предлагать этот трек"),action:"taste-track",run:()=>dislike(track,"tracks").catch(error=>toast(errorText(error),{error:true}))},

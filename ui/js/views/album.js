@@ -1,3 +1,5 @@
+import { collectionShareLink } from "../share-links.js";
+import { linkControls } from "../sharing.js";
 import { api } from "../api.js";
 import { createTracksScreen } from "../tracks-screen.js";
 import { errorText, t, tn } from "../i18n.js";
@@ -31,11 +33,12 @@ export function createAlbumView({ play, onTrackAction, toast, back }) {
     onclick: () => tracks.visible.length && play(tracks.visible, 0, { shuffle: false }) }, icon("play", 14), t("artist.listen"));
   const shuffleButton = h("button", { class: "icon-btn circle-btn", type: "button", hidden: true, title: t("shuffle"), "aria-label": t("shuffle"),
     onclick: () => tracks.visible.length && play(tracks.visible, Math.floor(Math.random() * tracks.visible.length), { shuffle: true }) }, icon("shuffle", 16));
+  const links=linkControls(()=>collectionShareLink("album",album),()=>album?.title,toast);
   const head = pageHero({
     back: backButton(t("playlists.back"), () => back()),
     art: cover,
     body: [h("div", { class: "kicker", text: t("album.kicker") }), title, artists, meta],
-    actions: [listenButton, shuffleButton, followButton],
+    actions: [listenButton, shuffleButton, followButton, links.copy, links.share],
   });
 
   const tracks = createTracksScreen({
@@ -58,6 +61,7 @@ export function createAlbumView({ play, onTrackAction, toast, back }) {
   }
 
   function render() {
+    links.refresh();
     title.textContent = album.title;
     cover.replaceChildren(artBox(album.artwork_url, { glyph: "album", size: 40 }));
     setAmbience(head, album.artwork_url);

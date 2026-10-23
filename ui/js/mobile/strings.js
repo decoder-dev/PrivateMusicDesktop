@@ -3,6 +3,13 @@ import { addStrings } from "../i18n.js";
 
 addStrings({
   ru: {
+    "share.copy": "Копировать ссылку",
+    "share.open": "Поделиться",
+    "share.copied": "Ссылка скопирована",
+    "share.unavailable": "Для этого трека или коллекции пока нет ссылки",
+    "share.copyFailed": "Не удалось скопировать ссылку. Попробуйте ещё раз.",
+    "share.failed": "Не удалось открыть меню «Поделиться»",
+
     "upload.title": "Загрузить MP3",
     "upload.artist": "Исполнитель",
     "upload.track": "Название трека",
@@ -106,6 +113,13 @@ addStrings({
     "np.grab": "Потяните вниз, чтобы свернуть",
   },
   en: {
+    "share.copy": "Copy link",
+    "share.open": "Share",
+    "share.copied": "Link copied",
+    "share.unavailable": "No link is available for this track or collection yet",
+    "share.copyFailed": "Could not copy the link. Try again.",
+    "share.failed": "Could not open sharing",
+
     "upload.title": "Upload MP3",
     "upload.artist": "Artist",
     "upload.track": "Track title",

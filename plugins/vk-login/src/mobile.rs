@@ -68,6 +68,16 @@ impl<R: Runtime> VkLogin<R> {
             .map_err(|e| Error::Native(e.to_string()))
     }
 
+    pub fn share_link(&self, url: &str, title: &str) -> Result<()> {
+        self.plugin.run_mobile_plugin::<serde_json::Value>("shareLink", serde_json::json!({"url":url,"title":title}))
+            .map(|_|()).map_err(|error|Error::Native(error.to_string()))
+    }
+
+    pub fn copy_link(&self, url: &str) -> Result<()> {
+        self.plugin.run_mobile_plugin::<serde_json::Value>("copyLink", serde_json::json!({"url":url}))
+            .map(|_|()).map_err(|error|Error::Native(error.to_string()))
+    }
+
     pub fn pick_audio(&self) -> Result<Option<crate::PickedAudio>> {
         let reply: serde_json::Value = self.plugin.run_mobile_plugin("pickAudio", ())
             .map_err(|error| Error::Native(error.to_string()))?;

@@ -194,3 +194,11 @@ no capability grants a WebView direct access to the native picker. The picker ne
 login cookies/tokens, and requires no broad storage permission. Kotlin policy tests run with the
 existing standalone Gradle test task. Process death can leave a temporary copy; stale picker copies
 are removed the next time the picker is used.
+
+## Native VK link actions
+
+`share_link()` opens Android's `ACTION_SEND` chooser; `copy_link()` writes a plain-text VK link to
+ClipboardManager. The shell and `ShareLinkPolicy` permit only HTTPS vk.com track/playlist/album
+locators with an optional collection access key. Neither action receives session cookies, tokens,
+or audio stream addresses. The native result only confirms that the chooser opened, not delivery.
+The Kotlin policy is unit-tested alongside the picker and login policies.
