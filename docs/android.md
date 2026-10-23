@@ -41,7 +41,7 @@ are built (slow, large). Debug builds are big because they are unoptimised.
 
 Minimum Android is 8.0 (API 26); target SDK is 35 (compile SDK 36, which the Tauri Android library requires). The version
 name is the workspace version; the version code is
-`major*10000 + minor*100 + patch` (0.6.0 is 600, 0.6.1 is 601, 0.6.2 is 602, 0.6.3 is 603).
+`major*10000 + minor*100 + patch` (0.6.0 is 600, 0.6.1 is 601, 0.6.2 is 602, 0.6.3 is 603, 0.6.4 is 604).
 
 ## Signing
 

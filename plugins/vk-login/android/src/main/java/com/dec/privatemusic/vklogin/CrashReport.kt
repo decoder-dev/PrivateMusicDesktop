@@ -33,6 +33,7 @@ object CrashReport {
     private const val MAX_TRACE_FILE = 12_000
     private const val MAX_FILE_BYTES = 24_000
     private const val MAX_TRACE_CHARS = 6_000
+    private const val MAIN_THREAD_LINES = 60
 
     /** Writes every uncaught Java exception to a file before the process dies. */
     fun install(context: Context) {
@@ -117,7 +118,13 @@ object CrashReport {
                 // An ANR trace is plain text; a native crash trace is binary protobuf, so only its description is used.
                 if (item.reason == ApplicationExitInfo.REASON_ANR) {
                     try {
-                        item.traceInputStream?.bufferedReader()?.use { out.append(it.readText().take(MAX_TRACE_CHARS)).append('\n') }
+                        item.traceInputStream?.bufferedReader()?.use { reader ->
+                            val text = reader.readText()
+                            // The part that matters is the stack of the main thread, not the heap statistics before it.
+                            val start = text.indexOf("\"main\" prio=")
+                            val part = if (start >= 0) text.substring(start).lines().take(MAIN_THREAD_LINES).joinToString("\n") else text.take(MAX_TRACE_CHARS)
+                            out.append(part.take(MAX_TRACE_CHARS)).append('\n')
+                        }
                     } catch (_: Exception) { /* no trace kept */ }
                 }
             }

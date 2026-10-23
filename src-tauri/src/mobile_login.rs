@@ -21,28 +21,50 @@ use crate::AppState;
 pub const EVENT: &str = "pm-login";
 
 /// Подключает обработчик событий плагина. Вызывается после `manage(AppState)`.
+///
+/// Плагин отдаёт события из Kotlin в потоке интерфейса Android (главном). Сохранение сессии идёт через плагин
+/// Keystore, который отвечает тоже через главный поток: выполнять его прямо в обработчике значит ждать ответа,
+/// который не может прийти, пока поток занят ожиданием (на телефоне это зависание «приложение не отвечает» сразу
+/// после входа). Поэтому обработчик только кладёт событие в очередь, а работает отдельный поток, по порядку.
 pub fn install(handle: &AppHandle) {
     let target = handle.clone();
-    handle.vk_login().set_handler(move |event| {
-        // В журнал попадает только имя события: cookie и токены там не бывают.
-        let name = match &event {
-            LoginEvent::Pending { .. } => "pending",
-            LoginEvent::Success(_) => "success",
-            LoginEvent::Error { .. } => "error",
-            LoginEvent::Cancelled => "cancelled",
-            LoginEvent::LoadFailed => "loadfailed",
-            LoginEvent::LoadOk | LoginEvent::SmokeLoaded { .. } => "loadok",
-        };
-        log::info!("sign-in (android): event={name}");
-        let message = handle_event(event, |session| {
-            if let Some(state) = target.try_state::<AppState>() {
-                state.app.sign_in(session);
-                log::info!("sign-in (android): session handed to the application");
-            }
-        });
-        log::info!("sign-in (android): result={message}");
-        let _ = target.emit(EVENT, message);
+    let (queue, events) = std::sync::mpsc::channel::<LoginEvent>();
+    let worker = std::thread::Builder::new().name("vk-login-events".into()).spawn(move || {
+        for event in events {
+            process(&target, event);
+        }
     });
+    if let Err(error) = worker {
+        log::error!("sign-in (android): could not start the event thread: {error}");
+        return;
+    }
+    let queue = std::sync::Mutex::new(queue);
+    handle.vk_login().set_handler(move |event| {
+        if let Ok(queue) = queue.lock() {
+            let _ = queue.send(event);
+        }
+    });
+}
+
+fn process(target: &AppHandle, event: LoginEvent) {
+    // В журнал попадает только имя события: cookie и токены там не бывают.
+    let name = match &event {
+        LoginEvent::Pending { .. } => "pending",
+        LoginEvent::Success(_) => "success",
+        LoginEvent::Error { .. } => "error",
+        LoginEvent::Cancelled => "cancelled",
+        LoginEvent::LoadFailed => "loadfailed",
+        LoginEvent::LoadOk | LoginEvent::SmokeLoaded { .. } => "loadok",
+    };
+    log::info!("sign-in (android): event={name}");
+    let message = handle_event(event, |session| {
+        if let Some(state) = target.try_state::<AppState>() {
+            state.app.sign_in(session);
+            log::info!("sign-in (android): session handed to the application");
+        }
+    });
+    log::info!("sign-in (android): result={message}");
+    let _ = target.emit(EVENT, message);
 }
 
 /// Открывает экран входа (или возвращает открытый и просит проверить сессию сейчас). Возвращается сразу;
