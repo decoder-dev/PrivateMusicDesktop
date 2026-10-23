@@ -765,3 +765,11 @@ pub async fn restore_radio(state: TauriState<'_, AppState>, source: RadioSource,
     let app = state.app.clone();
     blocking(move || app.restore_radio(source, tracks, index, position, next_offset)).await
 }
+
+
+#[tauri::command]
+pub async fn share_audio(handle: AppHandle, state: TauriState<'_, AppState>, track: Track, allow_download: Option<bool>) -> CommandResult<bool> {
+    let track=checked_queue(vec![track])?.pop().ok_or(Error::InvalidRequest)?;
+    let app=state.app.clone();
+    blocking(move || crate::audio_share::share(&handle,&app,&track,allow_download.unwrap_or(false))).await
+}

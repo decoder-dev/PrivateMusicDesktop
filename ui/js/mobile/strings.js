@@ -3,6 +3,9 @@ import { addStrings } from "../i18n.js";
 
 addStrings({
   ru: {
+    "share.audio": "Поделиться аудиофайлом",
+    "share.audioPreparing": "Готовим аудиофайл…",
+    "share.audioFailed": "Не удалось подготовить аудиофайл или открыть меню «Поделиться». Повторите попытку.",
     "later.radioNote": "Сохранены очередь, позиция и источник радио. Микс продолжит пополняться; для новых треков нужен интернет.",
     "pl.discovery": "Рекомендации VK (не меняет доступ по ссылке)",
     "pl.discovery.keep": "Не менять / по умолчанию",
@@ -123,6 +126,9 @@ addStrings({
     "np.grab": "Потяните вниз, чтобы свернуть",
   },
   en: {
+    "share.audio": "Share audio file",
+    "share.audioPreparing": "Preparing audio file…",
+    "share.audioFailed": "Could not prepare the audio file or open sharing. Please try again.",
     "later.radioNote": "Queue, position and radio source saved. The mix will keep filling; new tracks need an internet connection.",
     "pl.discovery": "VK recommendations (link access stays the same)",
     "pl.discovery.keep": "Keep current / default",

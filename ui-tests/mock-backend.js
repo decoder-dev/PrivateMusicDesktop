@@ -133,6 +133,10 @@
       if (!playlistTracks.has(key)) playlistTracks.set(key, library.slice(0, playlist.count).map((t) => ({ ...t, title: `${playlist.title}: ${t.title}` })));
       return page(playlistTracks.get(key), offset, count);
     },
+    share_audio: async ({track,allowDownload}) => {
+      if(!allowDownload && (config.audioShareMissingCache || !(state.downloads??[]).some(saved=>saved.track_id===track.track_id && saved.owner_id===track.owner_id)))return false;
+      await delay(config.audioShareDelay ?? 5);if(config.audioShareFails)throw {kind:"unavailable"};return true;
+    },
     share_link: () => {},
     copy_link: () => {},
     choose_audio: async () => {

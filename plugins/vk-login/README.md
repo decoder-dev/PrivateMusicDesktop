@@ -202,3 +202,13 @@ ClipboardManager. The shell and `ShareLinkPolicy` permit only HTTPS vk.com track
 locators with an optional collection access key. Neither action receives session cookies, tokens,
 or audio stream addresses. The native result only confirms that the chooser opened, not delivery.
 The Kotlin policy is unit-tested alongside the picker and login policies.
+
+
+## Audio file sharing
+
+`shareAudio` is Rust-to-Kotlin only. `AudioSharePolicy` accepts a nonempty AAC/MP3 file (up to 512 MiB)
+inside `cacheDir/audio-share/share-<hex>-<hex>/`; canonical path checks reject traversal, other
+cache directories and symlinks outside that subtree. `AudioShareProvider` is not exported and grants
+read access only to the chosen file. Its XML exposes just `audio-share/`. Rust prepares private copies
+and removes failures; the successful chooser launch retains its payload for delayed recipient reads.
+No raw path is returned to JavaScript. No storage permission is requested.

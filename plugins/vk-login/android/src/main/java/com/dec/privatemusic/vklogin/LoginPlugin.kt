@@ -12,6 +12,7 @@ import java.io.File
 import java.util.UUID
 import android.webkit.WebView
 import androidx.activity.result.ActivityResult
+import androidx.core.content.FileProvider
 import app.tauri.annotation.ActivityCallback
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
@@ -26,6 +27,9 @@ class StartArgs {
     /** Native channel to Rust: every [LoginEvent] goes here, never to JavaScript. */
     lateinit var onEvent: Channel
 }
+
+@InvokeArg
+class AudioShareArgs { lateinit var path: String }
 
 @InvokeArg
 class ShareArgs {
@@ -171,6 +175,24 @@ class LoginPlugin(private val activity: Activity) : Plugin(activity) {
             val connected = network != null && manager.getNetworkCapabilities(network) != null
             invoke.resolve(JSObject().put("connected", connected).put("metered", manager.isActiveNetworkMetered))
         } catch (_: Exception) { invoke.reject("Network status unavailable") }
+    }
+
+    @Command
+    fun shareAudio(invoke: Invoke) {
+        val args = invoke.parseArgs(AudioShareArgs::class.java)
+        try {
+            val file = AudioSharePolicy.checked(activity.cacheDir, args.path)
+            val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.pm.audio.share", file)
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = if (file.extension == "aac") "audio/aac" else "audio/mpeg"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, file.nameWithoutExtension)
+                clipData = ClipData.newRawUri(file.name, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            activity.startActivity(Intent.createChooser(intent, null).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            invoke.resolve()
+        } catch (_: Exception) { invoke.reject("Could not share audio") }
     }
 
     @Command

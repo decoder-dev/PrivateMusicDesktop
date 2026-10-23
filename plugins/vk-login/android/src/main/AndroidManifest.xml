@@ -8,6 +8,13 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application>
+        <provider
+            android:name=".AudioShareProvider"
+            android:authorities="${applicationId}.pm.audio.share"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/pm_audio_share_paths" />
+        </provider>
         <!-- Not exported: only the host app's own process can open it. configChanges
              keeps the page through rotation, theme and keyboard changes, so no
              instance state needs saving. -->

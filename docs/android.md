@@ -334,3 +334,17 @@ The default sends no flag, preserving VK's current/default policy. Excluding a p
 recommendations does not make its link private. The choice travels in the same single-attempt
 metadata write; changing accounts while the dialog is open invalidates submission. VK does not
 consistently return this flag in playlist lists, so reopening the form offers “Keep current”.
+
+### Share audio files
+
+Android track menus offer **Share audio file** separately from sharing a VK link. The app uses an
+native-verified offline file or downloads the track (with the metered-network check), then stages a copy
+in its private `audio-share` cache. The system chooser receives an AAC/MP3 `content://` URI with a
+read-only grant. It cannot access login state, other downloads or the MP3 picker directory. Internal
+paths never go through the WebView. Account changes abort preparation before opening the chooser;
+repeated taps on the same track share one preparation. Stale offline metadata cannot trigger an
+unapproved download: the first native call probes with downloads disabled. Unshared copies are removed immediately;
+shared copies remain available for a day and are cleaned during later preparations. Opening the
+chooser does not mean a file was sent. This shares the downloaded elementary audio; iOS-style
+embedded artwork/lyrics and M4A conversion are not included yet. Verify recipient app compatibility
+on a real Android device; local tests cover staging, access boundaries, native compilation and UI.

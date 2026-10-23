@@ -1505,3 +1505,40 @@ test("queue history: a saved radio restores its source and position on pause",as
     assert.deepEqual(app.problems,[]);
   } finally {await app.close();}
 });
+
+test("audio sharing: a track opens native file sharing and duplicate preparation is suppressed",async()=>{
+  const app=await phoneApp({config:{...CONFIG,audioShareDelay:600}});
+  try {
+    const {page}=app;await openLibraryTracks(page);await tap(page,'.library-hub .row [data-action="menu"]');await tap(page,'.sheet [data-action="share-audio"]');
+    await page.waitForFunction(()=>window.__mock.calls.filter(call=>call.command==='share_audio' && call.args.allowDownload).length===1);
+    await page.evaluate(async()=>{const {shareAudio}=await import('/js/sharing.js');await shareAudio(window.__mock.last('share_audio').args.track,()=>{});});
+    assert.equal(await page.evaluate(()=>window.__mock.count('share_audio')),2);
+    const args=await page.evaluate(()=>window.__mock.last('share_audio').args);assert.deepEqual(Object.keys(args),['track','allowDownload']);assert.equal(args.track.track_id,1);
+    assert.doesNotMatch(await page.locator('.toast').innerText(),/отправлен|доставлен/i);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("audio sharing: metered preparation can be cancelled; saved files share without downloading",async()=>{
+  const app=await phoneApp({config:{...CONFIG,metered:true}});
+  try {
+    const {page}=app;await openLibraryTracks(page);const menu='.library-hub .row [data-action="menu"]';
+    await tap(page,menu);await tap(page,'.sheet [data-action="share-audio"]');await see(page,'dialog[open]');await tap(page,'dialog .btn:not(.primary)');
+    assert.equal(await page.evaluate(()=>window.__mock.calls.filter(call=>call.command==='share_audio' && call.args.allowDownload).length),0);
+    await page.evaluate(async()=>{const {refreshDownloads}=await import('/js/downloads.js');window.__mock.state.downloads=[{owner_id:7,track_id:1,title:'Saved',artist:'A',duration:12}];await refreshDownloads();});
+    await tap(page,menu);await tap(page,'.sheet [data-action="share-audio"]');await page.waitForFunction(()=>window.__mock.count('share_audio')===2);
+    assert.equal(await page.locator('dialog').count(),0);
+    await page.evaluate(()=>window.__mock.config.audioShareMissingCache=true);
+    await tap(page,menu);await tap(page,'.sheet [data-action="share-audio"]');await see(page,'dialog[open]');
+    assert.equal(await page.evaluate(()=>window.__mock.calls.filter(call=>call.command==='share_audio' && call.args.allowDownload).length),0);
+    await tap(page,'dialog .btn:not(.primary)');assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("audio sharing: preparation errors leave an error toast and allow a retry",async()=>{
+  const app=await phoneApp({config:{...CONFIG,audioShareFails:true}});
+  try {
+    const {page}=app;await openLibraryTracks(page);const menu='.library-hub .row [data-action="menu"]';
+    await tap(page,menu);await tap(page,'.sheet [data-action="share-audio"]');await see(page,'.toast.error');
+    await tap(page,menu);await tap(page,'.sheet [data-action="share-audio"]');
+    assert.equal(await page.evaluate(()=>window.__mock.count('share_audio')),4);assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
