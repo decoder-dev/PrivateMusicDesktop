@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.net.ConnectivityManager
 import android.content.pm.ApplicationInfo
 import android.util.Log
 import android.provider.OpenableColumns
@@ -159,6 +160,17 @@ class LoginPlugin(private val activity: Activity) : Plugin(activity) {
                 audioPickerRunning.set(false)
             }
         }, "pm-audio-picker").start()
+    }
+
+    @Command
+    fun networkUsage(invoke: Invoke) {
+        try {
+            val manager = activity.getSystemService(ConnectivityManager::class.java)
+                ?: throw IllegalStateException("Network status unavailable")
+            val network = manager.activeNetwork
+            val connected = network != null && manager.getNetworkCapabilities(network) != null
+            invoke.resolve(JSObject().put("connected", connected).put("metered", manager.isActiveNetworkMetered))
+        } catch (_: Exception) { invoke.reject("Network status unavailable") }
     }
 
     @Command

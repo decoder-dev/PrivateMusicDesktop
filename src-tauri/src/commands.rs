@@ -738,3 +738,21 @@ pub async fn share_link(handle: AppHandle, url: String, title: String) -> Comman
 pub async fn copy_link(handle: AppHandle, url: String) -> CommandResult<()> {
     blocking(move || crate::share::copy(&handle, &url)).await
 }
+
+
+/// Local Android network cost hint. No request to a server is made.
+#[tauri::command]
+pub async fn network_usage(handle: AppHandle) -> CommandResult<serde_json::Value> {
+    blocking(move || {
+        #[cfg(target_os = "android")]
+        {
+            use tauri_plugin_vk_login::VkLoginExt;
+            handle.vk_login().network_usage().map_err(|_| Error::Offline)
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            let _ = handle;
+            Ok(serde_json::json!({"connected":true,"metered":false}))
+        }
+    }).await
+}

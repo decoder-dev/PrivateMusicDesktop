@@ -310,3 +310,14 @@ runners: the boot is retried once inside the job, a second red boot is worth one
 Without `--apk` it takes the newest debug APK under `src-tauri/gen/android/app/build/outputs/apk`. Results go to
 `scripts/android-emulator-tests/out`. To call one command in the running app:
 `node scripts/android-emulator-tests/invoke.mjs app_info`.
+
+### Download network cost
+
+Android reads the active network’s metered flag locally (`ACCESS_NETWORK_STATE`, a normal permission).
+Manual downloads ask before using metered traffic or when cost cannot be determined. Consent lasts
+for the current action; batch downloads recheck before each new file. Offline requests stop before
+starting a file. Automatic playlist sync waits on metered/unknown networks without opening prompts;
+retry the sync after connecting to an unmetered network. Cancelling consent or changing accounts
+prevents pending downloads from starting. Already downloaded files can still be removed or manually
+protected from sync cleanup without a network request. An in-flight file may finish if the network
+changes while that file is downloading.

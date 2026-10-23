@@ -1372,3 +1372,60 @@ test("sharing: desktop Copy uses the browser clipboard without Android commands"
     assert.deepEqual(app.problems,[]);
   } finally {await app.close();}
 });
+
+test("download cost: metered downloads require consent, Cancel writes nothing, and consent expires after the action",async()=>{
+  const app=await phoneApp({config:{...CONFIG,metered:true}});
+  try {
+    const {page}=app;
+    const start=()=>page.evaluate(async()=>{const {toggleDownload}=await import('/js/downloads.js');window.__costJob=toggleDownload({owner_id:7,track_id:901,title:'Test',artist:'Artist',duration:12});});
+    await start();await see(page,'dialog[open]');
+    assert.match(await page.locator('dialog').innerText(),/оплатой трафика/);
+    assert.equal(await page.evaluate(()=>window.__mock.count('download')),0);
+    await tap(page,'dialog .btn:not(.primary)');await page.evaluate(()=>window.__costJob);
+    assert.equal(await page.evaluate(()=>window.__mock.count('download')),0);
+    await start();await see(page,'dialog[open]');await tap(page,'dialog .btn.primary');await page.evaluate(()=>window.__costJob);
+    assert.equal(await page.evaluate(()=>window.__mock.count('download')),1);
+    await page.evaluate(async()=>{const {toggleDownload}=await import('/js/downloads.js');window.__costJob=toggleDownload({owner_id:7,track_id:902,title:'Next',duration:12});});
+    await see(page,'dialog[open]');await tap(page,'dialog .btn:not(.primary)');await page.evaluate(()=>window.__costJob);
+    assert.equal(await page.evaluate(()=>window.__mock.count('download')),1);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("download cost: a batch rechecks network changes and automatic sync waits without opening a dialog",async()=>{
+  const app=await phoneApp();
+  try {
+    const {page}=app;
+    await page.evaluate(async()=>{const {downloadAll}=await import('/js/downloads.js');window.__costJob=downloadAll([901,902].map(track_id=>({owner_id:7,track_id,title:'Test',duration:12})),{onProgress:()=>{window.__mock.config.metered=true;}});});
+    await see(page,'dialog[open]');assert.equal(await page.evaluate(()=>window.__mock.count('download')),1);
+    await tap(page,'dialog .btn:not(.primary)');
+    const result=await page.evaluate(()=>window.__costJob);assert.equal(result.cancelled,true);assert.equal(result.completed,1);
+    const automatic=await page.evaluate(async()=>{const {downloadAll}=await import('/js/downloads.js');return downloadAll([{owner_id:7,track_id:903,title:'Automatic',duration:12}],{managed:true});});
+    assert.equal(automatic.cancelled,true);assert.equal(await page.locator('dialog').count(),0);
+    assert.equal(await page.evaluate(()=>window.__mock.count('download')),1);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("download cost: unknown network cost is explicit and sign-out invalidates pending consent",async()=>{
+  const app=await phoneApp({config:{...CONFIG,networkUsageFails:true}});
+  try {
+    const {page}=app;
+    await page.evaluate(async()=>{const {toggleDownload}=await import('/js/downloads.js');window.__costJob=toggleDownload({owner_id:7,track_id:901,title:'Test',duration:12});});
+    await see(page,'dialog[open]');assert.match(await page.locator('dialog').innerText(),/определить стоимость/);
+    await page.evaluate(async()=>{const {store}=await import('/js/store.js');store.session={signed_in:false,profile:null};});
+    await tap(page,'dialog .btn.primary');await page.evaluate(()=>window.__costJob);
+    assert.equal(await page.evaluate(()=>window.__mock.count('download')),0);
+    assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});
+test("download cost: offline starts no request and already saved tracks can be removed without consent",async()=>{
+  const app=await phoneApp({config:{...CONFIG,networkConnected:false,metered:true}});
+  try {
+    const {page}=app;
+    const error=await page.evaluate(async()=>{const {toggleDownload}=await import('/js/downloads.js');try{await toggleDownload({owner_id:7,track_id:901,title:'Test',duration:12});return null;}catch(e){return e.kind;}});
+    assert.equal(error,'offline');assert.equal(await page.locator('dialog').count(),0);
+    assert.equal(await page.evaluate(()=>window.__mock.count('download')),0);
+    await page.evaluate(async()=>{const {toggleDownload,refreshDownloads}=await import('/js/downloads.js');const track={owner_id:7,track_id:901,title:'Test',duration:12};window.__mock.state.downloads=[track];await refreshDownloads();await toggleDownload(track);});
+    assert.equal(await page.evaluate(()=>window.__mock.count('remove_download')),1);
+    assert.equal(await page.locator('dialog').count(),0);assert.deepEqual(app.problems,[]);
+  } finally {await app.close();}
+});

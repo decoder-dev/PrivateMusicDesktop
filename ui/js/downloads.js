@@ -3,6 +3,8 @@
 import { api, trackKey } from "./api.js";
 import { publish } from "./store.js";
 import { t } from "./i18n.js";
+import { downloadPermission } from "./download-permission.js";
+import { accountId } from "./personal.js";
 import { readPersonal,writePersonal } from "./personal.js";
 
 let job = null;
@@ -41,7 +43,11 @@ export async function toggleDownload(track) {
       await api.removeDownload(key);
       return "removed";
     }
+    const account=accountId();
+    const allowed=downloadPermission();
+    if (!await allowed()) return null;
     await api.download(track);
+    if(account!==accountId())return null;
     writePersonal("manualDownloads",[...new Set([...readPersonal("manualDownloads",[]),key])].slice(-20000));
     return "added";
   } finally {
@@ -61,16 +67,19 @@ export async function downloadAll(items, { isCancelled = () => false, onProgress
   if (job?.running) return null;
   const unique = [...new Map(items.map(track => [trackKey(track),track])).values()].slice(0,20000);
   const state = { running:true,cancelled:false,completed:0,total:unique.length,failed:0,current:null,errors:[] };
+  const allowed=downloadPermission({interactive:!managed,isCancelled:()=>state.cancelled || isCancelled()});
   job=state;
   publish("downloadJob");
   try {
     for (const track of unique) {
       if (state.cancelled || isCancelled()) { state.cancelled=true; break; }
       const key=trackKey(track);
-      if(!managed)writePersonal("manualDownloads",[...new Set([...readPersonal("manualDownloads",[]),key])].slice(-20000));
       state.current=track;
       publish("downloadJob");
-      if (!keys.has(key) && !pending.has(key)) {
+      const needsDownload=!keys.has(key) && !pending.has(key);
+      if(needsDownload && !await allowed()){state.cancelled=true;break;}
+      if(!managed)writePersonal("manualDownloads",[...new Set([...readPersonal("manualDownloads",[]),key])].slice(-20000));
+      if (needsDownload) {
         pending.add(key); publish("downloads");
         try { await api.download(track); keys.add(key); }
         catch (error) { state.failed++; state.errors.push({track,error}); }

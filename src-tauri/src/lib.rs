@@ -287,7 +287,7 @@ pub fn run() {
             commands::set_visualizer,
             commands::set_equalizer,commands::set_taste,commands::set_transitions,commands::set_normalization,commands::month_plays,
             commands::lyrics, commands::lyrics_versions,
-            commands::share_link, commands::copy_link,
+            commands::share_link, commands::copy_link, commands::network_usage,
             commands::choose_audio, commands::upload_audio, commands::discard_audio,
             commands::create_playlist,
             commands::edit_playlist,

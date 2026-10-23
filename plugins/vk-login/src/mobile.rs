@@ -68,6 +68,11 @@ impl<R: Runtime> VkLogin<R> {
             .map_err(|e| Error::Native(e.to_string()))
     }
 
+    pub fn network_usage(&self) -> Result<serde_json::Value> {
+        self.plugin.run_mobile_plugin("networkUsage", ())
+            .map_err(|error| Error::Native(error.to_string()))
+    }
+
     pub fn share_link(&self, url: &str, title: &str) -> Result<()> {
         self.plugin.run_mobile_plugin::<serde_json::Value>("shareLink", serde_json::json!({"url":url,"title":title}))
             .map(|_|()).map_err(|error|Error::Native(error.to_string()))

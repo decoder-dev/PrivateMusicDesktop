@@ -4,6 +4,9 @@
          has it already (it streams music), and manifest merging keeps one copy. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Normal permission: read whether the active network charges for traffic. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <application>
         <!-- Not exported: only the host app's own process can open it. configChanges
              keeps the page through rotation, theme and keyboard changes, so no

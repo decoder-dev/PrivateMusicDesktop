@@ -3,6 +3,10 @@ import { addStrings } from "../i18n.js";
 
 addStrings({
   ru: {
+    "download.metered": "Скачать через сеть с оплатой трафика? Это может израсходовать мобильный пакет.",
+    "download.unknownNetwork": "Не удалось определить стоимость трафика. Скачать всё равно?",
+    "download.continue": "Скачать",
+
     "share.copy": "Копировать ссылку",
     "share.open": "Поделиться",
     "share.copied": "Ссылка скопирована",
@@ -113,6 +117,10 @@ addStrings({
     "np.grab": "Потяните вниз, чтобы свернуть",
   },
   en: {
+    "download.metered": "Download over a metered network? This may use your mobile data allowance.",
+    "download.unknownNetwork": "Could not determine network cost. Download anyway?",
+    "download.continue": "Download",
+
     "share.copy": "Copy link",
     "share.open": "Share",
     "share.copied": "Link copied",
