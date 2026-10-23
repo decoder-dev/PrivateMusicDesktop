@@ -61,7 +61,7 @@ attempt() { # <number>
   adb start-server
   local pid_file="$out/emulator-attempt-$1.pid"
   rm -f "$pid_file" "$out/emulator-exit-$1.txt"
-  nohup setsid bash "$(dirname "$0")/emulator-supervise.sh" "$out/emulator-exit-$1.txt" "$pid_file" "$emulator_bin" -avd "$avd" -no-window -no-audio -no-boot-anim -gpu software \
+  nohup setsid bash "$(dirname "$0")/emulator-supervise.sh" "$out/emulator-exit-$1.txt" "$pid_file" "$emulator_bin" -avd "$avd" -no-window -no-audio -no-boot-anim -no-metrics -gpu software -feature -Vulkan \
     -no-snapshot -wipe-data -memory 3072 -cores 4 -accel on -netdelay none -netspeed full \
     > "$log" 2>&1 </dev/null &
   local supervisor_pid=$!

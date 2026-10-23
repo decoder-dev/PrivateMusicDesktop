@@ -420,3 +420,9 @@ and Cargo manifest/lockfile keys. Each source revision gets a new cache entry, w
 fallbacks for later revisions. Cargo still checks changed Rust/UI assets. SDK installations, account
 credentials and signed APKs are outside these paths. The first run has no cache; savings can only be
 measured after a later cache hit.
+
+The 37.2.12 runner also reproduced a host emulator SIGSEGV (exit 139) during sign-in; the app
+startup, Keystore and generated cover decoder checks passed before the host disappeared. Software
+rendering alone did not resolve it. CI now disables guest Vulkan following Android's Chromium
+compatibility guidance, and retains privileged kernel tail/limited emulator Crashpad dumps for a
+further diagnosis. This is a test-environment workaround, not evidence of a fixed app bug.
