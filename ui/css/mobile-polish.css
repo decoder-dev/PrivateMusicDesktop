@@ -63,3 +63,9 @@ html[data-layout="phone"] .empty-state svg { opacity: 0.6; }
 html[data-layout="phone"] .diag-dialog { width: min(420px, calc(100vw - 24px)); text-align: left; }
 html[data-layout="phone"] .diag-dialog h2, html[data-layout="phone"] .diag-dialog .dialog-text { margin-inline: 0; }
 .login-log { display: block; margin: 18px auto 0; color: var(--text-2); font: 500 13px/18px var(--font); }
+
+/* ---- узкий телефон: четыре вкладки поиска не слипаются ---- */
+html[data-layout="phone"] .tabs button { white-space: nowrap; }
+@media (max-width: 400px) {
+  html[data-layout="phone"] .tabs button, html[data-layout="phone"] .tab-bar .tabs button { padding: 0 6px; font-size: 13.5px; letter-spacing: -0.2px; flex: 1 1 auto; min-width: 0; }
+}
