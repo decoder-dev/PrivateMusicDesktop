@@ -32,4 +32,13 @@ class SessionCookiesTest {
         assertEquals("REMIXSID6=z", SessionCookies.sessionHeader(listOf("REMIXSID6" to "z"), false))
         assertEquals("remixnsid=1", SessionCookies.sessionHeader(listOf("remixnsid" to "1"), false))
     }
+
+    @Test
+    fun mergeKeepsTheFirstValueAndAddsWhatOnlyTheLaterAnswerHas() {
+        assertEquals(
+            listOf("a" to "1", "b" to "2", "remixsid" to "x"),
+            SessionCookies.merge("a=1; b=2", null, "a=9; remixsid=x"),
+        )
+        assertEquals(emptyList<Pair<String, String>>(), SessionCookies.merge(null, ""))
+    }
 }

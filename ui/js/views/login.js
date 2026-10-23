@@ -3,6 +3,7 @@ import { t, errorText } from "../i18n.js";
 import { api } from "../api.js";
 import { icon } from "../icons.js";
 import { isNetworkError, vpnHint } from "../network.js";
+import { openDiagnostics } from "../diagnostics.js";
 
 /** Экран входа в систему. Собственная страница VK открывается в отдельном окне. */
 export function createLoginView({ onError }) {
@@ -51,7 +52,9 @@ export function createLoginView({ onError }) {
         h("div", { class: "app-icon" }, icon("note", 40))),
       h("h1", { text: t("login.title") }),
       h("p", { text: t("login.lead") }),
-      button, message, hint, recovery, note));
+      button, message, hint, recovery, note,
+      // Вход может не получиться, а настроек до входа нет: журнал для отчета открывается и отсюда.
+      h("button", { class: "link-text login-log", type: "button", onclick: () => openDiagnostics(), text: t("diag.open") })));
 
   return {
     element,

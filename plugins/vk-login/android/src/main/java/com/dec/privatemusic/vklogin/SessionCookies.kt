@@ -25,6 +25,18 @@ object SessionCookies {
     }
 
     /**
+     * Cookies of several `CookieManager.getCookie` answers in one list, the first answer winning per name.
+     * VK may set the session cookie for `vk.ru` only (host-only), which `getCookie("https://login.vk.ru/")`
+     * does not return: the desktop reads the whole cookie store for the same reason (`token_cookies`).
+     */
+    fun merge(vararg headers: String?): List<Pair<String, String>> {
+        val seen = HashSet<String>()
+        val out = ArrayList<Pair<String, String>>()
+        for (header in headers) for (pair in parse(header)) if (seen.add(pair.first)) out.add(pair)
+        return out
+    }
+
+    /**
      * The `Cookie:` header to try, or null while the user is not signed in.
      * Automatic checks need a known session cookie with a value; a manual
      * check ("Done") lets VK judge any non-empty cookie set.
