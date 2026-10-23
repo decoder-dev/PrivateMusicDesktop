@@ -56,6 +56,9 @@ fn checked_queue(tracks: Vec<Track>) -> CommandResult<Vec<Track>> {
 
 #[tauri::command]
 pub async fn session_state(state: TauriState<'_, AppState>) -> CommandResult<SessionState> {
+    // Первый запрос интерфейса: с этого момента страница загружена и её скрипты работают.
+    static FIRST: std::sync::Once = std::sync::Once::new();
+    FIRST.call_once(|| if let Some(started) = crate::STARTED.get() { log::info!("startup: interface ready after {} ms", started.elapsed().as_millis()); });
     let app = state.app.clone();
     blocking(move || { Ok(app.session_state()) }).await
 }
