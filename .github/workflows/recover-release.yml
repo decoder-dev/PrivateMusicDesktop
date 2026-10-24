@@ -1,0 +1,120 @@
+name: Recover release publication
+
+# Reuses successful, checked binaries from a release run. A DMG-only macOS build can
+# be completed without recompiling or moving the immutable release tag.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to publish
+        required: true
+      source_run_id:
+        description: Release run containing all successful platform builds and UI checks
+        required: true
+
+concurrency:
+  group: recover-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  recover:
+    name: Verify and complete existing packages
+    runs-on: macos-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      version: ${{ steps.validate.outputs.version }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Require successful builds of this exact tag
+        id: validate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.source_run_id }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > "$RUNNER_TEMP/source-run.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/jobs?per_page=100" > "$RUNNER_TEMP/source-jobs.json"
+          python3 - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          run = json.loads((Path(os.environ['RUNNER_TEMP'])/'source-run.json').read_text())
+          jobs = json.loads((Path(os.environ['RUNNER_TEMP'])/'source-jobs.json').read_text())['jobs']
+          sha = subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          assert run['head_sha'] == sha, 'source binaries must match the immutable version tag'
+          assert run['path'] == '.github/workflows/release.yml', 'source must be a release workflow'
+          required = {'Check the tag','Release UI checks','Android APK','Build (Windows)','Build (Linux)','Build (macOS)'}
+          successful = {job['name'] for job in jobs if job['conclusion'] == 'success'}
+          assert required <= successful, f'missing successful checks: {required-successful}'
+          version = json.loads(Path('src-tauri/tauri.conf.json').read_text())['version']
+          assert os.environ['TAG'] == 'v'+version
+          with open(os.environ['GITHUB_OUTPUT'],'a') as output: output.write('version='+version+'\n')
+          PY
+      - name: Download the checked platform packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.source_run_id }}
+        run: |
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --pattern 'installers-*' --dir parts
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name android-apk --dir android-parts
+      - name: Complete the macOS updater archive from the original DMG
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          VERSION: ${{ steps.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          if find parts -type f -name '*.app.tar.gz' | grep -q .; then
+            echo 'The updater archive already exists; keep its original signature.'
+            exit 0
+          fi
+          dmg=$(python3 -c 'from pathlib import Path; files=list(Path("parts").rglob("*.dmg")); assert len(files)==1; print(files[0])')
+          mount_dir="$RUNNER_TEMP/release-app"
+          mkdir -p "$mount_dir" parts/installers-macOS/recovery
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount_dir"
+          trap 'hdiutil detach "$mount_dir" -quiet || true' EXIT
+          app=$(python3 -c 'from pathlib import Path; import sys; files=list(Path(sys.argv[1]).glob("*.app")); assert len(files)==1; print(files[0].name)' "$mount_dir")
+          architectures=$(lipo -archs "$mount_dir/$app/Contents/MacOS/private-music-desktop")
+          [[ "$architectures" == *x86_64* && "$architectures" == *arm64* ]]
+          archive="$GITHUB_WORKSPACE/parts/installers-macOS/recovery/$app.tar.gz"
+          COPYFILE_DISABLE=1 tar -czf "$archive" -C "$mount_dir" "$app"
+          npx --yes @tauri-apps/cli@2 signer sign --app-version "$VERSION" "$archive"
+      - name: Assemble the complete release
+        env:
+          VERSION: ${{ steps.validate.outputs.version }}
+        run: python3 scripts/prepare-release.py --parts parts --android android-parts --out out --version "$VERSION" --repo "$GITHUB_REPOSITORY"
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: complete-release
+          path: out/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish the completed release
+    needs: recover
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Download and publish verified packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          VERSION: ${{ needs.recover.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name complete-release --dir out
+          gh release create "$TAG" out/* --repo "$GITHUB_REPOSITORY" --verify-tag --latest \
+            --title "Private Music $VERSION" --notes-file "docs/releases/$VERSION.md"

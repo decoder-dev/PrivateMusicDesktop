@@ -67,7 +67,7 @@ jobs:
         include:
           - { name: Linux, os: ubuntu-latest, bundles: "deb appimage", target: "" }
           - { name: Windows, os: windows-latest, bundles: "nsis", target: "" }
-          - { name: macOS, os: macos-latest, bundles: "dmg", target: "universal-apple-darwin" }
+          - { name: macOS, os: macos-latest, bundles: "app dmg", target: "universal-apple-darwin" }
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
