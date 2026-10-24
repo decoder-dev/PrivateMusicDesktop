@@ -87,7 +87,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc5OTdFOEYxRTM4NUUzNjUKUldSbDQ0WGo4ZWlYZVdNK0J4SlpzTVZCc1lienN2WVVTL21hUXNYZXVKZm9PaTdVZGdxZzFzVTIK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFCNUNEODIzMzY5MkU1QkUKUldTKzVaSTJJOWhjcTRyOG90MmEvbDNwcWdEQmM3TGhrbmxGR0QxY0FscFJCSkwwQlFma2tlK2kK",
       "endpoints": [
         "https://github.com/decoder-dev/PrivateMusicDesktop/releases/latest/download/latest.json"
       ],
