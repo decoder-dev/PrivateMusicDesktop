@@ -13,7 +13,7 @@ import { coverPalette } from "./palette.js";
 import { createEqualizerPanel } from "./equalizer.js";
 import { openSheet } from "./mobile/sheet.js";
 import { artBox, bindRange, syncRange } from "./ui-parts.js";
-import { isPhone, isAndroid } from "./mobile/layout.js";
+import { isPhone, isAndroid, onLayoutChange } from "./mobile/layout.js";
 import { attachSheetDrag } from "./mobile/np-sheet.js";
 
 const IDLE_MS = 3000;
@@ -140,18 +140,25 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
 
   // The sheet's grabber (phone layout only): drag it, or anything not a control, down to close.
   const grab = h("div", { class: "np-grab", "aria-hidden": "true" }, h("i"));
+  const heading = h("div", { class: "np-heading" }, title);
+  const transport = h("div", { class: "np-controls" }, shuffleButton, previousButton, playButton, nextButton, repeatButton, likeButton);
   const element = h("div", { class: "np", role: "dialog", "aria-modal": "true", "aria-label": t("np.open"), hidden: true },
     backdrop,
     canvas,
     grab,
     h("div", { class: "np-top" }, closeButton, h("div", { class: "np-kicker" }, h("div", { class: "k1", text: t("np.nowPlaying") }), kickerAlbum), lyricsButton, modeButton, windowButton),
     h("div", { class: "np-stage" },
-      h("div", { class: "np-main" }, coverBox, h("div", { class: "np-info" }, title, h("div", { class: "np-artist-row" }, artist), upNext)),
+      h("div", { class: "np-main" }, coverBox, h("div", { class: "np-info" }, heading, h("div", { class: "np-artist-row" }, artist), upNext)),
       lyrics.element, queuePanel),
     h("div", { class: "np-bottom" },
       h("div", { class: "np-seek" }, elapsed, seek, total),
-      h("div", { class: "np-controls" }, shuffleButton, previousButton, playButton, nextButton, repeatButton, likeButton),
+      transport,
       h("div", { class: "np-quick" }, quickLyrics, quickQueue, quickEq, quickMore)));
+
+  // One favourite button: beside the title on phones, after Repeat on desktop.
+  const placeFavorite = () => (isPhone() ? heading : transport).append(likeButton);
+  placeFavorite();
+  own(onLayoutChange(placeFavorite));
 
   const visualizer = createVisualizer(canvas);
   visualizer.setMode(mode);
@@ -172,7 +179,8 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     const info=element.querySelector(".np-info").getBoundingClientRect();
     const bottom=element.querySelector(".np-bottom").getBoundingClientRect();
     const top=info.bottom+8-frame.top;
-    return {top,height:Math.max(0,bottom.top-frame.top-8-top)};
+    const lane=seek.getBoundingClientRect();
+    return {top,height:Math.max(0,bottom.top-frame.top-8-top),left:lane.left-frame.left,width:lane.width};
   });
 
   // -------------------------------------------------- Режимы

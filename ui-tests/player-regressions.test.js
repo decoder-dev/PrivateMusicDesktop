@@ -142,3 +142,27 @@ test("phone: a finger moves a vertical EQ fader without scrolling the sheet",asy
     assert.deepEqual(app.problems,[]);
   }finally{await app.close();}
 });
+
+for(const phone of ['small','pixel7','landscape']) {
+  test(`phone ${phone}: long titles fit beside one favourite and playback is centred`,async()=>{
+    const app=await openApp({config,phone});
+    try {
+      const {page}=app;await openPlayer(app);
+      await page.evaluate(async()=>{
+        const {store}=await import('/js/store.js');
+        window.__mock.emit('pm-event',{...store.player,type:'state',track:{...store.player.track,title:'Очень длинное название любимой песни — концертная запись',artist:'Исполнитель с длинным именем'}});
+      });
+      const metrics=await page.evaluate(()=>{
+        const rect=s=>document.querySelector(s).getBoundingClientRect();
+        const title=rect('.np-title'),like=rect('.np-like'),play=rect('.np-play'),controls=rect('.np-controls'),cover=rect('.np-cover'),header=rect('.np-top'),info=rect('.np-info'),bottom=rect('.np-bottom');
+        return {favourites:document.querySelectorAll('.np-like').length,separate:title.right<=like.left,centred:Math.abs(play.x+play.width/2-innerWidth/2)<1,coverBelowHeader:cover.top>=header.bottom-1,infoAboveControls:info.bottom<bottom.top,controlsInside:controls.right<=innerWidth && controls.left>=0};
+      });
+      assert.deepEqual(metrics,{favourites:1,separate:true,centred:true,coverBelowHeader:true,infoAboveControls:true,controlsInside:true});
+      await page.locator('.np-like').click();
+      await page.waitForFunction(()=>document.querySelector('.np-like').getAttribute('aria-pressed')==='true');
+      await page.locator('.np-quick button').first().click();
+      assert.equal(await page.locator('.np-main').isVisible(),false);
+      assert.deepEqual(app.problems,[]);
+    }finally{await app.close();}
+  });
+}

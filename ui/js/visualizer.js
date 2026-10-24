@@ -75,16 +75,18 @@ export function createVisualizer(canvas) {
     if (plot && plot.height < 4) return;
     const plotHeight = plot?.height ?? height;
     const plotTop = plot?.top ?? 0;
+    const plotLeft = plot?.left ?? 0;
+    const plotWidth = plot?.width ?? width;
     const floor = plotHeight * 0.04;
     if (mode === "bars" || mode === "mirror") {
       const area = plotHeight * (plot ? 0.85 : 0.42);
-      const step = width / count;
+      const step = plotWidth / count;
       const bar = Math.max(2, step * 0.62);
       const base = plot ? plotTop + plotHeight - 4 : height - 28;
       const baseline = mode === "bars" ? base : base - area / 2;
       context.fillStyle = fill(0, base - area, 0, base);
       for (let i = 0; i < count; i += 1) {
-        const x = i * step + (step - bar) / 2;
+        const x = plotLeft + i * step + (step - bar) / 2;
         const level = bands[i] ** 1.4;
         if (mode === "bars") {
           roundedBar(x, baseline, bar, -(floor + level * area));
@@ -96,9 +98,9 @@ export function createVisualizer(canvas) {
     } else if (mode === "wave") {
       const area = plotHeight * (plot ? 0.85 : 0.38);
       const baseline = plot ? plotTop + plotHeight / 2 : height - 28 - area / 2;
-      const points = bands.map((level, i) => [(i / (count - 1)) * width, level ** 1.3 * area / 2 + floor / 2]);
+      const points = bands.map((level, i) => [plotLeft + (i / (count - 1)) * plotWidth, level ** 1.3 * area / 2 + floor / 2]);
       context.beginPath();
-      context.moveTo(0, baseline);
+      context.moveTo(plotLeft, baseline);
       points.forEach(([x, y], i) => {
         const [px, py] = points[i - 1] ?? [x, y];
         context.quadraticCurveTo(px, baseline - py, (px + x) / 2, baseline - (py + y) / 2);
