@@ -495,3 +495,23 @@ wrap, search tabs retain readable labels, Settings stays inside the viewport and
 leave room for actions. Equalizer frequency navigation exposes all ten bands with 44px buttons.
 Alert actions retain readable accent text without the general primary-button gradient. Tests live in
 `ui-tests/screen-audit.test.js`; browser emulation does not replace physical Android device validation.
+
+
+### Music interface refresh (2026-10-24)
+
+The shared music layer (`ui/css/music.css`) uses a quieter shell, compact home mix,
+labelled navigation, library filters and a single accent playback action. Spotify and
+Spotube informed the hierarchy and spacing; the app keeps its own assets and all seven
+palettes. Saved palette, accent and app style choices are retained. New installations
+start with green as the accent.
+
+Missing or failed track covers show a track number without a coloured tile. Collection
+cards keep their titles and counts without a fake cover; a missing player cover uses
+quiet typography. Loading is a short, accessible text label instead of geometric
+skeleton rows. A failed next cover also clears the previous backdrop and cannot reinsert
+a broken image after decoding finishes. `ui-tests/artwork.test.js` covers these cases.
+
+The browser review includes 87 captures across the phone routes, small-screen enlarged
+text, seven palettes in light and dark, Material styling, and desktop layouts. README
+previews use test catalogue data and explicitly substitute bundled photographs for mock
+cover URLs. These checks do not establish performance on a physical phone.

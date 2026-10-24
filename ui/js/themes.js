@@ -1,9 +1,9 @@
 // Цвета и настройки по умолчанию перенесены из PrivateMusic2/App/AppPalette.swift..
 import { addStrings } from "./i18n.js";
 export const PALETTES = ["classic", "banana", "midnight", "forest", "rose", "mocha", "halloween"];
-export const PALETTE_ACCENT = { classic: "blue", banana: "banana", midnight: "indigo", forest: "green", rose: "pink", mocha: "orange", halloween: "orange" };
+export const PALETTE_ACCENT = { classic: "green", banana: "banana", midnight: "indigo", forest: "green", rose: "pink", mocha: "orange", halloween: "orange" };
 export const COLORS = {
-  classic: ["#ffffff", "#f6f6f6", "#f4f4f4", "#000000", "#0e0e0e", "#131313"],
+  classic: ["#ffffff", "#f6f6f6", "#f4f4f4", "#121212", "#080808", "#1e1e1e"],
   banana: ["#F6F3EB", "#F1EDE2", "#FFFCF5", "#181B20", "#14171B", "#23272E"],
   midnight: ["#EEF2FA", "#E6ECF8", "#FFFFFF", "#0B1020", "#090D1A", "#141B33"],
   forest: ["#EEF4EE", "#E5EFE6", "#FBFFFB", "#0D1511", "#0A110D", "#16221B"],

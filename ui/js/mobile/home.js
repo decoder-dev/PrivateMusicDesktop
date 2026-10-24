@@ -33,7 +33,7 @@ export function createHomeView({ play, onTrackAction, toast, openTrackMenu, like
   const headline = h("h2", { class: "stage-headline" });
   const cover = h("button", { class: "stage-art", type: "button", onclick: () => (store.player.track ? openPlayer() : startStation()) },
     h("span", { class: "stage-cover" }, artBox(null, { glyph: "sparkles", size: 40 })));
-  const startButton = h("button", { class: "btn primary cta stage-cta", type: "button", onclick: () => startStation() }, icon("sparkles", 16), t("home.start"));
+  const startButton = h("button", { class: "btn primary cta stage-cta", type: "button", onclick: () => startStation() }, icon("play", 18), t("home.start"));
   const playButton = h("button", { class: "stage-btn", type: "button", onclick: () => api.toggle() }, icon("play", 22));
   const trackButton = h("button", { class: "stage-track", type: "button", onclick: () => openPlayer() });
   const likeButton = h("button", { class: "stage-btn like", type: "button", onclick: () => like(store.player.track) }, icon("heart", 22));
@@ -66,7 +66,7 @@ export function createHomeView({ play, onTrackAction, toast, openTrackMenu, like
     headline.textContent = track ? (track.artist || track.title) : t("home.station");
     startButton.hidden = !!track;
     controls.hidden = !track;
-    const url = track?.artwork_url ?? null;
+    const url = track ? (track.artwork_url ?? null) : "/assets/discovery-calm.webp";
     if (url !== coverUrl) {
       coverUrl = url;
       swapArt(cover.firstElementChild, url, { glyph: track ? "note" : "sparkles", size: 40 }, () => coverUrl === url);
@@ -174,7 +174,7 @@ export function createHomeView({ play, onTrackAction, toast, openTrackMenu, like
     }
   }
 
-  const body = h("div", { class: "home-body" }, stage, resume, recsSection, mixes.element, explore, releases.element, recentSection);
+  const body = h("div", { class: "home-body" }, stage, resume, mixes.element, explore, recsSection, releases.element, recentSection);
   const element = h("section", { class: "view home-view", hidden: true }, body);
 
   subscribe("player", renderStage);

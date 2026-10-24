@@ -60,11 +60,16 @@ export async function openApp({ config = {}, viewport = { width: 1120, height: 7
   });
   // Иллюстрации URLs являются фейковыми: отвечайте им изображением 1x1, а не сетью.
   const pixel = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64");
-  // `fancyArt` (screenshots only) answers with a coloured gradient per URL so the screens look like they have covers.
+  // Screenshot fixtures: true uses synthetic gradients; "photos" uses bundled mood images.
+  // These are test covers, never replacements for real catalogue artwork in the app.
   await context.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => {
     if (!fancyArt) return route.fulfill({ status: 200, contentType: "image/png", body: pixel });
     let hash = 0;
     for (const ch of route.request().url()) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+    if (fancyArt === "photos") {
+      const names = ["love", "energy", "rain", "calm", "sun"];
+      return route.fulfill({ status: 200, contentType: "image/webp", body: fs.readFileSync(path.join(uiRoot, `assets/discovery-${names[hash % names.length]}.webp`)) });
+    }
     const hue = hash % 360;
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue} 70% 58%)"/><stop offset="1" stop-color="hsl(${(hue + 55) % 360} 65% 38%)"/></linearGradient></defs><rect width="300" height="300" fill="url(#g)"/><circle cx="${80 + hash % 140}" cy="${90 + hash % 120}" r="${50 + hash % 40}" fill="hsl(${(hue + 180) % 360} 60% 70%)" opacity=".35"/></svg>`;
     return route.fulfill({ status: 200, contentType: "image/svg+xml", body: svg });

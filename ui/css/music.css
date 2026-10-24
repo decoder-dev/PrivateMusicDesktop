@@ -1,0 +1,187 @@
+/* Music-first surfaces: restrained chrome, generous artwork and clear playback actions. */
+:root { --r-card: 14px; --r-compact: 10px; --r-control: 10px; }
+.shell { gap: 8px; padding: 8px; }
+.sidebar { border-radius: 12px; background: var(--page-bottom); }
+.main { border: 0; border-radius: 12px; background: var(--page-top); }
+.brand { padding-bottom: 22px; }
+.nav button { border-radius: 7px; min-height: 44px; font-weight: 650; }
+.nav button[aria-current="page"] { color: var(--text); background: var(--hover); box-shadow: none; }
+.nav button[aria-current="page"]::before { display: none; }
+.nav button[aria-current="page"] .icon { color: var(--accent); }
+.view-header h1 { font-weight: 800; letter-spacing: -.9px; }
+.shelf-title { font-weight: 750; letter-spacing: -.5px; }
+.btn.primary { box-shadow: none; }
+.card { border-radius: 9px; }
+.card .card-art, .card .card-art .art-box { border-radius: 9px; }
+.artist-card .card-art, .artist-card .card-art .art-box { border-radius: 50%; }
+.card .name { font-weight: 650; line-height: 1.4; }
+.card .count { line-height: 1.5; }
+.play-chip { width: 44px; height: 44px; background: var(--accent); color: var(--on-accent); }
+.row .art-box { border-radius: 5px; box-shadow: none; }
+.row .title { font-weight: 550; }
+.row .artist { color: var(--text-2); }
+.player-dock { border-top: 0; padding: 8px 12px 12px; }
+.player-dock .player { border-radius: 12px; background: var(--surface); box-shadow: none; }
+.player .controls .play { box-shadow: none; }
+.np .np-cover { border-radius: 12px; }
+.np .np-play { box-shadow: none; }
+
+/* Keep the main mix compact so discovery is visible on the first screen. */
+html[data-layout="phone"] .home-body .stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px;
+  grid-template-areas: "chip art" "title art" "start art" "controls controls";
+  align-items: center;
+  gap: 8px 16px;
+  padding: 20px;
+  margin: 8px var(--gutter) 0;
+  width: calc(100% - 2 * var(--gutter));
+  text-align: left;
+  border: 0;
+  border-radius: 14px;
+  background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 14%, var(--surface)), var(--surface));
+  box-shadow: none;
+}
+html[data-layout="phone"] .stage-chip {
+  grid-area: chip; justify-self: start; min-height: 0; padding: 0;
+  color: var(--text-2); background: none; border: 0; border-radius: 0;
+  font-size: calc(11px * var(--text-scale, 1)); line-height: 1.4;
+  font-weight: 600; letter-spacing: .2px; white-space: normal;
+}
+html[data-layout="phone"] .stage-headline {
+  grid-area: title; margin: 0; text-align: left; text-wrap: pretty;
+  font-size: calc(26px * var(--text-scale, 1)); line-height: 1.15; font-weight: 800;
+}
+html[data-layout="phone"] .stage-art { grid-area: art; width: 92px; height: 92px; border-radius: 9px; }
+html[data-layout="phone"] .stage-cover .art-box { --art-size: 92px; border-radius: 9px; box-shadow: none; }
+html[data-layout="phone"] .stage[data-state="idle"] .stage-cover .art-box {
+  background: linear-gradient(140deg, var(--accent), color-mix(in srgb, var(--accent) 35%, #101817));
+}
+html[data-layout="phone"] .stage[data-state="idle"] .stage-cover .art-ph { color: var(--on-accent); }
+html[data-layout="phone"] .stage .stage-cta {
+  grid-area: start; justify-self: start; min-width: 0; min-height: 44px; width: auto;
+  margin: 2px 0 0; padding-inline: 17px; border-radius: 999px;
+  font-size: calc(14px * var(--text-scale, 1)); background: var(--accent); box-shadow: none;
+}
+html[data-layout="phone"] .stage-controls { grid-area: controls; margin-top: 4px; }
+html[data-layout="phone"] .stage-btn { width: 44px; height: 44px; border: 0; background: var(--hover); }
+html[data-layout="phone"] .stage-controls > .stage-btn:first-child { background: var(--accent); color: var(--on-accent); }
+html[data-layout="phone"] .stage-track { min-height: 44px; font-size: calc(15px * var(--text-scale, 1)); text-align: left; }
+html[data-layout="phone"] .resume-card { border-radius: 12px; box-shadow: none; border: 0; }
+html[data-layout="phone"] .home-body .shelf-title { margin-top: 26px; font-size: calc(21px * var(--text-scale, 1)); }
+html[data-layout="phone"] .home-body .explore-row { border-radius: 8px; background: var(--surface); box-shadow: none; }
+
+/* Search keeps a full label, and every destination gets the same visual weight. */
+html[data-layout="phone"]:not([data-style="material"]) .dock {
+  gap: 0; padding-inline: var(--safe-left) var(--safe-right);
+  padding-top: 6px; background: var(--page-top); border-top: 1px solid var(--line-card);
+}
+html[data-layout="phone"]:not([data-style="material"]) .dock-tabs {
+  flex: 3 1 0; padding: 0; gap: 0; border-radius: 0; border: 0; background: transparent; box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+html[data-layout="phone"]:not([data-style="material"]) .dock-searchwrap {
+  flex: 1 1 0; width: auto; border-radius: 0; border: 0; background: transparent; box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+html[data-layout="phone"]:not([data-style="material"]) .dock-tab,
+html[data-layout="phone"]:not([data-style="material"]) .dock-tab.dock-search {
+  height: var(--dock-h); min-height: 44px; border-radius: 0; color: var(--text-2); gap: 3px;
+}
+html[data-layout="phone"]:not([data-style="material"]) .dock-tab .dock-ico,
+html[data-layout="phone"]:not([data-style="material"]) .dock-tab.dock-search .dock-ico {
+  width: 34px; height: 26px; border-radius: 0; border: 0; background: transparent; box-shadow: none;
+}
+html[data-layout="phone"]:not([data-style="material"]) .dock-tab[aria-current="page"] { color: var(--text); }
+html[data-layout="phone"]:not([data-style="material"]) .dock-tab[aria-current="page"] .dock-ico { color: var(--accent); background: transparent; box-shadow: none; }
+html[data-layout="phone"]:not([data-style="material"]) .dock-search .dock-label { display: block; }
+html[data-layout="phone"]:not([data-style="material"]) .dock-label { font-size: calc(10px * var(--text-scale, 1)); font-weight: 600; }
+html[data-layout="phone"]:not([data-style="material"]) .navbar { background: var(--page-top); }
+html[data-layout="phone"]:not([data-style="material"]) .navbar .nav-title { text-align: left; font-weight: 800; }
+html[data-layout="phone"]:not([data-style="material"]) .player {
+  border-radius: 9px; border: 0; background: var(--surface); box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+html[data-layout="phone"] .player .now-art .art-box { border-radius: 6px; }
+
+/* Collection filters and shortcuts read as tools rather than separate glass cards. */
+html[data-layout="phone"] .library-hub .lib-sections {
+  gap: 8px; justify-content: flex-start; margin: 4px 0 0; padding: 0 0 3px; background: none;
+}
+html[data-layout="phone"] .library-hub .lib-sections > button {
+  flex: 0 0 auto; min-height: 44px; padding-inline: 16px; border-radius: 999px;
+  font-size: calc(13px * var(--text-scale, 1)); background: var(--surface); color: var(--text-2);
+}
+html[data-layout="phone"] .library-hub .lib-sections > button[aria-selected="true"] { background: var(--accent); color: var(--on-accent); }
+html[data-layout="phone"] .library-hub .lib-sections > button::after { display: none; }
+html[data-layout="phone"] .lib-summary { border: 0; border-radius: 9px; background: var(--surface); box-shadow: none; }
+html[data-layout="phone"] .lib-summary-ico { border-radius: 14px; }
+html[data-layout="phone"] .lib-summary.liked .lib-summary-ico {
+  background: linear-gradient(135deg, #6a4cbd, #a38bd8); color: #fff;
+}
+html[data-layout="phone"] .lib-summary-detail { font-size: calc(12px * var(--text-scale, 1)); }
+html[data-layout="phone"] .lib-summary .chev { color: var(--text-2); }
+
+/* Album-led player with one clear primary action; visualizer themes remain available. */
+html[data-layout="phone"] .np { border-radius: 18px 18px 0 0; }
+html[data-layout="phone"] .np .np-cover { border-radius: 12px; box-shadow: 0 14px 30px -12px rgb(0 0 0 / .4); }
+html[data-layout="phone"] .np[data-mode="radial"] .np-cover { border-radius: 50%; }
+html[data-layout="phone"] .np-top .np-btn { border: 0; background: transparent; }
+html[data-layout="phone"] .np-heading .np-like { border: 0; background: transparent; }
+html[data-layout="phone"] .np-heading .np-like.on { color: var(--accent); background: transparent; }
+html[data-layout="phone"] .np .np-play { background: var(--accent); color: var(--on-accent); box-shadow: none; }
+html[data-layout="phone"] .np-quick { border-top: 0; }
+html[data-layout="phone"] .np-quick button { border-radius: 8px; }
+html[data-layout="phone"] .np .np-title { font-weight: 750; letter-spacing: -.7px; }
+
+@media (max-width: 350px) {
+  html[data-layout="phone"] .home-body .stage { grid-template-columns: minmax(0, 1fr) 76px; padding: 16px; gap: 8px 12px; }
+  html[data-layout="phone"] .stage-art { width: 76px; height: 76px; }
+  html[data-layout="phone"] .stage-cover .art-box { --art-size: 76px; }
+  html[data-layout="phone"] .stage-headline { font-size: calc(23px * var(--text-scale, 1)); }
+}
+
+/* Override the older raised primary treatment only for the music launch card. */
+html[data-layout="phone"]:not([data-style="material"]) .stage .btn.stage-cta {
+  background: var(--accent); border: 0; box-shadow: none;
+}
+html[data-layout="phone"] .library-hub .lib-sections { border: 0; border-radius: 0; box-shadow: none; }
+html[data-layout="phone"] .library-hub .lib-shortcuts .lib-summary {
+  flex-direction: row; align-items: center; min-height: 90px; padding: 12px;
+  border: 0; border-radius: 9px; box-shadow: none; background: var(--surface);
+}
+html[data-layout="phone"] .library-hub .lib-shortcuts .lib-summary.smart { min-height: 68px; }
+html[data-layout="phone"] .library-hub .lib-shortcuts .lib-summary-title { font-size: calc(14px * var(--text-scale, 1)); }
+html[data-layout="phone"] .library-hub .lib-shortcuts .lib-summary-ico { width: 40px; height: 40px; border-radius: 14px; }
+.np .np-play { background: var(--accent); color: var(--on-accent); }
+@media (max-width: 380px) {
+  html[data-layout="phone"] .library-hub .lib-shortcuts { grid-template-columns: minmax(0, 1fr); }
+  html[data-layout="phone"] .library-hub .lib-shortcuts .lib-summary { min-height: 68px; }
+}
+
+/* Artwork is content, not a decorative placeholder. Keep row geometry stable. */
+html .art-box { background: transparent; background-image: none; box-shadow: none; }
+html .art-box .art-ph { color: var(--text-2); }
+html .art-box[data-art="ready"] .art-ph { visibility: hidden; }
+html .row .art-box .art-ph { font-size: 13px; font-variant-numeric: tabular-nums; }
+html .card:has(.art-box[data-art="missing"], .art-box[data-art="error"]) .card-art { display: none; }
+html .card:has(.art-box[data-art="missing"], .art-box[data-art="error"]) { min-height: 88px; align-self: flex-start; padding: 16px 10px; justify-content: center; background: transparent; }
+html .np-cover:has(.np-placeholder) { box-shadow: none; background: transparent; }
+html .np-placeholder { background: transparent; color: var(--text-2); font-size: clamp(48px, 16vw, 96px); font-weight: 750; }
+html[data-layout="phone"] .stage:has(.art-box[data-art="missing"], .art-box[data-art="error"]) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "chip" "title" "start" "controls"; }
+html[data-layout="phone"] .stage-art:has(.art-box[data-art="missing"], .art-box[data-art="error"]) { display: none; }
+/* A short loading label avoids decorative skeletons and continuous repainting. */
+.status.loading .loading-label { color: var(--text-2); padding: 12px var(--gutter); }
+
+/* Catalogue mixes use simple colour and type, without concentric decorations. */
+html .mix-tile.mobile-mix { background: linear-gradient(145deg, var(--mix-c0), var(--mix-c3)); border-radius: 12px; box-shadow: none; }
+html .mix-tile.mobile-mix::before { background: linear-gradient(180deg, transparent, rgb(0 0 0 / .65)); }
+html .mix-tile .art-box { display: none; }
+html[data-layout="phone"]:not([data-style="material"]) .row .art-box { box-shadow: none; }
+
+html .selena-personal::after { display: none; }
+html .discovery-view .mix-card .mix-symbol { border: 0; background: transparent; }
+html[data-layout="phone"] .home-body .mix-card .mix-tile { min-height: 112px; padding: 16px; }
+
+/* Secondary screens share the same quiet surfaces as the library. */
+html .settings .set-card, html .dl-summary, html .sync-panel { border: 0; border-radius: 12px; box-shadow: none; }

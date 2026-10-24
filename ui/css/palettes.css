@@ -9,7 +9,7 @@
 .palette-opt[aria-checked="true"] { border-color: var(--accent); color: var(--text); background: var(--accent-soft); }
 .palette-swatch { width: 42px; height: 27px; border-radius: 8px; border: 1px solid var(--line); }
 .brand-mark img { width: 100%; height: 100%; border-radius: 9px; }
-.palette-classic { background: linear-gradient(135deg, #000000, #131313); }
+.palette-classic { background: linear-gradient(135deg, #121212, #1e1e1e); }
 .palette-banana { background: linear-gradient(135deg, #181B20, #23272E); }
 .palette-midnight { background: linear-gradient(135deg, #0B1020, #141B33); }
 .palette-forest { background: linear-gradient(135deg, #0D1511, #16221B); }

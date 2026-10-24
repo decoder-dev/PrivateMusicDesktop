@@ -463,7 +463,7 @@ const ACCENTS = {
   red: ["#c73338", "#fa6161"], orange: ["#a6570f", "#ff9933"], green: ["#1c7a45", "#4ccc7a"], teal: ["#0f787a", "#3dcccc"], banana: ["#805600", "#f4d66f"],
 };
 
-test("design: every accent has the iOS value in light, in explicit dark and in system dark, with a readable label", async () => {
+test("design: accents preserve their colour and adapt for contrast on the neutral dark surface", async () => {
   for (const [scheme, theme] of [["light", null], ["dark", null], ["dark", "dark"], ["dark", "light"], ["light", "dark"]]) {
     const app = await openApp({ config: { signedIn: false }, colorScheme: scheme });
     try {
@@ -479,7 +479,12 @@ test("design: every accent has the iOS value in light, in explicit dark and in s
           const s = getComputedStyle(root);
           return { accent: s.getPropertyValue("--accent").trim(), on: s.getPropertyValue("--on-accent").trim() };
         }, [theme, accent]);
-        assert.equal(read.accent, dark ? night : light, `${accent} in ${scheme}/${theme ?? "system"}`);
+        const original = dark ? night : light;
+        if (dark && contrast(hexColor(original), hexColor("#1e1e1e")) < 4.5) {
+          assert.ok(contrast(hexColor(read.accent), hexColor("#1e1e1e")) >= 4.5, `${accent} remains visible on the dark surface`);
+        } else {
+          assert.equal(read.accent, original, `${accent} in ${scheme}/${theme ?? "system"}`);
+        }
         assert.equal(read.on, dark ? "#000000" : "#ffffff");
         const ratio = contrast(hexColor(read.accent), hexColor(read.on));
         assert.ok(ratio >= 4.5, `${accent} ${read.accent} with ${read.on}: ${ratio.toFixed(2)}`);
@@ -502,7 +507,7 @@ test("design: secondary text stays readable on the page and on surfaces in both 
           pageTop: root.getPropertyValue("--page-top").trim(), pageBottom: root.getPropertyValue("--page-bottom").trim(), surface: root.getPropertyValue("--surface").trim(),
         };
       });
-      assert.deepEqual([colours.pageTop, colours.pageBottom, colours.surface], scheme === "dark" ? ["#000000", "#0e0e0e", "#131313"] : ["#ffffff", "#f6f6f6", "#f4f4f4"]);
+      assert.deepEqual([colours.pageTop, colours.pageBottom, colours.surface], scheme === "dark" ? ["#121212", "#080808", "#1e1e1e"] : ["#ffffff", "#f6f6f6", "#f4f4f4"]);
       const [fg, bg] = colours.text2.map(parseColor);
       assert.ok(contrast(over(fg, bg), bg.slice(0, 3)) >= 4.5, `${scheme}: secondary text on a surface`);
       const onPage = contrast(over(fg, hexColor(colours.pageBottom)), hexColor(colours.pageBottom));
@@ -703,14 +708,15 @@ test("hero headers: artist, album and playlist show a cover, a kicker and their 
   } finally { await app.close(); }
 });
 
-test("states: loading shows a skeleton, empty and failed lists a panel; dead buttons are hidden", async () => {
+test("states: loading has a visible label without skeleton tiles; empty and failed lists have a panel", async () => {
   const loading = await openApp({ config: { signedIn: true, pageDelay: 3000 } });
   try {
     const { page } = loading;
     await page.waitForSelector(".main > .view:not([hidden]) .status.loading");
-    assert.ok((await page.locator(".status.loading .sk-row").count()) >= 5);
+    assert.equal(await page.locator(".status.loading .sk-row").count(), 0);
+    assert.equal(await page.locator(".status.loading .loading-label").isVisible(), true);
     assert.equal(await page.locator(".status.loading").getAttribute("aria-busy"), "true");
-    assert.match(await page.locator(".status.loading .sr-only").innerText(), /Загрузка/);
+    assert.match(await page.locator(".status.loading .loading-label").innerText(), /Загрузка/);
     assert.equal(await page.locator(".main > .view:not([hidden]) .vh-actions .btn.primary").isHidden(), true, "no Play with nothing to play");
   } finally { await loading.close(); }
   const empty = await openApp({ config: { signedIn: true, libraryTotal: 0 } });
@@ -2444,7 +2450,8 @@ test("for you: mix cards are colourful gradients with readable white text, and t
     await page.waitForSelector(".mix-tile");
     for (const tile of await page.locator(".mix-tile").all()) {
       const bg = await tile.evaluate((el) => getComputedStyle(el).backgroundImage);
-      assert.match(bg, /radial-gradient/);
+      assert.match(bg, /linear-gradient/);
+      assert.doesNotMatch(bg, /radial-gradient/, "mixes have no decorative rings");
     }
     // Любая цветовая гамма: оба упора сохраняют соотношение 4,5:1 по отношению к белой этикетке.
     const stops = await page.evaluate(() => {

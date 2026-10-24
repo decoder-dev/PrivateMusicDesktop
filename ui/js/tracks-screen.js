@@ -106,6 +106,7 @@ export function createTracksScreen({ title, filterable = false, playable = true,
     rowHeight: ROW_HEIGHT,
     renderRow: (track, index) => {
       const row = trackRow(track, {
+        index,
         selected: hooks.isSelected ? hooks.isSelected(track, index) : !!store.player.track && trackKey(store.player.track) === trackKey(track),
         paused: store.player.status !== "playing" && store.player.status !== "buffering" && store.player.status !== "loading",
         actions: hooks.rowActions,

@@ -286,7 +286,10 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     }
     const next = layers[1 - frontLayer];
     next.src = url;
-    try { await next.decode(); } catch { return; }
+    try { await next.decode(); } catch {
+      if (mine === backdropToken) for (const layer of layers) layer.classList.remove("show");
+      return;
+    }
     if (mine !== backdropToken) return;
     next.classList.add("show");
     layers[frontLayer].classList.remove("show");
@@ -299,12 +302,13 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     coverUrl = url;
     const token = ++paletteToken;
     if (url) {
+      let failed = false;
       const image = h("img", { src: url, alt: "", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" });
-      image.addEventListener("error", () => image.replaceWith(h("div", { class: "np-placeholder" }, icon("note", 96))));
+      image.addEventListener("error", () => { failed = true; if (token === paletteToken) coverBox.replaceChildren(h("div", { class: "np-placeholder", "aria-hidden": "true", text: (track?.artist || track?.title || "♪").slice(0, 1) })); });
       // Старая обложка остается до тех пор, пока не раскодируется новая.
       // Новая обложка проявляется поверх старой (кроссфейд), затем старая убирается.
       const swap = () => {
-        if (token !== paletteToken) return;
+        if (token !== paletteToken || failed) return;
         const old = [...coverBox.children];
         if (!old.length || motionOk() === false) { coverBox.replaceChildren(image); return; }
         image.classList.add("np-fade-in");
@@ -313,7 +317,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
       };
       if (coverBox.firstChild) image.decode().catch(() => {}).finally(swap); else swap();
     } else {
-      coverBox.replaceChildren(h("div", { class: "np-placeholder" }, icon("note", 96)));
+      coverBox.replaceChildren(h("div", { class: "np-placeholder", "aria-hidden": "true", text: (track?.artist || track?.title || "♪").slice(0, 1) }));
     }
     setBackdrop(url);
     const [a, b] = fallbackColors(track);

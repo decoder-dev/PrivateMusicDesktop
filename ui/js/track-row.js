@@ -21,7 +21,7 @@ function indicator(paused) {
  * переопределяющий действия при наведении по умолчанию. Строки воссоздаются при прокрутке списка,
  * поэтому здесь ничего не может анимироваться или переходить.
  */
-export function trackRow(track, { selected = false, paused = false, actions, liked = false, busy = false, pinLiked = true, downloaded = false, downloading = false } = {}) {
+export function trackRow(track, { index = 0, selected = false, paused = false, actions, liked = false, busy = false, pinLiked = true, downloaded = false, downloading = false } = {}) {
   const likeLabel = liked ? t("like.remove") : t("like.add");
   const like = h("button", {
     class: `icon-btn like${liked ? " on" : ""}${liked && pinLiked ? " pinned" : ""}`, type: "button", "data-action": "like",
@@ -41,7 +41,7 @@ export function trackRow(track, { selected = false, paused = false, actions, lik
     downloaded ? h("span", { "aria-hidden": "true" }, icon("downloaded", 12)) : null,
     downloading ? h("span", { class: "spinner", "aria-hidden": "true" }) : null);
   return h("div", { class: "row", "data-track-key": trackKey(track), role: "option", "aria-selected": selected ? "true" : "false", tabindex: "0", "data-liked": liked ? "1" : null },
-    artBox(track.artwork_url),
+    artBox(track.artwork_url, { fallbackText: index + 1 }),
     h("div", { class: "titles" },
       h("div", { class: "title", text: track.title }),
       hasArtist(track)

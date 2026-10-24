@@ -18,6 +18,7 @@ export function createCompactTrackList({ play, onAction, onMenu }) {
     const playing = store.player.status === "playing" || store.player.status === "buffering" || store.player.status === "loading";
     element.replaceChildren(...tracks.map((track, index) => {
       const row = trackRow(track, {
+        index,
         selected: !!store.player.track && trackKey(store.player.track) === trackKey(track),
         paused: !playing,
         liked: isLiked(track), busy: isBusy(track), pinLiked: true,

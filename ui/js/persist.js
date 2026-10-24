@@ -64,7 +64,7 @@ export function loadSettings() {
     visualizer: ["bars", "mirror", "wave", "radial", "off"].includes(saved.visualizer) ? saved.visualizer : null,
     palette: PALETTES.includes(saved.palette) ? saved.palette : "classic",
     theme: ["system", "light", "dark"].includes(saved.theme) ? saved.theme : "system",
-    accent: ACCENTS.includes(RENAMED[saved.accent] ?? saved.accent) ? (RENAMED[saved.accent] ?? saved.accent) : "blue",
+    accent: ACCENTS.includes(RENAMED[saved.accent] ?? saved.accent) ? (RENAMED[saved.accent] ?? saved.accent) : "green",
     flatChrome: saved.flatChrome === true,
     haptics: saved.haptics !== false,
   };

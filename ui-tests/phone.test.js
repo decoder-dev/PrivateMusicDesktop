@@ -846,7 +846,7 @@ test("Studio on a phone: Onest, the window frame and the sidebar chrome are gone
       assert.equal(s.mainRadius, "0px");
       assert.equal(s.pad, "0px");
       assert.equal(s.dock, "contents");
-      assert.equal(s.bg, colorScheme === "dark" ? "rgb(0, 0, 0)" : "rgb(255, 255, 255)");
+      assert.equal(s.bg, colorScheme === "dark" ? "rgb(18, 18, 18)" : "rgb(255, 255, 255)");
     } finally { await app.close(); }
   }
 });

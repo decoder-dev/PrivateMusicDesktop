@@ -7,16 +7,15 @@ import { t } from "./i18n.js";
 import { coverPalette } from "./palette.js";
 import { decorateStatus, forgetStatus } from "./network.js";
 
-/**
- * Произведение искусства. Заполнитель (градиент акцента и глиф) находится позади изображения, поэтому
- * отсутствующая, медленная или сломанная обложка никогда не оставляет пустого квадрата. Нет затухания:
- * списки, которые его используют, воссоздают свои строки при прокрутке.
- */
-export function artBox(url, { glyph = "note", size = 18, className = "", eager = false } = {}) {
-  const box = h("span", { class: `art-box${className ? ` ${className}` : ""}` }, h("span", { class: "art-ph" }, icon(glyph, size)));
+/** Real artwork with an explicit load state; absent artwork stays quiet. */
+export function artBox(url, { glyph = "note", size = 18, className = "", eager = false, fallbackText } = {}) {
+  const fallback = h("span", { class: "art-ph", "aria-hidden": "true" }, fallbackText == null ? icon(glyph, size) : String(fallbackText));
+  const box = h("span", { class: `art-box${className ? ` ${className}` : ""}`, "data-art": url ? "loading" : "missing" }, fallback);
   if (url) {
-    const image = h("img", { src: url, alt: "", loading: eager ? "eager" : "lazy", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" });
-    image.addEventListener("error", () => image.remove());
+    const image = h("img", { alt: "", loading: eager ? "eager" : "lazy", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" });
+    image.addEventListener("load", () => { box.dataset.art = "ready"; }, { once: true });
+    image.addEventListener("error", () => { box.dataset.art = "error"; image.remove(); }, { once: true });
+    image.src = url;
     box.append(image);
   }
   return box;
@@ -61,22 +60,10 @@ export function bindRange(input) {
 
 const LOADING = () => new Set([t("loading"), t("friends.loading")]);
 
-function skeleton(kind) {
-  if (kind === "tiles") {
-    return h("div", { class: "sk-tiles", "aria-hidden": "true" }, Array.from({ length: 4 }, () => h("div", { class: "sk-art sk-tile" })));
-  }
-  if (kind === "cards") {
-    return h("div", { class: "sk-cards", "aria-hidden": "true" },
-      Array.from({ length: 6 }, () => h("div", { class: "sk-card" }, h("div", { class: "sk-art" }), h("div", { class: "sk-bar" }), h("div", { class: "sk-bar" }))));
-  }
-  return h("div", { class: "sk-rows", "aria-hidden": "true" },
-    Array.from({ length: 6 }, () => h("div", { class: "sk-row" }, h("div", { class: "sk-art" }),
-      h("div", { class: "sk-lines" }, h("div", { class: "sk-bar a" }), h("div", { class: "sk-bar b" })))));
-}
 
 /**
  * В одном случае на экране отображается "loading", ошибка или пустое примечание в элементе состояния:
- * загрузка становится статическим скелетом (текст остается для программ чтения с экрана), все
+ * загрузка получает краткую текстовую подпись без декоративных заглушек, все
  * остальное - панелью состояния. Пустой текст скрывает элемент.
  */
 export function paintStatus(element, text, { error = false, kind = "rows", extra = "", art = null } = {}) {
@@ -91,7 +78,7 @@ export function paintStatus(element, text, { error = false, kind = "rows", extra
   if (LOADING().has(text)) {
     element.className = `status loading ${kind}${extra ? ` ${extra}` : ""}`;
     element.setAttribute("aria-busy", "true");
-    element.replaceChildren(h("span", { class: "sr-only", text }), skeleton(kind));
+    element.replaceChildren(h("span", { class: "loading-label", text }));
     return;
   }
   element.removeAttribute("aria-busy");
