@@ -18,7 +18,7 @@ import { allPlaylists, ensurePlaylists, isOwn, replacePlaylist, dropPlaylist, ch
 import { ensureAlbums, followedAlbums } from "../my-albums.js";
 import { albumCard } from "../album-card.js";
 import { openAlbum } from "../navigation.js";
-import { artBox, paintStatus, backButton, headerOnScroll } from "../ui-parts.js";
+import { artBox, initial, paintStatus, backButton, headerOnScroll } from "../ui-parts.js";
 import { enter } from "../motion.js";
 import { isSynced,setPlaylistSync,syncPlaylists } from "../playlist-sync.js";
 import { removeSelected } from "../batch-remove.js";
@@ -27,7 +27,7 @@ const sameTrack=(a,b)=>a.owner_id===b.owner_id && a.track_id===b.track_id;
 addStrings({ ru: { "pl.openLink": "Открыть по ссылке", "pl.link": "Ссылка на плейлист VK", "pl.linkInvalid": "Вставьте ссылку VK вида vk.com/music/playlist/-123_456 или vk.com/audio_playlist-123_456.", "pl.shared": "Плейлист по ссылке", "pl.follow": "Добавить в мои плейлисты", "pl.followed": "Плейлист добавлен" }, en: { "pl.openLink": "Open link", "pl.link": "VK playlist link", "pl.linkInvalid": "Paste a VK playlist link, such as vk.com/music/playlist/-123_456.", "pl.shared": "Shared playlist", "pl.follow": "Add to my playlists", "pl.followed": "Playlist added" } });
 
 export function playlistCard(playlist, open) {
-  const art = h("span", { class: "card-art art" }, artBox(playlist.artwork_url, { glyph: "playlist", size: 36, className: "fill" }), h("span", { class: "play-chip" }, icon("play", 12)));
+  const art = h("span", { class: "card-art art" }, artBox(playlist.artwork_url, { className: "fill", fallbackText: initial(playlist.title) }), h("span", { class: "play-chip" }, icon("play", 12)));
   return h("button", { class: "card", type: "button", onclick: () => open(playlist) },
     art,
     h("div", { class: "name", text: playlist.title }),

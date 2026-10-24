@@ -86,3 +86,21 @@ test('queue failures show a message rather than becoming an unhandled page error
   await page.waitForFunction(()=>window.__mock.count('jump')>0);assert.deepEqual(app.problems,[]);
  }finally{await app.close();}
 });
+
+test('empty search offers no selection button; results do',async()=>{
+ const app=await openApp({config:{...config,platform:'android'},phone:'small'});
+ try{const {page}=app;await page.locator('.dock-tab[data-tab="search"]').click();await page.locator('.search-view input, .main > .view:not([hidden]) input[type="search"]').first().waitFor();
+  assert.equal(await page.locator('.main > .view:not([hidden]) .select-toggle').isVisible(),false);
+  await page.locator('.main > .view:not([hidden]) input').first().fill('тест');
+  await page.locator('.main > .view:not([hidden]) .select-toggle').waitFor();assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test('statistics play counts stay inside their cards on a phone',async()=>{
+ const app=await openApp({config:{...config,platform:'android',history:[1,2,3]},phone:'small'});
+ try{const {page}=app;await page.locator('.dock-tab[data-tab="profile"]').click();await page.locator('[data-row="stats"]').click();
+  await page.locator('.stat-count').first().waitFor();
+  const overflow=await page.locator('.stat-count').evaluateAll(nodes=>nodes.filter(n=>n.offsetParent).map(n=>{const card=n.closest('.stat-row').parentElement.getBoundingClientRect();return n.getBoundingClientRect().right-card.right;}).filter(d=>d>0));
+  assert.deepEqual(overflow,[]);assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});

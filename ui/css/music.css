@@ -164,8 +164,11 @@ html .art-box { background: transparent; background-image: none; box-shadow: non
 html .art-box .art-ph { color: var(--text-2); }
 html .art-box[data-art="ready"] .art-ph { visibility: hidden; }
 html .row .art-box .art-ph { font-size: 13px; font-variant-numeric: tabular-nums; }
-html .card:has(.art-box[data-art="missing"], .art-box[data-art="error"]) .card-art { display: none; }
-html .card:has(.art-box[data-art="missing"], .art-box[data-art="error"]) { min-height: 88px; align-self: flex-start; padding: 16px 10px; justify-content: center; background: transparent; }
+/* Grids keep one rhythm: a collection without artwork shows its initial on a quiet surface. */
+html .card .art-box:is([data-art="missing"], [data-art="error"]) { background: var(--surface); }
+html .card .art-box:is([data-art="missing"], [data-art="error"]) .art-ph {
+  font-size: 40px; font-weight: 750; letter-spacing: -.5px; color: var(--text-2);
+}
 html .np-cover:has(.np-placeholder) { box-shadow: none; background: transparent; }
 html .np-placeholder { background: transparent; color: var(--text-2); font-size: clamp(48px, 16vw, 96px); font-weight: 750; }
 html[data-layout="phone"] .stage:has(.art-box[data-art="missing"], .art-box[data-art="error"]) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "chip" "title" "start" "controls"; }
@@ -188,3 +191,6 @@ html .settings .set-card, html .dl-summary, html .sync-panel { border: 0; border
 
 /* The explicit Home preference takes precedence over the compact grid layout. */
 html[data-layout="phone"][data-home-stage="off"] .home-body .stage { display: none; }
+
+/* Play counts stay inside the rounded statistics cards on phones. */
+html[data-layout="phone"] .stat-row .stat-count { padding-right: 12px; }

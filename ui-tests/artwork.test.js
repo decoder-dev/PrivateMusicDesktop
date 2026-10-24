@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {openApp} from './harness.js';
 
-test('artwork: missing covers keep row height, numbering and collection titles without empty tiles', async()=>{
+test('artwork: missing covers keep row height, numbering, and a uniform card grid with the collection initial', async()=>{
   const app=await openApp({config:{signedIn:true,platform:'android'},phone:'small'});
   try {
     const result=await app.page.evaluate(async()=>{
@@ -13,10 +13,10 @@ test('artwork: missing covers keep row height, numbering and collection titles w
       const container=document.createElement('div');
       container.append(row,card);document.querySelector('.home-body').append(container);
       const result={number:row.querySelector('.art-ph').textContent,height:row.getBoundingClientRect().height,
-        artwork:getComputedStyle(card.querySelector('.card-art')).display,title:card.querySelector('.name').textContent};
+        artwork:getComputedStyle(card.querySelector('.card-art')).display,letter:card.querySelector('.art-ph').textContent,square:Math.round(card.querySelector('.card-art').getBoundingClientRect().width)===Math.round(card.querySelector('.card-art').getBoundingClientRect().height),title:card.querySelector('.name').textContent};
       container.remove();return result;
     });
-    assert.deepEqual(result,{number:'7',height:56,artwork:'none',title:'Альбом без обложки'});
+    assert.deepEqual(result,{number:'7',height:56,artwork:'block',letter:'А',square:true,title:'Альбом без обложки'});
     assert.deepEqual(app.problems,[]);
   } finally {await app.close();}
 });

@@ -44,7 +44,7 @@ export function createTracksScreen({ title, filterable = false, playable = true,
   let batchBusy = false;
   const selectionCount = h("strong");
   const selectionBar = h("div", { class:"selection-bar", hidden:true, role:"toolbar", "aria-label":t("select.start") }, selectionCount);
-  const selectionButton = h("button", {class:"btn select-toggle",type:"button",text:t("select.start"),"aria-pressed":"false",onclick:()=>{ selecting=!selecting; selected.clear(); renderSelection(); }});
+  const selectionButton = h("button", {class:"btn select-toggle",type:"button",hidden:true,text:t("select.start"),"aria-pressed":"false",onclick:()=>{ selecting=!selecting; selected.clear(); renderSelection(); }});
   const chosen = () => [...new Map(visible.filter(track => selected.has(trackKey(track))).map(track=>[trackKey(track),track])).values()];
   function renderSelection() {
     selectionBar.hidden = !selecting;
