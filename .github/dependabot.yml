@@ -1,0 +1,90 @@
+version: 2
+updates:
+- package-ecosystem: github-actions
+  directories:
+  - /
+  schedule:
+    interval: weekly
+    day: monday
+    time: 09:00
+    timezone: Europe/Moscow
+  open-pull-requests-limit: 3
+  groups:
+    security-fixes:
+      applies-to: security-updates
+      patterns:
+      - '*'
+    minor-and-patch:
+      applies-to: version-updates
+      patterns:
+      - '*'
+      update-types:
+      - minor
+      - patch
+- package-ecosystem: cargo
+  directories:
+  - /
+  - /native
+  schedule:
+    interval: weekly
+    day: monday
+    time: 09:00
+    timezone: Europe/Moscow
+  open-pull-requests-limit: 3
+  groups:
+    security-fixes:
+      applies-to: security-updates
+      patterns:
+      - '*'
+    minor-and-patch:
+      applies-to: version-updates
+      patterns:
+      - '*'
+      update-types:
+      - minor
+      - patch
+- package-ecosystem: npm
+  directories:
+  - /ui-tests
+  - /scripts/android-emulator-tests
+  schedule:
+    interval: weekly
+    day: monday
+    time: 09:00
+    timezone: Europe/Moscow
+  open-pull-requests-limit: 3
+  groups:
+    security-fixes:
+      applies-to: security-updates
+      patterns:
+      - '*'
+    minor-and-patch:
+      applies-to: version-updates
+      patterns:
+      - '*'
+      update-types:
+      - minor
+      - patch
+- package-ecosystem: gradle
+  directories:
+  - /plugins/media-session/android
+  - /plugins/vk-login/android
+  - /src-tauri/gen/android
+  schedule:
+    interval: weekly
+    day: monday
+    time: 09:00
+    timezone: Europe/Moscow
+  open-pull-requests-limit: 3
+  groups:
+    security-fixes:
+      applies-to: security-updates
+      patterns:
+      - '*'
+    minor-and-patch:
+      applies-to: version-updates
+      patterns:
+      - '*'
+      update-types:
+      - minor
+      - patch

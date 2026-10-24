@@ -1,0 +1,48 @@
+name: Dependency security
+on:
+  push:
+    branches: [main]
+    paths: ["**/Cargo.toml", "**/Cargo.lock", "**/*.gradle.kts", "**/gradle.properties", ".github/workflows/dependency-security.yml", "scripts/security-android-prepare.sh"]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '37 3 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          license-check: false
+          comment-summary-in-pr: never
+          retry-on-snapshot-warnings: true
+          retry-on-snapshot-warnings-timeout: 120
+  gradle-dependencies:
+    if: github.event_name != 'pull_request'
+    name: Android dependencies (${{ matrix.plugin }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: [media-session, vk-login]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Android SDK and Tauri API sources
+        run: bash scripts/security-android-prepare.sh
+      - uses: gradle/actions/dependency-submission@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
+        with:
+          gradle-version: '8.14.3'
+          build-root-directory: plugins/${{ matrix.plugin }}/android
+          cache-provider: basic
+          dependency-graph: generate-and-submit
