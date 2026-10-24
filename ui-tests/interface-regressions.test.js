@@ -104,3 +104,15 @@ test('statistics play counts stay inside their cards on a phone',async()=>{
   assert.deepEqual(overflow,[]);assert.deepEqual(app.problems,[]);
  }finally{await app.close();}
 });
+
+test('idle desktop: no "-0:00", empty queue has no dead buttons, sync checkbox sits beside its label',async()=>{
+ const app=await openApp({config});
+ try{const {page}=app;
+  assert.equal(await page.locator('.player .seek span').last().textContent(),'0:00');
+  await page.locator('.nav [data-view="queue"]').click();
+  assert.equal(await page.locator('.main > .view:not([hidden]) .btn:visible').filter({hasText:/Предыдущие очереди|Очистить следующие/}).count(),0);
+  await page.locator('.nav [data-view="downloads"]').click();
+  const gap=await page.locator('.sync-panel label.set-inline').evaluate(l=>{const box=l.querySelector('input').getBoundingClientRect();const range=document.createRange();range.selectNodeContents(l.lastChild);return range.getBoundingClientRect().left-box.right;});
+  assert.ok(gap>=0 && gap<24,String(gap));assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});

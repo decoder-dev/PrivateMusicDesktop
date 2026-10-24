@@ -104,7 +104,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     onclick: () => playbackAction(() => api.setRepeat({ off: "all", all: "one", one: "off" }[store.player.repeat] ?? "off")) }, icon("repeat", 20));
 
   const elapsed = h("span", { text: "0:00" });
-  const remaining = (seconds) => `-${formatTime(Math.max(0, seconds))}`;
+  const remaining = (seconds) => seconds > 0 ? `-${formatTime(seconds)}` : formatTime(0);
   const total = h("span", { text: remaining(0) });
   const seek = h("input", {
     type: "range", min: "0", max: "0", step: "1", value: "0", "aria-label": t("seek"),

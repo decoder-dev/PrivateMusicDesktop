@@ -194,3 +194,7 @@ html[data-layout="phone"][data-home-stage="off"] .home-body .stage { display: no
 
 /* Play counts stay inside the rounded statistics cards on phones. */
 html[data-layout="phone"] .stat-row .stat-count { padding-right: 12px; }
+
+/* The checkbox sits beside its own label, not at the opposite edge of the card. */
+html .sync-panel > label.set-inline { flex-wrap: nowrap; justify-content: flex-start; align-items: flex-start; gap: 10px; text-align: left; }
+html .sync-panel > label.set-inline > input { flex: none; margin-top: 2px; }

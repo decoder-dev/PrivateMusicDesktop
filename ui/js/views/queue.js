@@ -31,7 +31,7 @@ export function createQueueView() {
     const entries=queueHistory();
     openMenu({x:box.left,y:box.bottom+4},entries.map(entry=>({label:`${new Date(entry.at).toLocaleString()} · ${entry.tracks[entry.index]?.title} · ${entry.tracks.length}`,action:"restore-queue",run:()=>restoreQueue(entry.at).catch(error=>toast(errorText(error),{error:true}))})),{label:t("queue.history")});
   }});
-  const renderHistory=()=>{history.disabled=queueHistory().length===0;};
+  const renderHistory=()=>{history.disabled=history.hidden=queueHistory().length===0;};
   subscribe("queueHistory",renderHistory);subscribe("session",renderHistory);renderHistory();
   const screen = createTracksScreen({
     title: t("queue.title"),
@@ -60,7 +60,7 @@ export function createQueueView() {
     const key = noteKeys[player.radio];
     note.textContent = key ? t(key) : "";
     note.hidden = !key;
-    clear.disabled = player.queue_len <= (player.queue_index ?? -1) + 1;
+    clear.disabled = clear.hidden = player.queue_len <= (player.queue_index ?? -1) + 1;
   }
   subscribe("player", renderNote);
   renderNote(store.player);

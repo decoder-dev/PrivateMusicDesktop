@@ -33,7 +33,7 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
 
   const elapsed = h("span", { text: "0:00" });
   /** Правая метка ведет обратный отсчет, как скруббер iOS. */
-  const remaining = (seconds) => `-${formatTime(Math.max(0, seconds))}`;
+  const remaining = (seconds) => seconds > 0 ? `-${formatTime(seconds)}` : formatTime(0);
   const total = h("span", { text: remaining(0) });
   const seek = h("input", {
     class: "reveal", type: "range", min: "0", max: "0", step: "1", value: "0", "aria-label": t("seek"),
