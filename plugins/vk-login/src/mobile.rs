@@ -39,7 +39,7 @@ impl<R: Runtime> VkLogin<R> {
     /// The host supplies only a checksum-verified APK from its private update cache.
     pub fn install_update(&self, path: &std::path::Path) -> Result<()> {
         self.plugin.run_mobile_plugin::<serde_json::Value>("installUpdate", serde_json::json!({"path":path}))
-            .map(|_| ()).map_err(Into::into)
+            .map(|_| ()).map_err(|error| Error::Native(error.to_string()))
     }
 
     /// Receives every event of every sign-in, on a plugin thread.
