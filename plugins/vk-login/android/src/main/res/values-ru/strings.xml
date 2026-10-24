@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="pm_vk_login_title">VK</string>
+    <string name="pm_vk_login_title">Вход в VK</string>
     <string name="pm_vk_login_close">Закрыть</string>
     <string name="pm_vk_login_done">Готово</string>
     <string name="pm_vk_login_retry">Повторить</string>

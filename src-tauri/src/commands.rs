@@ -685,6 +685,21 @@ pub async fn playlist_by_id(state: TauriState<'_, AppState>, album: Album) -> Co
     blocking(move || app.playlist_by_id(&album)).await
 }
 
+/// Keep the native title aligned with the active screen. Metadata is plain text.
+#[cfg(desktop)]
+#[tauri::command]
+pub fn set_window_title(window: tauri::WebviewWindow, title: String) -> CommandResult<()> {
+    let title: String = title.chars().filter(|ch| !ch.is_control()).take(200).collect();
+    window.set_title(&title).map_err(|error| CommandError { kind: "window".into(), message: error.to_string(), retry_after: None })
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+pub fn set_window_title(title: String) -> CommandResult<()> {
+    let _ = title;
+    Ok(())
+}
+
 /// Исправлены обычные настройки, максимизация рабочего стола или полноэкранный режим без полей.
 #[cfg(desktop)]
 #[tauri::command]

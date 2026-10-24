@@ -1,3 +1,5 @@
+import { playbackAction } from "./playback-action.js";
+import { installScreenTitles } from "./screen-title.js";
 import { accountId } from "./personal.js";
 import { discoveryField, discoveryChoice } from "./playlist-discovery.js";
 import { ft } from "./feature-i18n.js";
@@ -375,6 +377,7 @@ function buildShellParts() {
   const main = h("main", { class: "main" }, ...Object.values(views).map((v) => v.element), h("div", { class:"player-dock" },bar.element));
   const phone = createPhoneShell({ main, views, display: (id, direction) => display(id, direction), activeId: () => store.view });
   main.prepend(phone.navbar);
+  own(installScreenTitles(main));
 
   const element = h("div", { class: "shell" },
     h("aside", { class: "sidebar" },
@@ -639,7 +642,7 @@ function typing(event) {
 
 document.addEventListener("keydown", (event) => {
   // Горячие клавиши — для окна на компьютере; у телефона клавиатуры нет (физическая ничего не меняет).
-  if (!shell || isAndroid() || typing(event) || event.altKey) return;
+  if (!shell || isAndroid() || event.defaultPrevented || typing(event) || event.altKey || document.querySelector("dialog[open], .sheet, .menu")) return;
   // Сфокусированный ползунок (объем, положение) сам использует клавиши со стрелками.
   if (event.target instanceof HTMLInputElement && event.target.type === "range" && event.key.startsWith("Arrow")) return;
   const mod = event.ctrlKey || event.metaKey;
@@ -649,17 +652,17 @@ document.addEventListener("keydown", (event) => {
       if (event.repeat) { event.preventDefault(); return; }
       if (event.target instanceof HTMLButtonElement) return; // кнопка с фокусом управляет самим пространством
       event.preventDefault();
-      api.toggle();
+      playbackAction(() => api.toggle());
       break;
     case "ArrowRight":
       event.preventDefault();
-      if (mod) api.next();
-      else api.seek(Math.min(store.player.duration, store.player.position + 5));
+      if (mod) playbackAction(() => api.next());
+      else playbackAction(() => api.seek(Math.min(store.player.duration, store.player.position + 5)));
       break;
     case "ArrowLeft":
       event.preventDefault();
-      if (mod) api.previous();
-      else api.seek(Math.max(0, store.player.position - 5));
+      if (mod) playbackAction(() => api.previous());
+      else playbackAction(() => api.seek(Math.max(0, store.player.position - 5)));
       break;
     case "ArrowUp":
       if (mod) { event.preventDefault(); shell.bar.volumeUp(); }

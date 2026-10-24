@@ -1,3 +1,4 @@
+import { playbackAction } from "./playback-action.js";
 import { morph } from "./motion.js";
 import { h, formatTime } from "./dom.js";
 import { icon } from "./icons.js";
@@ -23,12 +24,12 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
     onclick: () => openArtistOf(store.player.track) });
 
   const shuffleButton = h("button", { class: "icon-btn shuffle", type: "button", title: t("shuffle.toggle"), "aria-label": t("shuffle.toggle"), "aria-pressed": "false",
-    onclick: () => { api.setShuffle(!store.player.shuffle); } }, icon("shuffle", 18));
-  const previousButton = h("button", { class: "icon-btn", type: "button", title: t("previous"), "data-kbd": "Ctrl+Left", "aria-label": t("previous"), onclick: () => api.previous() }, icon("prev", 20));
-  const playButton = h("button", { class: "icon-btn play", type: "button", title: t("play"), "data-kbd": "Space", "aria-label": t("play"), onclick: () => api.toggle() }, icon("play", 20));
-  const nextButton = h("button", { class: "icon-btn", type: "button", title: t("next"), "data-kbd": "Ctrl+Right", "aria-label": t("next"), onclick: () => api.next() }, icon("next", 20));
+    onclick: () => { playbackAction(() => api.setShuffle(!store.player.shuffle)); } }, icon("shuffle", 18));
+  const previousButton = h("button", { class: "icon-btn", type: "button", title: t("previous"), "data-kbd": "Ctrl+Left", "aria-label": t("previous"), onclick: () => playbackAction(() => api.previous()) }, icon("prev", 20));
+  const playButton = h("button", { class: "icon-btn play", type: "button", title: t("play"), "data-kbd": "Space", "aria-label": t("play"), onclick: () => playbackAction(() => api.toggle()) }, icon("play", 20));
+  const nextButton = h("button", { class: "icon-btn", type: "button", title: t("next"), "data-kbd": "Ctrl+Right", "aria-label": t("next"), onclick: () => playbackAction(() => api.next()) }, icon("next", 20));
   const repeatButton = h("button", { class: "icon-btn repeat", type: "button", title: t("repeat.off"), "aria-label": t("repeat.off"),
-    onclick: () => { api.setRepeat({ off: "all", all: "one", one: "off" }[store.player.repeat] ?? "off"); } }, icon("repeat", 18));
+    onclick: () => { playbackAction(() => api.setRepeat({ off: "all", all: "one", one: "off" }[store.player.repeat] ?? "off")); } }, icon("repeat", 18));
 
   const elapsed = h("span", { text: "0:00" });
   /** Правая метка ведет обратный отсчет, как скруббер iOS. */
@@ -37,7 +38,7 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
   const seek = h("input", {
     class: "reveal", type: "range", min: "0", max: "0", step: "1", value: "0", "aria-label": t("seek"),
     oninput: () => { dragging = true; elapsed.textContent = formatTime(Number(seek.value)); total.textContent = remaining(Number(seek.max) - Number(seek.value)); },
-    onchange: () => { api.seek(Number(seek.value)); dragging = false; },
+    onchange: () => { playbackAction(() => api.seek(Number(seek.value))); dragging = false; },
   });
   bindRange(seek);
   const buffering = h("div", { class: "buffering", hidden: true, role: "status", text: t("buffering") });
@@ -52,9 +53,11 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
 
   function setVolume(value) {
     const clamped = Math.min(1, Math.max(0, value));
-    if (clamped > 0) lastVolume = clamped;
-    api.setVolume(clamped);
-    onSettingsChange?.({ volume: clamped });
+    playbackAction(async () => {
+      await api.setVolume(clamped);
+      if (clamped > 0) lastVolume = clamped;
+      onSettingsChange?.({ volume: clamped });
+    });
   }
 
   function toggleMute() {
@@ -98,7 +101,7 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
     // composedPath: a button that re-draws its glyph while it handles the click has already detached its target.
     if (isPhone() && !event.composedPath().some((node) => node.matches?.("button, input"))) onExpand?.();
   });
-  attachMiniGestures(element, { onNext: () => api.next(), onPrevious: () => api.previous(), onOpen: () => onExpand?.() });
+  attachMiniGestures(element, { onNext: () => playbackAction(() => api.next()), onPrevious: () => playbackAction(() => api.previous()), onOpen: () => onExpand?.() });
 
   let coverUrl;
   let tintToken = 0;

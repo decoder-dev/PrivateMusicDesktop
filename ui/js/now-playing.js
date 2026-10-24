@@ -1,3 +1,4 @@
+import { playbackAction } from "./playback-action.js";
 import { toggleWindowFullscreen as changeWindowFullscreen, isWindowFullscreen } from "./window-mode.js";
 import { h, formatTime } from "./dom.js";
 import { icon } from "./icons.js";
@@ -43,6 +44,7 @@ function toHex(color) {
  */
 export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu }) {
   let open = false;
+  let returnFocus = null;
   let queueOpen = false;
   let userChoseMode = MODES.includes(settings.visualizer);
   let dragging = false;
@@ -65,6 +67,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   const artist = h("button", { class: "np-artist link-text", type: "button", title: t("artist.open"), disabled: true,
     onclick: () => { const track = store.player.track; close(); openArtistOf(track); } });
   const upNext = h("div", { class: "np-next" });
+  const playbackStatus = h("div", { class: "k1", role: "status" });
   const kickerAlbum = h("div", { class: "k2" });
   const likeButton = h("button", { class: "np-btn np-like", type: "button", onclick: () => onLike?.(store.player.track) }, icon("heart", 20));
   function renderLike() {
@@ -93,12 +96,12 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     onclick: () => toggleWindowFullscreen() }, icon("expand", 20));
 
   const shuffleButton = h("button", { class: "np-btn", type: "button", title: t("shuffle.toggle"), "aria-label": t("shuffle.toggle"), "aria-pressed": "false",
-    onclick: () => api.setShuffle(!store.player.shuffle) }, icon("shuffle", 20));
-  const previousButton = h("button", { class: "np-btn", type: "button", title: t("previous"), "aria-label": t("previous"), onclick: () => api.previous() }, icon("prev", 24));
-  const playButton = h("button", { class: "np-play", type: "button", title: t("play"), "aria-label": t("play"), onclick: () => api.toggle() }, icon("play", 28));
-  const nextButton = h("button", { class: "np-btn", type: "button", title: t("next"), "aria-label": t("next"), onclick: () => api.next() }, icon("next", 24));
+    onclick: () => playbackAction(() => api.setShuffle(!store.player.shuffle)) }, icon("shuffle", 20));
+  const previousButton = h("button", { class: "np-btn", type: "button", title: t("previous"), "aria-label": t("previous"), onclick: () => playbackAction(() => api.previous()) }, icon("prev", 24));
+  const playButton = h("button", { class: "np-play", type: "button", title: t("play"), "aria-label": t("play"), onclick: () => playbackAction(() => api.toggle()) }, icon("play", 28));
+  const nextButton = h("button", { class: "np-btn", type: "button", title: t("next"), "aria-label": t("next"), onclick: () => playbackAction(() => api.next()) }, icon("next", 24));
   const repeatButton = h("button", { class: "np-btn", type: "button", title: t("repeat.off"), "aria-label": t("repeat.off"),
-    onclick: () => api.setRepeat({ off: "all", all: "one", one: "off" }[store.player.repeat] ?? "off") }, icon("repeat", 20));
+    onclick: () => playbackAction(() => api.setRepeat({ off: "all", all: "one", one: "off" }[store.player.repeat] ?? "off")) }, icon("repeat", 20));
 
   const elapsed = h("span", { text: "0:00" });
   const remaining = (seconds) => `-${formatTime(Math.max(0, seconds))}`;
@@ -106,7 +109,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   const seek = h("input", {
     type: "range", min: "0", max: "0", step: "1", value: "0", "aria-label": t("seek"),
     oninput: () => { dragging = true; elapsed.textContent = formatTime(Number(seek.value)); total.textContent = remaining(Number(seek.max) - Number(seek.value)); },
-    onchange: () => { api.seek(Number(seek.value)); dragging = false; lyrics.snap(Number(seek.value)); },
+    onchange: () => { playbackAction(() => api.seek(Number(seek.value))); dragging = false; lyrics.snap(Number(seek.value)); },
   });
   bindRange(seek);
 
@@ -135,7 +138,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     h("div", { class: "nq-head", text: t("np.queue") }), queueList);
   queueList.addEventListener("click", (event) => {
     const row = event.target.closest?.(".nq-row");
-    if (row) api.jump(Number(row.dataset.index));
+    if (row) playbackAction(() => api.jump(Number(row.dataset.index)));
   });
 
   // The sheet's grabber (phone layout only): drag it, or anything not a control, down to close.
@@ -146,7 +149,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     backdrop,
     canvas,
     grab,
-    h("div", { class: "np-top" }, closeButton, h("div", { class: "np-kicker" }, h("div", { class: "k1", text: t("np.nowPlaying") }), kickerAlbum), lyricsButton, modeButton, windowButton),
+    h("div", { class: "np-top" }, closeButton, h("div", { class: "np-kicker" }, playbackStatus, kickerAlbum), lyricsButton, modeButton, windowButton),
     h("div", { class: "np-stage" },
       h("div", { class: "np-main" }, coverBox, h("div", { class: "np-info" }, heading, h("div", { class: "np-artist-row" }, artist), upNext)),
       lyrics.element, queuePanel),
@@ -336,10 +339,16 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
 
   function render(player) {
     const track = player.track;
-    title.textContent = track ? track.title : t("nothing");
-    artist.textContent = track ? track.artist : "";
+    const titleText = track ? track.title : t("nothing");
+    if (title.textContent !== titleText) { title.textContent = titleText; title.title = titleText; }
+    const artistText = track ? track.artist : "";
+    if (artist.textContent !== artistText) artist.textContent = artistText;
+    const statusText = player.status === "playing" ? t("np.nowPlaying") : player.status === "paused" ? t("pause") : player.status === "loading" ? t("loading") : player.status === "buffering" ? t("buffering") : t("nothing");
+    if (playbackStatus.textContent !== statusText) playbackStatus.textContent = statusText;
+    element.dataset.state = player.status;
     artist.disabled = !hasArtist(track);
-    kickerAlbum.textContent = track ? `${track.artist} — ${track.title}` : "";
+    const caption = track ? `${track.artist} — ${track.title}` : "";
+    if (kickerAlbum.textContent !== caption) kickerAlbum.textContent = caption;
     updateCover(track);
     if (lyricsOn) {
       lyrics.setTrack(track);
@@ -425,7 +434,18 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   }
 
   function onKey(event) {
-    if (!open || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (!open || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || document.querySelector("dialog[open], .sheet, .menu")) return;
+    if (event.key === "Tab") {
+      const controls = [...element.querySelectorAll("button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex='0']")].filter(node => node.offsetParent);
+      const first = controls[0], last = controls.at(-1);
+      const outside = !element.contains(document.activeElement);
+      if (controls.length && (outside || (event.shiftKey ? document.activeElement === first : document.activeElement === last))) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus({ preventScroll: true });
+      }
+      return;
+    }
+    if (event.target.closest?.("input:not([type=range]), textarea, select, [contenteditable]:not([contenteditable=false])")) return;
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
@@ -463,6 +483,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
 
   function show() {
     if (open) return;
+    if (!element.contains(document.activeElement)) returnFocus = document.activeElement;
     open = true;
     // The phone's player opens on the cover; lyrics and the queue are one tap away.
     if (isPhone()) { lyricsOn = false; queueOpen = false; }
@@ -499,6 +520,8 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
       element.hidden = true;
       element.classList.remove("closing");
       delete document.documentElement.dataset.np;
+      if (returnFocus?.isConnected && !document.querySelector("dialog[open], .sheet, .menu")) returnFocus.focus({ preventScroll: true });
+      returnFocus = null;
     }, 450);
   }
 

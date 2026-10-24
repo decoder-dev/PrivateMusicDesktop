@@ -1,3 +1,4 @@
+import { playbackAction } from "../playback-action.js";
 import { ft } from "../feature-i18n.js";
 import { api } from "../api.js";
 import { h } from "../dom.js";
@@ -42,11 +43,11 @@ export function createQueueView() {
       headerExtra: h("div",{class:"set-inline"},history,clear),
       rowActions: [["move-up", "up", t("queue.up")], ["move-down", "down", t("queue.down")], ["close", "remove", t("remove")]],
       isSelected: (_track, index) => index === store.queue.current,
-      onPlay: (_tracks, index) => api.jump(index),
+      onPlay: (_tracks, index) => playbackAction(() => api.jump(index)),
       onAction: (action, _track, index) => {
         if (action === "remove") undoable(()=>api.removeFromQueue(index));
-        else if (action === "up" && index > (store.queue.current ?? -1) + 1) api.moveUpcoming(index, index - 1);
-        else if (action === "down" && index > (store.queue.current ?? -1) && index + 1 < store.queue.tracks.length) api.moveUpcoming(index, index + 1);
+        else if (action === "up" && index > (store.queue.current ?? -1) + 1) playbackAction(() => api.moveUpcoming(index, index - 1));
+        else if (action === "down" && index > (store.queue.current ?? -1) && index + 1 < store.queue.tracks.length) playbackAction(() => api.moveUpcoming(index, index + 1));
       },
     },
   });

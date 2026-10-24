@@ -118,6 +118,7 @@ Apple, поэтому ОС может показать предупрежден�
 Код обработки аудиопотоков в `native/` используется совместно с
 [версией для iPhone](https://github.com/decoder-dev/PrivateMusic2).
 
+- [Концепт мобильного плеера](docs/mobile-player-concept.md)
 - [Сборка и устройство Android-версии](docs/android.md)
 - [Возможности линейки 0.6](docs/features-0.6.md)
 - [Сборка и публикация обновлений](docs/updates.md)

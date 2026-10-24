@@ -185,3 +185,6 @@ html[data-layout="phone"] .home-body .mix-card .mix-tile { min-height: 112px; pa
 
 /* Secondary screens share the same quiet surfaces as the library. */
 html .settings .set-card, html .dl-summary, html .sync-panel { border: 0; border-radius: 12px; box-shadow: none; }
+
+/* The explicit Home preference takes precedence over the compact grid layout. */
+html[data-layout="phone"][data-home-stage="off"] .home-body .stage { display: none; }

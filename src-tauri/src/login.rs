@@ -248,7 +248,7 @@ pub fn start(handle: &AppHandle, state: &AppState, reset: bool) -> Result<(), St
     reset_load_state();
     let url: Url = LOGIN_URL.parse().map_err(|_| "bad login address".to_string())?;
     let builder = WebviewWindowBuilder::new(handle, "login", WebviewUrl::External(url))
-        .title("VK")
+        .title("VK — Private Music")
         .inner_size(520.0, 760.0)
         .user_agent(WEB_USER_AGENT)
         .incognito(true)

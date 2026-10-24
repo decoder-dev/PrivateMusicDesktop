@@ -80,6 +80,7 @@ export const api = {
   updateCancel: () => invoke("update_cancel"),
   updateAccess: (token) => invoke("update_access", { token }),
   updateOpen: () => invoke("update_open"),
+  setWindowTitle: (title) => invoke("set_window_title", { title }),
   setWindowMode: (mode) => invoke("set_window_mode", { mode }),
   setEqualizer: (gains) => invoke("set_equalizer", { gains }),
   setTaste: (taste,userId) => invoke("set_taste", { taste,userId }),

@@ -29,7 +29,10 @@ test('iPhone audio options: native processing, full presets, haptics and recover
 });
 test('iPhone home stage can be hidden and restored without hiding recommendations',async()=>{
  const app=await openApp({config,phone:true});
- try{const {page}=app;await settings(page);await page.getByRole('switch',{name:'Карточка плеера на главной',exact:true}).uncheck();await page.locator('.dock-tab[data-tab="home"]').click();await page.locator('.home-view:not([hidden])').waitFor();assert.equal(await page.locator('.home-view .stage').isVisible(),false);assert.equal(await page.locator('.home-view .home-body').isVisible(),true);await page.reload();await page.locator('.dock').waitFor();assert.equal(await page.locator('.home-view .stage').isVisible(),false);assert.deepEqual(app.problems,[]);}finally{await app.close();}
+ try{const {page}=app;await settings(page);await page.getByRole('switch',{name:'Карточка плеера на главной',exact:true}).uncheck();await page.locator('.dock-tab[data-tab="home"]').click();await page.locator('.home-view:not([hidden])').waitFor();assert.equal(await page.locator('.home-view .stage').isVisible(),false);assert.equal(await page.locator('.home-view .home-body').isVisible(),true);await page.reload();await page.locator('.dock').waitFor();assert.equal(await page.locator('.home-view .stage').isVisible(),false);
+ await settings(page);await page.getByRole('switch',{name:'Карточка плеера на главной',exact:true}).check();
+ await page.locator('.dock-tab[data-tab="home"]').click();await page.locator('.home-view .stage').waitFor();
+ await page.locator('.home-recs:not([hidden])').waitFor();assert.deepEqual(app.problems,[]);}finally{await app.close();}
 });
 test('automatic liked downloads pause on metered data and resume on an unmetered connection',async()=>{
  const app=await openApp({config:{...config,metered:true,libraryTotal:3},phone:true});

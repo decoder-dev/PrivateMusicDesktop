@@ -286,6 +286,7 @@ pub fn run() {
             updater::update_access,
             updater::update_open,
             commands::set_window_mode,
+            commands::set_window_title,
             commands::session_state,
             commands::profile,
             commands::login_start,

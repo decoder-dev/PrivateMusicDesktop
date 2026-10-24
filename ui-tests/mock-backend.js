@@ -336,6 +336,7 @@
     update_access: ({token}) => state.update={...(state.update??{phase:"idle",current:"0.3.0"}),access_saved:!!token},
     update_open: () => null,
     set_window_mode: () => null,
+    set_window_title: () => null,
     // `platform` is only sent by the Android build; the desktop answers without it.
     app_info: () => ({ version: "0.1.0", has_tray: config.noTray ? false : true, ...(config.platform ? { platform: config.platform } : {}) }),
     set_equalizer: ({ gains }) => { state.eq = gains; },

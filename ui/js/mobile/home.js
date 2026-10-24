@@ -1,3 +1,4 @@
+import { playbackAction } from "../playback-action.js";
 // Home: what the iOS app's Home tab holds. A stage with what is playing (or one
 // button to start your mix), the way back into the paused track, then shelves:
 // recommendations, VK's mixes with the way into Explore, new releases and what
@@ -34,7 +35,7 @@ export function createHomeView({ play, onTrackAction, toast, openTrackMenu, like
   const cover = h("button", { class: "stage-art", type: "button", onclick: () => (store.player.track ? openPlayer() : startStation()) },
     h("span", { class: "stage-cover" }, artBox(null, { glyph: "sparkles", size: 40 })));
   const startButton = h("button", { class: "btn primary cta stage-cta", type: "button", onclick: () => startStation() }, icon("play", 18), t("home.start"));
-  const playButton = h("button", { class: "stage-btn", type: "button", onclick: () => api.toggle() }, icon("play", 22));
+  const playButton = h("button", { class: "stage-btn", type: "button", onclick: () => playbackAction(() => api.toggle()) }, icon("play", 22));
   const trackButton = h("button", { class: "stage-track", type: "button", onclick: () => openPlayer() });
   const likeButton = h("button", { class: "stage-btn like", type: "button", onclick: () => like(store.player.track) }, icon("heart", 22));
   const controls = h("div", { class: "stage-controls" }, playButton, trackButton, likeButton);
@@ -97,7 +98,7 @@ export function createHomeView({ play, onTrackAction, toast, openTrackMenu, like
   const resumeTitle = h("div", { class: "resume-title" });
   const resumeArtist = h("div", { class: "resume-artist" });
   const resumeAt = h("div", { class: "resume-at tnum" });
-  const resume = h("button", { class: "resume-card", type: "button", hidden: true, onclick: () => api.toggle() },
+  const resume = h("button", { class: "resume-card", type: "button", hidden: true, onclick: () => playbackAction(() => api.toggle()) },
     resumeArt,
     h("div", { class: "resume-text" }, h("div", { class: "resume-kicker", text: t("home.continue") }), resumeTitle, resumeArtist, resumeAt),
     h("span", { class: "resume-go", "aria-hidden": "true" }, icon("play", 18)));

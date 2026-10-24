@@ -1,3 +1,5 @@
+import { screenTitle } from "../screen-title.js";
+import { own } from "../store.js";
 // The phone's chrome: a bottom dock with four root tabs (Home, Library, Search,
 // Profile), an iOS-style navigation bar and a push stack per tab. It is built
 // from the same view modules the sidebar shows; nothing here loads or changes
@@ -58,9 +60,7 @@ export function createPhoneShell({ main, views, display, activeId }) {
 
   function titleOf(id) {
     if (STATIC_TITLES[id]) return t(STATIC_TITLES[id]);
-    const element = views[id]?.element;
-    const heading = [...(element?.querySelectorAll("h1") ?? [])].find((node) => node.offsetParent && node.textContent.trim());
-    return heading?.textContent.trim() ?? "";
+    return screenTitle(views[id]?.element, id);
   }
 
   // The inline title appears when the large one has scrolled under the bar. Pages
@@ -68,11 +68,12 @@ export function createPhoneShell({ main, views, display, activeId }) {
   let frame = 0;
   function syncTitle() {
     frame = 0;
+    if (!active) return;
     const id = activeId();
     const element = views[id]?.element;
     if (!element) return;
     const name = titleOf(id);
-    title.textContent = name;
+    if (title.textContent !== name) title.textContent = name;
     const heading = [...element.querySelectorAll("h1")].find((node) => node.offsetParent);
     const always = !heading || STATIC_TITLES[id];
     let shown = always;
@@ -86,6 +87,13 @@ export function createPhoneShell({ main, views, display, activeId }) {
   const scheduleTitle = () => { if (!frame) frame = requestAnimationFrame(syncTitle); };
   // Scroll events do not bubble; the capture phase sees every scroller of the pages.
   main.addEventListener("scroll", scheduleTitle, { capture: true, passive: true });
+  main.addEventListener("pm-screen-title", scheduleTitle);
+  own(() => {
+    active = false;
+    cancelAnimationFrame(frame);
+    main.removeEventListener("scroll", scheduleTitle, true);
+    main.removeEventListener("pm-screen-title", scheduleTitle);
+  });
 
   function renderNavActions(id) {
     const items = views[id]?.navActions?.() ?? [];

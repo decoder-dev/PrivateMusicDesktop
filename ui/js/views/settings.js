@@ -16,7 +16,7 @@ import { createVkIntegrationOptions } from "../vk-integration.js";
 import { createOfflineOptions } from "../automatic-downloads.js";
 import { createAudioOptions } from "../audio-options.js";
 addStrings({ru:{"window.mini":"Мини-плеер"},en:{"window.mini":"Mini player"}});
-import { isAndroid } from "../mobile/layout.js";
+import { isAndroid, isPhone } from "../mobile/layout.js";
 import { STYLES, currentStyle, setStyle } from "../mobile/style.js";
 import { NP_THEMES, currentNpTheme, setNpTheme } from "../mobile/np-theme.js";
 import { openDiagnostics } from "../diagnostics.js";
@@ -173,8 +173,9 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
     settingsNav.append(h("button", {
       type:"button", class:"btn", text:t(key), "aria-controls":section.id, ...(section.hasAttribute("data-desktop-only") ? { "data-desktop-only":"" } : {}),
       onclick:() => {
-        const top = section.getBoundingClientRect().top - settingsBody.getBoundingClientRect().top + settingsBody.scrollTop;
-        settingsBody.scrollTo({ top:Math.max(0, top - 12), behavior:"instant" });
+        const scroller = isPhone() ? element : settingsBody;
+        const top = section.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+        scroller.scrollTo({ top:Math.max(0, top - 12), behavior:"instant" });
         heading.focus({ preventScroll:true });
       },
     }));

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="pm_vk_login_title">VK</string>
+    <string name="pm_vk_login_title">Sign in to VK</string>
     <string name="pm_vk_login_close">Close</string>
     <string name="pm_vk_login_done">Done</string>
     <string name="pm_vk_login_retry">Retry</string>
