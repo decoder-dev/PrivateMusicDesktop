@@ -1,3 +1,4 @@
+import { icon } from "./icons.js";
 import { own } from "./store.js";
 import { h } from "./dom.js";
 import { t, addStrings } from "./i18n.js";
@@ -6,6 +7,7 @@ import { bindRange, syncRange } from "./ui-parts.js";
 
 addStrings({ru:{"eq.curve":"Уровни частот", "eq.hint":"Автоматический запас громкости защищает усиленные частоты от перегруза. Нажмите на значение, чтобы обнулить полосу.","eq.resetBand":"Сбросить {band} Гц", "eq.db":"дБ", "eq.applyError":"Не удалось применить эквалайзер. Попробуйте ещё раз.", "eq.retry":"Повторить", "eq.jazz":"Джаз", "eq.classical":"Классика"},en:{"eq.curve":"Frequency levels", "eq.hint":"Automatic headroom protects boosted frequencies from overload. Select a value to reset its band.","eq.resetBand":"Reset {band} Hz", "eq.db":"dB", "eq.applyError":"Could not apply equaliser settings. Try again.", "eq.retry":"Retry", "eq.jazz":"Jazz", "eq.classical":"Classical"}});
 addStrings({"ru": {"eq.bassReduction": "Меньше баса", "eq.trebleReduction": "Меньше высоких", "eq.vocalReduction": "Меньше вокала", "eq.speech": "Речь", "eq.piano": "Фортепиано", "eq.lounge": "Лаунж", "eq.pop": "Поп", "eq.rnb": "R&B", "eq.hipHop": "Хип-хоп", "eq.dance": "Танцевальная", "eq.metal": "Метал", "eq.loudness": "Тонкомпенсация", "eq.smallSpeakers": "Маленькие динамики", "eq.headphones": "Наушники"}, "en": {"eq.bassReduction": "Bass reduction", "eq.trebleReduction": "Treble reduction", "eq.vocalReduction": "Vocal reduction", "eq.speech": "Speech", "eq.piano": "Piano", "eq.lounge": "Lounge", "eq.pop": "Pop", "eq.rnb": "R&B", "eq.hipHop": "Hip hop", "eq.dance": "Dance", "eq.metal": "Metal", "eq.loudness": "Loudness", "eq.smallSpeakers": "Small speakers", "eq.headphones": "Headphones"}});
+addStrings({ru:{"eq.previousBands":"Предыдущие частоты","eq.nextBands":"Следующие частоты","eq.visibleBands":"Полосы {from}–{to} из 10"},en:{"eq.previousBands":"Previous frequencies","eq.nextBands":"Next frequencies","eq.visibleBands":"Bands {from}–{to} of 10"}});
 export const LABELS = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
 export const PRESETS = {
   "flat": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -72,12 +74,32 @@ export function createEqualizerPanel({ settings, onSettingsChange }) {
     return { input, element: h("div", { class: "eq-band" }, value, input, h("span", { class: "eq-label", text: label })) };
   });
 
+  const bands=h("div",{class:"eq-bands"},sliders.map(s=>s.element));
+  const previousBands=h("button",{type:"button",class:"icon-btn","aria-label":t("eq.previousBands"),onclick:()=>scrollBands(-1)},icon("back",18));
+  const nextBands=h("button",{type:"button",class:"icon-btn","aria-label":t("eq.nextBands"),onclick:()=>scrollBands(1)},icon("chevronRight",18));
+  const visibleBands=h("span",{class:"eq-band-range",role:"status"});
+  const bandNav=h("div",{class:"eq-band-nav",hidden:true},previousBands,visibleBands,nextBands);
+  function scrollBands(direction){bands.scrollBy({left:direction*Math.max(44,bands.clientWidth-44),behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"instant":"smooth"});}
+  function updateBandNav(){
+    if(disposed)return;
+    const overflow=bands.scrollWidth>bands.clientWidth+1;
+    bandNav.hidden=!overflow || !bands.clientWidth;
+    previousBands.disabled=bands.scrollLeft<=1;
+    nextBands.disabled=bands.scrollLeft+bands.clientWidth>=bands.scrollWidth-1;
+    if(!overflow)return;
+    const bounds=bands.getBoundingClientRect();
+    const shown=sliders.map((slider,index)=>({index,rect:slider.element.getBoundingClientRect()})).filter(({rect})=>rect.right>bounds.left+1 && rect.left<bounds.right-1);
+    if(shown.length)visibleBands.textContent=t("eq.visibleBands",{from:shown[0].index+1,to:shown.at(-1).index+1});
+  }
+  bands.addEventListener("scroll",updateBandNav,{passive:true});
+  const bandsObserver=new ResizeObserver(updateBandNav);bandsObserver.observe(bands);
+
   const element = h("div", { class: "eq" },
     h("div", { class: "set-row" },
       h("label", { class: "set-check", for: "eq-on" }, h("span", { text: t("eq.on") }), toggle),
       h("div", { class: "set-inline" }, preset, reset)),
     graph,
-    h("div", { class: "eq-bands" }, sliders.map((s) => s.element)),
+    bands,bandNav,
     h("p",{class:"eq-hint",text:t("eq.hint")}),error);
 
   function changeBand(band,value) {
@@ -124,6 +146,7 @@ export function createEqualizerPanel({ settings, onSettingsChange }) {
     if(disposed) return;
     if(timer) {clearTimeout(timer);timer=0;send();}
     disposed=true;
+    bandsObserver.disconnect();bands.removeEventListener("scroll",updateBandNav);
   }
   own(destroy);
   render();

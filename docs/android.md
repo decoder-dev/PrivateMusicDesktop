@@ -498,3 +498,11 @@ both were corrected and their targeted runs passed. Small/large/landscape layout
 permission opt-out, delayed profiles, unmetered resume, cross-account file protection and scroll/player
 performance have dedicated checks. Run the UI suite with `npm test` inside `ui-tests`, the engine with
 `cargo test -p pm_engine`, and the standalone media plugin with its `scripts/android-test.sh`.
+
+Phone screen audit covers 28 main routes and 10 additional sign-in, loading, empty, error and dialog
+states. Browser screenshots were reviewed at 360×640 dark, 412×915 light and 320×568 with 120% text;
+regression checks also walk all main screens at 915×412 with 120% text. Toolbars and catalog headings
+wrap, search tabs retain readable labels, Settings stays inside the viewport and navigation titles
+leave room for actions. Equalizer frequency navigation exposes all ten bands with 44px buttons.
+Alert actions retain readable accent text without the general primary-button gradient. Tests live in
+`ui-tests/screen-audit.test.js`; browser emulation does not replace physical Android device validation.

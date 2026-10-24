@@ -1,0 +1,69 @@
+/* Keep phone controls usable when text grows or the available width shrinks. */
+html[data-layout="phone"] .view-header > .vh-text {
+  min-width: 0;
+  max-width: 100%;
+}
+html[data-layout="phone"] .settings .view-header > .vh-text { width: 100%; }
+html[data-layout="phone"] .settings-nav { min-width: 0; max-width: 100%; }
+html[data-layout="phone"] .view-header .vh-actions {
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+html[data-layout="phone"] .view-header .vh-actions .btn.primary { flex: 1 1 120px; }
+html[data-layout="phone"] .view-header .vh-actions > .btn {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+html[data-layout="phone"] :is(.tabs, .lib-sections) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  touch-action: pan-x;
+}
+html[data-layout="phone"] :is(.tabs, .lib-sections) > button,
+html[data-layout="phone"] .tab-bar .tabs > button,
+html[data-layout="phone"] .fy-heading-row .tabs > button {
+  flex: 1 0 auto;
+  white-space: nowrap;
+}
+html[data-layout="phone"] .view-header .smart-tools > .btn {
+  flex: 1 0 auto;
+  white-space: normal;
+}
+html[data-layout="phone"] .sync-panel > .set-inline { flex-wrap: wrap; }
+html[data-layout="phone"] .sync-panel > .set-inline > strong { flex: 1 1 120px; }
+html[data-layout="phone"] .sync-panel > .set-inline > .btn { max-width: 100%; white-space: normal; }
+html[data-layout="phone"] .fy-toolbar { flex-wrap: wrap; max-width: 100%; }
+html[data-layout="phone"] .navbar .nav-title {
+  position: static;
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: var(--nav-h);
+}
+html[data-layout="phone"] .navbar .nav-actions { flex: none; }
+.eq-band-nav { display: none; }
+html[data-layout="phone"] .eq-band-nav:not([hidden]) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-inline: 8px;
+}
+.eq-band-nav .icon-btn { flex: none; width: 44px; height: 44px; }
+.eq-band-range { color: var(--text-2); text-align: center; font-size: calc(12px * var(--text-scale, 1)); }
+html[data-layout="phone"] .shelf-heading { flex-wrap: wrap; row-gap: 4px; }
+html[data-layout="phone"] .shelf-heading > .shelf-tools {
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+/* Alert actions use accent text; the general primary gradient hides that text. */
+html[data-layout="phone"]:not([data-style="material"]) .dialog-actions .btn.primary {
+  background: none;
+  box-shadow: none;
+}
