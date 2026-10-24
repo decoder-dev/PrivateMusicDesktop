@@ -103,9 +103,11 @@ pub async fn update_check(
         i.update = None;
         i.bytes = None;
         let current = i.snapshot.current.clone();
+        let access_saved = i.snapshot.access_saved;
         i.snapshot = Snapshot {
             phase: "checking".into(),
             current,
+            access_saved,
             ..Default::default()
         };
     });
@@ -115,6 +117,7 @@ pub async fn update_check(
     })
     .await
     .map_err(|_| "worker")?;
+    updater.change(|i| i.snapshot.access_saved = token.is_some());
     let before_exit = handle.clone();
     let mut builder = handle
         .updater_builder()
@@ -145,6 +148,9 @@ pub async fn update_check(
             _=tokio::time::sleep(Duration::from_millis(100))=>if updater.cancelled.load(Ordering::SeqCst){return Ok(updater.finish(&handle,Some("cancelled")));}
         }
     };
+    if updater.cancelled.load(Ordering::SeqCst) {
+        return Ok(updater.finish(&handle, Some("cancelled")));
+    }
     match result {
         Ok(Some(update)) if update.download_url.scheme() == "https" => {
             updater.change(|i| {

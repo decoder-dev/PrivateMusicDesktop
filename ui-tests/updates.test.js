@@ -20,3 +20,21 @@ test('a command failure after a progress event leaves checking retryable',async(
  const app=await openApp({config:{signedIn:true,platform:'android'},phone:'small'});
  try{await settings(app);const {page}=app;await page.evaluate(async()=>{const {api}=await import('/js/api.js');api.updateCheck=async()=>{window.__mock.emit('pm-update',{phase:'checking',current:'0.6.5'});throw 'network';};});await page.getByRole('button',{name:'Проверить обновления',exact:true}).click();await page.locator('.update-error:not([hidden])').waitFor();assert.equal(await page.getByRole('button',{name:'Проверить обновления',exact:true}).isEnabled(),true);assert.equal(await page.evaluate(()=>window.__mock.count('update_open')),0);assert.deepEqual(app.problems,[]);}finally{await app.close();}
 });
+
+test('cancelling a check never starts a download when an available reply arrives late',async()=>{
+ const app=await openApp({config:{signedIn:true,platform:'android'},phone:'small'});
+ try {
+  await settings(app);const {page}=app;
+  await page.evaluate(async()=>{
+   const {api}=await import('/js/api.js');
+   api.updateCancel=async()=>{};
+   api.updateCheck=()=>{window.__mock.emit('pm-update',{phase:'checking',current:'0.6.7'});return new Promise(resolve=>{window.__finishCheck=()=>resolve({phase:'available',current:'0.6.7',version:'0.6.8'});});};
+  });
+  await page.getByRole('button',{name:'Проверить обновления',exact:true}).click();
+  await page.getByRole('button',{name:'Отменить загрузку',exact:true}).click();
+  await page.evaluate(()=>window.__finishCheck());
+  await page.waitForFunction(()=>!document.querySelector('.update-actions button').disabled);
+  assert.equal(await page.evaluate(()=>window.__mock.count('update_download')),0);
+  assert.equal(await page.evaluate(()=>window.__mock.count('update_open')),0);
+ } finally {await app.close();}
+});

@@ -9,25 +9,31 @@ addStrings({ ru: { "sleep.title": "Таймер сна", "sleep.action":"Пос�
 export function createSleepTimer() {
   let deadline = null;
   let ticker = null;
+  let revision = 0, disposed = false, committed = "0";
   const select = h("select", { class:"field", "aria-label": t("sleep.title"), onchange: async () => {
+    revision++;
     select.disabled = true;
     try { await api.setSleepTimer(select.value === "end" || select.value === "0" ? null : Number(select.value), select.value === "end"); }
-    catch (error) { toast(errorText(error), { error: true }); }
+    catch (error) { if (!disposed) { select.value = committed; toast(errorText(error), { error: true }); } }
     finally { select.disabled = false; }
   } }, [h("option", { value: "0", text: t("sleep.off") }), ...[15,30,60,120].map((n) => h("option", { value: String(n*60), text: t("sleep.minutes", { n }) })), h("option", { value: "end", text: t("sleep.end") })]);
   const note = h("div", { class: "set-note" });
   function tick() { note.textContent = deadline === null ? "" : t("sleep.left", { time: formatTime(Math.max(0, Math.ceil((deadline-Date.now())/1000))) }); }
   function update({ remaining, end_of_track: end }) {
+    if (disposed) return;
+    revision++;
     clearInterval(ticker);
     deadline = remaining == null ? null : Date.now() + remaining*1000;
     for (const option of [...select.options]) if (option.dataset.custom) option.remove();
     if (remaining != null && ![900,1800,3600,7200].includes(remaining)) select.append(h("option", { value: String(remaining), "data-custom": "1", text: t("sleep.minutes", { n: Math.ceil(remaining/60) }) }));
     select.value = end ? "end" : String(remaining ?? 0);
+    committed = select.value;
     tick();
     if (deadline !== null) ticker = setInterval(tick, 1000);
   }
   subscribe("sleep", update);
-  own(() => clearInterval(ticker));
-  api.sleepTimer().then(([remaining,end_of_track]) => update({remaining,end_of_track})).catch(() => {});
+  own(() => { disposed = true; clearInterval(ticker); });
+  const initialRevision = revision;
+  api.sleepTimer().then(([remaining,end_of_track]) => { if (initialRevision === revision) update({remaining,end_of_track}); }).catch(() => {});
   return h("div", { class:"sleep-timer" }, select, note);
 }

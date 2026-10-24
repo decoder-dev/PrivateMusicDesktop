@@ -8,6 +8,8 @@ let all = [];
 let loaded = false;
 let loading = null;
 let epoch = 0;
+const changes = new Map();
+const playlistKey = playlist => `${playlist.owner_id}_${playlist.playlist_id}`;
 
 const userId = () => store.session.profile?.id ?? null;
 /**
@@ -17,7 +19,11 @@ const userId = () => store.session.profile?.id ?? null;
 export const isOwn = (playlist) => (userId() !== null ? playlist.owner_id === userId() : playlist.owner_id > 0);
 
 export function setPlaylists(list) {
-  all = list.slice();
+  // A request started before a confirmed edit may still contain the old data.
+  const incoming = new Set(list.map(playlistKey));
+  const added = [...changes.values()].filter(p => p && !incoming.has(playlistKey(p))).reverse();
+  all = [...added, ...list.map(p => changes.has(playlistKey(p)) ? changes.get(playlistKey(p)) : p).filter(Boolean)];
+  changes.clear();
   loaded = true;
   publish("playlists");
 }
@@ -44,27 +50,34 @@ export function forgetPlaylists() {
   epoch++;
   loading = null;
   all = [];
+  changes.clear();
   loaded = false;
   publish("playlists");
 }
 
 export function addPlaylist(playlist) {
+  changes.set(playlistKey(playlist), playlist);
   all = [playlist, ...all.filter((p) => !same(p, playlist))];
   publish("playlists");
 }
 
 export function replacePlaylist(playlist) {
+  changes.set(playlistKey(playlist), playlist);
   all = all.map((p) => (same(p, playlist) ? playlist : p));
   publish("playlists");
 }
 
 export function dropPlaylist(playlist) {
+  changes.set(playlistKey(playlist), null);
   all = all.filter((p) => !same(p, playlist));
   publish("playlists");
 }
 
 export function changeCount(playlist, delta) {
-  replacePlaylist({ ...playlist, count: Math.max(0, (all.find((p) => same(p, playlist)) ?? playlist).count + delta) });
+  const key = playlistKey(playlist);
+  if (changes.has(key) && changes.get(key) === null) return;
+  const current = all.find((p) => same(p, playlist)) ?? changes.get(key) ?? playlist;
+  replacePlaylist({ ...current, count: Math.max(0, current.count + delta) });
 }
 
 export const same = (a, b) => a.owner_id === b.owner_id && a.playlist_id === b.playlist_id;

@@ -56,7 +56,7 @@ export function createUpdater() {
   cancelRequested=false;
   await run(async()=>{
    let next=await action();
-   if(next?.phase==="available")next=await api.updateDownload();
+   if(next?.phase==="available" && !cancelRequested)next=await api.updateDownload();
    if(next?.phase==="ready" && !cancelRequested){
     render(next);
     await api.updateOpen();

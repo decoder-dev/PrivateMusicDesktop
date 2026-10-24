@@ -6,6 +6,7 @@ import { icon, illustration } from "./icons.js";
 import { t } from "./i18n.js";
 import { coverPalette } from "./palette.js";
 import { decorateStatus, forgetStatus } from "./network.js";
+import { own } from "./store.js";
 
 /** Real artwork with an explicit load state; absent artwork stays quiet. */
 export function artBox(url, { glyph = "note", size = 18, className = "", eager = false, fallbackText } = {}) {
@@ -106,16 +107,21 @@ export function fillPanel(element, text, art) {
  * выбранную кнопку. Выбор считывается из aria-selected всякий раз, когда он изменяется.
  */
 export function watchSegmented(tabs) {
+  let frame = 0, disposed = false;
   const place = () => {
+    if (disposed) return;
     const selected = tabs.querySelector('button[aria-selected="true"]');
     if (!selected || !selected.offsetWidth) return;
     tabs.style.setProperty("--seg-x", `${selected.offsetLeft}px`);
     tabs.style.setProperty("--seg-w", `${selected.offsetWidth}px`);
     // Первое размещение не должно появляться из ниоткуда.
-    requestAnimationFrame(() => tabs.classList.add("ready"));
+    if (!frame) frame = requestAnimationFrame(() => { frame = 0; if (!disposed) tabs.classList.add("ready"); });
   };
-  new MutationObserver(place).observe(tabs, { attributes: true, attributeFilter: ["aria-selected"], subtree: true });
-  new ResizeObserver(place).observe(tabs);
+  const mutation = new MutationObserver(place);
+  mutation.observe(tabs, { attributes: true, attributeFilter: ["aria-selected"], subtree: true });
+  const resize = new ResizeObserver(place);
+  resize.observe(tabs);
+  own(() => { disposed = true; mutation.disconnect(); resize.disconnect(); if (frame) cancelAnimationFrame(frame); });
   place();
   return tabs;
 }

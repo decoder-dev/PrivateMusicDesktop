@@ -34,16 +34,19 @@ export function setPlaylistSync(playlist, on) {
 let running = false;
 export function sharedProtection(currentKey){
   const manual=new Set(),protectedKeys=new Set();let complete=true;
+  const addKeys=(target,values)=>{for(const id of values){if(typeof id==='string' && /^-?\d+_\d+$/.test(id))target.add(id);else complete=false;}};
   // Файлы загрузок общие для компьютера: чужое локальное закрепление тоже защищает файл.
   for(let i=0;i<localStorage.length;i++){
     const key=localStorage.key(i);if(!/^pm\.personal\.[^.]+\.(playlistSync|manualDownloads|autoLikeDownloads)$/.test(key || ""))continue;
     let values;try{values=JSON.parse(localStorage.getItem(key));}catch{complete=false;continue;}
     if(!Array.isArray(values)){complete=false;continue;}
-    if(key.endsWith(".manualDownloads") || key.endsWith(".autoLikeDownloads")){for(const id of values)manual.add(id);continue;}
+    if(key.endsWith(".manualDownloads") || key.endsWith(".autoLikeDownloads")){addKeys(manual,values);continue;}
     for(const other of values){
+      if(!other || typeof other!=='object' || Array.isArray(other)){complete=false;continue;}
       if(key===`pm.personal.${accountId()}.playlistSync` && other.key===currentKey)continue;
       if(!Array.isArray(other.wanted))complete=false;
-      for(const id of other.wanted || other.owned || [])protectedKeys.add(id);
+      const ids=Array.isArray(other.wanted)?other.wanted:Array.isArray(other.owned)?other.owned:[];
+      addKeys(protectedKeys,ids);
     }
   }
   return {manual,protectedKeys,complete};

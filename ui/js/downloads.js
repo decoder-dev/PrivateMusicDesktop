@@ -1,7 +1,7 @@
 // Какие треки есть на этом компьютере, везде кнопки скачать.
 
 import { api, trackKey } from "./api.js";
-import { publish } from "./store.js";
+import { store, publish } from "./store.js";
 import { t } from "./i18n.js";
 import { downloadPermission } from "./download-permission.js";
 import { accountId } from "./personal.js";
@@ -14,20 +14,23 @@ let tracks = [];
 let bytes = 0;
 const keys = new Set();
 const pending = new Set();
+let refreshGeneration = 0;
 
 export const isDownloaded = (track) => !!track && keys.has(trackKey(track));
 export const isDownloading = (track) => !!track && pending.has(trackKey(track));
 export const downloads = () => ({ tracks, bytes });
 
 export async function refreshDownloads() {
+  const generation = ++refreshGeneration;
   try {
     const result = await api.downloads();
+    if (generation !== refreshGeneration) return;
     tracks = result.tracks;
     bytes = result.bytes;
     keys.clear();
     for (const track of tracks) keys.add(trackKey(track));
   } catch {
-    // Загрузки недоступны: все отображается как не загруженное.
+    // Keep the last known offline files when the refresh is unavailable.
   }
   publish("downloads");
 }
@@ -67,17 +70,20 @@ export async function downloadAll(items, { isCancelled = () => false, onProgress
   if (job?.running) return null;
   const unique = [...new Map(items.map(track => [trackKey(track),track])).values()].slice(0,20000);
   const state = { running:true,cancelled:false,completed:0,total:unique.length,failed:0,current:null,errors:[] };
-  const allowed=downloadPermission({interactive:!managed,isCancelled:()=>state.cancelled || isCancelled(),onBlocked:reason=>{state.blocked=reason;}});
+  const account = accountId();
+  const cancelled = () => state.cancelled || isCancelled() || account !== accountId() || !store.session.signed_in;
+  const allowed=downloadPermission({interactive:!managed,isCancelled:cancelled,onBlocked:reason=>{state.blocked=reason;}});
   job=state;
   publish("downloadJob");
   try {
     for (const track of unique) {
-      if (state.cancelled || isCancelled()) { state.cancelled=true; break; }
+      if (cancelled()) { state.cancelled=true; break; }
       const key=trackKey(track);
       state.current=track;
       publish("downloadJob");
       const needsDownload=!keys.has(key) && !pending.has(key);
       if(needsDownload && !await allowed()){state.cancelled=true;break;}
+      if(cancelled()){state.cancelled=true;break;}
       if(!managed)writePersonal("manualDownloads",[...new Set([...readPersonal("manualDownloads",[]),key])].slice(-20000));
       if (needsDownload) {
         pending.add(key); publish("downloads");
@@ -86,6 +92,7 @@ export async function downloadAll(items, { isCancelled = () => false, onProgress
         finally { pending.delete(key); publish("downloads"); }
       }
       state.completed++;
+      if(cancelled()){state.cancelled=true;break;}
       onProgress(state.completed,state.total,state.failed);
       publish("downloadJob");
     }

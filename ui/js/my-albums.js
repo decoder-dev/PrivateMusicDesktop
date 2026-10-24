@@ -21,7 +21,14 @@ export function ensureAlbums() {
   if (loading) return loading;
   const mine = epoch;
   const request = loadAllPages((offset,count) => api.followedAlbums(offset,count), { pageSize:100, isCancelled: () => mine !== epoch })
-    .then(list => { if (mine !== epoch) return []; all = list ?? []; loaded = true; publish("albums"); return all; })
+    .then(list => {
+      if (mine !== epoch) return [];
+      const confirmed = all.filter(album => decided.get(albumKey(album)) === true);
+      all = (list ?? []).filter(album => decided.get(albumKey(album)) !== false);
+      const keys = new Set(all.map(albumKey));
+      all = [...confirmed.filter(album => !keys.has(albumKey(album))), ...all];
+      loaded = true; publish("albums"); return all;
+    })
     .finally(() => { if (loading === request) loading = null; });
   loading = request;
   return request;

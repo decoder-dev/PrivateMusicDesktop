@@ -53,17 +53,23 @@ impl OfflineStore {
         let dir = dir.into();
         fs::create_dir_all(&dir).map_err(|e| Error::Stream(format!("downloads folder: {e}")))?;
         let index = match fs::read(dir.join(INDEX)) {
-            Ok(bytes) => serde_json::from_slice::<Vec<OfflineTrack>>(&bytes).unwrap_or_else(|error| {
-                log::warn!("downloads index unreadable ({error}); starting a new one");
-                let _ = fs::rename(dir.join(INDEX), dir.join("index.damaged.json"));
-                Vec::new()
-            }),
-            Err(_) => Vec::new(),
+            Ok(bytes) => match serde_json::from_slice::<Vec<OfflineTrack>>(&bytes) {
+                Ok(entries) => entries,
+                Err(error) => {
+                    log::warn!("downloads index unreadable ({error}); preserving it before starting a new one");
+                    fs::rename(dir.join(INDEX), dir.join("index.damaged.json"))
+                        .map_err(|e| Error::Stream(format!("preserving the downloads index: {e}")))?;
+                    Vec::new()
+                }
+            },
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+            Err(error) => return Err(Error::Stream(format!("reading the downloads index: {error}"))),
         };
         // Сохраняйте только те записи, файлы которых действительно существуют и имеют безопасное имя.
         let index = index
             .into_iter()
-            .filter(|e| safe_offline_name(&e.file) && dir.join(&e.file).is_file())
+            .filter(|e| safe_offline_name(&e.file) && fs::symlink_metadata(dir.join(&e.file))
+                .is_ok_and(|file| file.is_file() && file.len() > 0 && file.len() == e.bytes))
             .map(|e| (e.track.id(), e))
             .collect();
         Ok(Self { writes: Mutex::new(()), dir, index: Mutex::new(index) })
@@ -103,11 +109,14 @@ impl OfflineStore {
 
     /// Адрес `offline:` понятен плееру, если он скачан.
     pub fn address(&self, track_id: &str) -> Option<String> {
-        self.lock().get(track_id).map(|e| format!("{OFFLINE_SCHEME}{}", e.file))
+        let entry = self.lock().get(track_id)?.clone();
+        let valid = fs::symlink_metadata(self.dir.join(&entry.file))
+            .is_ok_and(|file| file.is_file() && file.len() > 0 && file.len() == entry.bytes);
+        valid.then(|| format!("{OFFLINE_SCHEME}{}", entry.file))
     }
 
     pub fn total_bytes(&self) -> u64 {
-        self.lock().values().map(|e| e.bytes).sum()
+        self.lock().values().fold(0u64, |total, e| total.saturating_add(e.bytes))
     }
 
     /// Записывает звук и записывает его. Файл отображается атомарно, поэтому сбой в середине записи
@@ -142,8 +151,13 @@ impl OfflineStore {
     pub fn remove(&self, track_id: &str) -> Result<bool> {
         let _write = self.writes.lock().unwrap_or_else(|p| p.into_inner());
         let mut index = self.lock();
-        let Some(entry) = index.remove(track_id) else { return Ok(false) };
-        let _ = fs::remove_file(self.dir.join(&entry.file));
+        let Some(entry) = index.get(track_id) else { return Ok(false) };
+        match fs::remove_file(self.dir.join(&entry.file)) {
+            Ok(()) => {},
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
+            Err(error) => return Err(Error::Stream(format!("removing the download: {error}"))),
+        }
+        index.remove(track_id);
         self.write_index(&index)?;
         Ok(true)
     }
@@ -220,6 +234,44 @@ mod tests {
     }
 
     #[test]
+    fn a_failed_file_removal_keeps_the_index_and_reports_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = OfflineStore::open(dir.path()).unwrap();
+        let entry = store.save(&track(7, 1), ElementaryKind::Mp3, b"audio").unwrap();
+        fs::remove_file(dir.path().join(&entry.file)).unwrap();
+        fs::create_dir(dir.path().join(&entry.file)).unwrap();
+        assert!(store.remove("7_1").is_err());
+        assert!(store.contains("7_1"));
+        assert!(store.address("7_1").is_none());
+    }
+
+    #[test]
+    fn unreadable_or_unpreservable_indexes_are_never_replaced_with_an_empty_library() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join(INDEX)).unwrap();
+        assert!(OfflineStore::open(dir.path()).is_err());
+        fs::remove_dir(dir.path().join(INDEX)).unwrap();
+        fs::write(dir.path().join(INDEX), b"broken index").unwrap();
+        fs::create_dir(dir.path().join("index.damaged.json")).unwrap();
+        assert!(OfflineStore::open(dir.path()).is_err());
+        assert_eq!(fs::read(dir.path().join(INDEX)).unwrap(), b"broken index");
+    }
+
+    #[test]
+    fn inconsistent_file_sizes_in_an_index_do_not_become_downloads_or_overflow_totals() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("7_1.mp3"), b"a").unwrap();
+        fs::write(dir.path().join("7_2.mp3"), b"b").unwrap();
+        let entries: Vec<_> = [1, 2].into_iter().map(|id| OfflineTrack {
+            track: track(7, id), file: format!("7_{id}.mp3"), bytes: u64::MAX, added: 0,
+        }).collect();
+        fs::write(dir.path().join(INDEX), serde_json::to_vec(&entries).unwrap()).unwrap();
+        let store = OfflineStore::open(dir.path()).unwrap();
+        assert!(store.list().is_empty());
+        assert_eq!(store.total_bytes(), 0);
+    }
+
+    #[test]
     fn a_damaged_or_hostile_index_cannot_point_outside_the_folder() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("index.json"), b"{not json").unwrap();
@@ -250,8 +302,10 @@ mod tests {
         assert!(json.get("track").is_none());
         fs::write(dir.path().join("7_1.mp3"), b"a").unwrap();
         assert!(!store.details("7_1").unwrap().available);
+        assert!(store.address("7_1").is_none(), "truncated files must fall back to streaming");
         fs::remove_file(dir.path().join("7_1.mp3")).unwrap();
         assert!(!store.details("7_1").unwrap().available);
+        assert!(store.address("7_1").is_none(), "removed files must fall back to streaming");
         fs::create_dir(dir.path().join("7_1.mp3")).unwrap();
         assert!(!store.details("7_1").unwrap().available);
         assert!(store.details("../secret").is_none());
