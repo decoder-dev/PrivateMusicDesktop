@@ -33,6 +33,7 @@ function mixHue(text) {
 
 export function createForYouView({ play, onTrackAction, toast }) {
   let current = "mix";
+  const cacheTimes = new Map();
   const cache = new Map(); // источник -> треки
   let generation = 0;
   let sessionGeneration = 0;
@@ -135,6 +136,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
     continuationBusy=false;
     if(current==="mix") {
       listSource={...listSource,next_offset:offset};
+      if(cache.get(sourceCacheKey())!==tracks) cacheTimes.set(sourceCacheKey(),Date.now());
       cache.set(sourceCacheKey(),tracks);continuationCache.set(sourceCacheKey(),offset);
     }
     moreFooter.hidden=current!=="mix" || !tracks.length;
@@ -197,7 +199,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
     const options = id === "mix" ? encodeSelection(selected) : null;
     const cacheKey = id === "mix" ? `mix:${options ?? "plain"}` : id;
     refresh.disabled = false;
-    if (!force && cache.has(cacheKey)) {
+    if (!force && cache.has(cacheKey) && Date.now()-(cacheTimes.get(cacheKey)??0)<5*60*1000) {
       if (id === "mix") { listOptions = options; listSource = { kind: "personal", options }; activeMix=options?null:"common#"; paintActive(); }
       screen.clearStatus();
       setMixTracks(cache.get(cacheKey),{offset:continuationCache.get(cacheKey)??400});
@@ -211,6 +213,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
       const tracks = id === "mix" ? await api.mix(options) : await SOURCES[id].load();
       if (mine !== generation) return;
       cache.set(cacheKey, tracks);
+      cacheTimes.set(cacheKey,Date.now());
       if (id === "mix") { listOptions = options; listSource = { kind: "personal", options }; activeMix=options?null:"common#"; paintActive(); }
       screen.clearStatus();
       setMixTracks(tracks);
@@ -231,7 +234,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
     try {
       const tracks=id!=="mix" ? await SOURCES[id].load() : source.kind==="catalog" ? await api.streamMix(source.mix_id,source.options) : await api.mix(source.options);
       if(mine!==generation)return;
-      if(id!=="mix")cache.set(id,tracks);
+      if(id!=="mix") {cache.set(id,tracks);cacheTimes.set(id,Date.now());}
       else if(source.kind==="personal")cache.set(`mix:${source.options??"plain"}`,tracks);
       screen.clearStatus();setMixTracks(tracks);
     }catch(error){if(mine===generation)toast(errorText(error),{error:true});}
@@ -296,6 +299,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
         h("button", { class: "btn primary", type: "button", text: t("fy.applyTune"), onclick: () => {
           saveSelection();
           cache.clear();
+          cacheTimes.clear();
       continuationCache.clear();displayedTracks=[];continuationBusy=false;moreFooter.hidden=true;
           tuning.open = false;
           current = "mix";
@@ -514,6 +518,7 @@ export function createForYouView({ play, onTrackAction, toast }) {
       generation += 1;
       catalogGeneration += 1;
       cache.clear();
+      cacheTimes.clear();
       continuationCache.clear();displayedTracks=[];continuationBusy=false;moreFooter.hidden=true;
       catalogLoaded = false;
       catalogGrid.replaceChildren();

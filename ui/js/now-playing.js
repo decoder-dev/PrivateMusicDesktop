@@ -123,7 +123,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
 
   const quickEq = quick("sliders", t("eq.title"), () => {
     const panel = createEqualizerPanel({ settings, onSettingsChange });
-    openSheet({ label: t("eq.title"), className: "eq-sheet", content: [h("div", { class: "sheet-title", text: t("eq.title") }), panel.element] });
+    openSheet({ label: t("eq.title"), className: "eq-sheet", onClose: panel.destroy, content: [h("div", { class: "sheet-title", text: t("eq.title") }), panel.element] });
     panel.render?.();
   });
 
@@ -164,18 +164,32 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     return { x:cover.left+cover.width/2-frame.left,y:cover.top+cover.height/2-frame.top,radius:cover.width/2,bounds };
   });
 
+  visualizer.setPlotBounds(() => {
+    const frame=canvas.getBoundingClientRect();
+    const info=element.querySelector(".np-info").getBoundingClientRect();
+    const bottom=element.querySelector(".np-bottom").getBoundingClientRect();
+    const top=info.bottom+8-frame.top;
+    return {top,height:Math.max(0,bottom.top-frame.top-8-top)};
+  });
+
   // -------------------------------------------------- Режимы
 
   function renderMode() {
+    const previousMode = element.dataset.mode;
     const label = t("np.mode", { mode: t(`np.mode.${mode}`) });
     modeButton.title = label;
     modeButton.setAttribute("aria-label", label);
     element.dataset.mode = mode;
+    visualizer.redraw();
+    if (open && previousMode && previousMode !== mode && motionOk()) {
+      canvas.getAnimations().forEach(animation => animation.cancel());
+      canvas.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: "ease-out" });
+    }
   }
 
   function syncEngine() {
     // Движок анализирует звук только тогда, когда кто-то смотрит на результат.
-    api.setVisualizer(open && mode !== "off" && !document.hidden).catch(() => {});
+    api.setVisualizer(open && mode !== "off" && !document.hidden && (!isPhone() || element.dataset.side === "none")).catch(() => {});
   }
 
   function cycleMode() {
@@ -198,6 +212,8 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     quickLyrics.setAttribute("aria-pressed", String(side === "lyrics"));
     quickQueue.setAttribute("aria-pressed", String(side === "queue"));
     if (side === "queue") renderQueuePanel();
+    visualizer.redraw();
+    if (open) syncEngine();
   }
 
   function setLyrics(on) {
@@ -321,7 +337,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     const spinning = player.status === "buffering" || player.status === "loading";
     const changedGlyph = playButton.dataset.glyph !== (showPause ? "pause" : "play");
     playButton.dataset.glyph = showPause ? "pause" : "play";
-    playButton.replaceChildren(icon(showPause ? "pause" : "play", 28), ...(spinning ? [h("span", { class: "spin-over", "aria-hidden": "true" }, h("span", { class: "spinner" }))] : []));
+    if (changedGlyph || playButton.classList.contains("is-buffering") !== spinning) playButton.replaceChildren(icon(showPause ? "pause" : "play", 28), ...(spinning ? [h("span", { class: "spin-over", "aria-hidden": "true" }, h("span", { class: "spinner" }))] : []));
     playButton.classList.toggle("is-buffering", spinning);
     if (changedGlyph && playButton.dataset.ready) morph(playButton.firstChild);
     playButton.dataset.ready = "1";
@@ -334,7 +350,10 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     const repeatLabel = t(`repeat.${player.repeat}`);
     repeatButton.title = repeatLabel;
     repeatButton.setAttribute("aria-label", repeatLabel);
-    repeatButton.replaceChildren(icon("repeat", 20), ...(player.repeat === "one" ? [h("span", { class: "np-one", text: "1" })] : []));
+    if (repeatButton.dataset.repeat !== player.repeat) {
+      repeatButton.dataset.repeat = player.repeat;
+      repeatButton.replaceChildren(icon("repeat", 20), ...(player.repeat === "one" ? [h("span", { class: "np-one", text: "1" })] : []));
+    }
     quickMore.disabled = !track;
 
     const duration = Math.max(0, player.duration || 0);
@@ -412,7 +431,11 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     }
     wake();
   }
-  const onVisibility = () => { if (open) syncEngine(); };
+  const onVisibility = () => {
+    if (!open) return;
+    if (document.hidden) visualizer.stop(); else visualizer.start();
+    syncEngine();
+  };
   document.addEventListener("keydown", onKey, true);
   document.addEventListener("visibilitychange", onVisibility);
   own(() => {
@@ -466,6 +489,8 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
 
   const redrawLayout = new ResizeObserver(() => { if (open) visualizer.redraw(); });
   redrawLayout.observe(coverBox);
+  redrawLayout.observe(element.querySelector(".np-info"));
+  redrawLayout.observe(element.querySelector(".np-bottom"));
   redrawLayout.observe(element.querySelector(".np-stage"));
   own(() => redrawLayout.disconnect());
   const onWindowMode = () => { windowFullscreen=isWindowFullscreen();windowButton.setAttribute("aria-pressed",String(windowFullscreen));windowButton.replaceChildren(icon(windowFullscreen?"collapse":"expand",20)); };
@@ -506,6 +531,6 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
       if (typeof patch.lyrics === "boolean" && patch.lyrics !== lyricsOn) setLyrics(patch.lyrics);
     },
     /** От двигателя ~30 раз в секунду при открытом состоянии. */
-    feed(bands) { if (open && mode !== "off" && Array.isArray(bands)) visualizer.feed(bands); },
+    feed(bands) { if (open && !document.hidden && mode !== "off" && (!isPhone() || element.dataset.side === "none") && Array.isArray(bands)) visualizer.feed(bands); },
   };
 }

@@ -129,7 +129,7 @@ html[data-layout="phone"] .theme-picker { justify-content: space-between; width:
 html[data-layout="phone"] .theme-opt { width: 30%; min-height: 44px; }
 html[data-layout="phone"] .accent-grid { justify-content: flex-start; margin: -4px; gap: 0; }
 html[data-layout="phone"] .eq-bands { overflow-x: auto; grid-template-columns: repeat(10, 44px); gap: 0; padding-inline: 8px; scrollbar-width: none; touch-action: pan-x; }
-html[data-layout="phone"] .eq-slider { width: 44px !important; height: 148px; }
+html[data-layout="phone"] .eq-slider { width: 44px !important; height: 148px; touch-action: none; }
 html[data-layout="phone"] input[type="checkbox"][role="switch"] { box-sizing: border-box; width: 64px; height: 44px; border: 6.5px solid transparent; background-clip: padding-box; border-radius: 22px; }
 html[data-layout="phone"] input[type="checkbox"][role="switch"]::before { top: 2px; left: 2px; }
 html[data-layout="phone"] .set-account { flex: 1 1 auto; }

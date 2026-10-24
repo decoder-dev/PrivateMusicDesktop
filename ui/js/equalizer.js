@@ -51,7 +51,7 @@ export function createEqualizerPanel({ settings, onSettingsChange }) {
       oninput: () => {
         changeBand(band,Number(input.value));
       },
-      onchange:()=>{clearTimeout(timer);send();},
+      onchange:()=>{clearTimeout(timer);timer=0;send();},
     });
     bindRange(input);
     return { input, element: h("div", { class: "eq-band" }, value, input, h("span", { class: "eq-label", text: label })) };
@@ -79,16 +79,17 @@ export function createEqualizerPanel({ settings, onSettingsChange }) {
     line.setAttribute("points",points.map(p=>p.join(",")).join(" "));
     area.setAttribute("d",`M12,56 L${points.map(p=>p.join(",")).join(" L")} L588,56 Z`);
     dots.forEach((dot,i)=>{dot.setAttribute("cx",points[i][0]);dot.setAttribute("cy",points[i][1]);});
-    sliders.forEach(({ input }, i) => { input.value = String(eq.gains[i]); input.setAttribute("aria-valuetext",`${eq.gains[i]} ${t("eq.db")}`); syncRange(input); });
+    sliders.forEach(({ input }, i) => { if (input.value !== String(eq.gains[i])) input.value = String(eq.gains[i]); input.setAttribute("aria-valuetext",`${eq.gains[i]} ${t("eq.db")}`); syncRange(input); });
     values.forEach((node, i) => { node.textContent = `${eq.gains[i] > 0 ? "+" : ""}${eq.gains[i]}`; });
   }
 
   async function send() {
+    onSettingsChange({ eq: { ...eq, gains: eq.gains.slice(), custom: custom.slice() } });
     pending={gains:eq.on?eq.gains.slice():null};
-    if(sending || disposed)return;
+    if(sending)return;
     sending=true;
     try {
-      while(pending && !disposed) {
+      while(pending) {
         const current=pending; pending=null;
         try { await api.setEqualizer(current.gains); if(!disposed)error.hidden=true; }
         catch { if(!disposed)error.hidden=false; }
@@ -99,13 +100,17 @@ export function createEqualizerPanel({ settings, onSettingsChange }) {
   function update(patch, immediate=false) {
     eq = { ...eq, ...patch };
     render();
-    onSettingsChange({ eq: { ...eq, gains: eq.gains.slice() } });
-    // Перетаскивание пожаров многих событий; двигателю нужно только самое последнее.
-    clearTimeout(timer);
-    if(immediate)send();else timer = setTimeout(send, 60);
+    // Apply the latest curve at a bounded rate even during a continuous drag.
+    if(immediate) { clearTimeout(timer); timer=0; send(); }
+    else if(!timer) timer=setTimeout(()=>{timer=0;send();},80);
   }
 
-  own(() => {disposed=true;pending=null;clearTimeout(timer);});
+  function destroy() {
+    if(disposed) return;
+    if(timer) {clearTimeout(timer);timer=0;send();}
+    disposed=true;
+  }
+  own(destroy);
   render();
-  return { element, render };
+  return { element, render, destroy };
 }

@@ -36,9 +36,15 @@ export function createVisualizer(canvas) {
   let width = 0;
   let height = 0;
   let ratio = 1;
+  let spotCache = null;
+  let plotCache = null;
+  let plotBounds = () => null;
+  const phone = () => document.documentElement.dataset.layout === "phone";
 
   function resize() {
-    ratio = Math.min(window.devicePixelRatio || 1, 2);
+    spotCache = null;
+    plotCache = null;
+    ratio = Math.min(window.devicePixelRatio || 1, phone() ? 1.25 : 2);
     width = canvas.clientWidth;
     height = canvas.clientHeight;
     canvas.width = Math.max(1, Math.round(width * ratio));
@@ -65,13 +71,18 @@ export function createVisualizer(canvas) {
     context.clearRect(0, 0, width, height);
     if (mode === "off" || !bands.length || !width || !height) return;
     const count = bands.length;
-    const floor = height * 0.04;
+    const plot = phone() && mode !== "radial" ? (plotCache ??= plotBounds()) : null;
+    if (plot && plot.height < 4) return;
+    const plotHeight = plot?.height ?? height;
+    const plotTop = plot?.top ?? 0;
+    const floor = plotHeight * 0.04;
     if (mode === "bars" || mode === "mirror") {
-      const area = height * 0.42;
+      const area = plotHeight * (plot ? 0.85 : 0.42);
       const step = width / count;
       const bar = Math.max(2, step * 0.62);
-      const baseline = mode === "bars" ? height - 28 : height - 28 - area / 2;
-      context.fillStyle = fill(0, height - 28 - area, 0, height - 28);
+      const base = plot ? plotTop + plotHeight - 4 : height - 28;
+      const baseline = mode === "bars" ? base : base - area / 2;
+      context.fillStyle = fill(0, base - area, 0, base);
       for (let i = 0; i < count; i += 1) {
         const x = i * step + (step - bar) / 2;
         const level = bands[i] ** 1.4;
@@ -83,8 +94,8 @@ export function createVisualizer(canvas) {
         }
       }
     } else if (mode === "wave") {
-      const area = height * 0.38;
-      const baseline = height - 28 - area / 2;
+      const area = plotHeight * (plot ? 0.85 : 0.38);
+      const baseline = plot ? plotTop + plotHeight / 2 : height - 28 - area / 2;
       const points = bands.map((level, i) => [(i / (count - 1)) * width, level ** 1.3 * area / 2 + floor / 2]);
       context.beginPath();
       context.moveTo(0, baseline);
@@ -103,7 +114,7 @@ export function createVisualizer(canvas) {
       context.fill();
       context.globalAlpha = 1;
     } else if (mode === "radial") {
-      const spot = anchor() ?? { x: width / 2, y: height / 2, radius: Math.min(width, height) * 0.2 };
+      const spot = (spotCache ??= anchor()) ?? { x: width / 2, y: height / 2, radius: Math.min(width, height) * 0.2 };
       const total = count * 2; // зеркально отразил left/right, чтобы кольцо было симметричным
       const geometry=radialGeometry(spot,width,height,count);
       if (!geometry) return;
@@ -147,16 +158,20 @@ export function createVisualizer(canvas) {
   observer.observe(canvas);
 
   return {
-    redraw() { paint(); },
+    redraw() { spotCache=null; plotCache=null; paint(); },
     get mode() { return mode; },
-    setMode(next) { mode = MODES.includes(next) ? next : "bars"; paint(); },
+    setMode(next) { spotCache=null; plotCache=null; mode = MODES.includes(next) ? next : "bars"; paint(); },
     setColors(primary, secondary) { colors = [primary, secondary]; paint(); },
-    setAnchor(fn) { anchor = fn; },
+    setPlotBounds(fn) { plotBounds=fn; plotCache=null; },
+    setAnchor(fn) { anchor = fn; spotCache=null; },
     /** Свежая картинка с движка: нарисовано сразу. */
     feed(levels) {
+      if (!running || mode === "off") return;
       target = levels.slice(0,128).map(value => Number.isFinite(value) ? Math.max(0,Math.min(1,value)) : 0);
       bands = target.slice();
-      paint();
+      // Coalesce phone events into a single paint before the next display frame.
+      if (phone()) { if (!frame) frame=requestAnimationFrame(tick); }
+      else paint();
     },
     /** Воспроизведение остановлено: пусть полоски осядут, а не замерзнут. */
     settle() {

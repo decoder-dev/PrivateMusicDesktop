@@ -1630,7 +1630,7 @@ test("downloads: a row button saves the track, shows it everywhere, lists it wit
     await rows(page).first().hover();
     await rows(page).first().locator("[data-action=download]").click();
     await page.waitForSelector(".main > .view:not([hidden]) .empty-state:not([hidden])");
-    assert.match(await page.locator(".toast").innerText(), /Удалено с компьютера/);
+    assert.match(await page.locator(".toast").innerText(), /Удалено с устройства/);
     assert.deepEqual(app.problems, []);
   } finally { await app.close(); }
 });
@@ -2118,7 +2118,7 @@ test("history: recent tracks play as a queue, filter, drop one at a time and cle
     await openSection(page, "history");
     await page.waitForFunction(() => document.querySelectorAll(".main > .view:not([hidden]) .row").length === 4);
     assert.deepEqual(await rows(page).locator(".title").allInnerTexts(), ["Из истории 1", "Из истории 2", "Из истории 3", "Из истории 4"]);
-    assert.match(await page.locator(`${view} .footer-note`).innerText(), /только на этом компьютере/);
+    assert.match(await page.locator(`${view} .footer-note`).innerText(), /только на этом устройстве/);
 
     await rows(page).nth(1).dblclick();
     const play = await page.evaluate(() => window.__mock.last("play_tracks"));

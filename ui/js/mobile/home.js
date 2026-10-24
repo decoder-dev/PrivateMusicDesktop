@@ -16,10 +16,13 @@ import { createCompactTrackList } from "./compact-list.js";
 import "./strings.js";
 
 const RECS = 6;
+const RECS_MAX_AGE = 5 * 60 * 1000;
 const RECENT = 10;
 
 export function createHomeView({ play, onTrackAction, toast, openTrackMenu, like, push, openPlayer }) {
   let recsLoaded = false;
+  let recsLoadedAt = 0;
+  let recsLoading = false;
   let recsGeneration = 0;
   let historyGeneration = 0;
   let coverUrl;
@@ -127,12 +130,14 @@ export function createHomeView({ play, onTrackAction, toast, openTrackMenu, like
     h("h2", { class: "shelf-title", text: t("home.recent") }), recentRow);
 
   async function loadRecs(force = false) {
-    if (recsLoaded && !force) return;
+    if (!force && (recsLoading || (recsLoaded && Date.now()-recsLoadedAt < RECS_MAX_AGE))) return;
+    recsLoading = true;
     const mine = ++recsGeneration;
     try {
       const tracks = await api.recommendations();
       if (mine !== recsGeneration) return;
       recsLoaded = true;
+      recsLoadedAt = Date.now();
       paintStatus(recsStatus, "");
       recs.setTracks(tracks.slice(0, RECS));
       recsSection.hidden = tracks.length === 0;
@@ -140,6 +145,8 @@ export function createHomeView({ play, onTrackAction, toast, openTrackMenu, like
       if (mine !== recsGeneration) return;
       recsSection.hidden = false;
       paintStatus(recsStatus, errorText(error), { error: true, extra: "inline" });
+    } finally {
+      if (mine === recsGeneration) recsLoading = false;
     }
   }
 
@@ -188,6 +195,8 @@ export function createHomeView({ play, onTrackAction, toast, openTrackMenu, like
     reload,
     reset() {
       recsLoaded = false;
+      recsLoadedAt = 0;
+      recsLoading = false;
       recsGeneration++;
       historyGeneration++;
       recs.setTracks([]);

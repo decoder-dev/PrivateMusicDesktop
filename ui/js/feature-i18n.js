@@ -35,7 +35,7 @@ const english = {
   "Правило": "Rule",
   "Дней без прослушиваний": "Days without listening",
   "Максимум треков": "Maximum tracks",
-  "Правила пересчитываются при открытии. Рейтинг использует локальную статистику прослушиваний, а «Давно не слушал» — сохранённую историю этого компьютера. «Недавно добавлено» использует порядок библиотеки VK.": "Rules refresh when opened. Rankings use local listening statistics; Rediscover uses this computer's saved history. Recently added follows VK library order.",
+  "Правила пересчитываются при открытии. Рейтинг использует локальную статистику прослушиваний, а «Давно не слушал» — сохранённую историю этого устройства. «Недавно добавлено» использует порядок библиотеки VK.": "Rules refresh when opened. Rankings use local listening statistics; Rediscover uses this device's saved history. Recently added follows VK library order.",
   "Мини-плеер": "Mini player",
   "Воспроизведение / пауза": "Play / pause",
   "Избранное": "Favourite",

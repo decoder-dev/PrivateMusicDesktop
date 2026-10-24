@@ -10,9 +10,9 @@ import { downloads, refreshDownloads, formatSize, downloadJob, cancelDownloads, 
 import { createSyncPanel } from "../sync-panel.js";
 import { removeSelected } from "../batch-remove.js";
 
-addStrings({ ru:{ "dl.clear":"Очистить загрузки", "dl.confirm":"Удалить все скачанные аудиофайлы с этого компьютера? Музыка в VK сохранится.", "dl.stop":"Остановить после текущего", "dl.retry":"Повторить неудачные", "dl.progress":"Скачано: {done}/{total}. Ошибок: {failed}", "dl.stopping":"Остановка после текущего трека…" }, en:{ "dl.clear":"Clear downloads", "dl.confirm":"Remove all downloaded audio from this computer? Your VK library will be kept.", "dl.stop":"Stop after current", "dl.retry":"Retry failed", "dl.progress":"Downloaded: {done}/{total}. Failed: {failed}", "dl.stopping":"Stopping after the current track…" } });
+addStrings({ ru:{ "dl.clear":"Очистить загрузки", "dl.confirm":"Удалить все скачанные аудиофайлы с этого устройства? Музыка в VK сохранится.", "dl.stop":"Остановить после текущего", "dl.retry":"Повторить неудачные", "dl.progress":"Скачано: {done}/{total}. Ошибок: {failed}", "dl.stopping":"Остановка после текущего трека…" }, en:{ "dl.clear":"Clear downloads", "dl.confirm":"Remove all downloaded audio from this device? Your VK library will be kept.", "dl.stop":"Stop after current", "dl.retry":"Retry failed", "dl.progress":"Downloaded: {done}/{total}. Failed: {failed}", "dl.stopping":"Stopping after the current track…" } });
 
-/** Все, что есть на этом компьютере, сначала самое новое. */
+/** Все, что есть на этом устройстве, сначала самое новое. */
 export function createDownloadsView({ play, onTrackAction, toast }) {
   const screen = createTracksScreen({
     title: t("dl.title"),

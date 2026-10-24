@@ -227,3 +227,24 @@ html[data-layout="phone"] .lib-collection-search { margin: 0 var(--gutter) 4px; 
 .upload-body .field { width: 100%; min-width: 0; }
 .upload-file { display: grid; gap: 10px; min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 20px; background: var(--studio-card, var(--surface)); }
 .upload-filename { overflow-wrap: anywhere; }
+
+/* Leave space for the entire spectrum ring, including on short screens. */
+html[data-layout="phone"] .np .np-cover {
+  transition: width 240ms var(--ease-ios), margin 240ms var(--ease-ios), border-radius 240ms var(--ease-ios);
+}
+html[data-layout="phone"] .np[data-mode="radial"] .np-cover {
+  width: min(48vw, 25dvh); margin: 30px; border-radius: 50%;
+}
+html[data-layout="phone"] .np[data-mode="radial"] .np-main { gap: 12px; }
+html[data-layout="phone"][data-orientation="landscape"] .np[data-mode="radial"] .np-cover {
+  width: min(24vw, 28dvh); margin: 24px;
+}
+
+/* Keep the full fader and its frequency label visible on compact phone sheets. */
+html[data-layout="phone"] .eq-sheet .eq-curve { height: 48px; margin-block: 0; }
+html[data-layout="phone"] .eq-sheet .eq-bands { padding-block: 8px; }
+html[data-layout="phone"] .eq-sheet .eq-band { gap: 4px; }
+html[data-layout="phone"] .eq-sheet .eq-slider { height: 120px; }
+html[data-layout="phone"] .eq-sheet .eq-hint { margin: 4px 14px 8px; }
+
+html[data-layout="phone"] .np:is([data-side="lyrics"], [data-side="queue"]) .np-canvas { visibility: hidden; }
