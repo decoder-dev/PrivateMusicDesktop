@@ -62,6 +62,7 @@ export function createMiniPlayer(onLike) {
   );
   toggle.classList.add("mini-play");
   let previous;
+  let lastGlyph, lastLiked;
   function render() {
     const p = store.player;
     const key = p.track ? `${p.track.owner_id}_${p.track.track_id}` : null;
@@ -69,18 +70,21 @@ export function createMiniPlayer(onLike) {
       previous = key;
       art.replaceChildren(artBox(p.track?.artwork_url));
     }
-    title.textContent = p.track?.title || ft("Выберите музыку");
-    artist.textContent = p.track?.artist || "Private Music";
-    toggle.replaceChildren(
-      icon(
-        ["playing", "buffering", "loading"].includes(p.status)
-          ? "pause"
-          : "play",
-        24,
-      ),
-    );
-    like.replaceChildren(icon(isLiked(p.track) ? "heart-on" : "heart", 20));
-    like.setAttribute("aria-pressed", String(isLiked(p.track)));
+    const titleText=p.track?.title || ft("Выберите музыку");
+    if(title.textContent!==titleText) title.textContent=titleText;
+    const artistText=p.track?.artist || "Private Music";
+    if(artist.textContent!==artistText) artist.textContent=artistText;
+    const glyph=["playing","buffering","loading"].includes(p.status)?"pause":"play";
+    if(lastGlyph!==glyph) {
+      lastGlyph=glyph;
+      toggle.replaceChildren(icon(glyph,24));
+    }
+    const liked=isLiked(p.track);
+    if(lastLiked!==liked) {
+      lastLiked=liked;
+      like.replaceChildren(icon(liked ? "heart-on" : "heart", 20));
+    }
+    like.setAttribute("aria-pressed", String(liked));
     like.disabled = !p.track;
     seek.max = String(p.duration || 1);
     if (document.activeElement !== seek) seek.value = String(p.position || 0);

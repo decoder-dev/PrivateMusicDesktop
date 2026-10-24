@@ -49,7 +49,8 @@ export function syncRange(input) {
   const min = Number(input.min || 0);
   const max = Number(input.max || 100);
   const share = max > min ? ((Number(input.value) - min) / (max - min)) * 100 : 0;
-  input.style.setProperty("--fill", `${Math.max(0, Math.min(100, share))}%`); // CSSOM: разрешено под номером CSP.
+  const fill=`${Math.max(0, Math.min(100, share))}%`;
+  if(input.style.getPropertyValue("--fill")!==fill) input.style.setProperty("--fill", fill); // CSSOM: разрешено под номером CSP.
 }
 
 export function bindRange(input) {

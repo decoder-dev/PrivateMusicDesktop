@@ -20,7 +20,10 @@ export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
   spacer.append(windowEl);
   const root = h("div", { class: "list", role: "listbox", tabindex: "-1" }, spacer);
   let items = [];
-  let scheduled = false;
+  let frame = 0;
+  let disposed = false;
+  let dirty = true;
+  let visibleFirst = -1, visibleLast = -1;
   let header = null;
   let pageScroller = null; // экран, который прокручивается на телефоне
   const nearEnd = [];
@@ -32,7 +35,10 @@ export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
     const next = scroller();
     const outer = next === root ? null : next;
     if (outer === pageScroller) return;
-    pageScroller?.removeEventListener("scroll", schedule);
+    if(pageScroller) {
+      pageScroller.removeEventListener("scroll", schedule);
+      observer.unobserve(pageScroller);
+    }
     pageScroller = outer;
     if (outer) {
       outer.addEventListener("scroll", schedule, { passive: true });
@@ -45,8 +51,10 @@ export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
     return spacer.getBoundingClientRect().top - scrolling.getBoundingClientRect().top + scrolling.scrollTop;
   }
 
-  function render() {
-    scheduled = false;
+  function render(force = true) {
+    if(disposed) return;
+    if(force) dirty=true;
+    force=dirty;
     // Высота списка известна, даже когда он скрыт: при показе размер меняется и ResizeObserver перерисовывает.
     spacer.style.height = `${items.length * rowHeight}px`;
     // Список, которого нет на экране (отображение: нет), ничего не рисует; ResizeObserver ниже
@@ -69,13 +77,21 @@ export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
     const last = Math.max(first, Math.min(items.length, Math.max(4, Math.ceil((top + viewport) / rowHeight) + 4)));
     spacer.style.height = `${items.length * rowHeight}px`;
     windowEl.style.top = `${first * rowHeight}px`;
-    const rows = [];
-    for (let index = first; index < last; index++) {
-      const row = renderRow(items[index], index);
-      row.dataset.index = String(index);
-      rows.push(row);
+    if(force || first !== visibleFirst || last !== visibleLast) {
+      const existing = force ? new Map() : new Map([...windowEl.children].map(row => [Number(row.dataset.index),row]));
+      const rows = [];
+      for (let index = first; index < last; index++) {
+        const row = existing.get(index) ?? renderRow(items[index], index);
+        row.dataset.index = String(index);
+        rows.push(row);
+      }
+      const keep = new Set(rows);
+      for(const row of [...windowEl.children]) if(!keep.has(row)) row.remove();
+      rows.forEach((row,index) => {
+        if(windowEl.children[index] !== row) windowEl.insertBefore(row,windowEl.children[index] ?? null);
+      });
+      visibleFirst=first;visibleLast=last;dirty=false;
     }
-    windowEl.replaceChildren(...rows);
     // Широкий макет слушает собственную прокрутку списка (см. экраны); помощь нужна только режиму прокрутки страницы.
     if (!own) {
       for (const { margin, fn } of nearEnd) {
@@ -85,15 +101,19 @@ export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
   }
 
   function schedule() {
-    if (scheduled) return;
-    scheduled = true;
-    requestAnimationFrame(render);
+    if (disposed || frame) return;
+    frame=requestAnimationFrame(()=>{frame=0;render(false);});
   }
 
   root.addEventListener("scroll", schedule, { passive: true });
   const observer = new ResizeObserver(schedule);
   observer.observe(root);
-  own(() => observer.disconnect());
+  own(() => {
+    disposed=true;observer.disconnect();
+    if(frame)cancelAnimationFrame(frame);
+    root.removeEventListener("scroll",schedule);
+    pageScroller?.removeEventListener("scroll",schedule);
+  });
 
   for (const type of ["click", "dblclick", "keydown", "contextmenu", "pm-row-longpress", "pm-row-swipe"]) {
     root.addEventListener(type, (event) => {

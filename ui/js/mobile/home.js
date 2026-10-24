@@ -26,6 +26,7 @@ export function createHomeView({ play, onTrackAction, toast, openTrackMenu, like
   let recsGeneration = 0;
   let historyGeneration = 0;
   let coverUrl;
+  let stageState;
 
   // -------------------------------------------------------------- the stage
   const chip = h("div", { class: "stage-chip", role: "status" });
@@ -56,6 +57,9 @@ export function createHomeView({ play, onTrackAction, toast, openTrackMenu, like
   function renderStage(player) {
     const track = player.track;
     const playing = player.status === "playing" || player.status === "buffering" || player.status === "loading";
+    const nextState=JSON.stringify([track?.owner_id,track?.track_id,track?.title,track?.artist,track?.artwork_url,player.status,playing?null:player.position]);
+    if(nextState===stageState) return;
+    stageState=nextState;
     stage.dataset.state = track ? "playing" : "idle";
     chip.textContent = track ? t("home.now") : t("home.idle");
     chip.classList.toggle("quiet", !track);

@@ -78,7 +78,10 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     likeButton.setAttribute("aria-label", label);
     likeButton.setAttribute("aria-pressed", String(liked));
     likeButton.disabled = isBusy(track);
-    likeButton.replaceChildren(icon(liked ? "heart-on" : "heart", 20));
+    if(likeButton.dataset.liked!==String(liked)) {
+      likeButton.dataset.liked=String(liked);
+      likeButton.replaceChildren(icon(liked ? "heart-on" : "heart",20));
+    }
   }
 
   const closeButton = h("button", { class: "np-btn", type: "button", title: t("np.close"), "aria-label": t("np.close"), onclick: () => close() }, icon("chevron", 22));

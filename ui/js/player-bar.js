@@ -77,7 +77,7 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
     likeButton.disabled = isBusy(track);
     const changed = likeButton.dataset.liked !== String(liked);
     likeButton.dataset.liked = String(liked);
-    likeButton.replaceChildren(icon(liked ? "heart-on" : "heart", 18));
+    if(changed || !likeButton.dataset.ready) likeButton.replaceChildren(icon(liked ? "heart-on" : "heart", 18));
     if (changed && likeButton.dataset.ready) morph(likeButton.firstChild);
     likeButton.dataset.ready = "1";
   }
@@ -119,8 +119,10 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
 
   function render(player) {
     const track = player.track;
-    title.textContent = track ? track.title : t("nothing");
-    artist.textContent = track ? track.artist : "";
+    const titleText=track ? track.title : t("nothing");
+    if(title.textContent!==titleText) title.textContent=titleText;
+    const artistText=track ? track.artist : "";
+    if(artist.textContent!==artistText) artist.textContent=artistText;
     artist.disabled = !hasArtist(track);
     const url = track?.artwork_url ?? null;
     if (url !== coverUrl) {
@@ -135,7 +137,7 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
     const glyph = playing ? "pause" : "play";
     const changed = playButton.dataset.glyph !== glyph;
     playButton.dataset.glyph = glyph;
-    playButton.replaceChildren(icon(glyph, 20), ...(spinning ? [h("span", { class: "spin-over", "aria-hidden": "true" }, h("span", { class: "spinner" }))] : []));
+    if(changed || playButton.classList.contains("is-buffering") !== spinning) playButton.replaceChildren(icon(glyph, 20), ...(spinning ? [h("span", { class: "spin-over", "aria-hidden": "true" }, h("span", { class: "spinner" }))] : []));
     playButton.classList.toggle("is-buffering", spinning);
     if (changed && playButton.dataset.ready) morph(playButton.firstChild);
     playButton.dataset.ready = "1";
@@ -149,7 +151,10 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
     repeatButton.classList.toggle("on", player.repeat !== "off");
     repeatButton.title = repeatLabel;
     repeatButton.setAttribute("aria-label", repeatLabel);
-    repeatButton.replaceChildren(icon("repeat", 18), ...(player.repeat === "one" ? [h("span", { class: "badge", text: "1" })] : []));
+    if(repeatButton.dataset.repeat !== player.repeat) {
+      repeatButton.dataset.repeat=player.repeat;
+      repeatButton.replaceChildren(icon("repeat", 18), ...(player.repeat === "one" ? [h("span", { class: "badge", text: "1" })] : []));
+    }
 
     const duration = Math.max(0, player.duration || 0);
     seek.max = String(Math.max(duration, 1));
@@ -164,7 +169,11 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
 
     volume.value = String(Math.round((player.volume ?? 1) * 100));
     syncRange(volume);
-    muteButton.replaceChildren(icon(player.volume > 0 ? "volume" : "mute", 18));
+    const volumeGlyph=player.volume>0?"volume":"mute";
+    if(muteButton.dataset.glyph!==volumeGlyph) {
+      muteButton.dataset.glyph=volumeGlyph;
+      muteButton.replaceChildren(icon(volumeGlyph,18));
+    }
     previousButton.disabled = nextButton.disabled = playButton.disabled = !track && player.queue_len === 0;
   }
 
