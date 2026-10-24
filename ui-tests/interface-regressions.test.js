@@ -116,3 +116,29 @@ test('idle desktop: no "-0:00", empty queue has no dead buttons, sync checkbox s
   assert.ok(gap>=0 && gap<24,String(gap));assert.deepEqual(app.problems,[]);
  }finally{await app.close();}
 });
+
+test('renaming a coverless playlist refreshes the heading and title; new artwork metadata replaces the absent cover',async()=>{
+ const app=await openApp({config:{...config,platform:'android'},phone:'small'});
+ try{const {page}=app;
+  await page.locator('.dock-tab[data-tab="library"]').click();await page.locator('.lib-sections [data-section="playlists"]').click();await page.locator('.lib-grid .card').first().click();
+  await page.locator('.pl-owner .btn').filter({hasText:'Изменить'}).click();await page.locator('dialog input[name="title"]').fill('Новое название');await page.locator('dialog button[type="submit"]').click();
+  await page.waitForFunction(()=>document.title==='Новое название — Private Music');
+  const art=page.locator('.main > .view:not([hidden]) .hero-art').filter({visible:true});
+  assert.equal(await art.count(),0);
+  await page.evaluate(async()=>{const {allPlaylists,replacePlaylist}=await import('/js/my-playlists.js');const playlist=allPlaylists().find(p=>p.title==='Новое название');replacePlaylist({...playlist,artwork_url:'https://cdn.example/updated-cover.jpg'});});
+  const cover=page.locator('.main > .view:not([hidden]) .hero-art img[src="https://cdn.example/updated-cover.jpg"]');await cover.waitFor();
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+for(const width of [320,412])test(`collection pin controls clear long titles at enlarged text (${width})`,async()=>{
+ const app=await openApp({config:{...config,platform:'android'},phone:{viewport:{width,height:740}}});
+ try{const {page}=app;await page.evaluate(()=>localStorage.setItem('pm.settings.v1',JSON.stringify({textScale:'extraLarge'})));await page.reload();
+  await page.locator('.dock-tab[data-tab="library"]').click();await page.locator('.lib-sections [data-section="playlists"]').click();await page.locator('.lib-grid .collection-card').first().waitFor();
+  await page.evaluate(async()=>{const {allPlaylists,replacePlaylist}=await import('/js/my-playlists.js');replacePlaylist({...allPlaylists()[0],title:'Очень длинное название любимой музыкальной коллекции'});});
+  for(const layout of ['grid','list']){
+   const issues=await page.locator('.lib-grid:not([hidden]) .lib-collection').evaluateAll(items=>items.flatMap(item=>{const title=item.querySelector('.name').getBoundingClientRect(),pin=item.querySelector('.lib-pin').getBoundingClientRect();return Math.min(title.right,pin.right)>Math.max(title.left,pin.left)+1 && Math.min(title.bottom,pin.bottom)>Math.max(title.top,pin.top)+1 ? ['title overlaps pin'] : [];}));
+   assert.deepEqual(issues,[],layout);if(layout==='grid')await page.locator('.lib-layout[data-layout-kind="playlist"]').click();
+  }assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});

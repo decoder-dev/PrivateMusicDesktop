@@ -167,8 +167,3 @@ export async function setAmbience(header, url) {
     if (token === header._ambience) header.classList.remove("has-amb");
   }
 }
-
-/** First visible letter of a title, used when a collection has no artwork. */
-export function initial(text) {
-  return Array.from(String(text ?? "").trim())[0]?.toLocaleUpperCase() || "♪";
-}

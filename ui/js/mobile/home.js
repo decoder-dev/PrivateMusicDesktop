@@ -163,8 +163,8 @@ export function createHomeView({ play, onTrackAction, toast, openTrackMenu, like
       const tracks = entries.map((entry) => entry.track).slice(0, RECENT);
       recentSection.hidden = tracks.length === 0;
       recentRow.replaceChildren(...tracks.map((track, index) => {
-        const card = h("button", { class: "card track-card", type: "button", onclick: () => play(tracks, index, { shuffle: false }) },
-          h("span", { class: "card-art art" }, artBox(track.artwork_url, { size: 30, className: "fill" })),
+        const card = h("button", { class: "card collection-card track-card", type: "button", onclick: () => play(tracks, index, { shuffle: false }) },
+          h("span", { class: "card-art art" }, artBox(track.artwork_url, { fallbackText: "", className: "fill" })),
           h("div", { class: "name", text: track.title }),
           h("div", { class: "count", text: track.artist }));
         card.addEventListener("contextmenu", (event) => { event.preventDefault(); openTrackMenu(track, { x: event.clientX, y: event.clientY }); });

@@ -9,7 +9,7 @@ import { trackKey } from "./api.js";
 import { isLiked, isBusy } from "./likes.js";
 import { isDownloaded, isDownloading, downloadAll, downloadJob, cancelDownloads } from "./downloads.js";
 import { openArtistOf } from "./navigation.js";
-import { artBox, paintStatus, pageHero, searchField, headerOnScroll, setAmbience, fillPanel, initial } from "./ui-parts.js";
+import { artBox, paintStatus, pageHero, searchField, headerOnScroll, setAmbience, fillPanel } from "./ui-parts.js";
 
 /**
  * Общий экран для каждого списка треков: заголовок, дополнительный фильтр, строка состояния и
@@ -230,7 +230,7 @@ export function createTracksScreen({ title, filterable = false, playable = true,
     header,
     setTitle(text) { heading.textContent = text; },
     setKicker(text) { const node = header.querySelector(".kicker"); if (node) node.textContent = text; },
-    setCover(url, title) { heroArt?.replaceChildren(artBox(url, title ? { fallbackText: initial(title) } : { glyph: "playlist", size: 40 })); if (hero) setAmbience(header, url); },
+    setCover(url) { heroArt?.replaceChildren(artBox(url, { fallbackText: "" })); if (hero) setAmbience(header, url); },
     setNote(text) { if (note) { note.textContent = text ?? ""; note.hidden = !text; } },
     setTracks(tracks, { preserveScroll = false } = {}) {
       all = tracks;

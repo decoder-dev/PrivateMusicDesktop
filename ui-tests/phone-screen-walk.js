@@ -72,7 +72,7 @@ export async function everyPhoneScreen(page, check) {
   await back(); await back();
   await tap(page, '.lib-sections [data-section="playlists"]');
   await tap(page, ".lib-grid .card");
-  await see(page, ".main > .view:not([hidden]) .hero-art");
+  await see(page, ".main > .view:not([hidden]) h1");
   await page.waitForTimeout(300);
   await check("playlist");
   await back();
@@ -87,7 +87,7 @@ export async function everyPhoneScreen(page, check) {
   await tap(page, '.tabs [data-tab="albums"]');
   await see(page, ".grid .card");
   await tap(page, ".grid .card");
-  await see(page, ".main > .view:not([hidden]) .hero-art");
+  await see(page, ".main > .view:not([hidden]) h1");
   await page.waitForTimeout(300);
   await check("album");
   await tap(page, ".page-artists .link-text");

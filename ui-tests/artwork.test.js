@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {openApp} from './harness.js';
 
-test('artwork: missing covers keep row height, numbering, and a uniform card grid with the collection initial', async()=>{
+test('artwork: missing covers keep row height, numbering, and collection titles without artificial covers', async()=>{
   const app=await openApp({config:{signedIn:true,platform:'android'},phone:'small'});
   try {
     const result=await app.page.evaluate(async()=>{
@@ -13,10 +13,10 @@ test('artwork: missing covers keep row height, numbering, and a uniform card gri
       const container=document.createElement('div');
       container.append(row,card);document.querySelector('.home-body').append(container);
       const result={number:row.querySelector('.art-ph').textContent,height:row.getBoundingClientRect().height,
-        artwork:getComputedStyle(card.querySelector('.card-art')).display,letter:card.querySelector('.art-ph').textContent,square:Math.round(card.querySelector('.card-art').getBoundingClientRect().width)===Math.round(card.querySelector('.card-art').getBoundingClientRect().height),title:card.querySelector('.name').textContent};
+        artwork:getComputedStyle(card.querySelector('.card-art')).display,letter:card.querySelector('.art-ph').textContent,title:card.querySelector('.name').textContent};
       container.remove();return result;
     });
-    assert.deepEqual(result,{number:'7',height:56,artwork:'block',letter:'А',square:true,title:'Альбом без обложки'});
+    assert.deepEqual(result,{number:'7',height:56,artwork:'none',letter:'',title:'Альбом без обложки'});
     assert.deepEqual(app.problems,[]);
   } finally {await app.close();}
 });
@@ -49,12 +49,27 @@ test('player artwork: a broken next cover cannot restore a stale image after dec
       const {store}=await import('/js/store.js');
       window.__mock.emit('pm-event',{type:'state',...store.player,track:{...store.player.track,title:'Следующий',artist:'Новый исполнитель',artwork_url:location.origin+'/broken-next-cover.jpg'}});
     });
-    await page.locator('.np-cover .np-placeholder').waitFor();
+    await page.locator('.np-cover .np-placeholder').waitFor({state:'attached'});
     await page.waitForTimeout(550);
     assert.equal(await page.locator('.np-cover img').count(),0);
-    assert.equal(await page.locator('.np-placeholder').textContent(),'Н');
+    assert.equal(await page.locator('.np-placeholder').textContent(),'');
+    assert.equal(await page.locator('.np-cover').isVisible(),false);
     assert.equal(await page.locator('.np-backdrop .show').count(),0);
     assert.equal(await page.locator('.np-title').textContent(),'Следующий');
     assert.deepEqual(app.problems,[]);
   }finally{await app.close();}
+});
+
+for(const colorScheme of ['dark','light'])test(`collection rows retain real covers and align text without placeholder tiles (${colorScheme})`,async()=>{
+ const app=await openApp({config:{signedIn:true},phone:'small',colorScheme});
+ try{const result=await app.page.evaluate(async()=>{
+  const {albumCard}=await import('/js/album-card.js');
+  const container=document.createElement('div');container.className='release-row';
+  const album={title:'Альбом',artists:[],year:2026};
+  const missing=albumCard(album,()=>{}),real=albumCard({...album,artwork_url:'/assets/discovery-love.webp'},()=>{});
+  container.append(missing,real);document.querySelector('.home-body').append(container);real.scrollIntoView();real.querySelector('img').loading='eager';await real.querySelector('img').decode();
+  const result={missingArt:getComputedStyle(missing.querySelector('.card-art')).display,realArt:getComputedStyle(real.querySelector('.card-art')).display,realSize:real.querySelector('.card-art').getBoundingClientRect().width,
+   sameHeight:Math.abs(real.getBoundingClientRect().height-missing.getBoundingClientRect().height)<1,minHeight:missing.getBoundingClientRect().height};container.remove();return result;
+ });assert.equal(result.missingArt,'none');assert.equal(result.realArt,'block');assert.equal(result.realSize,56);assert.equal(result.sameHeight,true);assert.ok(result.minHeight>=88);assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
 });

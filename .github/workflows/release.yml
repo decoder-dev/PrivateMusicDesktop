@@ -43,6 +43,20 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+  ui:
+    name: Release UI checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Install browser test dependencies
+        working-directory: ui-tests
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Check the complete interface
+        working-directory: ui-tests
+        run: npm test
+
   build:
     name: Build (${{ matrix.name }})
     needs: version
@@ -232,13 +246,17 @@ jobs:
 
   publish:
     name: Publish release
-    needs: [version, build, android]
+    needs: [version, ui, build, android]
     # Publish only when every platform has built successfully.
     runs-on: ubuntu-latest
     permissions:
       contents: write
       actions: read
     steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+
       - name: Download the installers built above
         env:
           GH_TOKEN: ${{ github.token }}
@@ -247,10 +265,6 @@ jobs:
           gh run download "$GITHUB_RUN_ID" --repo "$REPO" --pattern 'installers-*' --dir parts
           mkdir -p android-parts
           gh run download "$GITHUB_RUN_ID" --repo "$REPO" --name android-apk --dir android-parts
-
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          ref: ${{ github.sha }}
 
       - name: Prepare installers, signatures and update manifest
         env:
@@ -264,6 +278,10 @@ jobs:
           TAG: ${{ needs.version.outputs.tag }}
           REPO: ${{ github.repository }}
         run: |
+          notes="docs/releases/${TAG#v}.md"
+          if [ ! -f "$notes" ]; then
+            notes="$RUNNER_TEMP/release-notes.md"
+            printf '%s\n' "Private Music ${TAG#v}: Windows, macOS, Linux and Android." > "$notes"
+          fi
           gh release create "$TAG" out/* --repo "$REPO" --target "$GITHUB_SHA" --latest \
-            --title "Private Music ${TAG#v}" \
-            --notes "Unofficial VK Music player for Windows, macOS, Linux and Android. Desktop installers are not code-signed: see the README for installation. The Android APK is signed for installation and updates."
+            --title "Private Music ${TAG#v}" --notes-file "$notes"

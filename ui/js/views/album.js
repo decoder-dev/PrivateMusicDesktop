@@ -3,7 +3,7 @@ import { linkControls } from "../sharing.js";
 import { api } from "../api.js";
 import { createTracksScreen } from "../tracks-screen.js";
 import { errorText, t, tn } from "../i18n.js";
-import { artBox, backButton, pageHero, headerOnScroll, setAmbience, initial } from "../ui-parts.js";
+import { artBox, backButton, pageHero, headerOnScroll, setAmbience } from "../ui-parts.js";
 import { h } from "../dom.js";
 import { icon } from "../icons.js";
 import { subscribe } from "../store.js";
@@ -63,7 +63,7 @@ export function createAlbumView({ play, onTrackAction, toast, back }) {
   function render() {
     links.refresh();
     title.textContent = album.title;
-    cover.replaceChildren(artBox(album.artwork_url, { fallbackText: initial(album.title) }));
+    cover.replaceChildren(artBox(album.artwork_url, { fallbackText: "" }));
     setAmbience(head, album.artwork_url);
     artists.replaceChildren(...album.artists.flatMap((artist, i) => [
       i ? ", " : null,

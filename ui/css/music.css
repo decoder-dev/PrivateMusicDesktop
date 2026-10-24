@@ -164,13 +164,26 @@ html .art-box { background: transparent; background-image: none; box-shadow: non
 html .art-box .art-ph { color: var(--text-2); }
 html .art-box[data-art="ready"] .art-ph { visibility: hidden; }
 html .row .art-box .art-ph { font-size: 13px; font-variant-numeric: tabular-nums; }
-/* Grids keep one rhythm: a collection without artwork shows its initial on a quiet surface. */
-html .card .art-box:is([data-art="missing"], [data-art="error"]) { background: var(--surface); }
-html .card .art-box:is([data-art="missing"], [data-art="error"]) .art-ph {
-  font-size: 40px; font-weight: 750; letter-spacing: -.5px; color: var(--text-2);
+/* Collections are content rows: artwork is optional, never a fake tile. */
+html .card.collection-card,
+html[data-layout="phone"] .card.collection-card {
+  display: grid; grid-template-columns: 56px minmax(0, 1fr); grid-template-rows: auto auto;
+  column-gap: 12px; row-gap: 4px; align-content: center; align-self: stretch;
+  min-height: 88px; padding: 10px; background: transparent; border: 0; box-shadow: none;
 }
-html .np-cover:has(.np-placeholder) { box-shadow: none; background: transparent; }
-html .np-placeholder { background: transparent; color: var(--text-2); font-size: clamp(48px, 16vw, 96px); font-weight: 750; }
+html .card.collection-card .card-art { grid-column: 1; grid-row: 1 / 3; width: 56px; height: 56px; align-self: center; }
+html .card.collection-card .name { grid-column: 2; grid-row: 1; align-self: end; margin: 0; }
+html .card.collection-card .count { grid-column: 2; grid-row: 2; align-self: start; margin: 0; white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+html .card.collection-card:has(.art-box:is([data-art="missing"], [data-art="error"])) .card-art { display: none; }
+html .card.collection-card:has(.art-box:is([data-art="missing"], [data-art="error"])) :is(.name, .count) { grid-column: 1 / -1; }
+html .release-row .card.collection-card { width: 224px; }
+html .grid:has(> .collection-card),
+html[data-layout="phone"] .lib-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 224px), 1fr)); }
+html .hero-art:has(.art-box:is([data-art="missing"], [data-art="error"])) { display: none; }
+/* With no cover, the title and controls remain the player content. */
+html .np-cover:has(.np-placeholder) { visibility: hidden; box-shadow: none; background: transparent; }
+html .np[data-mode="off"] .np-main:has(.np-placeholder) { display: flex; flex-direction: column; justify-content: center; }
+html .np[data-mode="off"] .np-cover:has(.np-placeholder) { display: none; }
 html[data-layout="phone"] .stage:has(.art-box[data-art="missing"], .art-box[data-art="error"]) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "chip" "title" "start" "controls"; }
 html[data-layout="phone"] .stage-art:has(.art-box[data-art="missing"], .art-box[data-art="error"]) { display: none; }
 /* A short loading label avoids decorative skeletons and continuous repainting. */
@@ -199,9 +212,15 @@ html[data-layout="phone"] .stat-row .stat-count { padding-right: 12px; }
 html .sync-panel > label.set-inline { flex-wrap: nowrap; justify-content: flex-start; align-items: flex-start; gap: 10px; text-align: left; }
 html .sync-panel > label.set-inline > input { flex: none; margin-top: 2px; }
 
-/* Collection pages without artwork show the same quiet initial as their grid card. */
-html .hero-art .art-box:is([data-art="missing"], [data-art="error"]) { background: var(--surface); }
-html .hero-art .art-box:is([data-art="missing"], [data-art="error"]) .art-ph { font-size: 72px; font-weight: 750; color: var(--text-2); }
 /* Phone: sliders take their own line so the explanation keeps a readable width. */
 html[data-layout="phone"] .set-row:has(> .audio-range) { flex-wrap: wrap; }
 html[data-layout="phone"] .set-row > .audio-range { flex: 1 1 100%; min-width: 0; order: 2; }
+
+html .card.collection-card.artist-card { text-align: left; align-items: stretch; }
+html .card.collection-card.artist-card .name { text-align: left; grid-row: 1 / 3; align-self: center; }
+
+/* Leave a touch target for pinning without covering a collection title. */
+html[data-layout="phone"] .lib-grid:not(.list-layout) .lib-collection > .collection-card { padding-right: 54px; }
+html[data-layout="phone"] .lib-collection .lib-pin,
+html[data-layout="phone"] .lib-collection .lib-pin[aria-pressed="true"] { background: transparent; border: 0; box-shadow: none; }
+html[data-layout="phone"] :is(.lib-pinned, .lib-grid.list-layout) .lib-collection { border: 0; box-shadow: none; }

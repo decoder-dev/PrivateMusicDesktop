@@ -307,7 +307,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     if (url) {
       let failed = false;
       const image = h("img", { src: url, alt: "", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" });
-      image.addEventListener("error", () => { failed = true; if (token === paletteToken) coverBox.replaceChildren(h("div", { class: "np-placeholder", "aria-hidden": "true", text: (track?.artist || track?.title || "♪").slice(0, 1) })); });
+      image.addEventListener("error", () => { failed = true; if (token === paletteToken) coverBox.replaceChildren(h("div", { class: "np-placeholder", "aria-hidden": "true" })); });
       // Старая обложка остается до тех пор, пока не раскодируется новая.
       // Новая обложка проявляется поверх старой (кроссфейд), затем старая убирается.
       const swap = () => {
@@ -320,7 +320,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
       };
       if (coverBox.firstChild) image.decode().catch(() => {}).finally(swap); else swap();
     } else {
-      coverBox.replaceChildren(h("div", { class: "np-placeholder", "aria-hidden": "true", text: (track?.artist || track?.title || "♪").slice(0, 1) }));
+      coverBox.replaceChildren(h("div", { class: "np-placeholder", "aria-hidden": "true" }));
     }
     setBackdrop(url);
     const [a, b] = fallbackColors(track);

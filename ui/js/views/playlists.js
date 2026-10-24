@@ -18,7 +18,7 @@ import { allPlaylists, ensurePlaylists, isOwn, replacePlaylist, dropPlaylist, ch
 import { ensureAlbums, followedAlbums } from "../my-albums.js";
 import { albumCard } from "../album-card.js";
 import { openAlbum } from "../navigation.js";
-import { artBox, initial, paintStatus, backButton, headerOnScroll } from "../ui-parts.js";
+import { artBox, paintStatus, backButton, headerOnScroll } from "../ui-parts.js";
 import { enter } from "../motion.js";
 import { isSynced,setPlaylistSync,syncPlaylists } from "../playlist-sync.js";
 import { removeSelected } from "../batch-remove.js";
@@ -27,8 +27,8 @@ const sameTrack=(a,b)=>a.owner_id===b.owner_id && a.track_id===b.track_id;
 addStrings({ ru: { "pl.openLink": "Открыть по ссылке", "pl.link": "Ссылка на плейлист VK", "pl.linkInvalid": "Вставьте ссылку VK вида vk.com/music/playlist/-123_456 или vk.com/audio_playlist-123_456.", "pl.shared": "Плейлист по ссылке", "pl.follow": "Добавить в мои плейлисты", "pl.followed": "Плейлист добавлен" }, en: { "pl.openLink": "Open link", "pl.link": "VK playlist link", "pl.linkInvalid": "Paste a VK playlist link, such as vk.com/music/playlist/-123_456.", "pl.shared": "Shared playlist", "pl.follow": "Add to my playlists", "pl.followed": "Playlist added" } });
 
 export function playlistCard(playlist, open) {
-  const art = h("span", { class: "card-art art" }, artBox(playlist.artwork_url, { className: "fill", fallbackText: initial(playlist.title) }), h("span", { class: "play-chip" }, icon("play", 12)));
-  return h("button", { class: "card", type: "button", onclick: () => open(playlist) },
+  const art = h("span", { class: "card-art art" }, artBox(playlist.artwork_url, { className: "fill", fallbackText: "" }), h("span", { class: "play-chip" }, icon("play", 12)));
+  return h("button", { class: "card collection-card playlist-card", type: "button", onclick: () => open(playlist) },
     art,
     h("div", { class: "name", text: playlist.title }),
     h("div", { class: "count", text: tn("playlists.tracks", playlist.count) }));
@@ -59,7 +59,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
 
   const coverEditor=createCoverEditor({getPlaylist:()=>current,isSame:(a,b)=>!!a && !!b && same(a,b),toast,
     onBusy:busy=>{coverButton.disabled=busy;},
-    onSaved:async playlist=>{const account=accountId();forgetPlaylists();await ensurePlaylists();if(account===accountId() && current && same(current,playlist)){const fresh=allPlaylists().find(item=>same(item,playlist));if(fresh){current=fresh;detail.setCover(fresh.artwork_url, fresh.title);renderOwner();}}}});
+    onSaved:async playlist=>{const account=accountId();forgetPlaylists();await ensurePlaylists();if(account===accountId() && current && same(current,playlist)){const fresh=allPlaylists().find(item=>same(item,playlist));if(fresh){current=fresh;detail.setCover(fresh.artwork_url);renderOwner();}}}});
   const coverButton=h("button",{class:"icon-btn circle-btn playlist-cover",type:"button",title:t("cover.title"),"aria-label":t("cover.title"),onclick:()=>{if(current && isOwn(current))coverEditor.open(current);}},icon("image",18));
   const editButton = h("button", { class: "btn", type: "button", onclick: () => edit(), text: t("pl.edit") });
   const syncButton=h("button",{class:"btn",type:"button",text:ft("Сохранять офлайн"),onclick:async()=>{if(!current)return;try{setPlaylistSync(current,!isSynced(current));renderOwner();await syncPlaylists();}catch(error){toast(errorText(error),{error:true});}}});
@@ -109,7 +109,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
     renderGrid();
     if (current) {
       const fresh = allPlaylists().find((p) => same(p, current));
-      if (fresh) { current = fresh; detail.setTitle(fresh.title); detail.setNote(fresh.description ?? ""); }
+      if (fresh) { current = fresh; detail.setTitle(fresh.title); detail.setCover(fresh.artwork_url); detail.setNote(fresh.description ?? ""); }
     }
   });
   subscribe("session", renderOwner);
@@ -163,7 +163,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
     detail.element.hidden = false;
     enter(detail.element);
     detail.setTitle(playlist.title);
-    detail.setCover(playlist.artwork_url, playlist.title);
+    detail.setCover(playlist.artwork_url);
     detail.setNote(playlist.description ?? "");
     detail.setTracks([]);
     detail.setStatus(t("loading"));
