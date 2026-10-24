@@ -97,9 +97,9 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
 
   const shuffleButton = h("button", { class: "np-btn", type: "button", title: t("shuffle.toggle"), "aria-label": t("shuffle.toggle"), "aria-pressed": "false",
     onclick: () => playbackAction(() => api.setShuffle(!store.player.shuffle)) }, icon("shuffle", 20));
-  const previousButton = h("button", { class: "np-btn", type: "button", title: t("previous"), "aria-label": t("previous"), onclick: () => playbackAction(() => api.previous()) }, icon("prev", 24));
-  const playButton = h("button", { class: "np-play", type: "button", title: t("play"), "aria-label": t("play"), onclick: () => playbackAction(() => api.toggle()) }, icon("play", 28));
-  const nextButton = h("button", { class: "np-btn", type: "button", title: t("next"), "aria-label": t("next"), onclick: () => playbackAction(() => api.next()) }, icon("next", 24));
+  const previousButton = h("button", { class: "np-btn", type: "button", title: t("previous"), "aria-label": t("previous"), onclick: () => playbackAction(() => api.previous(), previousButton) }, icon("prev", 24));
+  const playButton = h("button", { class: "np-play", type: "button", title: t("play"), "aria-label": t("play"), onclick: () => playbackAction(() => api.toggle(), playButton) }, icon("play", 28));
+  const nextButton = h("button", { class: "np-btn", type: "button", title: t("next"), "aria-label": t("next"), onclick: () => playbackAction(() => api.next(), nextButton) }, icon("next", 24));
   const repeatButton = h("button", { class: "np-btn", type: "button", title: t("repeat.off"), "aria-label": t("repeat.off"),
     onclick: () => playbackAction(() => api.setRepeat({ off: "all", all: "one", one: "off" }[store.player.repeat] ?? "off")) }, icon("repeat", 20));
 
@@ -305,20 +305,10 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     coverUrl = url;
     const token = ++paletteToken;
     if (url) {
-      let failed = false;
       const image = h("img", { src: url, alt: "", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" });
-      image.addEventListener("error", () => { failed = true; if (token === paletteToken) coverBox.replaceChildren(h("div", { class: "np-placeholder", "aria-hidden": "true" })); });
-      // Старая обложка остается до тех пор, пока не раскодируется новая.
-      // Новая обложка проявляется поверх старой (кроссфейд), затем старая убирается.
-      const swap = () => {
-        if (token !== paletteToken || failed) return;
-        const old = [...coverBox.children];
-        if (!old.length || motionOk() === false) { coverBox.replaceChildren(image); return; }
-        image.classList.add("np-fade-in");
-        coverBox.append(image);
-        setTimeout(() => { if (token === paletteToken) { for (const node of old) node.remove(); image.classList.remove("np-fade-in"); } }, 520);
-      };
-      if (coverBox.firstChild) image.decode().catch(() => {}).finally(swap); else swap();
+      image.addEventListener("error", () => { if (token === paletteToken) coverBox.replaceChildren(h("div", { class: "np-placeholder", "aria-hidden": "true" })); });
+      // Never show the previous track's cover under the new title while loading.
+      coverBox.replaceChildren(image);
     } else {
       coverBox.replaceChildren(h("div", { class: "np-placeholder", "aria-hidden": "true" }));
     }

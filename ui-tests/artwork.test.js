@@ -2,6 +2,57 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {openApp} from './harness.js';
 
+test('player artwork changes immediately even while the next image request is stalled',async()=>{
+ const app=await openApp({config:{signedIn:true,platform:'android'},phone:'small'});
+ let release;
+ try {
+  const {page}=app;
+  await page.locator('.stage-cta').click();await page.locator('.player .now').click();
+  await page.locator('.np-cover img').waitFor();
+  await page.route('**/stalled-cover.jpg',async route=>{
+   await new Promise(resolve=>{release=resolve;});
+   await route.abort().catch(()=>{});
+  });
+  const changed=await page.evaluate(async()=>{
+   const {store}=await import('/js/store.js');
+   const url=location.origin+'/stalled-cover.jpg';
+   window.__mock.emit('pm-event',{...store.player,type:'state',track:{...store.player.track,track_id:999,title:'Следующий трек',artwork_url:url}});
+   return {mini:document.querySelector('.player .cover-button img')?.src,full:document.querySelector('.np-cover img')?.src,url};
+  });
+  assert.equal(changed.mini,changed.url);assert.equal(changed.full,changed.url);
+  // Move on before the pending image finishes: it must never come back later.
+  await page.evaluate(async()=>{
+   const {store}=await import('/js/store.js');
+   window.__mock.emit('pm-event',{...store.player,type:'state',track:{...store.player.track,track_id:1000,artwork_url:null}});
+  });
+  release?.();
+  await page.waitForTimeout(80);
+  assert.equal(await page.locator('.np-cover img,.player .cover-button img').count(),0);
+ } finally {release?.();await app.close();}
+});
+
+test('concurrent artwork palette requests share one download and failed requests can retry',async()=>{
+ const app=await openApp({config:{signedIn:true}});
+ try {
+  const result=await app.page.evaluate(async()=>{
+   const {api}=await import('/js/api.js');const {coverPalette}=await import('/js/palette.js');
+   let calls=0,resolve;
+   api.artworkPalette=()=>{calls++;return new Promise(done=>{resolve=done;});};
+   const requests=Array.from({length:3},()=>coverPalette('https://cdn.example/coalesced.jpg'));
+   resolve({primary:'#112233',secondary:'#445566'});
+   const values=await Promise.all(requests);await coverPalette('https://cdn.example/coalesced.jpg');
+   const successCalls=calls;
+   api.artworkPalette=()=>{calls++;return Promise.reject(new Error('unavailable'));};
+   await coverPalette('https://cdn.example/retry.jpg').catch(()=>{});
+   api.artworkPalette=()=>{calls++;return Promise.resolve(values[0]);};
+   await coverPalette('https://cdn.example/retry.jpg');
+   return {successCalls,calls,values};
+  });
+  assert.equal(result.successCalls,1);assert.equal(result.calls,3);
+  assert.ok(result.values.every(v=>v.primary==='#112233'));
+ } finally {await app.close();}
+});
+
 test('artwork: missing covers keep row height, numbering, and collection titles without artificial covers', async()=>{
   const app=await openApp({config:{signedIn:true,platform:'android'},phone:'small'});
   try {

@@ -22,14 +22,11 @@ export function artBox(url, { glyph = "note", size = 18, className = "", eager =
 }
 
 /**
- * Помещает новую обложку в `slot` только после ее декодирования, поэтому старая обложка остается до
- * тех пор (без мигания заполнителя между треками). `current` сообщает, является ли запрос последним.
+ * Replace the old track's artwork immediately. Waiting for decode used to leave
+ * the previous cover beside the new title for seconds on a slow connection.
  */
 export function swapArt(slot, url, options, current) {
-  const next = artBox(url, { ...options, eager: true });
-  const image = next.querySelector("img");
-  if (!image) { slot.replaceChildren(next); return; }
-  image.decode().catch(() => {}).finally(() => { if (current()) slot.replaceChildren(next); });
+  if (current()) slot.replaceChildren(artBox(url, { fallbackText: "", ...options, eager: true }));
 }
 
 /** Поле поиска с ведущим глифом и кнопкой очистки. Возвращает {элемент, ввод}. */

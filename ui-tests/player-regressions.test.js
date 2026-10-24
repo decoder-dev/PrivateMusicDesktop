@@ -3,6 +3,38 @@ import test from "node:test";
 import { openApp } from "./harness.js";
 
 const config = { signedIn: true, platform: "android", catalogMixes: true };
+
+test('transport buttons acknowledge a slow command immediately and clear feedback on failure',async()=>{
+ const app=await openApp({config,phone:'small'});
+ try {
+  const {page}=app;await page.locator('.stage-cta').click();
+  await page.evaluate(()=>{
+   const invoke=window.__TAURI__.core.invoke;
+   window.__TAURI__.core.invoke=(command,args)=>command==='toggle'?new Promise((resolve,reject)=>{window.__finishToggle=()=>reject({kind:'network',message:'Slow command failed'});}):invoke(command,args);
+  });
+  await page.locator('.player .play').tap();
+  assert.equal(await page.locator('.player .play').getAttribute('aria-busy'),'true');
+  await page.evaluate(()=>window.__finishToggle());
+  await page.waitForFunction(()=>!document.querySelector('.player .play').classList.contains('is-requesting'));
+  assert.equal(await page.locator('.player .play').getAttribute('aria-busy'),null);
+  assert.deepEqual(app.problems,[]);
+ } finally {await app.close();}
+});
+
+test('a Play icon redrawn while the finger is down does not lose the button tap',async()=>{
+ const app=await openApp({config,phone:'small'});
+ try {
+  const {page}=app;await page.locator('.stage-cta').click();
+  await page.locator('.player .play').waitFor({state:'visible'});
+  const box=await page.locator('.player .play').boundingBox();
+  const cdp=await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:box.x+box.width/2,y:box.y+box.height/2,id:1}]});
+  await page.evaluate(()=>{window.__mock.state.player.status='paused';window.__mock.emitState();});
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();
+  await page.waitForTimeout(80);
+  assert.equal(await page.evaluate(()=>window.__mock.count('toggle')),1);
+ } finally {await app.close();}
+});
 async function openPlayer(app) {
   const { page } = app;
   await page.locator(".stage-cta").click();

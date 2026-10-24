@@ -246,19 +246,20 @@ fn render_output<T: SizedSample + FromSample<f32>>(output: &mut [T], consumer: &
         return;
     }
     let volume = f32::from_bits(shared.volume_bits.load(Ordering::Relaxed));
-    let mut frames_played = 0u64;
-    for frame in output.chunks_mut(channels) {
-        if consumer.occupied_len() < channels {
-            frame.fill(T::EQUILIBRIUM);
-            continue;
+    // Consume complete frames in blocks. Per-sample pops publish the ring's read
+    // index tens of thousands of times a second, contending with the producer on
+    // phones. Fixed stack storage keeps the device callback allocation-free.
+    let available = consumer.occupied_len().min(output.len()) / channels * channels;
+    let mut samples = [0.0f32; 256];
+    for block in output[..available].chunks_mut(samples.len()) {
+        let count = consumer.pop_slice(&mut samples[..block.len()]);
+        debug_assert_eq!(count, block.len());
+        for (slot, sample) in block.iter_mut().zip(&samples[..count]) {
+            *slot = T::from_sample((*sample * volume).clamp(-1.0, 1.0));
         }
-        for slot in frame.iter_mut() {
-            let sample = consumer.try_pop().unwrap_or(0.0);
-            *slot = T::from_sample((sample * volume).clamp(-1.0, 1.0));
-        }
-        frames_played += 1;
     }
-    shared.played_frames.fetch_add(frames_played, Ordering::Relaxed);
+    output[available..].fill(T::EQUILIBRIUM);
+    shared.played_frames.fetch_add((available / channels) as u64, Ordering::Relaxed);
 }
 
 impl Sink for CpalSink {
@@ -301,6 +302,31 @@ impl Sink for CpalSink {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn block_reads_keep_channel_alignment_and_do_not_count_underrun_silence() {
+        let shared = Shared {
+            callbacks: AtomicU64::new(0), played_frames: AtomicU64::new(0),
+            paused: AtomicBool::new(false), volume_bits: AtomicU32::new(0.5f32.to_bits()),
+            flush_requested: AtomicU64::new(0), flush_acknowledged: AtomicU64::new(0),
+            broken: AtomicBool::new(false),
+        };
+        let (mut producer, mut consumer) = HeapRb::<f32>::new(1024).split();
+        // Three channels deliberately cross the internal block boundary.
+        let samples: Vec<f32> = (0..304).map(|i| (i % 3) as f32 - 1.0).collect();
+        producer.push_slice(&samples);
+        let mut output = [9.0f32; 309];
+        render_output(&mut output, &mut consumer, &shared, 3);
+        assert_eq!(&output[..303], samples[..303].iter().map(|v| v * 0.5).collect::<Vec<_>>());
+        assert_eq!(&output[303..], &[0.0; 6]);
+        assert_eq!(consumer.occupied_len(), 1, "retain the incomplete frame");
+        assert_eq!(shared.played_frames.load(Ordering::Relaxed), 101);
+        producer.push_slice(&[0.0, 1.0]);
+        let mut tail = [9.0f32; 6];
+        render_output(&mut tail, &mut consumer, &shared, 3);
+        assert_eq!(tail, [-0.5, 0.0, 0.5, 0.0, 0.0, 0.0]);
+        assert_eq!(shared.played_frames.load(Ordering::Relaxed), 102);
+    }
 
     #[test]
     fn pause_outputs_silence_and_resume_preserves_queued_audio() {

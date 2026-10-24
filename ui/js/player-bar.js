@@ -25,9 +25,9 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
 
   const shuffleButton = h("button", { class: "icon-btn shuffle", type: "button", title: t("shuffle.toggle"), "aria-label": t("shuffle.toggle"), "aria-pressed": "false",
     onclick: () => { playbackAction(() => api.setShuffle(!store.player.shuffle)); } }, icon("shuffle", 18));
-  const previousButton = h("button", { class: "icon-btn", type: "button", title: t("previous"), "data-kbd": "Ctrl+Left", "aria-label": t("previous"), onclick: () => playbackAction(() => api.previous()) }, icon("prev", 20));
-  const playButton = h("button", { class: "icon-btn play", type: "button", title: t("play"), "data-kbd": "Space", "aria-label": t("play"), onclick: () => playbackAction(() => api.toggle()) }, icon("play", 20));
-  const nextButton = h("button", { class: "icon-btn", type: "button", title: t("next"), "data-kbd": "Ctrl+Right", "aria-label": t("next"), onclick: () => playbackAction(() => api.next()) }, icon("next", 20));
+  const previousButton = h("button", { class: "icon-btn", type: "button", title: t("previous"), "data-kbd": "Ctrl+Left", "aria-label": t("previous"), onclick: () => playbackAction(() => api.previous(), previousButton) }, icon("prev", 20));
+  const playButton = h("button", { class: "icon-btn play", type: "button", title: t("play"), "data-kbd": "Space", "aria-label": t("play"), onclick: () => playbackAction(() => api.toggle(), playButton) }, icon("play", 20));
+  const nextButton = h("button", { class: "icon-btn", type: "button", title: t("next"), "data-kbd": "Ctrl+Right", "aria-label": t("next"), onclick: () => playbackAction(() => api.next(), nextButton) }, icon("next", 20));
   const repeatButton = h("button", { class: "icon-btn repeat", type: "button", title: t("repeat.off"), "aria-label": t("repeat.off"),
     onclick: () => { playbackAction(() => api.setRepeat({ off: "all", all: "one", one: "off" }[store.player.repeat] ?? "off")); } }, icon("repeat", 18));
 

@@ -572,6 +572,7 @@ struct Inner {
 
 pub struct History {
     inner: Arc<Mutex<Inner>>,
+    writes: Arc<Mutex<()>>,
     wake: Option<Sender<()>>,
 }
 
@@ -630,14 +631,19 @@ impl Inner {
         self.dirty = true;
     }
 
-    fn save(&mut self) {
+    fn save_snapshot(&mut self) -> Option<(PathBuf, FileData)> {
         self.commit_pending();
         if !self.dirty {
-            return;
+            return None;
         }
         self.dirty = false;
-        let Some(path) = self.path() else { return };
+        let path = self.path()?;
         let data = FileData { version: VERSION, entries: self.entries.clone(), stats: self.stats.clone() };
+        Some((path, data))
+    }
+
+    fn save(&mut self) {
+        let Some((path, data)) = self.save_snapshot() else { return };
         if let Err(error) = write_atomic(&path, &data) {
             log::warn!("could not save the listening history: {error}");
         }
@@ -694,6 +700,19 @@ fn write_atomic(path: &Path, data: &FileData) -> std::io::Result<()> {
     fs::rename(&temporary, path)
 }
 
+fn save_history(inner: &Mutex<Inner>, writes: &Mutex<()>, write: impl FnOnce(&Path, &FileData) -> std::io::Result<()>) {
+    // Serialize writers before taking the snapshot, so an older save cannot
+    // overwrite a later flush/account change. Playback never takes this gate.
+    let _writer = writes.lock().unwrap_or_else(|p| p.into_inner());
+    let snapshot = inner.lock().unwrap_or_else(|p| p.into_inner()).save_snapshot();
+    // Encoding and disk I/O must not hold the lock acquired by every audio tick.
+    if let Some((path, data)) = snapshot {
+        if let Err(error) = write(&path, &data) {
+            log::warn!("could not save the listening history: {error}");
+        }
+    }
+}
+
 impl History {
     /// `dir` — место хранения файла; `None` сохраняет все в памяти.
     pub fn open(dir: Option<PathBuf>) -> Arc<Self> {
@@ -717,13 +736,15 @@ impl History {
             dirty: false,
             clock,
         }));
+        let writes = Arc::new(Mutex::new(()));
         let wake = delay.and_then(|delay| {
             let (sender, receiver) = crossbeam_channel::unbounded::<()>();
             let shared = inner.clone();
+            let writer = writes.clone();
             std::thread::Builder::new()
                 .name("history-saver".into())
                 .spawn(move || {
-                    let save = || shared.lock().unwrap_or_else(|p| p.into_inner()).save();
+                    let save = || save_history(&shared, &writer, write_atomic);
                     while receiver.recv().is_ok() {
                         std::thread::sleep(delay);
                         while receiver.try_recv().is_ok() {}
@@ -734,7 +755,7 @@ impl History {
                 .ok()
                 .map(|_| sender)
         });
-        Arc::new(Self { inner, wake })
+        Arc::new(Self { inner, writes, wake })
     }
 
     /// Запускает `f` под блокировкой и будит заставку, когда она что-то испачкала.
@@ -756,6 +777,7 @@ impl History {
     /// Переключается на другую учетную запись VK (или ни на одну: тогда ничего не записывается).
     /// Сначала сохраняются данные исходящего аккаунта.
     pub fn set_account(&self, account: Option<i64>) {
+        let _writer = self.writes.lock().unwrap_or_else(|p| p.into_inner());
         self.with(|inner| {
             if inner.account == account {
                 return;
@@ -895,7 +917,7 @@ impl History {
 
     /// Записывает на диск то, что сейчас ожидает выполнения (используется при выходе и в тестах).
     pub fn flush(&self) {
-        self.with(|inner| inner.save());
+        save_history(&self.inner, &self.writes, write_atomic);
     }
 }
 
@@ -940,6 +962,24 @@ mod tests {
         let history = History::with_clock(dir, move || clock.load(Ordering::Relaxed));
         history.set_account(Some(7));
         (history, now)
+    }
+
+    #[test]
+    fn slow_history_writes_do_not_block_audio_ticks_or_lose_new_progress() {
+        let dir = tempfile::tempdir().unwrap();
+        let (history, _) = rig(Some(dir.path().to_path_buf()));
+        let song = track(1, "Artist", 200);
+        history.tick(&song, 0.0, 200.0, true);
+        listen(&history, &song, 0.0, 12.0);
+        save_history(&history.inner, &history.writes, |path, data| {
+            assert!(history.inner.try_lock().is_ok(), "disk writes must release the playback lock");
+            // Playback continues while this older snapshot is being written.
+            listen(&history, &song, 12.0, 6.0);
+            write_atomic(path, data)
+        });
+        history.flush();
+        let (loaded, _) = rig(Some(dir.path().to_path_buf()));
+        assert_eq!(loaded.stats("all", None).unwrap().summary.total_seconds, 18.0);
     }
 
     /// Воспроизводит `seconds` из `track`, начиная с `from`, так как 4 сообщает в секунду.

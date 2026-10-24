@@ -104,19 +104,28 @@ impl Queue {
     /// Трек после текущего. `auto` имеет значение true, когда предыдущая дорожка закончилась сама по
     /// себе (повторение одной дорожки затем повторяет ее); Следующее нажатие пропускает ложь. `None`
     /// означает, что очередь закончилась.
-    pub fn advance(&mut self, auto: bool) -> Option<&Track> {
+    fn next_cursor(&self, auto: bool) -> Option<usize> {
         let cursor = self.cursor?;
         if auto && self.repeat == Repeat::One {
-            return self.current();
+            return Some(cursor);
         }
         let next = cursor + 1;
         if next < self.order.len() {
-            self.cursor = Some(next);
+            Some(next)
         } else if self.repeat == Repeat::All {
-            self.cursor = Some(0);
+            Some(0)
         } else {
-            return None;
+            None
         }
+    }
+
+    /// Inspect the next track without copying the queue or moving its cursor.
+    pub fn peek_next(&self, auto: bool) -> Option<&Track> {
+        self.next_cursor(auto).and_then(|c| self.order.get(c)).and_then(|i| self.tracks.get(*i))
+    }
+
+    pub fn advance(&mut self, auto: bool) -> Option<&Track> {
+        self.cursor = Some(self.next_cursor(auto)?);
         self.current()
     }
 
@@ -336,6 +345,26 @@ mod tests {
 
     fn ids(q: &Queue) -> Vec<i64> {
         q.order.iter().map(|i| q.tracks[*i].track_id).collect()
+    }
+
+    #[test]
+    fn peeking_preserves_the_cursor_and_matches_advance_in_every_mode() {
+        for shuffle in [false, true] {
+            for repeat in [Repeat::Off, Repeat::All, Repeat::One] {
+                for auto in [false, true] {
+                    let (mut q, mut rng) = queue(5);
+                    q.set_shuffle(shuffle, &mut rng);
+                    q.set_repeat(repeat);
+                    for _ in 0..7 {
+                        let before = q.current_index();
+                        let next = q.peek_next(auto).map(|t| t.track_id);
+                        assert_eq!(q.current_index(), before);
+                        assert_eq!(q.advance(auto).map(|t| t.track_id), next);
+                    }
+                }
+            }
+        }
+        assert!(Queue::default().peek_next(true).is_none());
     }
 
     #[test]

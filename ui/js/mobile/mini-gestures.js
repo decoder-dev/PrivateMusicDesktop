@@ -33,10 +33,14 @@ export function gestureAction(translation, predicted) {
 
 export function attachMiniGestures(element, { onNext, onPrevious, onOpen }) {
   let drag = null;
-  let swallowUntil = 0;
+  let suppressClick = false;
 
   element.addEventListener("pointerdown", (event) => {
-    if (!isPhone() || (event.pointerType === "mouse" && event.button !== 0) || event.target.closest?.("input")) return;
+    if (!isPhone() || (event.pointerType === "mouse" && event.button !== 0)) return;
+    suppressClick = false;
+    // A finger can move slightly while pressing Pause/Next. Capturing that
+    // pointer on the card would retarget the button's click to its parent.
+    if (event.target.closest?.("button, input, a, [role=button]")) return;
     drag = { id: event.pointerId, x: event.clientX, y: event.clientY, samples: [{ x: event.clientX, y: event.clientY, t: performance.now() }], moved: false };
   });
   element.addEventListener("pointermove", (event) => {
@@ -71,7 +75,7 @@ export function attachMiniGestures(element, { onNext, onPrevious, onOpen }) {
       x: translation.x + ((last.x - first.x) / span) * PREDICT_MS,
       y: translation.y + ((last.y - first.y) / span) * PREDICT_MS,
     };
-    swallowUntil = Date.now() + 400;
+    suppressClick = true;
     const action = gestureAction(translation, predicted);
     if (!action) return;
     haptic(8);
@@ -83,6 +87,9 @@ export function attachMiniGestures(element, { onNext, onPrevious, onOpen }) {
   element.addEventListener("pointercancel", (event) => finish(event, true));
   // A swipe is not a tap.
   element.addEventListener("click", (event) => {
-    if (Date.now() < swallowUntil) { event.stopImmediatePropagation(); event.preventDefault(); }
+    if (suppressClick && event.detail > 0) {
+      suppressClick = false;
+      event.stopImmediatePropagation(); event.preventDefault();
+    }
   }, true);
 }

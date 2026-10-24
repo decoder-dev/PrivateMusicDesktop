@@ -329,10 +329,12 @@ impl Shared {
     }
 
     fn prepare_next(self:&Arc<Self>,inner:&mut Inner){
-        let mut next=inner.queue.clone();
-        let track=if inner.prefetch && !inner.sleep_end && !inner.user_paused && inner.status==Status::Playing {next.advance(true).cloned()}else{None};
-        let tag=track.as_ref().and_then(|track|inner.queue.current().map(|current|(current.id(),track.id(),inner.network_epoch)));
+        // Called on every position report on the audio thread: inspecting the next
+        // entry must stay constant-time even for a library-sized queue.
+        let track=if inner.prefetch && !inner.sleep_end && !inner.user_paused && inner.status==Status::Playing {inner.queue.peek_next(true)}else{None};
+        let tag=track.and_then(|track|inner.queue.current().map(|current|(current.id(),track.id(),inner.network_epoch)));
         if tag==inner.prepared_tag{return;}
+        let track=track.cloned();
         inner.prepared_tag=tag.clone();
         inner.preparation_generation=inner.preparation_generation.wrapping_add(1);
         let generation=inner.preparation_generation;
@@ -828,9 +830,8 @@ impl Shared {
         match event {
             PlayerEvent::Transition{from,to}=>self.with(|inner,events|{
                 if inner.queue.current().map(Track::id).as_deref()!=Some(from.as_str()){return;}
-                let mut next=inner.queue.clone();
-                if next.advance(true).map(Track::id).as_deref()!=Some(to.as_str()){self.remote().stop();self.start_current(inner,events);return;}
-                inner.queue=next;inner.position=0.0;inner.pending_start=0.0;inner.duration=inner.queue.current().map(|track|f64::from(track.duration)).unwrap_or_default();inner.status=Status::Playing;
+                if inner.queue.peek_next(true).map(Track::id).as_deref()!=Some(to.as_str()){self.remote().stop();self.start_current(inner,events);return;}
+                inner.queue.advance(true);inner.position=0.0;inner.pending_start=0.0;inner.duration=inner.queue.current().map(|track|f64::from(track.duration)).unwrap_or_default();inner.status=Status::Playing;
                 inner.prepared_tag=None;
                 inner.source_offline=inner.queue.current().is_some_and(|track|self.offline.get().and_then(|offline|offline.address(&track.id())).is_some());
                 inner.failures=0;

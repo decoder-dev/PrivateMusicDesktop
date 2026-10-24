@@ -278,6 +278,31 @@ test("mini player: swipe left is next, swipe right is previous, swipe up opens t
   } finally { await app.close(); }
 });
 
+test("mini player: a slightly moving finger still presses Pause and a new pointer resets swipe suppression", async () => {
+  const app = await phoneApp();
+  try {
+    const { page } = app;
+    await playFromHome(page);
+    const pause = await center(page, ".player .play");
+    const before = await page.evaluate(() => window.__mock.count("toggle"));
+    await drag(page, pause, { x: pause.x + 8, y: pause.y }, { steps: 2 });
+    await page.waitForTimeout(80);
+    assert.equal(await page.evaluate(() => window.__mock.count("toggle")), before + 1);
+    assert.equal(await page.evaluate(() => window.__mock.state.player.status), "paused");
+    const titles = await center(page, ".player .titles");
+    await drag(page, titles, { x: titles.x - 80, y: titles.y }, { steps: 3 });
+    // A new intentional tap must not inherit suppression from the swipe.
+    await page.evaluate(() => {
+      const button = document.querySelector('.player .play');
+      button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch', pointerId: 99 }));
+      button.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch', pointerId: 99 }));
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    });
+    await page.waitForTimeout(80);
+    assert.equal(await page.evaluate(() => window.__mock.count("toggle")), before + 2);
+  } finally { await app.close(); }
+});
+
 test("full-screen player: a sheet with a grabber; the chevron closes it, a drag down follows the finger and dismisses it", async () => {
   const app = await phoneApp({ reducedMotion: "reduce" });
   try {
