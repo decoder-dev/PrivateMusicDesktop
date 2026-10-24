@@ -197,23 +197,11 @@ tests. To check on a phone:
 
 ## Выпуск Android-версии
 
-The release workflow (`release.yml`, job `Android`) builds the **unsigned** arm64 release APK and attaches it
-to the GitHub release as `PrivateMusic_<version>_android-arm64-unsigned.apk` (it is also listed in
-`SHA256SUMS.txt`). The project owner signs it **outside CI** with a private key that never enters the
-repository, and re-uploads the signed file as `PrivateMusic_<version>_android-arm64.apk`.
-
-Steps (build-tools 35 or newer; the APK is already zipaligned, so sign it as is):
-
-    gh release download v<version> --pattern '*android-arm64-unsigned.apk'
-    $ANDROID_HOME/build-tools/35.0.0/apksigner sign --ks <release.jks> --ks-key-alias <alias> \
-        --out PrivateMusic_<version>_android-arm64.apk PrivateMusic_<version>_android-arm64-unsigned.apk
-    $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs PrivateMusic_<version>_android-arm64.apk
-    gh release upload v<version> PrivateMusic_<version>_android-arm64.apk --clobber
-
-Check that the certificate fingerprint printed by `verify` is the one of your release key. Then delete the
-unsigned asset from the release (`gh release delete-asset v<version> PrivateMusic_<version>_android-arm64-unsigned.apk`)
-and refresh the checksums (`SHA256SUMS.txt` lists the unsigned file): download the assets, run `sha256sum`
-over them and `gh release upload v<version> SHA256SUMS.txt --clobber`.
+The release workflow (`release.yml`, job `Android APK`) builds and verifies a **signed** arm64 release APK
+and attaches it as `PrivateMusic_<version>_android-arm64.apk` (it is also listed in
+`SHA256SUMS.txt`). The signing key is supplied through GitHub Actions secrets, written only to a temporary
+runner file and removed after the build. It never enters the repository. Download this APK directly
+from the same release as the desktop installers; no manual signing or re-upload is needed.
 
 Installing:
 
@@ -226,19 +214,20 @@ is higher: it grows with the version, `0.6.1` = 601). A different key means unin
 removes the signed-in session. Keep the keystore and its passwords backed up: without the key there are no
 updates for the installed copies.
 
-Optional signing in CI: if **all four** repository secrets exist, the `Android` job signs the APK itself
+Release signing in CI requires **all four** repository secrets. The `Android APK` job signs the APK itself
 (Gradle reads them; the key is a temporary file removed at the end) and the asset is named
 `PrivateMusic_<version>_android-arm64.apk` without "unsigned":
 
     ANDROID_KEYSTORE_BASE64    the .jks file, base64 (`base64 -w0 release.jks`)
     ANDROID_KEYSTORE_PASSWORD  ANDROID_KEY_ALIAS  ANDROID_KEY_PASSWORD
 
-With any of them missing the job stays unsigned and prints a notice. If the Android job fails, the desktop
-installers are still published (with a warning) and the APK can be added later with `gh release upload`.
+With any of them missing the release job fails instead of publishing an uninstallable APK. Standalone
+Android CI still builds unsigned test artifacts. The shared release waits for all
+platform builds, including Android: a failed Android build prevents publication of a partial release.
 
 ## CI
 
-Workflow `.github/workflows/android.yml` ("Android"). It runs on pushes to `android` and `android-**`, on pull
+Workflow `.github/workflows/android.yml` ("Android"). The shared development branch is `main`. It runs on pushes to `main`, on pull
 requests that touch the Android-relevant paths (`src-tauri`, `plugins`, `engine`, `native`, `ui`, Cargo files,
 the Android scripts) and by hand (`workflow_dispatch`). Only the two already pinned actions (`checkout`,
 `upload-artifact`) are used; everything else is plain `run:` steps, helpers are in `scripts/android-*.sh`.

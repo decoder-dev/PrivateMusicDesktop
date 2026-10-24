@@ -155,10 +155,8 @@ jobs:
           . scripts/android-ci-env.sh
           scripts/android-ci-sdk.sh "ndk;${NDK_VERSION}" "platforms;android-35" "platforms;android-36" "build-tools;35.0.0" "build-tools;36.0.0"
 
-      # Подпись в CI необязательна. Владелец подписывает APK вне CI (docs/android.md, «Выпуск Android-версии»).
-      # Если заданы все четыре секрета, Gradle подписывает сам (переменные ANDROID_KEYSTORE_PATH и др.);
-      # иначе APK остаётся неподписанным. Ключ сохраняется только во временный файл и удаляется в конце.
-      - name: Signing key (only if all four secrets exist)
+      # Publish installable APKs only. Keep the signing key in a temporary file.
+      - name: Load the release signing key
         id: key
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -168,14 +166,15 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            umask 077
             path="$RUNNER_TEMP/release.jks"
             printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$path"
             chmod 600 "$path"
             echo "path=$path" >> "$GITHUB_OUTPUT"
             echo "The four signing secrets are set: the APK will be signed by Gradle."
           else
-            echo "path=" >> "$GITHUB_OUTPUT"
-            echo "::notice::Android signing secrets are not (all) set: the APK stays unsigned and must be signed outside CI."
+            echo "::error::All four ANDROID signing secrets are required to publish an installable APK."
+            exit 1
           fi
 
       - name: Build release APK (arm64)
@@ -201,7 +200,8 @@ jobs:
           name="$("$aapt2" dump badging dist/*.apk | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -1)"
           [ "$name" = "$VERSION" ] || { echo "APK versionName $name differs from the tag version $VERSION" >&2; exit 1; }
           if ls dist/*-unsigned.apk >/dev/null 2>&1; then
-            echo "::notice::The APK is unsigned (expected without signing secrets)."
+            echo "::error::Release APK must be signed."
+            exit 1
           else
             "$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)" verify --verbose dist/*.apk
           fi
@@ -216,9 +216,7 @@ jobs:
   publish:
     name: Publish release
     needs: [version, build, android]
-    # The desktop release does not depend on the Android build: if that job fails, the installers are still
-    # published (with a warning) and the APK can be added later with `gh release upload`.
-    if: ${{ !cancelled() && needs.version.result == 'success' && needs.build.result == 'success' }}
+    # Publish only when every platform has built successfully.
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -231,11 +229,7 @@ jobs:
         run: |
           gh run download "$GITHUB_RUN_ID" --repo "$REPO" --pattern 'installers-*' --dir parts
           mkdir -p android-parts
-          if [ "${{ needs.android.result }}" = success ]; then
-            gh run download "$GITHUB_RUN_ID" --repo "$REPO" --name android-apk --dir android-parts
-          else
-            echo "::warning::The Android job finished as '${{ needs.android.result }}': the release is published without the APK."
-          fi
+          gh run download "$GITHUB_RUN_ID" --repo "$REPO" --name android-apk --dir android-parts
 
       - name: Give the files plain names and checksum them
         env:
@@ -252,21 +246,17 @@ jobs:
             esac
             cp "$file" "out/$name"
           done
-          # The Android APK is named by the build script (…_android-arm64-unsigned.apk, or …_android-arm64.apk when
-          # CI signed it); the owner replaces the unsigned one with a signed upload (docs/android.md).
+          # The Android job verifies the release signature before uploading this APK.
           android=$(find android-parts -type f -name 'PrivateMusic_*_android-arm64*.apk')
-          expected=4
-          if [ -n "$android" ]; then
-            [ "$(printf '%s\n' "$android" | grep -c .)" -eq 1 ] || { echo "expected exactly one Android APK, found: $android" >&2; exit 1; }
-            cp "$android" "out/$(basename "$android")"
-            expected=5
-          fi
+          [ -n "$android" ] && [ "$(printf '%s\n' "$android" | grep -c .)" -eq 1 ] || { echo "expected exactly one Android APK, found: $android" >&2; exit 1; }
+          cp "$android" "out/$(basename "$android")"
+          expected=5
           cd out
           ls -l
-          [ "$(ls | wc -l)" -eq "$expected" ] || { echo "expected $expected files (four installers, plus the Android APK when it was built)" >&2; exit 1; }
+          [ "$(ls | wc -l)" -eq "$expected" ] || { echo "expected $expected files (four desktop installers and one Android APK)" >&2; exit 1; }
           sha256sum * > SHA256SUMS.txt
 
-      - name: Create the draft release
+      - name: Publish the combined release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.version.outputs.tag }}
@@ -274,4 +264,4 @@ jobs:
         run: |
           gh release create "$TAG" out/* --repo "$REPO" --target "$GITHUB_SHA" --latest \
             --title "Private Music ${TAG#v}" \
-            --notes "Unofficial VK Music player for Windows, macOS and Linux. Installers are not code-signed: use the install scripts in the README, or see the notes there for the first-run warning."
+            --notes "Unofficial VK Music player for Windows, macOS, Linux and Android. Desktop installers are not code-signed: see the README for installation. The Android APK is signed for installation and updates."

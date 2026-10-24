@@ -5,7 +5,7 @@ name: Android
 # DevTools WebView). Описание, артефакты и как читать журналы: docs/android.md, раздел «CI».
 on:
   push:
-    branches: ["android", "android-**"]
+    branches: ["main"]
   pull_request:
     paths:
       - "src-tauri/**"
