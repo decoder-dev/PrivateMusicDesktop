@@ -129,8 +129,8 @@ input[type="range"]::-webkit-slider-runnable-track { transition: block-size 140m
 .dl-summary { display: flex; align-items: center; gap: 14px; margin: 4px var(--gutter) 12px; padding: 14px 16px; border-radius: var(--r-card); background: var(--surface); border: var(--hair) solid var(--line-card); box-shadow: var(--sh-card); }
 .dl-tile { flex: none; width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: linear-gradient(145deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000)); color: var(--on-accent); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25), 0 4px 12px color-mix(in srgb, var(--accent) 28%, transparent); }
 .dl-text { min-width: 0; }
-.dl-size { font: 700 22px/26px var(--font); letter-spacing: -0.3px; }
-.dl-count { font-size: 13px; line-height: 18px; color: var(--text-2); }
+.dl-size { font: 700 calc(22px * var(--text-scale, 1))/calc(26px * var(--text-scale, 1)) var(--font); letter-spacing: -0.3px; }
+.dl-count { font-size: calc(13px * var(--text-scale, 1)); line-height: calc(18px * var(--text-scale, 1)); color: var(--text-2); }
 .view > .dl-summary + .status, .view > .dl-summary + .status + .empty-state { margin-top: 0; }
 
 /* ---------- статистика ---------- */
@@ -156,16 +156,16 @@ input[type="range"]::-webkit-slider-runnable-track { transition: block-size 140m
 /* ---------- подсказка ---------- */
 .tooltip {
   position: fixed; z-index: 100; display: inline-flex; align-items: center; gap: 6px; max-width: 280px; padding: 6px 10px; border-radius: 10px; pointer-events: none;
-  font: 500 12px/16px var(--font); letter-spacing: 0; color: var(--text); animation: tip-in 140ms var(--ease-out) backwards; transform-origin: bottom center;
+  font: 500 calc(12px * var(--text-scale, 1))/calc(16px * var(--text-scale, 1)) var(--font); letter-spacing: 0; color: var(--text); animation: tip-in 140ms var(--ease-out) backwards; transform-origin: bottom center;
 }
 .tooltip.below { transform-origin: top center; }
-.tooltip kbd { padding: 2px 5px; border-radius: 5px; font: 600 11px/1 var(--font); color: var(--text-2); background: var(--hover); }
+.tooltip kbd { padding: 2px 5px; border-radius: 5px; font: 600 calc(11px * var(--text-scale, 1))/1 var(--font); color: var(--text-2); background: var(--hover); }
 @keyframes tip-in { from { opacity: 0; transform: translateY(3px) scale(0.96); } }
 .tooltip.below { animation-name: tip-in-below; }
 @keyframes tip-in-below { from { opacity: 0; transform: translateY(-3px) scale(0.96); } }
 
 /* ---------- кнопки: размеры и состояние загрузки ---------- */
-.btn.small { min-height: 30px; padding: 0 12px; font-size: 13px; border-radius: 12px; }
+.btn.small { min-height: 30px; padding: 0 12px; font-size: calc(13px * var(--text-scale, 1)); border-radius: 12px; }
 .btn.tertiary { background: transparent; border-color: transparent; }
 .btn.tertiary:not(:disabled):hover { background: var(--hover); }
 .btn[aria-busy="true"], .btn.busy { position: relative; color: transparent !important; pointer-events: none; }

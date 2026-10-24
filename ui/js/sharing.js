@@ -1,3 +1,5 @@
+import { exportLyrics } from "./audio-export-lyrics.js";
+import { savedLyrics } from "./saved-lyrics.js";
 import { api, trackKey } from "./api.js";
 import { accountId } from "./personal.js";
 import { downloadPermission } from "./download-permission.js";
@@ -50,10 +52,11 @@ export async function shareAudio(track, toast) {
     if(account!==accountId())return;
     // Native code verifies the file, not just an offline-list entry. A stale entry
     // must never turn an offline share into an unapproved mobile-data download.
-    if(await api.shareAudio(track,false))return;
-    if(!await allowed() || account!==accountId())return;
+    const lyrics=exportLyrics(savedLyrics(track));
     toast(t("share.audioPreparing"));
-    await api.shareAudio(track,true);
+    if(await api.shareAudio(track,false,lyrics))return;
+    if(!await allowed() || account!==accountId())return;
+    await api.shareAudio(track,true,lyrics);
     // The native chooser opening says nothing about whether a recipient was selected.
   } catch(error) {if(account===accountId())toast(["unavailable","invalid"].includes(error.kind) ? t("share.audioFailed") : errorText(error),{error:true});}
   finally {preparingAudio.delete(key);await refreshDownloads();}

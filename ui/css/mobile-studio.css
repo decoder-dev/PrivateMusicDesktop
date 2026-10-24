@@ -18,7 +18,7 @@ html[data-layout="phone"] .player { background: var(--studio-card); border: 1px 
 
 /* Заголовки: тот же характер, что у студии (750, плотный трекинг). */
 html[data-layout="phone"] .view-header h1, html[data-layout="phone"] .navbar .nav-title { font-weight: 750; letter-spacing: -0.8px; }
-html[data-layout="phone"] .view-header h1 { font-size: 30px; line-height: 38px; }
+html[data-layout="phone"] .view-header h1 { font-size: calc(30px * var(--text-scale, 1)); line-height: calc(38px * var(--text-scale, 1)); }
 html[data-layout="phone"] .shelf-title, html[data-layout="phone"] .set-section > h2, html[data-layout="phone"] .group-label { font-weight: 700; letter-spacing: -0.45px; }
 html[data-layout="phone"] .btn { min-height: 44px; border-radius: 12px; }
 html[data-layout="phone"] .btn.primary { font-weight: 700; }
@@ -37,7 +37,7 @@ html[data-layout="phone"] .settings-nav .btn { flex: none; min-height: 44px; }
 /* Умные плейлисты: выбор правила на всю ширину, кнопки ниже. */
 html[data-layout="phone"] .smart-tools { gap: 8px; }
 html[data-layout="phone"] .view-header .smart-tools > select { flex: 1 0 100%; max-width: none; min-height: 44px; }
-html[data-layout="phone"] .view-header .smart-tools > .btn { flex: 1 1 0; min-width: 0; padding-inline: 10px; font-size: 14px; }
+html[data-layout="phone"] .view-header .smart-tools > .btn { flex: 1 1 0; min-width: 0; padding-inline: 10px; font-size: calc(14px * var(--text-scale, 1)); }
 html[data-layout="phone"] .smart-view > .view-header .smart-tools { flex-basis: 100%; }
 html[data-layout="phone"] .page-note.footer-note { text-align: left; }
 
@@ -45,7 +45,7 @@ html[data-layout="phone"] .page-note.footer-note { text-align: left; }
 html[data-layout="phone"] .sync-panel { margin: 4px var(--gutter) 12px; padding: 14px 16px; max-height: none; border: 1px solid var(--line); border-radius: 16px; background: var(--studio-card); }
 html[data-layout="phone"] .sync-panel > .set-inline { flex-wrap: nowrap; gap: 12px; }
 html[data-layout="phone"] .sync-panel > .set-inline strong { flex: 1 1 auto; min-width: 0; }
-html[data-layout="phone"] .sync-panel label.set-inline { display: flex; align-items: center; gap: 12px; min-height: 44px; font-size: 14px; line-height: 20px; }
+html[data-layout="phone"] .sync-panel label.set-inline { display: flex; align-items: center; gap: 12px; min-height: 44px; font-size: calc(14px * var(--text-scale, 1)); line-height: calc(20px * var(--text-scale, 1)); }
 html[data-layout="phone"] .sync-panel input[type="checkbox"] { flex: none; width: 22px; height: 22px; }
 html[data-layout="phone"] .sync-panel .set-note { margin: 6px 0 0; }
 html[data-layout="phone"] .sync-row { min-height: 52px; }
@@ -54,7 +54,7 @@ html[data-layout="phone"] .sync-row { min-height: 52px; }
 html[data-layout="phone"] .selection-bar { flex-wrap: nowrap; overflow-x: auto; gap: 8px; padding: 10px var(--gutter); scrollbar-width: none; border-block: 1px solid var(--line); }
 html[data-layout="phone"] .selection-bar::-webkit-scrollbar { display: none; }
 html[data-layout="phone"] .selection-bar > * { flex: none; }
-html[data-layout="phone"] .selection-bar strong { margin-right: 4px; font-size: 14px; }
+html[data-layout="phone"] .selection-bar strong { margin-right: 4px; font-size: calc(14px * var(--text-scale, 1)); }
 html[data-layout="phone"] .row.multi-selected { outline: 0; background: color-mix(in srgb, var(--accent) 14%, transparent); }
 
 /* Нижние панели непрозрачны: строки под ними не просвечивают. */
@@ -62,7 +62,7 @@ html[data-layout="phone"] .sheet, .sheet { background-color: var(--page-top); }
 
 /* Вход: крупная основная кнопка, «Начать заново» и подсказка про VPN доступны пальцем. */
 html[data-layout="phone"] .login .box { max-width: 420px; }
-html[data-layout="phone"] .login .btn.primary { min-height: 56px; font-size: 17px; font-weight: 700; }
+html[data-layout="phone"] .login .btn.primary { min-height: 56px; font-size: calc(17px * var(--text-scale, 1)); font-weight: 700; }
 html[data-layout="phone"] .login-restart { min-height: 48px; padding-inline: 22px; }
 html[data-layout="phone"] .login .net-hint-slot { width: 100%; text-align: left; }
 
@@ -72,7 +72,7 @@ html[data-layout="phone"] .player { width: auto; max-width: none; margin: 0; }
 /* Развёрнутый плеер: у быстрых действий есть подписи (иначе текст и очередь не отличить), правка текста — одной строкой. */
 html[data-layout="phone"] .np-quick { align-items: flex-start; }
 html[data-layout="phone"] .np-quick button { flex-direction: column; gap: 2px; min-width: 72px; }
-html[data-layout="phone"] .np-quick button span:not(.q-ico) { display: block; font: 600 11px/14px var(--font); color: var(--np-fg-2); }
+html[data-layout="phone"] .np-quick button span:not(.q-ico) { display: block; font: 600 calc(11px * var(--text-scale, 1))/calc(14px * var(--text-scale, 1)) var(--font); color: var(--np-fg-2); }
 html[data-layout="phone"][data-orientation="landscape"] .np-quick button span:not(.q-ico) { display: none; }
 html[data-layout="phone"] .ly-edit-controls { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; gap: 4px; padding: 4px 12px; scrollbar-width: none; }
 html[data-layout="phone"] .ly-edit-controls > * { flex: none; }
@@ -122,8 +122,8 @@ html[data-layout="phone"] .np-cover { width: min(100%, 42dvh); }
 html[data-layout="phone"] .np-main { gap: 12px; }
 @media (max-height: 700px) {
   html[data-layout="phone"][data-orientation="portrait"] .np-cover { width: min(100%, 34dvh); }
-  html[data-layout="phone"][data-orientation="portrait"] .np-title { font-size: 21px; line-height: 25px; }
-  html[data-layout="phone"][data-orientation="portrait"] .np-artist { font-size: 16px; min-height: 36px; }
+  html[data-layout="phone"][data-orientation="portrait"] .np-title { font-size: calc(21px * var(--text-scale, 1)); line-height: calc(25px * var(--text-scale, 1)); }
+  html[data-layout="phone"][data-orientation="portrait"] .np-artist { font-size: calc(16px * var(--text-scale, 1)); min-height: 36px; }
 }
 html[data-layout="phone"][data-orientation="landscape"] .np-quick { margin-top: 0; padding-bottom: 4px; }
 html[data-layout="phone"][data-orientation="landscape"] .np-quick button { min-height: 44px; }
@@ -150,7 +150,7 @@ html[data-layout="phone"] .lib-shortcuts .lib-summary.smart {
 html[data-layout="phone"] .lib-shortcuts .smart .chev { display: inline-flex; }
 html[data-layout="phone"] .lib-summary-ico { width: 42px; height: 42px; border-radius: 14px; }
 html[data-layout="phone"] .lib-summary-title { font-weight: 700; }
-html[data-layout="phone"] .lib-summary-detail { line-height: 19px; }
+html[data-layout="phone"] .lib-summary-detail { line-height: calc(19px * var(--text-scale, 1)); }
 html[data-layout="phone"] .lib-sections { background: var(--studio-card); border: 1px solid var(--line); padding: 4px; gap: 2px; }
 html[data-layout="phone"] .lib-sections button { border-radius: 9px; }
 html[data-layout="phone"] .lib-sections button[aria-selected="true"] { background: var(--accent-wash); }
@@ -187,7 +187,7 @@ html[data-layout="phone"] .stage {
   border: 1px solid var(--line); border-radius: 28px;
   background: radial-gradient(ellipse at 50% 0%, var(--accent-wash), transparent 75%), var(--studio-card);
 }
-html[data-layout="phone"] .stage-headline { margin: 14px 0 20px; font-size: 30px; line-height: 36px; }
+html[data-layout="phone"] .stage-headline { margin: 14px 0 20px; font-size: calc(30px * var(--text-scale, 1)); line-height: calc(36px * var(--text-scale, 1)); }
 html[data-layout="phone"] .stage-cta { width: 100%; min-width: 0; margin-top: 22px; border-radius: 16px; }
 html[data-layout="phone"] .stage-cover .art-box { box-shadow: 0 10px 24px rgb(0 0 0 / .12); }
 html[data-layout="phone"] .profile-avatar { overflow: hidden; }
@@ -200,11 +200,11 @@ html[data-layout="phone"] .later-art { flex: none; }
 html[data-layout="phone"] .later-art .art-box { width: 56px; height: 56px; border-radius: 12px; }
 html[data-layout="phone"] .later-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 html[data-layout="phone"] .later-title, html[data-layout="phone"] .later-detail { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-html[data-layout="phone"] .later-title { font: 700 15px/21px var(--font); }
-html[data-layout="phone"] .later-detail { color: var(--text-2); font: 400 12px/18px var(--font); }
+html[data-layout="phone"] .later-title { font: 700 calc(15px * var(--text-scale, 1))/calc(21px * var(--text-scale, 1)) var(--font); }
+html[data-layout="phone"] .later-detail { color: var(--text-2); font: 400 calc(12px * var(--text-scale, 1))/calc(18px * var(--text-scale, 1)) var(--font); }
 html[data-layout="phone"] .later-play > svg { flex: none; color: var(--accent); }
 html[data-layout="phone"] .later-remove { flex: none; display: grid; place-items: center; width: 44px; height: 44px; color: var(--text-2); }
-html[data-layout="phone"] .later-note { margin: 8px var(--gutter) 0; font: 400 12px/18px var(--font); color: var(--text-2); }
+html[data-layout="phone"] .later-note { margin: 8px var(--gutter) 0; font: 400 calc(12px * var(--text-scale, 1))/calc(18px * var(--text-scale, 1)) var(--font); color: var(--text-2); }
 
 /* Import is a full phone page: content wraps, choices remain touchable. */
 .playlist-import-view .import-body, .audio-upload-view .import-body { display: grid; gap: 16px; padding: 0 var(--gutter, 24px) 24px; }
@@ -212,7 +212,7 @@ html[data-layout="phone"] .later-note { margin: 8px var(--gutter) 0; font: 400 1
 .import-input > label { display: grid; gap: 8px; font-weight: 600; }
 .import-input .field { width: 100%; min-width: 0; }
 .import-text { min-height: 180px; resize: vertical; line-height: 1.6; }
-.import-note, .import-status { margin: 0; color: var(--text-2); font: 400 14px/21px var(--font); overflow-wrap: anywhere; }
+.import-note, .import-status { margin: 0; color: var(--text-2); font: 400 calc(14px * var(--text-scale, 1))/calc(21px * var(--text-scale, 1)) var(--font); overflow-wrap: anywhere; }
 .import-status:empty { display: none; }
 .import-rows { display: grid; gap: 10px; }
 .import-row { padding: 12px; border: 1px solid var(--line); background: var(--studio-card, var(--surface)); border-radius: 16px; min-width: 0; }

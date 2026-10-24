@@ -34,6 +34,19 @@ const ANDROID_PACKAGE: &str = "com.dec.privatemusic.vklogin";
 /// Largest result accepted from the native side (a web_token answer is ~1 KiB).
 const MAX_FIELD: usize = 64 * 1024;
 
+/// Prepared share payload; source paths stay on the native side of the bridge.
+#[derive(serde::Serialize)]
+#[serde(rename_all="camelCase")]
+pub struct AudioShareRequest<'a> {
+    pub path:&'a str,
+    pub title:&'a str,
+    pub artist:&'a str,
+    pub album:&'a str,
+    pub lyrics_text:&'a str,
+    pub lyrics_lrc:&'a str,
+    pub artwork_path:Option<&'a str>,
+}
+
 /// A private cache copy made by the system audio picker, never a caller-supplied path.
 #[derive(Deserialize)]
 pub struct PickedAudio {

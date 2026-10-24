@@ -19,8 +19,8 @@
 .cover-button .art-box { --art-size: 48px; box-shadow: var(--sh-art-mini), inset 0 0 0 var(--hair) var(--line-placeholder); }
 .cover-button:active { opacity: 0.88; }
 .now .titles { min-width: 0; flex: 0 1 auto; display: flex; flex-direction: column; gap: 1px; }
-.now .title { font: 600 15px/20px var(--font); letter-spacing: -0.2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.now .artist { font: 400 13px/18px var(--font); letter-spacing: -0.08px; color: var(--text-2); }
+.now .title { font: 600 calc(15px * var(--text-scale, 1))/calc(20px * var(--text-scale, 1)) var(--font); letter-spacing: -0.2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.now .artist { font: 400 calc(13px * var(--text-scale, 1))/calc(18px * var(--text-scale, 1)) var(--font); letter-spacing: -0.08px; color: var(--text-2); }
 .now .like { flex: none; }
 
 .transport { display: flex; flex-direction: column; gap: 2px; align-items: stretch; min-width: 0; }
@@ -32,11 +32,11 @@
 .controls .play:not(:disabled):active { background: var(--accent); }
 .controls .on { color: var(--accent); }
 .controls .icon-btn.on::after { content: ""; position: absolute; bottom: 3px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: currentColor; }
-.controls .icon-btn .badge { position: absolute; right: 5px; top: 5px; font: 700 9px/1 var(--font); }
+.controls .icon-btn .badge { position: absolute; right: 5px; top: 5px; font: 700 calc(9px * var(--text-scale, 1))/1 var(--font); }
 .play .spin-over { position: absolute; inset: 0; display: grid; place-items: center; }
 .play .spin-over .spinner { width: 30px; height: 30px; border-width: 2px; }
 .play.is-buffering svg { opacity: 0.3; }
-.seek { display: grid; grid-template-columns: 40px minmax(0, 1fr) 44px; align-items: center; gap: 8px; color: var(--text-2); font: 500 11px/16px var(--font); letter-spacing: 0.06px; font-variant-numeric: tabular-nums; }
+.seek { display: grid; grid-template-columns: 40px minmax(0, 1fr) 44px; align-items: center; gap: 8px; color: var(--text-2); font: 500 calc(11px * var(--text-scale, 1))/calc(16px * var(--text-scale, 1)) var(--font); letter-spacing: 0.06px; font-variant-numeric: tabular-nums; }
 .seek span:first-child { text-align: right; }
 .seek span:last-child { text-align: left; }
 .buffering { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }

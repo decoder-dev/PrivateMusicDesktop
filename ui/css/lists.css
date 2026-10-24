@@ -30,12 +30,12 @@
 .row, .row * { transition: none !important; }
 .row .art-box { grid-column: 1; grid-row: 1; }
 .row .titles { grid-column: 2; grid-row: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.row .title { font: 600 15px/20px var(--font); letter-spacing: -0.2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.row .artist { font: 400 13px/18px var(--font); letter-spacing: -0.08px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .title { font: 600 calc(15px * var(--text-scale, 1))/calc(20px * var(--text-scale, 1)) var(--font); letter-spacing: -0.2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .artist { font: 400 calc(13px * var(--text-scale, 1))/calc(18px * var(--text-scale, 1)) var(--font); letter-spacing: -0.08px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .badges { grid-column: 3; grid-row: 1; display: flex; align-items: center; gap: 8px; color: var(--text-2); }
 .row .badges:empty { display: none; }
 .row .badge-liked { color: var(--accent); display: inline-flex; }
-.row .time { grid-column: 4; grid-row: 1; justify-self: end; font: 400 12px/16px var(--font); font-variant-numeric: tabular-nums; color: var(--text-2); text-align: right; }
+.row .time { grid-column: 4; grid-row: 1; justify-self: end; font: 400 calc(12px * var(--text-scale, 1))/calc(16px * var(--text-scale, 1)) var(--font); font-variant-numeric: tabular-nums; color: var(--text-2); text-align: right; }
 .row .actions { grid-column: 4; grid-row: 1; justify-self: end; display: flex; align-items: center; gap: 2px; opacity: 0; pointer-events: none; }
 .row .actions .icon-btn { width: 32px; height: 32px; }
 .row:hover, .row:focus-within { background: var(--hover); }
@@ -68,7 +68,7 @@
   --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18V5l11-2v13'/%3E%3Ccircle cx='6' cy='18' r='3'/%3E%3Ccircle cx='17' cy='16' r='3'/%3E%3C/svg%3E");
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
   width: 100%; max-width: 380px; margin: 0 auto; padding: 40px 24px; text-align: center;
-  font-size: 14px; line-height: 20px; color: var(--text-2); letter-spacing: -0.15px;
+  font-size: calc(14px * var(--text-scale, 1)); line-height: calc(20px * var(--text-scale, 1)); color: var(--text-2); letter-spacing: -0.15px;
 }
 .status::before, .empty-state::before {
   content: ""; width: 34px; height: 34px; background: var(--accent);
@@ -82,7 +82,7 @@
 .view > .status:not(.progress):not(.loading), .view > .empty-state, .tab-pane > .status:not(.progress):not(.loading), .tab-pane > .empty-state { flex: 1 1 auto; }
 /* Однострочное сообщение о ходе выполнения и радиопримечание не являются панелями. */
 .status.progress, .status.radio-note, .status.inline {
-  flex-direction: row; justify-content: flex-start; max-width: none; margin: 0; padding: 4px var(--gutter) 8px; text-align: left; font-size: 13px; gap: 8px;
+  flex-direction: row; justify-content: flex-start; max-width: none; margin: 0; padding: 4px var(--gutter) 8px; text-align: left; font-size: calc(13px * var(--text-scale, 1)); gap: 8px;
 }
 .status.progress::before, .status.radio-note::before, .status.inline::before { display: none; }
 .status.inline.error { color: var(--danger); }

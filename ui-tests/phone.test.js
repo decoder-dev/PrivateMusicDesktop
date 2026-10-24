@@ -1513,7 +1513,7 @@ test("audio sharing: a track opens native file sharing and duplicate preparation
     await page.waitForFunction(()=>window.__mock.calls.filter(call=>call.command==='share_audio' && call.args.allowDownload).length===1);
     await page.evaluate(async()=>{const {shareAudio}=await import('/js/sharing.js');await shareAudio(window.__mock.last('share_audio').args.track,()=>{});});
     assert.equal(await page.evaluate(()=>window.__mock.count('share_audio')),2);
-    const args=await page.evaluate(()=>window.__mock.last('share_audio').args);assert.deepEqual(Object.keys(args),['track','allowDownload']);assert.equal(args.track.track_id,1);
+    const args=await page.evaluate(()=>window.__mock.last('share_audio').args);assert.deepEqual(Object.keys(args),['track','allowDownload','lyrics']);assert.equal(args.lyrics,null);assert.equal(args.track.track_id,1);
     assert.doesNotMatch(await page.locator('.toast').innerText(),/отправлен|доставлен/i);
     assert.deepEqual(app.problems,[]);
   } finally {await app.close();}

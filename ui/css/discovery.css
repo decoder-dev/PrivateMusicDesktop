@@ -3,21 +3,21 @@
 .discovery-view > .list { scroll-behavior:auto; }
 .discovery-view .fy-shelves { max-height:none; overflow:visible; border-bottom:0; padding-bottom:8px; }
 .discovery-view .fy-shelves, .discovery-view .spacer { width:100%; max-width:1520px; margin-inline:auto; }
-.discovery-view .shelf-title { margin:20px var(--gutter) 12px; font-size:19px; line-height:25px; }
+.discovery-view .shelf-title { margin:20px var(--gutter) 12px; font-size: calc(19px * var(--text-scale, 1)); line-height: calc(25px * var(--text-scale, 1)); }
 .discovery-view .selena-row { padding-bottom:8px; }
 .discovery-view .selena-card { min-height:168px; flex-basis:176px; padding:18px; }
 .discovery-view .selena-personal { flex-basis:280px; }
-.discovery-view .selena-card strong { font-size:21px; padding-right:0; }
-.discovery-view .selena-personal strong { font-size:32px; }
+.discovery-view .selena-card strong { font-size: calc(21px * var(--text-scale, 1)); padding-right:0; }
+.discovery-view .selena-personal strong { font-size: calc(32px * var(--text-scale, 1)); }
 .mood-symbol { position:absolute; top:18px; left:18px; color:rgb(255 255 255 / 0.94); }
 .shelf-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; padding-right:var(--gutter); }
 .shelf-heading .shelf-title { margin-right:0; }
-.shelf-heading .btn { flex:none; font-size:12px; min-height:30px; padding:0 12px; }
+.shelf-heading .btn { flex:none; font-size: calc(12px * var(--text-scale, 1)); min-height:30px; padding:0 12px; }
 .mix-card { position:relative; flex:0 0 204px; min-width:0; scroll-snap-align:start; }
 .mix-card .mix-tile.mobile-mix { width:100%; min-height:164px; height:100%; border-radius:18px; padding:18px; }
 .mix-card .mix-text { padding:34px 0 0; gap:4px; }
-.mix-card .mix-tile-title { font-size:18px; line-height:22px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; white-space:normal; overflow:hidden; }
-.mix-card .mix-tile-subtitle { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; white-space:normal; font-size:12px; line-height:16px; }
+.mix-card .mix-tile-title { font-size: calc(18px * var(--text-scale, 1)); line-height: calc(22px * var(--text-scale, 1)); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; white-space:normal; overflow:hidden; }
+.mix-card .mix-tile-subtitle { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; white-space:normal; font-size: calc(12px * var(--text-scale, 1)); line-height: calc(16px * var(--text-scale, 1)); }
 .mix-card .mix-symbol { position:absolute; left:18px; top:16px; color:#fff; }
 .mix-card .mix-play { right:16px; top:18px; }
 .mix-pin.icon-btn { position:absolute; top:10px; right:38px; width:30px; height:30px; color:rgb(255 255 255 / 0.78); border-radius:50%; background:rgb(0 0 0 / 0.12); }
@@ -43,10 +43,10 @@
 /* Орбитальная отметка Селены нарисована в CSS, поэтому она остается четкой при любом размере окна. */
 .discovery-view .selena-personal { min-height:188px; flex-basis:304px; padding:24px; }
 .selena-personal::after { content:""; position:absolute; z-index:-1; width:180px; height:180px; right:-42px; top:-50px; border:1px solid rgb(255 255 255 / 0.25); border-radius:50%; box-shadow:0 0 0 20px rgb(255 255 255 / 0.035),0 0 0 42px rgb(255 255 255 / 0.035),0 0 0 65px rgb(255 255 255 / 0.035); transform:rotate(-28deg) scaleX(0.72); }
-.discovery-view .selena-personal strong { font-size:38px; letter-spacing:-1.3px; }
+.discovery-view .selena-personal strong { font-size: calc(38px * var(--text-scale, 1)); letter-spacing:-1.3px; }
 .discovery-view .selena-mood { min-height:188px; }
-.discovery-view .selena-kicker { font-size:10px; font-weight:650; letter-spacing:0.8px; }
-.discovery-view .selena-subtitle { font-size:12px; color:rgb(255 255 255 / 0.8); }
+.discovery-view .selena-kicker { font-size: calc(10px * var(--text-scale, 1)); font-weight:650; letter-spacing:0.8px; }
+.discovery-view .selena-subtitle { font-size: calc(12px * var(--text-scale, 1)); color:rgb(255 255 255 / 0.8); }
 .discovery-view .selena-row { gap:14px; }
 .discovery-view .shelf-heading { align-items:center; min-height:60px; }
 .shelf-tools,.carousel-controls { display:flex; gap:8px; align-items:center; }
@@ -64,10 +64,10 @@
 @media (max-width:640px) {
  .discovery-view .selena-personal { flex-basis:248px; min-height:168px; padding:20px; }
  .discovery-view .selena-mood { min-height:168px; }
- .discovery-view .selena-personal strong { font-size:34px; }
+ .discovery-view .selena-personal strong { font-size: calc(34px * var(--text-scale, 1)); }
  .shelf-tools { gap:6px; }
  .discovery-view .shelf-heading { gap:8px; }
- .discovery-view .shelf-heading .shelf-title { font-size:18px; }
+ .discovery-view .shelf-heading .shelf-title { font-size: calc(18px * var(--text-scale, 1)); }
 }
 
 /* Карта владеет обоими элементами управления, включая перемещение при наведении и обрезку. */
@@ -116,7 +116,7 @@
 .saved-lyrics-reader .dialog-form { max-height: 80dvh; overflow: hidden; }
 .saved-lyrics-reader-body { min-height: 0; overflow-y: auto; }
 .saved-lyrics-reader .dialog-actions { flex-shrink: 0; }
-.saved-lyrics-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; font-size: 17px; }
+.saved-lyrics-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; font-size: calc(17px * var(--text-scale, 1)); }
 
 html[data-layout="phone"] .saved-lyrics-pane { padding: 0 var(--gutter) 24px; }
 .file-artist { color: var(--text-2); overflow-wrap: anywhere; }

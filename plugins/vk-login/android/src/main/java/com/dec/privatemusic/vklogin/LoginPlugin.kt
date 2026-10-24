@@ -29,7 +29,15 @@ class StartArgs {
 }
 
 @InvokeArg
-class AudioShareArgs { lateinit var path: String }
+class AudioShareArgs {
+    lateinit var path: String
+    var title: String = ""
+    var artist: String = ""
+    var album: String = ""
+    var lyricsText: String = ""
+    var lyricsLrc: String = ""
+    var artworkPath: String? = null
+}
 
 @InvokeArg
 class ClipboardTextArgs { lateinit var text: String }
@@ -228,19 +236,27 @@ class LoginPlugin(private val activity: Activity) : Plugin(activity) {
     @Command
     fun shareAudio(invoke: Invoke) {
         val args = invoke.parseArgs(AudioShareArgs::class.java)
-        try {
-            val file = AudioSharePolicy.checked(activity.cacheDir, args.path)
-            val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.pm.audio.share", file)
-            val intent = Intent(Intent.ACTION_SEND).apply {
-                type = if (file.extension == "aac") "audio/aac" else "audio/mpeg"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, file.nameWithoutExtension)
-                clipData = ClipData.newRawUri(file.name, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            activity.startActivity(Intent.createChooser(intent, null).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
-            invoke.resolve()
-        } catch (_: Exception) { invoke.reject("Could not share audio") }
+        shareWorker.execute {
+            try {
+                val file = AudioSharePolicy.checked(activity.cacheDir, args.path)
+                val cover = args.artworkPath?.let { path ->
+                    File(path).canonicalFile.also { require(it.parentFile == file.parentFile && it.name == "cover.jpg" && File(path).absoluteFile == it) }
+                }
+                val files = AudioShareEnricher.prepare(file, args.title, args.artist, args.album, args.lyricsText, args.lyricsLrc, cover)
+                val uris = ArrayList(files.map { FileProvider.getUriForFile(activity, "${activity.packageName}.pm.audio.share", it) })
+                val intent = Intent(if (uris.size > 1) Intent.ACTION_SEND_MULTIPLE else Intent.ACTION_SEND).apply {
+                    type = if (uris.size > 1) "*/*" else if (files[0].extension == "m4a") "audio/mp4" else "audio/mpeg"
+                    if (uris.size > 1) putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris) else putExtra(Intent.EXTRA_STREAM, uris[0])
+                    putExtra(Intent.EXTRA_SUBJECT, file.nameWithoutExtension)
+                    clipData = ClipData.newRawUri(file.name, uris[0]).also { data -> uris.drop(1).forEach { data.addItem(ClipData.Item(it)) } }
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                activity.runOnUiThread {
+                    try { activity.startActivity(Intent.createChooser(intent, null).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)); invoke.resolve() }
+                    catch (_: Exception) { invoke.reject("Could not share audio") }
+                }
+            } catch (_: Exception) { invoke.reject("Could not prepare audio") }
+        }
     }
 
     @Command
@@ -282,5 +298,6 @@ class LoginPlugin(private val activity: Activity) : Plugin(activity) {
 
     private companion object {
         const val TAG = "VkLogin"
+        val shareWorker = java.util.concurrent.Executors.newSingleThreadExecutor()
     }
 }

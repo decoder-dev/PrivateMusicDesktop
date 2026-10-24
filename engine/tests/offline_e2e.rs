@@ -129,3 +129,24 @@ fn an_expired_download_url_is_refreshed_without_leaving_partial_audio() {
     assert_eq!(app.downloads().len(), 1);
     assert!(!std::fs::read_dir(downloads.path()).unwrap().any(|entry| entry.unwrap().path().extension().is_some_and(|v| v == "part")));
 }
+
+#[test]
+fn automatic_cache_reuses_completed_playback_bytes_without_another_network_request() {
+    if !require_ffmpeg() { return; }
+    let media_dir=hls_dir();let media=Server::start(media_dir.path().to_path_buf());
+    let vk=FakeApi::start(|_,_,_|panic!("a prepared playback URL needs no VK request"));
+    let folder=tempfile::tempdir().unwrap();let (app,_)=app(&vk.base,folder.path());
+    let playing=Track{stream_url:Some(format!("{}/index.m3u8",media.base)),..track()};
+    app.controller().set_transitions(false,false,0.0);
+    app.controller().play_tracks(vec![playing.clone()],0);
+    wait_for("playing",||app.controller().state().status==Status::Playing);
+    app.controller().pause();
+    wait_for("complete playback bytes",||app.controller().track_buffer(&playing.id()).is_some_and(|buffer|buffer.is_complete()));
+    drop(media);
+    assert_eq!(app.cache_playing(&playing,8,1024*1024*1024).unwrap_err(),pm_engine::Error::Unauthorized);
+    assert!(app.cache_playing(&playing,7,1024*1024*1024).unwrap());
+    assert!(app.downloads()[0].bytes>50_000);
+    assert!(app.downloads()[0].track.stream_url.is_none());
+    assert!(!app.cache_playing(&playing,7,1024*1024*1024).unwrap());
+    assert!(vk.calls.lock().unwrap().is_empty());
+}

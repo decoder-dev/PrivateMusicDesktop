@@ -348,9 +348,12 @@ paths never go through the WebView. Account changes abort preparation before ope
 repeated taps on the same track share one preparation. Stale offline metadata cannot trigger an
 unapproved download: the first native call probes with downloads disabled. Unshared copies are removed immediately;
 shared copies remain available for a day and are cleaned during later preparations. Opening the
-chooser does not mean a file was sent. This shares the downloaded elementary audio; iOS-style
-embedded artwork/lyrics and M4A conversion are not included yet. Verify recipient app compatibility
-on a real Android device; local tests cover staging, access boundaries, native compilation and UI.
+chooser does not mean a file was sent. AAC is remuxed to M4A without re-encoding; MP3 keeps its original audio frames. Prepared copies
+include title, artist, album, available artwork and saved lyrics. Timed lyrics also produce an LRC
+sidecar, plain lyrics a UTF-8 text file; both files use the same scoped read grant. Artwork is optional
+and uses the bounded public-HTTPS image loader. Offline export continues without artwork if loading
+fails. Verify recipient app compatibility on a real Android device; local tests cover staging, access
+boundaries, native compilation, metadata readback and UI.
 
 ### Own playlist covers
 
@@ -437,3 +440,61 @@ lyrics action and a fixed footer. Plain text can also be selected. Android uses 
 command bounded to 150 KB UTF-8; the stricter VK-link clipboard command remains separate. The emulator
 run exercises the native write with generated text and rejects an empty copy, without reading the
 user's clipboard.
+
+
+### Phone feature parity (iPhone reference ecf7adb)
+
+The scope is the phone application. Widgets, Wear OS, WatchKit and Apple-only system surfaces are
+outside this change. Existing library/search/catalog, queue/radio, recommendations, playlists/import,
+manual downloads/sync, statistics/history, sleep timer, lyrics/search/editing and sharing remain in place.
+The Android player keeps its album-first layout and low-cost static background.
+
+Phone settings now include all 23 iPhone equalizer presets (plus the historical Android Night preset
+and Custom), preamp −12…+6 dB, dynamic-range compression, stereo widening/intensity, normalization,
+prefetch/gapless and crossfade 0.5…10 seconds. Preamp and stereo transitions are smoothed. Compression
+and stereo use the same native DSP as iPhone; the default bypass is bit-exact. These are stereo effects,
+not head tracking. HQ is on by default; disabling it selects the best audio-only HLS variant up to
+256 kbps, or the lowest available if all exceed it. Progressive files retain source quality. Changing
+quality applies to the next source and invalidates neighbor preparation.
+
+Bluetooth resume and pause at zero music-stream volume are implemented by the process-owned Android
+media module. Registering a route callback does not resume an already connected device. Only a newly
+connected Bluetooth output can resume a loaded, paused track, outside communication mode. Zero-volume
+pause does not automatically resume when volume rises. Unplug/noisy and audio-focus policies still
+apply. The unavailable-track advance switch preserves the existing bounded recovery attempts;
+disabling it keeps the failed track selected. Connectivity failures never skip the queue.
+
+Appearance adds four text sizes, the Home player-card switch and haptic feedback control. Font sizes
+and line heights scale together; virtual row heights and list arithmetic remain stable. Settings
+switches use the whole labelled row as a touch target, and horizontal sliders have a 44 px target.
+The Android manifest includes the normal vibration permission.
+
+Automatic downloads are account-local and disabled by default. Likes use unmetered connections and
+recheck cost between tracks. Automatic cache copies a completed playback buffer on a worker: it never
+starts a second audio fetch. An incomplete buffer stays pending; leaving that track cancels its pending
+cache request. The 1/2/4/8/16/32 GB limit prevents new automatic cache writes beyond the available
+budget. Cleanup evicts least-recently-played cache files owned by this account, protecting the current
+track, manual files, liked downloads and pinned playlists across accounts. Unowned/corrupt retention
+metadata grants no deletion rights. Protected/manual files may exceed the limit. Signing out disposes
+schedulers and invalidates work; a delayed initial profile still starts the account's saved policies.
+
+VK status broadcast and listening reporting are separate, explicit account-local opt-ins, both off by
+default. Playback-start/stop events remain in memory only, use the same event vocabulary as iPhone and
+stop after opt-out. Integration errors stop that integration until a preference change or Retry; they
+never interrupt music. Account IDs are checked again at the native API boundary. Uncertain writes are
+not retried automatically. The Settings section exposes an error and Retry action.
+
+Audio export prepares tagged MP3/M4A on a worker and shares saved text/LRC when available. Metadata
+readback with FFprobe and decoded-audio MD5 comparison verify that adding metadata preserves audio.
+Android MediaExtractor/MediaMuxer compilation and container/tag tests pass locally; actual device
+remuxing, Bluetooth routing, system-volume observation and receiving-app compatibility still need
+physical-device validation. Local host checks do not establish a frame-rate or battery measurement on
+the user's phone.
+
+Validation added in `ui-tests/ios-phone-parity.test.js`, `ui-tests/audio-export-lyrics.test.js`, native
+DSP/HLS tests, offline-buffer caching/recovery/VK integration tests and Android export-tag tests. The
+full interface run exposed two issues (new touch targets and an outdated sharing argument assertion);
+both were corrected and their targeted runs passed. Small/large/landscape layouts, enlarged text,
+permission opt-out, delayed profiles, unmetered resume, cross-account file protection and scroll/player
+performance have dedicated checks. Run the UI suite with `npm test` inside `ui-tests`, the engine with
+`cargo test -p pm_engine`, and the standalone media plugin with its `scripts/android-test.sh`.

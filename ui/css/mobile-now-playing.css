@@ -21,7 +21,7 @@ html[data-layout="phone"] .np-top .np-btn {
   border: 1px solid color-mix(in srgb, var(--np-fg) 6%, transparent);
 }
 html[data-layout="phone"] .np-kicker .k1 {
-  font-size: 11px; line-height: 16px; font-weight: 600; letter-spacing: 1.1px;
+  font-size: calc(11px * var(--text-scale, 1)); line-height: calc(16px * var(--text-scale, 1)); font-weight: 600; letter-spacing: 1.1px;
   text-transform: uppercase; color: var(--np-fg-2);
 }
 html[data-layout="phone"] .np-stage {
@@ -48,7 +48,7 @@ html[data-layout="phone"] .np[data-mode="radial"] .np-cover {
 html[data-layout="phone"] .np .np-info { width: 100%; min-width: 0; padding: 0; gap: 0; }
 html[data-layout="phone"] .np-heading { display: flex; align-items: center; gap: 12px; min-width: 0; }
 html[data-layout="phone"] .np .np-title {
-  flex: 1; min-width: 0; font: 700 clamp(23px, 6vw, 29px)/1.22 var(--font);
+  flex: 1; min-width: 0; font: 700 clamp(calc(23px * var(--text-scale, 1)), 6vw, calc(29px * var(--text-scale, 1)))/1.22 var(--font);
   letter-spacing: -.65px; padding-block: 3px;
 }
 html[data-layout="phone"] .np-heading .np-like {
@@ -60,14 +60,14 @@ html[data-layout="phone"] .np-heading .np-like.on {
   color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 html[data-layout="phone"] .np .np-artist {
-  min-height: 44px; font: 500 16px/22px var(--font); color: var(--np-fg-2);
+  min-height: 44px; font: 500 calc(16px * var(--text-scale, 1))/calc(22px * var(--text-scale, 1)) var(--font); color: var(--np-fg-2);
 }
 html[data-layout="phone"] .np-bottom {
   padding: 0 var(--np-gutter) calc(16px + var(--safe-bottom)); gap: 10px;
 }
 html[data-layout="phone"] .np-seek {
   display: grid; grid-template-columns: 1fr 1fr; gap: 0;
-  font-size: 11px; line-height: 16px; color: var(--np-fg-2);
+  font-size: calc(11px * var(--text-scale, 1)); line-height: calc(16px * var(--text-scale, 1)); color: var(--np-fg-2);
 }
 html[data-layout="phone"] .np .np-seek input { grid-column: 1 / -1; grid-row: 1; --track: 4px; }
 html[data-layout="phone"] .np-seek span:first-child { grid-column: 1; grid-row: 2; text-align: left; }
@@ -98,7 +98,7 @@ html[data-layout="phone"] .np-quick .q-ico {
   width: 32px; height: 28px; background: transparent; border-radius: 0;
 }
 html[data-layout="phone"] .np-quick button span:not(.q-ico) {
-  display: block; font: 500 11px/16px var(--font); color: var(--np-fg-2);
+  display: block; font: 500 calc(11px * var(--text-scale, 1))/calc(16px * var(--text-scale, 1)) var(--font); color: var(--np-fg-2);
 }
 html[data-layout="phone"] .np-quick button[aria-pressed="true"] {
   background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--accent);
@@ -110,7 +110,7 @@ html[data-layout="phone"] .np-quick button[aria-pressed="true"] span { color: in
   html[data-layout="phone"] .np-stage { padding-bottom: 38px; }
   html[data-layout="phone"] .np-bottom { gap: 5px; padding-bottom: calc(10px + var(--safe-bottom)); }
   html[data-layout="phone"] .np .np-play { width: 64px; height: 64px; }
-  html[data-layout="phone"] .np .np-title { font-size: 22px; line-height: 27px; }
+  html[data-layout="phone"] .np .np-title { font-size: calc(22px * var(--text-scale, 1)); line-height: calc(27px * var(--text-scale, 1)); }
   html[data-layout="phone"] .np-quick { margin-top: 4px; padding-top: 8px; }
 }
 html[data-layout="phone"][data-orientation="landscape"] .np-top { min-height: 52px; padding-top: 12px; }
@@ -123,7 +123,7 @@ html[data-layout="phone"][data-orientation="landscape"] .np .np-cover { height: 
 html[data-layout="phone"][data-orientation="landscape"] .np[data-mode="radial"] .np-cover {
   height: min(25dvh, calc(100% - 40px)); margin: 20px;
 }
-html[data-layout="phone"][data-orientation="landscape"] .np .np-title { font-size: 23px; line-height: 28px; }
+html[data-layout="phone"][data-orientation="landscape"] .np .np-title { font-size: calc(23px * var(--text-scale, 1)); line-height: calc(28px * var(--text-scale, 1)); }
 html[data-layout="phone"][data-orientation="landscape"] .np-bottom { gap: 0; padding-bottom: calc(4px + var(--safe-bottom)); }
 html[data-layout="phone"][data-orientation="landscape"] .np-seek { grid-template-columns: 40px minmax(0,1fr) 44px; gap: 10px; }
 html[data-layout="phone"][data-orientation="landscape"] .np-seek input { grid-column: 2; grid-row: 1; }

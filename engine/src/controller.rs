@@ -194,6 +194,8 @@ fn what(error: &Error) -> String {
 
 struct Inner {
     prefetch: bool,
+    advance_on_error: bool,
+    prefer_high_quality: bool,
     prepared_tag: Option<(String,String,u64)>,
     preparation_generation:u64,
     sleep_end: bool,
@@ -359,6 +361,7 @@ impl Shared {
         if let Some(session) = &inner.session {
             config.user_agent = session.api_user_agent.clone();
         }
+        config.prefer_high_quality=inner.prefer_high_quality;
         config.offline_dir = self.offline.get().map(|o| o.dir().to_path_buf());
         config
     }
@@ -578,7 +581,7 @@ impl Shared {
         events.push(UiEvent::Error { kind: error.kind().to_string(), message: error.to_string() });
         let skippable = matches!(error, Error::Stream(_) | Error::Http(_) | Error::Format(_) | Error::Vk { .. } | Error::Unavailable);
         inner.failures += 1;
-        if skippable && inner.failures < MAX_CONSECUTIVE_FAILURES && inner.queue.advance(false).is_some() {
+        if inner.advance_on_error && skippable && inner.failures < MAX_CONSECUTIVE_FAILURES && inner.queue.advance(false).is_some() {
             inner.refreshed.clear();
             events.push(inner.queue_event());
             self.start_current(inner, events);
@@ -966,6 +969,8 @@ impl Controller {
         let shared = Arc::new(Shared {
             inner: Mutex::new(Inner {
                 prefetch:true,
+                advance_on_error:true,
+                prefer_high_quality:true,
                 prepared_tag:None,
                 preparation_generation:0,
                 sleep_end: false,
@@ -1244,6 +1249,8 @@ impl Controller {
     }
 
     /// Усиления эквалайзера в dB (см. `audio::eq::BANDS`); `None` выключает его.
+    pub fn set_audio_processing(&self, settings: crate::audio::processing::AudioSettings) { self.shared.remote().set_audio_processing(settings); }
+
     pub fn set_equalizer(&self, gains: Option<[f32; 10]>) {
         self.shared.remote().set_equalizer(gains);
     }
@@ -1262,6 +1269,10 @@ impl Controller {
         self.shared.remote().send(crate::audio::Command::SetTransitions{gapless,crossfade});
         self.shared.with(|inner,_|{inner.prefetch=prefetch;});
     }
+    /// Obtain a buffer handle only; byte copies and file writes happen on the caller's worker.
+    pub fn track_buffer(&self,track_id:&str)->Option<crate::stream::SharedBuffer> {self.shared.remote().track_buffer(track_id)}
+    pub fn set_high_quality(&self,on:bool) {self.shared.with(|inner,_|{if inner.prefer_high_quality!=on {inner.prefer_high_quality=on;inner.prepared_tag=None;}});}
+    pub fn set_advance_on_error(&self, on: bool) { self.shared.with(|inner, _| inner.advance_on_error = on); }
     pub fn set_normalization(&self,on:bool){
         self.shared.remote().send(crate::audio::Command::SetNormalization(on));
         self.shared.with(|inner,_|{inner.prepared_tag=None;});

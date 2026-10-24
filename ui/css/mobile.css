@@ -86,7 +86,7 @@ html[data-layout="phone"] .main > .view:not(.pulling) > :not(.ptr) { transition:
 html[data-layout="phone"] .main > .view.pulling { overflow-y: hidden; }
 html[data-layout="phone"] .ptr {
   position: absolute; top: 0; left: 0; right: 0; height: 52px; display: flex; align-items: center; justify-content: center; gap: 8px;
-  color: var(--text-2); font: 500 13px/18px var(--font); opacity: 0; pointer-events: none;
+  color: var(--text-2); font: 500 calc(13px * var(--text-scale, 1))/calc(18px * var(--text-scale, 1)) var(--font); opacity: 0; pointer-events: none;
 }
 html[data-layout="phone"] .main > .view.pulling .ptr, html[data-layout="phone"] .ptr[data-state="loading"] { opacity: 1; }
 .ptr .spinner { display: none; }
@@ -110,7 +110,7 @@ html[data-layout="phone"] .navbar {
 }
 .nav-title {
   position: absolute; left: 64px; right: 64px; bottom: 0; height: var(--nav-h); display: flex; align-items: center; justify-content: center;
-  font: 600 17px/22px var(--font); letter-spacing: -0.4px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font: 600 calc(17px * var(--text-scale, 1))/calc(22px * var(--text-scale, 1)) var(--font); letter-spacing: -0.4px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   opacity: 0; pointer-events: none; transition: opacity 140ms var(--ease-std);
 }
 .navbar.has-title .nav-title { opacity: 1; }
@@ -138,7 +138,7 @@ html[data-layout="phone"][data-keyboard="open"] .dock > * { pointer-events: none
   border-radius: var(--r-pill); color: color-mix(in srgb, var(--text) 72%, transparent);
 }
 .dock-tab .dock-ico { width: 34px; height: 26px; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center; }
-.dock-label { font: 500 10px/12px var(--font); letter-spacing: 0.1px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.dock-label { font: 500 calc(10px * var(--text-scale, 1))/calc(12px * var(--text-scale, 1)) var(--font); letter-spacing: 0.1px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .dock-tab[aria-current="page"] { color: var(--accent); }
 .dock-tab[aria-current="page"] .dock-ico { background: var(--accent-fill); }
 .dock-tab[aria-current="page"] .dock-label { font-weight: 600; }
@@ -150,12 +150,12 @@ html[data-layout="phone"][data-keyboard="open"] .dock > * { pointer-events: none
 html[data-layout="phone"] .view-header { padding: 0 var(--gutter) 8px; gap: 10px 12px; flex-wrap: wrap; align-items: center; }
 html[data-layout="phone"] .view-header::after { display: none; }
 html[data-layout="phone"] .view-header h1 {
-  font: 700 34px/41px var(--font); letter-spacing: -0.7px; white-space: normal; overflow: visible; text-overflow: clip; text-wrap: balance;
+  font: 700 calc(34px * var(--text-scale, 1))/calc(41px * var(--text-scale, 1)) var(--font); letter-spacing: -0.7px; white-space: normal; overflow: visible; text-overflow: clip; text-wrap: balance;
   display: block; overflow-wrap: anywhere;
 }
-html[data-layout="phone"] .view-header h2 { font: 600 20px/25px var(--font); }
+html[data-layout="phone"] .view-header h2 { font: 600 calc(20px * var(--text-scale, 1))/calc(25px * var(--text-scale, 1)) var(--font); }
 html[data-layout="phone"] .vh-text { flex: 1 1 100%; min-width: 0; }
-html[data-layout="phone"] .view-header .meta { font-size: 13px; }
+html[data-layout="phone"] .view-header .meta { font-size: calc(13px * var(--text-scale, 1)); }
 html[data-layout="phone"] .view-header .search-field { flex: 1 1 100%; max-width: none; order: 5; }
 html[data-layout="phone"] .view-header .vh-actions { flex: 1 1 100%; order: 6; margin: 0; display: flex; gap: 10px; }
 html[data-layout="phone"] .view-header .vh-actions .btn.primary { flex: 1 1 auto; }
@@ -164,17 +164,17 @@ html[data-layout="phone"] .view-header > .back, html[data-layout="phone"] .page-
 html[data-layout="phone"] .page-note.footer-note, html[data-layout="phone"] .footer-note { padding: 0 var(--gutter) 8px; }
 
 /* ---------- buttons, fields: finger sized ---------- */
-html[data-layout="phone"] .btn { min-height: 44px; padding: 0 18px; font-size: 15px; }
+html[data-layout="phone"] .btn { min-height: 44px; padding: 0 18px; font-size: calc(15px * var(--text-scale, 1)); }
 html[data-layout="phone"] .btn.small { min-height: 44px; }
 html[data-layout="phone"] .icon-btn { width: 44px; height: 44px; }
-html[data-layout="phone"] .field { min-height: 44px; font-size: 16px; }   /* 16 px: the keyboard does not zoom the page */
+html[data-layout="phone"] .field { min-height: 44px; font-size: calc(16px * var(--text-scale, 1)); }   /* 16 px: the keyboard does not zoom the page */
 html[data-layout="phone"] .search-field { height: 44px; border-radius: 12px; border-color: transparent; background: color-mix(in srgb, var(--text) 7%, transparent); }
-html[data-layout="phone"] .search-field .field { min-height: 44px; height: 44px; font-size: 16px; }
+html[data-layout="phone"] .search-field .field { min-height: 44px; height: 44px; font-size: calc(16px * var(--text-scale, 1)); }
 html[data-layout="phone"] .search-field .clear { width: 44px; height: 44px; margin-right: 0; position: relative; }
 html[data-layout="phone"] .search-field .clear svg { opacity: 0.8; }
 html[data-layout="phone"] .search-field { overflow: visible; }
 html[data-layout="phone"] .search-field .clear { margin-top: -2px; margin-bottom: -2px; }
-html[data-layout="phone"] .tabs button { min-height: 44px; padding: 0 14px; font-size: 14px; }
+html[data-layout="phone"] .tabs button { min-height: 44px; padding: 0 14px; font-size: calc(14px * var(--text-scale, 1)); }
 html[data-layout="phone"] .tabs { padding: 2px; border-radius: 12px; }
 html[data-layout="phone"] select.field { padding-right: 34px; }
 html[data-layout="phone"] .link { min-height: 44px; }
@@ -197,7 +197,7 @@ html[data-layout="phone"] .row:hover { background: none; }
 html[data-layout="phone"] .row:hover .time { opacity: 1; }
 html[data-layout="phone"] .row[aria-selected="true"] { background: var(--accent-row); }
 html[data-layout="phone"] .row .artist { pointer-events: none; }
-html[data-layout="phone"] .row .title { font-size: 16px; }
+html[data-layout="phone"] .row .title { font-size: calc(16px * var(--text-scale, 1)); }
 html[data-layout="phone"] .row[aria-selected="true"]::before { left: 0; }
 /* The hairline between rows begins at the text, like an inset iOS list. */
 html[data-layout="phone"] .row + .row::after, html[data-layout="phone"] .window > .row:not(:first-child)::after {
@@ -207,7 +207,7 @@ html[data-layout="phone"] .list { margin-top: 4px; }
 html[data-layout="phone"] .compact-list { position: relative; }
 html[data-layout="phone"] .row[data-swipe] { transform: translateX(var(--sx, 0px)); z-index: 1; background: var(--page-top); }
 .swipe-bg {
-  position: absolute; left: 0; right: 0; z-index: 0; display: flex; align-items: center; gap: 8px; padding: 0 20px; color: #fff; font: 600 14px/18px var(--font);
+  position: absolute; left: 0; right: 0; z-index: 0; display: flex; align-items: center; gap: 8px; padding: 0 20px; color: #fff; font: 600 calc(14px * var(--text-scale, 1))/calc(18px * var(--text-scale, 1)) var(--font);
 }
 .swipe-bg[data-side="lead"] { background: var(--accent); color: var(--on-accent); justify-content: flex-start; }
 .swipe-bg[data-side="lead"][data-far] { background: var(--role-mix); color: #fff; }
@@ -228,9 +228,9 @@ html[data-layout="phone"] .release-row, html[data-layout="phone"] .mix-grid {
 }
 html[data-layout="phone"] .release-row::-webkit-scrollbar, html[data-layout="phone"] .mix-grid::-webkit-scrollbar { display: none; }
 html[data-layout="phone"] .release-row .card { width: 136px; }
-html[data-layout="phone"] .shelf-title { margin: 24px var(--gutter) 10px; font: 700 20px/25px var(--font); letter-spacing: -0.3px; }
-html[data-layout="phone"] .mix-catalog .shelf-title { font-size: 20px; line-height: 25px; margin: 24px var(--gutter) 10px; }
-html[data-layout="phone"] .card .name { font-size: 15px; }
+html[data-layout="phone"] .shelf-title { margin: 24px var(--gutter) 10px; font: 700 calc(20px * var(--text-scale, 1))/calc(25px * var(--text-scale, 1)) var(--font); letter-spacing: -0.3px; }
+html[data-layout="phone"] .mix-catalog .shelf-title { font-size: calc(20px * var(--text-scale, 1)); line-height: calc(25px * var(--text-scale, 1)); margin: 24px var(--gutter) 10px; }
+html[data-layout="phone"] .card .name { font-size: calc(15px * var(--text-scale, 1)); }
 html[data-layout="phone"] .card { min-height: 44px; }
 html[data-layout="phone"] .card:hover { transform: none; }
 html[data-layout="phone"] .release-row > *, html[data-layout="phone"] .mix-grid > *, html[data-layout="phone"] .grid > .card, html[data-layout="phone"] .friend-list > .friend { animation: none; }

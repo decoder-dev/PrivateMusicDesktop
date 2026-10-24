@@ -5,18 +5,33 @@ import { api } from "./api.js";
 import { bindRange, syncRange } from "./ui-parts.js";
 
 addStrings({ru:{"eq.curve":"Уровни частот", "eq.hint":"Автоматический запас громкости защищает усиленные частоты от перегруза. Нажмите на значение, чтобы обнулить полосу.","eq.resetBand":"Сбросить {band} Гц", "eq.db":"дБ", "eq.applyError":"Не удалось применить эквалайзер. Попробуйте ещё раз.", "eq.retry":"Повторить", "eq.jazz":"Джаз", "eq.classical":"Классика"},en:{"eq.curve":"Frequency levels", "eq.hint":"Automatic headroom protects boosted frequencies from overload. Select a value to reset its band.","eq.resetBand":"Reset {band} Hz", "eq.db":"dB", "eq.applyError":"Could not apply equaliser settings. Try again.", "eq.retry":"Retry", "eq.jazz":"Jazz", "eq.classical":"Classical"}});
+addStrings({"ru": {"eq.bassReduction": "Меньше баса", "eq.trebleReduction": "Меньше высоких", "eq.vocalReduction": "Меньше вокала", "eq.speech": "Речь", "eq.piano": "Фортепиано", "eq.lounge": "Лаунж", "eq.pop": "Поп", "eq.rnb": "R&B", "eq.hipHop": "Хип-хоп", "eq.dance": "Танцевальная", "eq.metal": "Метал", "eq.loudness": "Тонкомпенсация", "eq.smallSpeakers": "Маленькие динамики", "eq.headphones": "Наушники"}, "en": {"eq.bassReduction": "Bass reduction", "eq.trebleReduction": "Treble reduction", "eq.vocalReduction": "Vocal reduction", "eq.speech": "Speech", "eq.piano": "Piano", "eq.lounge": "Lounge", "eq.pop": "Pop", "eq.rnb": "R&B", "eq.hipHop": "Hip hop", "eq.dance": "Dance", "eq.metal": "Metal", "eq.loudness": "Loudness", "eq.smallSpeakers": "Small speakers", "eq.headphones": "Headphones"}});
 export const LABELS = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
 export const PRESETS = {
-  flat: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  bass: [7, 6, 4, 2, 0, 0, 0, 0, 0, 0],
-  treble: [0, 0, 0, 0, 0, 1, 2, 4, 6, 7],
-  vocal: [-2, -2, -1, 1, 3, 4, 3, 1, 0, -1],
-  rock: [5, 4, 2, -1, -2, -1, 1, 3, 4, 5],
-  electronic: [6, 5, 2, 0, -2, 0, 1, 2, 4, 5],
-  acoustic: [3, 3, 2, 1, 1, 1, 2, 2, 2, 1],
-  night: [-4, -3, -1, 0, 1, 1, 0, -1, -2, -3],
-  jazz: [3, 2, 1, 1, -1, -1, 0, 1, 2, 3],
-  classical: [2, 1, 0, 0, -1, 0, 1, 2, 3, 2],
+  "flat": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  "bass": [6, 6, 5, 3, 1, 0, 0, 0, -1, -1],
+  "bassReduction": [-6, -5, -4, -2, -1, 0, 0, 0, 0, 0],
+  "treble": [0, 0, 0, 0, 0, 1, 2, 4, 5, 6],
+  "trebleReduction": [0, 0, 0, 0, 0, -1, -2, -4, -5, -6],
+  "vocal": [-2, -2, -1, 0, 2, 4, 4, 3, 1, 0],
+  "vocalReduction": [2, 2, 1, -1, -3, -4, -3, -1, 0, 1],
+  "speech": [-4, -3, -1, 1, 4, 5, 5, 3, 0, -3],
+  "acoustic": [4, 4, 3, 1, 1, 1, 2, 3, 3, 2],
+  "classical": [0, 0, 0, 0, 0, 0, -3, -3, -3, -4],
+  "piano": [2, 1, 0, 2, 3, 1, 3, 4, 3, 3],
+  "jazz": [3, 2, 1, 2, -2, -2, 0, 1, 2, 3],
+  "lounge": [-3, -2, 0, 2, 3, 1, -1, 0, 1, 2],
+  "pop": [-1, 1, 3, 4, 3, 1, 0, -1, -1, -2],
+  "rnb": [3, 6, 5, 1, -2, -1, 2, 2, 3, 3],
+  "hipHop": [5, 4, 1, 3, -1, -1, 1, -1, 2, 3],
+  "dance": [6, 5, 2, 0, 0, -3, -4, -4, 0, 0],
+  "electronic": [5, 4, 2, 0, -1, 0, 2, 3, 5, 5],
+  "rock": [4, 3, 2, 0, -1, 1, 3, 4, 4, 3],
+  "metal": [4, 3, 0, -2, -4, -3, 0, 3, 5, 4],
+  "loudness": [6, 4, 0, -1, -1, -1, 0, 1, 4, 5],
+  "smallSpeakers": [5, 4, 3, 2, 1, 0, -1, -1, 0, 1],
+  "headphones": [3, 5, 3, -1, -1, 0, 2, 4, 5, 4],
+  "night": [-4, -3, -1, 0, 1, 1, 0, -1, -2, -3],
 };
 
 const presetFor = (gains) =>

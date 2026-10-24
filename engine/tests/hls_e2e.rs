@@ -115,6 +115,19 @@ fn master_playlist_picks_the_audio_variant() {
 }
 
 #[test]
+fn live_fetch_honors_the_hls_quality_preference() {
+    if !require_ffmpeg() { return; }
+    let dir=tempfile::tempdir().unwrap();
+    run_ffmpeg(dir.path(),&tone_args(&["-c:a","aac","-b:a","96k","-f","hls","-hls_time","2","-hls_list_size","0","-hls_segment_filename","low%d.ts","low.m3u8"]));
+    fs::write(dir.path().join("master.m3u8"),"#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=96000,CODECS=\"mp4a.40.2\"\nlow.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=320000,CODECS=\"mp4a.40.2\"\nunavailable.m3u8\n").unwrap();
+    let server=Server::start(dir.path().to_path_buf());let url=format!("{}/master.m3u8",server.base);
+    let mut config=lab_config();config.prefer_high_quality=false;
+    assert!(pm_engine::stream::fetch::fetch_to_end(&url,&config).is_ok());
+    config.prefer_high_quality=true;
+    assert_eq!(pm_engine::stream::fetch::fetch_to_end(&url,&config).unwrap_err(),pm_engine::Error::Http(404));
+}
+
+#[test]
 fn progressive_mp3_and_adts_files() {
     if !require_ffmpeg() { return; }
     let dir = tempfile::tempdir().unwrap();

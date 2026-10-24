@@ -3,16 +3,16 @@
 .login::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 55%; pointer-events: none; background: linear-gradient(180deg, color-mix(in srgb, var(--role-station) 20%, transparent), transparent); }
 .login .box { position: relative; width: 100%; max-width: 360px; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; animation: view-in var(--t-page) var(--ease-out) backwards; }
 .login .app-icon { width: 64px; height: 64px; border-radius: 16px; display: grid; place-items: center; color: var(--on-accent); background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 100%, #fff 18%), var(--accent)); box-shadow: var(--sh-rest); margin-bottom: 6px; }
-.login h1 { font: 700 28px/34px var(--font); letter-spacing: -0.4px; }
-.login p { color: var(--text-2); font-size: 15px; line-height: 21px; max-width: 320px; }
-.login .btn.primary { width: 100%; min-height: 54px; border-radius: var(--r-pill); font-size: 17px; margin-top: 8px; }
-.login .message { min-height: 21px; font-size: 14px; }
+.login h1 { font: 700 calc(28px * var(--text-scale, 1))/calc(34px * var(--text-scale, 1)) var(--font); letter-spacing: -0.4px; }
+.login p { color: var(--text-2); font-size: calc(15px * var(--text-scale, 1)); line-height: calc(21px * var(--text-scale, 1)); max-width: 320px; }
+.login .btn.primary { width: 100%; min-height: 54px; border-radius: var(--r-pill); font-size: calc(17px * var(--text-scale, 1)); margin-top: 8px; }
+.login .message { min-height: 21px; font-size: calc(14px * var(--text-scale, 1)); }
 .login-recovery { display:flex; flex-direction:column; gap:8px; align-items:center; }
-.login-restart { border:var(--hair) solid var(--line); border-radius:var(--r-pill); padding:10px 18px; color:var(--accent); background:var(--surface); font:600 14px/20px var(--font); cursor:pointer; }
+.login-restart { border:var(--hair) solid var(--line); border-radius:var(--r-pill); padding:10px 18px; color:var(--accent); background:var(--surface); font: 600 calc(14px * var(--text-scale, 1))/calc(20px * var(--text-scale, 1)) var(--font); cursor:pointer; }
 .login-restart:disabled { opacity:.5; cursor:wait; }
-.login .login-recovery p { font-size:12px; line-height:18px; color:var(--text-2); }
+.login .login-recovery p { font-size: calc(12px * var(--text-scale, 1)); line-height: calc(18px * var(--text-scale, 1)); color:var(--text-2); }
 .login .note {
-  display: flex; gap: 10px; text-align: left; padding: 12px 16px; border-radius: var(--r-compact); font-size: 13px; line-height: 18px; color: var(--text-2);
+  display: flex; gap: 10px; text-align: left; padding: 12px 16px; border-radius: var(--r-compact); font-size: calc(13px * var(--text-scale, 1)); line-height: calc(18px * var(--text-scale, 1)); color: var(--text-2);
   background: color-mix(in srgb, var(--warning) 12%, transparent); border: var(--hair) solid color-mix(in srgb, var(--warning) 28%, transparent);
 }
 .login .note svg { flex: none; color: var(--warning); margin-top: 1px; }
@@ -31,5 +31,5 @@
 .login-art .tile.a { left: 0; transform: rotate(-12deg); background: linear-gradient(145deg, #bd4f69, #8a2f5a); animation-delay: 120ms; }
 .login-art .tile.b { right: 0; transform: rotate(11deg); background: linear-gradient(145deg, #23806f, #1b5f78); animation-delay: 200ms; }
 .login-art .app-icon { position: absolute; left: 50%; top: 4px; width: 88px; height: 88px; margin: 0 0 0 -44px; border-radius: 26px; box-shadow: var(--sh-float), 0 10px 30px -6px color-mix(in srgb, var(--accent) 45%, transparent), inset 0 1px 0 rgb(255 255 255 / 0.3); }
-.login h1 { font-size: 32px; line-height: 38px; letter-spacing: -0.6px; text-wrap: balance; }
+.login h1 { font-size: calc(32px * var(--text-scale, 1)); line-height: calc(38px * var(--text-scale, 1)); letter-spacing: -0.6px; text-wrap: balance; }
 @media (max-height: 560px) { .login-art { transform: scale(0.8); margin-bottom: 0; } }

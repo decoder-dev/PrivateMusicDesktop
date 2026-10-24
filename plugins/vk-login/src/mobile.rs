@@ -80,8 +80,8 @@ impl<R: Runtime> VkLogin<R> {
         Ok(reply.get("text").and_then(serde_json::Value::as_str).unwrap_or_default().to_owned())
     }
 
-    pub fn share_audio(&self, path: &str) -> Result<()> {
-        let _: serde_json::Value = self.plugin.run_mobile_plugin("shareAudio", serde_json::json!({"path":path}))
+    pub fn share_audio(&self, payload:&crate::AudioShareRequest<'_>) -> Result<()> {
+        let _: serde_json::Value = self.plugin.run_mobile_plugin("shareAudio", payload)
             .map_err(|error| Error::Native(error.to_string()))?;
         Ok(())
     }

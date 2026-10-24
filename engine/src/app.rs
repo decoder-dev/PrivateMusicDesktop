@@ -675,6 +675,21 @@ impl Core {
         unreachable!("every download attempt returns or retries within the bound")
     }
 
+    /// Cache bytes already fetched for playback. This never starts another network stream.
+    pub fn cache_playing(&self,track:&Track,user_id:i64,limit_bytes:u64)->Result<bool> {
+        if !(1024*1024*1024..=32*1024*1024*1024).contains(&limit_bytes){return Err(Error::InvalidRequest)}
+        if self.controller.session().and_then(|s|s.user_id)!=Some(user_id){return Err(Error::Unauthorized)}
+        let epoch=self.session_epoch()?;
+        let store=self.offline()?;
+        if store.details(&track.id()).is_some_and(|details|details.available){return Ok(false)}
+        let Some(buffer)=self.controller.track_buffer(&track.id())else{return Ok(false)};
+        if !buffer.is_complete() || buffer.failure().is_some() || buffer.len() as u64>limit_bytes.saturating_sub(store.total_bytes()){return Ok(false)}
+        let Some((kind,bytes))=buffer.completed_bytes()else{return Ok(false)};
+        if bytes.is_empty() || self.session_epoch()?!=epoch{return Err(Error::Cancelled)}
+        store.save(&Track{stream_url:None,..track.clone()},kind,&bytes)?;
+        Ok(true)
+    }
+
     pub fn remove_download(&self, track_id: &str) -> Result<bool> {
         self.offline()?.remove(track_id)
     }
@@ -754,6 +769,16 @@ impl Core {
 
     pub fn remove_from_playlist(&self, playlist: &Playlist, track: &Track) -> Result<()> {
         self.api(|client, session| client.change_playlist(session, playlist, track, false))
+    }
+
+    pub fn vk_broadcast(&self, user_id:i64, track:Option<&Track>)->Result<()> {
+        if self.controller.session().and_then(|s|s.user_id)!=Some(user_id){return Err(Error::Unauthorized)}
+        if track.is_some_and(|t|t.track_id<=0 || t.owner_id==0){return Err(Error::InvalidRequest)}
+        self.api(|client,session|{if session.user_id!=Some(user_id){return Err(Error::Cancelled)}client.broadcast(session,track)})
+    }
+    pub fn vk_report_playback(&self,user_id:i64,events:&[crate::vk::playback::ListeningEvent])->Result<()> {
+        if self.controller.session().and_then(|s|s.user_id)!=Some(user_id){return Err(Error::Unauthorized)}
+        self.api(|client,session|{if session.user_id!=Some(user_id){return Err(Error::Cancelled)}client.report_playback(session,events)})
     }
 
     pub fn add_to_library(&self, track: &Track) -> Result<Track> {

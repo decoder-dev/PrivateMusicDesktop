@@ -79,19 +79,19 @@ html[data-platform="android"][data-style="material"][data-layout="phone"] .navba
 html[data-platform="android"][data-style="material"][data-layout="phone"] .navbar.is-scrolled { background: var(--md-c); transition: background-color 200ms var(--md-ease); }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .nav-back, html[data-platform="android"][data-style="material"][data-layout="phone"] .nav-btn { width: 48px; height: 48px; margin: 0 4px; color: var(--text); }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .nav-title {
-  left: 64px; right: 64px; height: 64px; justify-content: flex-start; font: 400 22px/28px var(--font); letter-spacing: 0; text-align: left;
+  left: 64px; right: 64px; height: 64px; justify-content: flex-start; font: 400 calc(22px * var(--text-scale, 1))/calc(28px * var(--text-scale, 1)) var(--font); letter-spacing: 0; text-align: left;
 }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .navbar:not(:has(.nav-back:not([hidden]))) .nav-title { left: 20px; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .view-header { padding: 4px var(--gutter) 12px; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .view-header h1, html[data-platform="android"][data-style="material"][data-layout="phone"] .navbar .nav-title {
   font-family: var(--font); letter-spacing: 0;
 }
-html[data-platform="android"][data-style="material"][data-layout="phone"] .view-header h1 { font-size: 32px; line-height: 40px; font-weight: 400; }
-html[data-platform="android"][data-style="material"][data-layout="phone"] .view-header .meta { font-size: 14px; color: var(--text-2); }
+html[data-platform="android"][data-style="material"][data-layout="phone"] .view-header h1 { font-size: calc(32px * var(--text-scale, 1)); line-height: calc(40px * var(--text-scale, 1)); font-weight: 400; }
+html[data-platform="android"][data-style="material"][data-layout="phone"] .view-header .meta { font-size: calc(14px * var(--text-scale, 1)); color: var(--text-2); }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .shelf-title,
-html[data-platform="android"][data-style="material"][data-layout="phone"] .mix-catalog .shelf-title { font: 500 22px/28px var(--font); letter-spacing: 0; margin: 24px var(--gutter) 12px; }
+html[data-platform="android"][data-style="material"][data-layout="phone"] .mix-catalog .shelf-title { font: 500 calc(22px * var(--text-scale, 1))/calc(28px * var(--text-scale, 1)) var(--font); letter-spacing: 0; margin: 24px var(--gutter) 12px; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .group-label,
-html[data-platform="android"][data-style="material"][data-layout="phone"] .set-section > h2 { font: 500 14px/20px var(--font); letter-spacing: 0.1px; text-transform: none; color: var(--accent); margin: 0 16px 8px; }
+html[data-platform="android"][data-style="material"][data-layout="phone"] .set-section > h2 { font: 500 calc(14px * var(--text-scale, 1))/calc(20px * var(--text-scale, 1)) var(--font); letter-spacing: 0.1px; text-transform: none; color: var(--accent); margin: 0 16px 8px; }
 
 /* ---- нижняя панель навигации M3: четыре пункта во всю ширину ---- */
 html[data-platform="android"][data-style="material"][data-layout="phone"] .dock {
@@ -107,7 +107,7 @@ html[data-platform="android"][data-style="material"][data-layout="phone"] .dock-
 html[data-platform="android"][data-style="material"][data-layout="phone"] .dock-tab:active .dock-ico { background: var(--md-state); }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .dock-tab[aria-current="page"] { color: var(--text); }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .dock-tab[aria-current="page"] .dock-ico { background: var(--md-primary-c); color: var(--md-on-primary-c); }
-html[data-platform="android"][data-style="material"][data-layout="phone"] .dock-label { font: 500 12px/16px var(--font); letter-spacing: 0.5px; }
+html[data-platform="android"][data-style="material"][data-layout="phone"] .dock-label { font: 500 calc(12px * var(--text-scale, 1))/calc(16px * var(--text-scale, 1)) var(--font); letter-spacing: 0.5px; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .dock-tab[aria-current="page"] .dock-label { font-weight: 700; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .dock-tab.dock-search { width: auto; height: var(--dock-h); order: 3; flex: 1 1 0; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .dock-tab.dock-search .dock-ico { width: 64px; height: 32px; border-radius: 16px; }
@@ -123,8 +123,8 @@ html[data-platform="android"][data-style="material"][data-layout="phone"] .playe
 }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .player .cover-button { border-radius: 12px; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .player .cover-button .art-box { --art-size: 48px; border-radius: 10px; }
-html[data-platform="android"][data-style="material"][data-layout="phone"] .player .title { font: 500 16px/22px var(--font); letter-spacing: 0.1px; }
-html[data-platform="android"][data-style="material"][data-layout="phone"] .player .artist { font: 400 14px/20px var(--font); letter-spacing: 0.25px; }
+html[data-platform="android"][data-style="material"][data-layout="phone"] .player .title { font: 500 calc(16px * var(--text-scale, 1))/calc(22px * var(--text-scale, 1)) var(--font); letter-spacing: 0.1px; }
+html[data-platform="android"][data-style="material"][data-layout="phone"] .player .artist { font: 400 calc(14px * var(--text-scale, 1))/calc(20px * var(--text-scale, 1)) var(--font); letter-spacing: 0.25px; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .player .controls .play {
   width: 48px; height: 48px; border-radius: 50%; background: var(--accent); color: var(--on-accent);
 }
@@ -133,7 +133,7 @@ html[data-platform="android"][data-style="material"][data-layout="phone"] .playe
 html[data-platform="android"][data-style="material"][data-layout="phone"] .player .seek input { height: 3px; --track: 3px; }
 
 /* ---- кнопки, поля, вкладки ---- */
-html[data-platform="android"][data-style="material"][data-layout="phone"] .btn { border-radius: 20px; min-height: 40px; padding: 0 24px; font: 500 14px/20px var(--font); letter-spacing: 0.1px; background: none; border: 1px solid var(--md-outline); color: var(--accent); box-shadow: none; }
+html[data-platform="android"][data-style="material"][data-layout="phone"] .btn { border-radius: 20px; min-height: 40px; padding: 0 24px; font: 500 calc(14px * var(--text-scale, 1))/calc(20px * var(--text-scale, 1)) var(--font); letter-spacing: 0.1px; background: none; border: 1px solid var(--md-outline); color: var(--accent); box-shadow: none; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .btn.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; font-weight: 500; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .btn.small { min-height: 40px; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .btn.danger { color: var(--danger); border-color: var(--md-outline); }
@@ -144,7 +144,7 @@ html[data-platform="android"][data-style="material"][data-layout="phone"] .tabs,
   border-radius: 0; padding: 0; background: none; border-bottom: 1px solid var(--md-outline-v); gap: 0;
 }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .tabs button, html[data-platform="android"][data-style="material"][data-layout="phone"] .lib-sections button {
-  position: relative; border-radius: 0; font: 500 14px/20px var(--font); letter-spacing: 0.1px; color: var(--text-2); min-height: 48px; background: none; box-shadow: none;
+  position: relative; border-radius: 0; font: 500 calc(14px * var(--text-scale, 1))/calc(20px * var(--text-scale, 1)) var(--font); letter-spacing: 0.1px; color: var(--text-2); min-height: 48px; background: none; box-shadow: none;
 }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .tabs button[aria-selected="true"], html[data-platform="android"][data-style="material"][data-layout="phone"] .lib-sections button[aria-selected="true"] { color: var(--accent); background: none; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .tabs button[aria-selected="true"]::after {
@@ -156,49 +156,49 @@ html[data-platform="android"][data-style="material"][data-layout="phone"] .lib-s
 html[data-platform="android"][data-style="material"][data-layout="phone"] .row { margin: 0; padding-left: 16px; grid-template-columns: 48px minmax(0, 1fr) auto auto 48px; column-gap: 16px; min-height: 64px; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .row .art-box { --art-size: 48px; border-radius: 8px; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .row + .row::after, html[data-platform="android"][data-style="material"][data-layout="phone"] .window > .row:not(:first-child)::after { display: none; }
-html[data-platform="android"][data-style="material"][data-layout="phone"] .row .title { font: 400 16px/24px var(--font); letter-spacing: 0.5px; }
-html[data-platform="android"][data-style="material"][data-layout="phone"] .row .artist { font: 400 14px/20px var(--font); letter-spacing: 0.25px; color: var(--text-2); }
+html[data-platform="android"][data-style="material"][data-layout="phone"] .row .title { font: 400 calc(16px * var(--text-scale, 1))/calc(24px * var(--text-scale, 1)) var(--font); letter-spacing: 0.5px; }
+html[data-platform="android"][data-style="material"][data-layout="phone"] .row .artist { font: 400 calc(14px * var(--text-scale, 1))/calc(20px * var(--text-scale, 1)) var(--font); letter-spacing: 0.25px; color: var(--text-2); }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .row[aria-selected="true"] { background: color-mix(in srgb, var(--accent) 14%, var(--md-bg)); border-radius: 0; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .row[aria-selected="true"]::before { display: none; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .row[data-swipe] { background: var(--md-bg); }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .card .art-box { border-radius: 12px; }
-html[data-platform="android"][data-style="material"][data-layout="phone"] .card .name { font: 500 14px/20px var(--font); letter-spacing: 0.1px; }
+html[data-platform="android"][data-style="material"][data-layout="phone"] .card .name { font: 500 calc(14px * var(--text-scale, 1))/calc(20px * var(--text-scale, 1)) var(--font); letter-spacing: 0.1px; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .lib-summary, html[data-platform="android"][data-style="material"][data-layout="phone"] .resume-card {
   border-radius: 16px; background: var(--md-c-low); border: 0;
 }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .lib-summary-ico, html[data-platform="android"][data-style="material"][data-layout="phone"] .group-ico { border-radius: 12px; background: var(--md-primary-c); color: var(--md-on-primary-c); }
-html[data-platform="android"][data-style="material"][data-layout="phone"] .lib-summary-title, html[data-platform="android"][data-style="material"][data-layout="phone"] .group-title { font: 500 16px/24px var(--font); letter-spacing: 0.15px; }
+html[data-platform="android"][data-style="material"][data-layout="phone"] .lib-summary-title, html[data-platform="android"][data-style="material"][data-layout="phone"] .group-title { font: 500 calc(16px * var(--text-scale, 1))/calc(24px * var(--text-scale, 1)) var(--font); letter-spacing: 0.15px; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .group { border-radius: 16px; background: var(--md-c-low); border: 0; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .group-row + .group-row::before { display: none; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .mix-tile { border-radius: 16px; }
-html[data-platform="android"][data-style="material"][data-layout="phone"] .stage-headline { font: 400 32px/40px var(--font); letter-spacing: 0; }
+html[data-platform="android"][data-style="material"][data-layout="phone"] .stage-headline { font: 400 calc(32px * var(--text-scale, 1))/calc(40px * var(--text-scale, 1)) var(--font); letter-spacing: 0; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .stage-chip { border-radius: 8px; background: var(--md-primary-c); color: var(--md-on-primary-c); font-weight: 500; }
-html[data-platform="android"][data-style="material"][data-layout="phone"] .stage-cta { min-height: 56px; border-radius: 28px; font: 500 16px/24px var(--font); }
+html[data-platform="android"][data-style="material"][data-layout="phone"] .stage-cta { min-height: 56px; border-radius: 28px; font: 500 calc(16px * var(--text-scale, 1))/calc(24px * var(--text-scale, 1)) var(--font); }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .stage-btn { background: var(--md-c-high); border: 0; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .profile-avatar { background: var(--md-primary-c); color: var(--md-on-primary-c); }
-html[data-platform="android"][data-style="material"][data-layout="phone"] .profile-name { font: 400 24px/32px var(--font); letter-spacing: 0; }
+html[data-platform="android"][data-style="material"][data-layout="phone"] .profile-name { font: 400 calc(24px * var(--text-scale, 1))/calc(32px * var(--text-scale, 1)) var(--font); letter-spacing: 0; }
 
 /* ---- листы и диалоги M3 ---- */
 html[data-platform="android"][data-style="material"][data-layout="phone"] .sheet, html[data-platform="android"][data-style="material"] .sheet {
   border-radius: 28px 28px 0 0; background-color: var(--md-c-low); box-shadow: 0 -2px 12px rgb(0 0 0 / 0.14);
 }
 html[data-platform="android"][data-style="material"] .sheet-grab i { width: 32px; height: 4px; margin-left: -16px; top: 12px; background: var(--md-outline); border-radius: 2px; }
-html[data-platform="android"][data-style="material"] .sheet-title { text-align: left; padding: 0 24px 8px; font: 500 16px/24px var(--font); color: var(--text); }
-html[data-platform="android"][data-style="material"] .sheet-item { min-height: 56px; border-radius: 0; padding: 0 16px; font: 400 16px/24px var(--font); letter-spacing: 0.5px; gap: 16px; }
+html[data-platform="android"][data-style="material"] .sheet-title { text-align: left; padding: 0 24px 8px; font: 500 calc(16px * var(--text-scale, 1))/calc(24px * var(--text-scale, 1)) var(--font); color: var(--text); }
+html[data-platform="android"][data-style="material"] .sheet-item { min-height: 56px; border-radius: 0; padding: 0 16px; font: 400 calc(16px * var(--text-scale, 1))/calc(24px * var(--text-scale, 1)) var(--font); letter-spacing: 0.5px; gap: 16px; }
 html[data-platform="android"][data-style="material"] .sheet-ico { color: var(--text-2); width: 24px; }
 html[data-platform="android"][data-style="material"] .sheet-sep { margin: 4px 0; background: var(--md-outline-v); }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .dialog {
   width: min(312px, calc(100vw - 48px)); max-width: 560px; padding: 24px; border-radius: 28px; text-align: left; overflow: visible;
   background-color: var(--md-c-high); box-shadow: 0 8px 24px rgb(0 0 0 / 0.25);
 }
-html[data-platform="android"][data-style="material"][data-layout="phone"] .dialog h2 { font: 400 24px/32px var(--font); letter-spacing: 0; margin: 0 0 16px; }
-html[data-platform="android"][data-style="material"][data-layout="phone"] .dialog-text { font: 400 14px/20px var(--font); letter-spacing: 0.25px; margin: 0 0 24px; }
+html[data-platform="android"][data-style="material"][data-layout="phone"] .dialog h2 { font: 400 calc(24px * var(--text-scale, 1))/calc(32px * var(--text-scale, 1)) var(--font); letter-spacing: 0; margin: 0 0 16px; }
+html[data-platform="android"][data-style="material"][data-layout="phone"] .dialog-text { font: 400 calc(14px * var(--text-scale, 1))/calc(20px * var(--text-scale, 1)) var(--font); letter-spacing: 0.25px; margin: 0 0 24px; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .dialog-form { padding: 0; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .dialog-actions, html[data-platform="android"][data-style="material"][data-layout="phone"] .dialog-form .dialog-actions {
   border: 0; margin: 24px 0 0; justify-content: flex-end; gap: 8px;
 }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .dialog-actions .btn {
-  flex: 0 0 auto; min-height: 40px; padding: 0 12px; border: 0; border-radius: 20px; font: 500 14px/20px var(--font); letter-spacing: 0.1px; color: var(--accent);
+  flex: 0 0 auto; min-height: 40px; padding: 0 12px; border: 0; border-radius: 20px; font: 500 calc(14px * var(--text-scale, 1))/calc(20px * var(--text-scale, 1)) var(--font); letter-spacing: 0.1px; color: var(--accent);
 }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .dialog-actions .btn + .btn { border: 0; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .dialog-actions .btn.primary { font-weight: 500; color: var(--accent); background: none; }
@@ -206,7 +206,7 @@ html[data-platform="android"][data-style="material"][data-layout="phone"] .dialo
 /* ---- снэкбар ---- */
 html[data-platform="android"][data-style="material"][data-layout="phone"] .toast {
   left: 8px; right: 8px; transform: none; max-width: none; margin: 0 auto; width: auto; border-radius: 4px; padding: 0 8px 0 16px;
-  min-height: 48px; background: color-mix(in srgb, var(--text) 88%, var(--md-bg)); color: var(--md-bg); font: 400 14px/20px var(--font); letter-spacing: 0.25px;
+  min-height: 48px; background: color-mix(in srgb, var(--text) 88%, var(--md-bg)); color: var(--md-bg); font: 400 calc(14px * var(--text-scale, 1))/calc(20px * var(--text-scale, 1)) var(--font); letter-spacing: 0.25px;
   box-shadow: 0 3px 8px rgb(0 0 0 / 0.25); bottom: calc(var(--clear) - 4px);
 }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .toast-action { color: color-mix(in srgb, var(--accent) 60%, var(--md-bg)); font-weight: 500; border-radius: 20px; padding: 0 12px; }
@@ -215,8 +215,8 @@ html[data-platform="android"][data-style="material"][data-layout="phone"] .toast
 html[data-platform="android"][data-style="material"][data-layout="phone"] .np { background: var(--md-bg); border-radius: 28px 28px 0 0; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .np-grab i { width: 32px; height: 4px; margin-left: -16px; top: 10px; background: var(--md-outline); }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .np-cover { border-radius: 28px; }
-html[data-platform="android"][data-style="material"][data-layout="phone"] .np-title { font: 500 24px/32px var(--font); letter-spacing: 0; }
-html[data-platform="android"][data-style="material"][data-layout="phone"] .np-artist { font: 400 16px/24px var(--font); letter-spacing: 0.15px; color: var(--np-fg-2); }
+html[data-platform="android"][data-style="material"][data-layout="phone"] .np-title { font: 500 calc(24px * var(--text-scale, 1))/calc(32px * var(--text-scale, 1)) var(--font); letter-spacing: 0; }
+html[data-platform="android"][data-style="material"][data-layout="phone"] .np-artist { font: 400 calc(16px * var(--text-scale, 1))/calc(24px * var(--text-scale, 1)) var(--font); letter-spacing: 0.15px; color: var(--np-fg-2); }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .np-controls { justify-content: center; gap: 2px; }
 html[data-platform="android"][data-style="material"][data-layout="phone"] .np-controls .np-btn:nth-child(2), html[data-platform="android"][data-style="material"][data-layout="phone"] .np-controls .np-btn:nth-child(4) {
   width: 56px; height: 56px; border-radius: 50%; background: var(--md-c-highest);

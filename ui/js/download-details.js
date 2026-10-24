@@ -1,3 +1,5 @@
+import { exportLyrics } from "./audio-export-lyrics.js";
+import { savedLyrics } from "./saved-lyrics.js";
 import { api, trackKey } from './api.js';
 import { h, formatTime } from './dom.js';
 import { t, addStrings, errorText } from './i18n.js';
@@ -33,7 +35,7 @@ export function createDownloadDetails({play,toast}) {
     const playButton=h('button',{class:'btn primary file-play',type:'button',text:t('play'),onclick:()=>act(op,async()=>{if(await check(op)){play([track],0,{shuffle:false});close();}})});
     const share=h('button',{class:'btn file-share',type:'button',text:t('share.audio'),hidden:!isAndroid(),onclick:()=>act(op,async()=>{
       if(!await check(op))return;
-      const opened=await api.shareAudio(track,false);
+      const opened=await api.shareAudio(track,false,exportLyrics(savedLyrics(track)));
       if(current(op) && !opened){op.info.available=false;op.render();}
     })});
     const keep=h('button',{class:'btn file-keep',type:'button',text:t('file.keep'),onclick:()=>act(op,async()=>{

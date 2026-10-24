@@ -12,6 +12,8 @@ import { createUpdater } from "../updater.js";
 import { ACCENTS } from "../persist.js";
 import { addStrings } from "../i18n.js";
 import { createTastePanel } from "../tastes.js";
+import { createVkIntegrationOptions } from "../vk-integration.js";
+import { createOfflineOptions } from "../automatic-downloads.js";
 import { createAudioOptions } from "../audio-options.js";
 addStrings({ru:{"window.mini":"Мини-плеер"},en:{"window.mini":"Mini player"}});
 import { isAndroid } from "../mobile/layout.js";
@@ -38,12 +40,14 @@ function desktopOnly(node) {
 const tile = (glyph) => h("span", { class: "set-ico", "aria-hidden": "true" }, icon(glyph, 16));
 
 function row(label, control, note, glyph) {
-  return h("div", { class: "set-row" },
+  return h(control.matches?.('input[type="checkbox"]') ? "label" : "div", { class: "set-row" },
     h("div", { class: "set-label" }, glyph ? tile(glyph) : null, h("div", { class: "set-text" }, label, note ? h("div", { class: "set-note", text: note }) : null)),
     h("div", { class: "set-control" }, control));
 }
 
 /** Настройки, ярлыки, учетная запись и версия. Каждое изменение применяется сразу. */
+addStrings({ru:{"set.homeStage":"Карточка плеера на главной","set.haptics":"Тактильный отклик"},en:{"set.homeStage":"Player card on Home","set.haptics":"Haptic feedback"}});
+addStrings({ru:{"set.textScale":"Размер текста","set.textScale.compact":"Компактный · 85%","set.textScale.system":"Обычный · 100%","set.textScale.large":"Крупный · 110%","set.textScale.extraLarge":"Очень крупный · 120%"},en:{"set.textScale":"Text size","set.textScale.compact":"Compact · 85%","set.textScale.system":"Default · 100%","set.textScale.large":"Large · 110%","set.textScale.extraLarge":"Extra large · 120%"}});
 export function createSettingsView({ settings, onSettingsChange, onSignOut, toast }) {
   // Тема и акцент применяются одновременно, а сборщики следуют за ними.
   const pick = (patch) => { onSettingsChange(patch); render(); };
@@ -60,6 +64,9 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
     MODES.map((mode) => h("option", { value: mode, text: t(`np.mode.${mode}`) })));
   const lyricsBox = h("input", { type: "checkbox", role: "switch", id: "set-lyrics",
     onchange: () => onSettingsChange({ lyrics: lyricsBox.checked }) });
+  const textScale=h("select",{class:"field","aria-label":t("set.textScale"),onchange:()=>pick({textScale:textScale.value})},["compact","system","large","extraLarge"].map(value=>h("option",{value,text:t(`set.textScale.${value}`)})));
+  const stageBox=h("input",{type:"checkbox",role:"switch","aria-label":t("set.homeStage"),onchange:()=>pick({homeStage:stageBox.checked})});
+  const hapticsBox=h("input",{type:"checkbox",role:"switch","aria-label":t("set.haptics"),onchange:()=>pick({haptics:hapticsBox.checked})});
   const flatBox = h("input", { type: "checkbox", role: "switch", id: "set-flat",
     onchange: () => pick({ flatChrome: flatBox.checked }) });
 
@@ -119,12 +126,17 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
           STYLES.map((value) => h("option", { value, selected: value === currentStyle(), text: t(`set.style.${value}`) }))), null, "sparkles") : null,
         row(t("set.nptheme"), h("select", { class: "field", "aria-label": t("set.nptheme"), onchange: (event) => setNpTheme(event.target.value) },
           NP_THEMES.map((value) => h("option", { value, selected: value === currentNpTheme(), text: t(`set.nptheme.${value}`) }))), null, "sparkles"),
+        row(t("set.textScale"),textScale,null,"lyrics"),
+        row(t("set.homeStage"),stageBox,null,"home"),
+        row(t("set.haptics"),hapticsBox,null,"sparkles"),
         row(t("set.theme"), themePicker, null, "sparkles"),
         row(t("palette.title"), paletteGrid, null, "sparkles"),
         row(t("set.accent"), accentGrid, null, "album"),
         h("div", { class: "set-row" },
           h("label", { class: "set-check", for: "set-flat" }, h("span", { class: "set-label" }, tile("settings"), h("span", { class: "set-text" }, t("set.flat"), h("div", { class: "set-note", text: t("set.flat.note") }))), flatBox))),
       Object.assign(section(t("eq.title"), equalizer.element), { id: "set-eq" }),
+      createOfflineOptions(),
+      createVkIntegrationOptions(),
       section("Selena",createTastePanel()),
       section(t("sleep.title"), row(t("sleep.action"),createSleepTimer(),t("sleep.note"),"moon")),
       desktopOnly(section(t("set.window"),
@@ -205,6 +217,9 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
     visualizerSelect.value = settings.visualizer ?? "bars";
     lyricsBox.checked = settings.lyrics !== false;
     flatBox.checked = settings.flatChrome === true;
+    hapticsBox.checked=settings.haptics!==false;
+    stageBox.checked=settings.homeStage!==false;
+    textScale.value=settings.textScale;
     // Группы радио: отмечена одна позиция табуляции.
     for (const button of themeButtons) {
       const on = button.dataset.v === (settings.theme ?? "system");

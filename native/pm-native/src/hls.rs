@@ -213,6 +213,11 @@ fn parse_renditions(text: &str) -> Vec<Rendition<'_>> {
 /// Порядок выбора: исполнение DEFAULT, исполнение AUTOSELECT, сначала исполнение в группе с некоторыми
 /// ссылками на варианты, затем лучший вариант, содержащий только аудио.
 pub fn choose_audio(text: &str) -> (i32, pm_hls_slice) {
+    choose_audio_with_limit(text, 0)
+}
+
+/// Best audio variant within a bitrate budget; zero keeps the original unlimited policy.
+pub fn choose_audio_with_limit(text: &str, max_bandwidth: i64) -> (i32, pm_hls_slice) {
     let renditions = parse_renditions(text);
     let variants = parse_variants(text);
     if variants.is_empty() && renditions.is_empty() {
@@ -241,7 +246,16 @@ pub fn choose_audio(text: &str) -> (i32, pm_hls_slice) {
             continue;
         }
         // `max(by:)` сохраняет первый из равных элементов.
-        if best.map_or(true, |b| b.bandwidth < v.bandwidth) {
+        if best.map_or(true, |b| {
+            if max_bandwidth <= 0 { return b.bandwidth < v.bandwidth; }
+            let within = |bandwidth:i64| bandwidth > 0 && bandwidth <= max_bandwidth;
+            match (within(v.bandwidth),within(b.bandwidth)) {
+                (true,true) => v.bandwidth > b.bandwidth,
+                (true,false) => true,
+                (false,true) => false,
+                (false,false) => v.bandwidth > 0 && (b.bandwidth <= 0 || v.bandwidth < b.bandwidth),
+            }
+        }) {
             best = Some(v);
         }
     }
@@ -462,6 +476,14 @@ mod tests {
 
     fn uri<'a>(t: &'a str, s: pm_hls_slice) -> &'a str {
         &t[s.offset as usize..(s.offset + s.length) as usize]
+    }
+
+    #[test]
+    fn data_saver_picks_the_best_audio_within_budget_or_lowest_available() {
+        let t="#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=96000,CODECS=\"mp4a.40.2\"\nlow.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=192000,CODECS=\"mp4a.40.2\"\nmid.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=320000,CODECS=\"mp4a.40.2\"\nhigh.m3u8\n";
+        assert_eq!(uri(t,choose_audio_with_limit(t,256000).1),"mid.m3u8");
+        assert_eq!(uri(t,choose_audio_with_limit(t,64000).1),"low.m3u8");
+        assert_eq!(uri(t,choose_audio(t).1),"high.m3u8");
     }
 
     #[test]

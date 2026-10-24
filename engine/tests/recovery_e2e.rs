@@ -545,6 +545,20 @@ fn a_dead_track_is_still_skipped_once_its_fresh_urls_fail_too() {
 }
 
 #[test]
+fn disabling_automatic_advance_keeps_the_failed_track_selected() {
+    if !require_ffmpeg() { return; }
+    let dir = hls_dir();
+    let media = Media::start(dir.path().to_path_buf(), 0);
+    let vk = fake_vk(media.url("old"), Arc::new(AtomicBool::new(true)));
+    let rig = rig(&vk.base, 20.0);
+    rig.controller.set_advance_on_error(false);
+    rig.controller.play_tracks((1..=6).map(|n| track(n, Some(media.url("old")))).collect(), 0);
+    wait_for("failed track paused", || rig.controller.state().status==Status::Idle && !rig.errors().is_empty());
+    assert_eq!(rig.controller.state().track.unwrap().track_id,1);
+    assert!(rig.recoveries(RecoveryPhase::Retrying).len()<=3);
+}
+
+#[test]
 fn pausing_while_vk_resolves_a_track_rejects_the_late_reply() {
     if !require_ffmpeg() { return; }
     let dir = hls_dir();

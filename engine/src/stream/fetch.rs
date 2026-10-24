@@ -41,6 +41,7 @@ pub const MAX_STREAM_BYTES: usize = 150 * 1024 * 1024;
 #[derive(Clone, Debug)]
 pub struct FetchConfig {
     pub user_agent: String,
+    pub prefer_high_quality: bool,
     /// Тесты выполняются с адреса 127.0.0.1 по простому http. Никогда не правда в приложении.
     pub allow_loopback_http: bool,
     pub max_stream_bytes: usize,
@@ -50,7 +51,7 @@ pub struct FetchConfig {
 
 impl FetchConfig {
     pub fn new(user_agent: impl Into<String>) -> Self {
-        Self { user_agent: user_agent.into(), allow_loopback_http: false, max_stream_bytes: MAX_STREAM_BYTES, offline_dir: None }
+        Self { prefer_high_quality:true,user_agent: user_agent.into(), allow_loopback_http: false, max_stream_bytes: MAX_STREAM_BYTES, offline_dir: None }
     }
 }
 
@@ -459,7 +460,7 @@ impl Fetcher<'_> {
         if depth > MAX_PLAYLIST_DEPTH {
             return Err(Error::Stream("playlist nesting is too deep".into()));
         }
-        let (code, slice) = hls::choose_audio(&text);
+        let (code, slice) = hls::choose_audio_with_limit(&text, if self.config.prefer_high_quality {0} else {256_000});
         if code == PM_HLS_CHOOSE_FOUND {
             let uri = slice_text(&text, slice).ok_or_else(|| Error::Stream("bad variant address".into()))?;
             let next = self.resolve(&url, uri)?;

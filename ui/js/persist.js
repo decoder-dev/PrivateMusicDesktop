@@ -41,8 +41,20 @@ export function loadSettings() {
     volume,
     prefetch:saved.prefetch!==false,
     gapless:saved.gapless!==false,
-    crossfade:Number.isFinite(saved.crossfade)?Math.max(0,Math.min(8,saved.crossfade)):0,
+    crossfade:Number.isFinite(saved.crossfade)?Math.max(0,Math.min(10,saved.crossfade)):0,
+    resumeBluetooth:saved.resumeBluetooth!==false,
+    pauseAtZero:saved.pauseAtZero===true,
+    highQuality:saved.highQuality!==false,
+    advanceOnError:saved.advanceOnError!==false,
+    textScale:["compact","system","large","extraLarge"].includes(saved.textScale)?saved.textScale:"system",
+    homeStage:saved.homeStage!==false,
     normalization:saved.normalization===true,
+    audio: {
+      preamp:Number.isFinite(saved.audio?.preamp)?Math.max(-12,Math.min(6,saved.audio.preamp)):0,
+      compression:saved.audio?.compression===true,
+      spatial:saved.audio?.spatial===true,
+      spatialIntensity:Number.isFinite(saved.audio?.spatialIntensity)?Math.max(0,Math.min(1,saved.audio.spatialIntensity)):0.35,
+    },
     shuffle: saved.shuffle === true,
     repeat: ["off", "all", "one"].includes(saved.repeat) ? saved.repeat : "off",
     lyrics: saved.lyrics !== false,
@@ -54,6 +66,7 @@ export function loadSettings() {
     theme: ["system", "light", "dark"].includes(saved.theme) ? saved.theme : "system",
     accent: ACCENTS.includes(RENAMED[saved.accent] ?? saved.accent) ? (RENAMED[saved.accent] ?? saved.accent) : "blue",
     flatChrome: saved.flatChrome === true,
+    haptics: saved.haptics !== false,
   };
 }
 

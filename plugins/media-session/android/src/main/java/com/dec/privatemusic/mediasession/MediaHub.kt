@@ -23,6 +23,7 @@ object MediaHub {
     private var channel: Channel? = null
     private var context: Context? = null
     private var focus: AudioFocusController? = null
+    private var preferences: PlaybackPreferences? = null
     private val artworkLoader = ArtworkLoader()
 
     var track: TrackInfo? = null
@@ -36,6 +37,7 @@ object MediaHub {
 
     fun attach(applicationContext: Context) {
         if (context == null) context = applicationContext
+        if (preferences == null) preferences = PlaybackPreferences(applicationContext)
         if (focus == null) {
             main.post { if (focus == null) focus = AudioFocusController(applicationContext, ::emit) }
         }
@@ -68,7 +70,12 @@ object MediaHub {
             snapshot = PlaybackSnapshot(it, SystemClock.elapsedRealtime())
             focus?.onPlaybackState(it.kind)
         }
+        preferences?.onPlaybackChanged()
         syncService()
+    }
+
+    fun configurePlayback(resumeBluetooth: Boolean, pauseAtZero: Boolean) {
+        preferences?.configure(resumeBluetooth, pauseAtZero)
     }
 
     fun setArtworkOverride(url: String?) {

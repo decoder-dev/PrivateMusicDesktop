@@ -78,6 +78,15 @@ class MediaSessionPlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     @Command
+    fun configurePlayback(invoke: Invoke) {
+        val args = invoke.getArgs()
+        val resume = args.optBoolean("resumeBluetooth", true)
+        val pause = args.optBoolean("pauseAtZero", false)
+        main.post { MediaHub.configurePlayback(resume, pause) }
+        invoke.resolve()
+    }
+
+    @Command
     fun setArtworkUrl(invoke: Invoke) {
         val url = invoke.getArgs().let { if (it.isNull("url")) null else it.optString("url", "") }
         main.post { MediaHub.setArtworkOverride(url) }

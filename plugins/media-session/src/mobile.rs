@@ -95,6 +95,10 @@ impl<R: Runtime> MediaSession<R> {
         self.enqueue("stop", json!({}))
     }
 
+    pub fn configure_playback(&self, resume_bluetooth: bool, pause_at_zero: bool) -> Result<()> {
+        self.enqueue("configurePlayback", json!({"resumeBluetooth":resume_bluetooth,"pauseAtZero":pause_at_zero}))
+    }
+
     pub async fn status(&self) -> Result<Status> {
         let mut status: Status = self.handle.run_mobile_plugin_async("status", json!({})).await?;
         status.available = true;

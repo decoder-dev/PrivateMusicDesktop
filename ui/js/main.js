@@ -21,6 +21,8 @@ import { createPlaylistImportView } from "./views/playlist-import.js";
 import { rememberQueue } from "./queue-history.js";
 import { createSmartView } from "./views/smart.js";
 import { createMiniPlayer } from "./mini-player.js";
+import { installVkIntegration } from "./vk-integration.js";
+import { installAutomaticDownloads } from "./automatic-downloads.js";
 import { installPlaylistSync } from "./playlist-sync.js";
 import { installTastes,dislike } from "./tastes.js";
 import { createNowPlaying } from "./now-playing.js";
@@ -77,6 +79,9 @@ function applyAppearance() {
   if (settings.theme === "system") delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = settings.theme;
   document.documentElement.dataset.accent = settings.accent;
+  document.documentElement.dataset.haptics=settings.haptics?"on":"off";
+  document.documentElement.dataset.homeStage=settings.homeStage?"on":"off";
+  document.documentElement.style.setProperty("--text-scale",String(({compact:0.85,system:1,large:1.1,extraLarge:1.2})[settings.textScale] ?? 1));
   applyPalette(settings);
   applyChrome();
 }
@@ -283,7 +288,7 @@ function persistSettings(patch) {
 /** С экрана настроек: сохранено и перенесено туда, где они сейчас отображаются. */
 function applySettings(patch) {
   persistSettings(patch);
-  if ("theme" in patch || "accent" in patch || "flatChrome" in patch || "palette" in patch) applyAppearance();
+  if ("textScale" in patch || "homeStage" in patch || "haptics" in patch || "theme" in patch || "accent" in patch || "flatChrome" in patch || "palette" in patch) applyAppearance();
   nowPlaying?.applySettings(patch);
 }
 
@@ -297,6 +302,8 @@ function buildShell() {
 function buildShellParts() {
   const fileDetails=createDownloadDetails({play,toast});
   installPlaylistSync();
+  installAutomaticDownloads();
+  installVkIntegration();
   installTastes();
   // Страницы исполнителя и альбома располагаются поверх всего, что было на экране: «Назад» возвращается
   // туда с тем же экраном, каким он был (список воспроизведения остается открытым, результаты поиска
@@ -533,6 +540,10 @@ async function applyStartupState() {
     if (!isAndroid()) api.setCloseToTray(settings.closeToTray).catch(() => {});
     api.setTransitions(settings.prefetch,settings.gapless,settings.crossfade).catch(()=>{});
     api.setNormalization(settings.normalization).catch(()=>{});
+    api.setAudioProcessing(settings.audio).catch(()=>{});
+    api.setAdvanceOnError(settings.advanceOnError).catch(()=>{});
+    api.setHighQuality(settings.highQuality).catch(()=>{});
+    api.setPlaybackPreferences(settings.resumeBluetooth,settings.pauseAtZero).catch(()=>{});
     syncTimeZone();
     if (settings.outputDevice && !isAndroid()) await api.setOutputDevice(settings.outputDevice).catch(() => {});
     if (settings.eq.on) api.setEqualizer(settings.eq.gains).catch(() => {});

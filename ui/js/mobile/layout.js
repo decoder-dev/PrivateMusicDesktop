@@ -118,7 +118,7 @@ export function initLayout() {
 /** A short tick for the moments the iOS app gives haptics (like, long press). Silent where unsupported. */
 export function haptic(ms = 10) {
   try {
-    if (isPhone() && typeof navigator.vibrate === "function") navigator.vibrate(ms);
+    if (root.dataset.haptics!=="off" && isPhone() && typeof navigator.vibrate === "function") navigator.vibrate(ms);
   } catch {
     // Vibration needs a user gesture and may be blocked: never a problem.
   }

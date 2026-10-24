@@ -1581,7 +1581,7 @@ test("equaliser: presets and sliders reach the engine, off sends nothing, and it
     await page.click(".nav button[data-view=settings]");
     await page.waitForSelector(".eq");
     await page.selectOption(".eq select", "bass");
-    await page.waitForFunction(() => JSON.stringify(window.__mock.state.eq) === JSON.stringify([7, 6, 4, 2, 0, 0, 0, 0, 0, 0]));
+    await page.waitForFunction(() => JSON.stringify(window.__mock.state.eq) === JSON.stringify([6, 6, 5, 3, 1, 0, 0, 0, -1, -1]));
     assert.equal(await page.isChecked("#eq-on"), true, "picking a preset turns it on");
 
     // Перетащите ползунок 1 kHz вверх с помощью клавиатуры: пользовательская кривая.
@@ -1599,7 +1599,7 @@ test("equaliser: presets and sliders reach the engine, off sends nothing, and it
     await page.waitForFunction(() => window.__mock.state.eq?.[5] === 2);
     await page.reload();
     await waitForLibrary(page);
-    await page.waitForFunction(() => window.__mock.state.eq?.[0] === 7 && window.__mock.state.eq?.[5] === 2);
+    await page.waitForFunction(() => window.__mock.state.eq?.[0] === 6 && window.__mock.state.eq?.[5] === 2);
     if (process.env.PM_SCREENSHOTS) {
       await page.click(".nav button[data-view=settings]");
       await page.locator(".eq").screenshot({ path: `${process.env.PM_SCREENSHOTS}/eq.png` });
@@ -2952,14 +2952,14 @@ test("refinement: equalizer remembers the custom curve, resets one band and surv
   const {page}=app;await waitForLibrary(page);await page.click('.nav button[data-view=settings]');
   await page.selectOption('.eq select','rock');
   await page.locator('.eq-slider').nth(5).focus();await page.keyboard.press('ArrowUp');
-  await page.waitForFunction(()=>window.__mock.state.eq?.[5]===0);
+  await page.waitForFunction(()=>window.__mock.state.eq?.[5]===2);
   await page.selectOption('.eq select','jazz');await page.selectOption('.eq select','custom');
-  await page.waitForFunction(()=>window.__mock.state.eq?.[0]===5 && window.__mock.state.eq?.[5]===0);
+  await page.waitForFunction(()=>window.__mock.state.eq?.[0]===4 && window.__mock.state.eq?.[5]===2);
   await page.locator('.eq-value').first().click();await page.waitForFunction(()=>window.__mock.state.eq?.[0]===0);
-  assert.match(await page.locator('.eq-curve').getAttribute('aria-label'),/1k Hz 0 дБ/);
+  assert.match(await page.locator('.eq-curve').getAttribute('aria-label'),/1k Hz 2 дБ/);
   await page.reload();await waitForLibrary(page);await page.click('.nav button[data-view=settings]');
   await page.selectOption('.eq select','bass');await page.selectOption('.eq select','custom');
-  await page.waitForFunction(()=>window.__mock.state.eq?.[0]===0 && window.__mock.state.eq?.[1]===4);
+  await page.waitForFunction(()=>window.__mock.state.eq?.[0]===0 && window.__mock.state.eq?.[1]===3);
   assert.deepEqual(app.problems,[]);
  }finally{await app.close();}
 });

@@ -142,7 +142,15 @@ mod staging {
     }
 }
 
-pub fn share(handle: &AppHandle, app: &App, track: &Track, allow_download: bool) -> Result<bool> {
+#[derive(Default, serde::Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ExportLyrics {pub text:String,pub lrc:String}
+impl ExportLyrics {
+    fn valid(&self)->bool {self.text.len()<=150_000 && self.lrc.len()<=200_000}
+}
+
+pub fn share(handle: &AppHandle, app: &App, track: &Track, allow_download: bool, lyrics:ExportLyrics) -> Result<bool> {
+    if !lyrics.valid(){return Err(Error::InvalidRequest)}
     #[cfg(target_os = "android")]
     {
         use tauri::Manager;
@@ -185,6 +193,9 @@ pub fn share(handle: &AppHandle, app: &App, track: &Track, allow_download: bool)
             entry.bytes,
             || app.session_epoch().is_ok_and(|current| current == epoch),
         )?;
+        let artwork_path=track.artwork_url.as_deref().and_then(|url|pm_engine::artwork::export_jpeg(url).ok()).and_then(|jpeg|{
+            let path=prepared.path.parent()?.join("cover.jpg");std::fs::write(&path,jpeg).ok()?;Some(path)
+        });
         if app.session_epoch()? != epoch {
             return Err(Error::Cancelled);
         }
@@ -194,14 +205,18 @@ pub fn share(handle: &AppHandle, app: &App, track: &Track, allow_download: bool)
             .map_err(|_| Error::Unavailable)?;
         handle
             .vk_login()
-            .share_audio(&canonical.to_string_lossy())
+            .share_audio(&tauri_plugin_vk_login::AudioShareRequest {
+                path:&canonical.to_string_lossy(),title:&track.title,artist:&track.artist,
+                album:track.album_title.as_deref().unwrap_or(""),lyrics_text:&lyrics.text,lyrics_lrc:&lyrics.lrc,
+                artwork_path:artwork_path.as_deref().and_then(|p|p.to_str()),
+            })
             .map_err(|_| Error::Unavailable)?;
         prepared.keep = true;
         Ok(true)
     }
     #[cfg(not(target_os = "android"))]
     {
-        let _ = (handle, app, track, allow_download);
+        let _ = (handle, app, track, allow_download,lyrics);
         Err(Error::InvalidRequest)
     }
 }

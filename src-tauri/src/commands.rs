@@ -428,7 +428,7 @@ pub async fn set_taste(state:TauriState<'_,AppState>,taste:pm_engine::taste::Tas
 
 #[tauri::command]
 pub async fn set_transitions(state:TauriState<'_,AppState>,prefetch:bool,gapless:bool,crossfade:f64)->CommandResult<()> {
-    if !crossfade.is_finite() || !(0.0..=8.0).contains(&crossfade){return Err(CommandError::from(pm_engine::Error::InvalidRequest));}
+    if !crossfade.is_finite() || !(0.0..=10.0).contains(&crossfade){return Err(CommandError::from(pm_engine::Error::InvalidRequest));}
     let app = state.app.clone();
     blocking(move || { app.controller().set_transitions(prefetch,gapless,crossfade); Ok(()) }).await
 }
@@ -819,10 +819,10 @@ pub async fn restore_radio(state: TauriState<'_, AppState>, source: RadioSource,
 
 
 #[tauri::command]
-pub async fn share_audio(handle: AppHandle, state: TauriState<'_, AppState>, track: Track, allow_download: Option<bool>) -> CommandResult<bool> {
+pub async fn share_audio(handle: AppHandle, state: TauriState<'_, AppState>, track: Track, allow_download: Option<bool>,lyrics:Option<crate::audio_share::ExportLyrics>) -> CommandResult<bool> {
     let track=checked_queue(vec![track])?.pop().ok_or(Error::InvalidRequest)?;
     let app=state.app.clone();
-    blocking(move || crate::audio_share::share(&handle,&app,&track,allow_download.unwrap_or(false))).await
+    blocking(move || crate::audio_share::share(&handle,&app,&track,allow_download.unwrap_or(false),lyrics.unwrap_or_default())).await
 }
 
 
@@ -860,4 +860,37 @@ pub async fn debug_cover_selftest(handle: AppHandle) -> CommandResult<String> {
 #[tauri::command]
 pub async fn copy_text(handle: AppHandle, text: String) -> CommandResult<()> {
     blocking(move || crate::clipboard::copy(&handle, &text)).await
+}
+
+#[tauri::command]
+pub async fn set_audio_processing(state:TauriState<'_,AppState>,settings:pm_engine::audio::processing::AudioSettings)->CommandResult<()> {
+    if !settings.valid(){return Err(pm_engine::Error::InvalidRequest.into());}
+    let app=state.app.clone();
+    blocking(move||{app.controller().set_audio_processing(settings);Ok(())}).await
+}
+
+#[tauri::command]
+pub async fn set_advance_on_error(state:TauriState<'_,AppState>,on:bool)->CommandResult<()> { control(state, move |controller| controller.set_advance_on_error(on)).await }
+
+#[tauri::command]
+pub async fn vk_broadcast(state:TauriState<'_,AppState>,user_id:i64,track:Option<Track>)->CommandResult<()> {
+    let app=state.app.clone();blocking(move||app.vk_broadcast(user_id,track.as_ref())).await
+}
+#[tauri::command]
+pub async fn vk_report_playback(state:TauriState<'_,AppState>,user_id:i64,events:Vec<pm_engine::vk::playback::ListeningEvent>)->CommandResult<()> {
+    let app=state.app.clone();blocking(move||app.vk_report_playback(user_id,&events)).await
+}
+
+#[tauri::command]
+pub async fn set_playback_preferences(handle:AppHandle,resume_bluetooth:bool,pause_at_zero:bool)->CommandResult<()> {
+    use tauri_plugin_media_session::MediaSessionExt;
+    handle.media_session().configure_playback(resume_bluetooth,pause_at_zero).map_err(|_|Error::Unavailable.into())
+}
+
+#[tauri::command]
+pub async fn set_high_quality(state:TauriState<'_,AppState>,on:bool)->CommandResult<()> {control(state,move |controller|controller.set_high_quality(on)).await}
+
+#[tauri::command]
+pub async fn cache_playing(state:TauriState<'_,AppState>,track:Track,user_id:i64,limit_bytes:u64)->CommandResult<bool> {
+    let app=state.app.clone();blocking(move||app.cache_playing(&track,user_id,limit_bytes)).await
 }

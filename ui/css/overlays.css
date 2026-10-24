@@ -11,7 +11,7 @@
 .menu.sub { animation: pop-in-sub 120ms var(--ease-out) backwards; }
 .menu-item {
   display: flex; align-items: center; gap: 10px; width: 100%; min-height: 32px; padding: 0 10px; border-radius: 8px; text-align: left;
-  font-size: 14px; line-height: 19px; font-weight: 500; color: var(--text); letter-spacing: -0.15px;
+  font-size: calc(14px * var(--text-scale, 1)); line-height: calc(19px * var(--text-scale, 1)); font-weight: 500; color: var(--text); letter-spacing: -0.15px;
   transition: background-color var(--t-hover) var(--ease-std), opacity var(--t-release) var(--ease-std);
 }
 .menu-item:hover, .menu-item:focus-visible { background: var(--hover); outline: none; }
@@ -42,18 +42,18 @@ body.overlay-open .player { -webkit-backdrop-filter: none; backdrop-filter: none
 @keyframes dialog-in { from { opacity: 0; transform: translateY(10px) scale(0.98); } }
 @keyframes dialog-out { to { opacity: 0; transform: scale(0.98); } }
 @keyframes fade-out { to { opacity: 0; } }
-.dialog h2 { font: 600 20px/25px var(--font); letter-spacing: -0.3px; margin: 0 0 16px; }
+.dialog h2 { font: 600 calc(20px * var(--text-scale, 1))/calc(25px * var(--text-scale, 1)) var(--font); letter-spacing: -0.3px; margin: 0 0 16px; }
 .dialog-form { display: flex; flex-direction: column; gap: 12px; }
-.dialog-field { display: flex; flex-direction: column; gap: 6px; color: var(--text-2); font-size: 13px; line-height: 18px; }
-.dialog-field .field { font-size: 14px; }
-.dialog-text { font-size: 15px; line-height: 21px; margin: 0 0 20px; }
+.dialog-field { display: flex; flex-direction: column; gap: 6px; color: var(--text-2); font-size: calc(13px * var(--text-scale, 1)); line-height: calc(18px * var(--text-scale, 1)); }
+.dialog-field .field { font-size: calc(14px * var(--text-scale, 1)); }
+.dialog-text { font-size: calc(15px * var(--text-scale, 1)); line-height: calc(21px * var(--text-scale, 1)); margin: 0 0 20px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 
 /* Тосты: стеклянная капсула над панелью игрока. */
 .toast {
   position: fixed; z-index: 90; left: 50%; bottom: calc(var(--bar-h) + var(--bar-gap) + 16px); transform: translateX(-50%);
   max-width: min(560px, 90vw); padding: 10px 20px; border-radius: var(--r-pill); box-shadow: var(--sh-rest);
-  font-size: 14px; line-height: 19px; font-weight: 600; letter-spacing: -0.15px; text-align: center;
+  font-size: calc(14px * var(--text-scale, 1)); line-height: calc(19px * var(--text-scale, 1)); font-weight: 600; letter-spacing: -0.15px; text-align: center;
   display: inline-flex; align-items: center; gap: 8px; animation: toast-in var(--t-toast) var(--ease-ios) backwards;
 }
 .toast.error svg { color: var(--danger); flex: none; }

@@ -247,6 +247,7 @@
       await delay(config.downloadDetailsDelay ?? 10);
       return (state.downloads ?? []).some(track=>`${track.owner_id}_${track.track_id}`===trackId) ? {bytes:4_200_000,added:1792700000,format:'AAC',available:!config.downloadFileMissing} : null;
     },
+    cache_playing: ({track})=>{if(config.cacheIncomplete)return false;if((state.downloads||[]).some(t=>t.track_id===track.track_id && t.owner_id===track.owner_id))return false;state.downloads=[{...track,stream_url:null},...(state.downloads||[])];return true;},
     download: async ({ track }) => {
       await delay(config.downloadDelay ?? 30);
       if (config.downloadFails) throw { kind: "stream", message: "Stream error: 403" };
@@ -340,6 +341,12 @@
     set_equalizer: ({ gains }) => { state.eq = gains; },
     set_taste:({taste})=>{state.taste=taste;},
     set_transitions:settings=>{state.transitions=settings;},
+    vk_broadcast: ({track}) => {state.broadcast=track;},
+    vk_report_playback: ({events}) => {state.listeningEvents=[...(state.listeningEvents||[]),...events];},
+    set_playback_preferences: args => {state.playbackPreferences=args;},
+    set_high_quality: ({on}) => {state.highQuality=on;},
+    set_advance_on_error: ({on}) => {state.advanceOnError=on;},
+    set_audio_processing:({settings})=>{state.audioProcessing=settings;},
     set_normalization:({on})=>{state.normalization=on;},
     lyrics_versions:()=>[],
     set_visualizer: ({ on }) => { state.visualizer = on; },

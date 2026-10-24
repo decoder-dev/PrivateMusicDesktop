@@ -25,6 +25,10 @@ pub struct Palette {
 }
 
 pub fn palette_from_url(raw: &str) -> Result<Palette> {
+    palette_from_image(&image_bytes(raw)?)
+}
+
+fn image_bytes(raw: &str) -> Result<Vec<u8>> {
     let url = Url::parse(raw).map_err(|_| Error::InvalidRequest)?;
     if url.scheme() != "https" || is_local_host(&url) || !url.username().is_empty() || url.password().is_some() {
         return Err(Error::InvalidRequest);
@@ -50,11 +54,27 @@ pub fn palette_from_url(raw: &str) -> Result<Palette> {
     if bytes.len() as u64 > MAX_BYTES {
         return Err(Error::Format("cover is too large".into()));
     }
-    palette_from_image(&bytes)
+    Ok(bytes)
+}
+
+/// Bounded, metadata-free JPEG for embedding in an exported audio file.
+pub fn export_jpeg(raw:&str)->Result<Vec<u8>> {
+    let bytes=image_bytes(raw)?;
+    let decoded=decode_image(&bytes)?;
+    let image=decoded.thumbnail(800,800).to_rgb8();
+    let mut result=Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut result,85).encode_image(&image).map_err(|_|Error::Unavailable)?;
+    Ok(result)
+}
+
+fn decode_image(bytes:&[u8])->Result<image::DynamicImage> {
+    let mut reader=image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format().map_err(|_|Error::InvalidRequest)?;
+    let mut limits=image::Limits::default();limits.max_image_width=Some(8192);limits.max_image_height=Some(8192);limits.max_alloc=Some(64*1024*1024);reader.limits(limits);
+    reader.decode().map_err(|_|Error::Format("cover is not a supported image".into()))
 }
 
 pub fn palette_from_image(bytes: &[u8]) -> Result<Palette> {
-    let decoded = image::load_from_memory(bytes).map_err(|_| Error::Format("cover is not an image".into()))?;
+    let decoded = decode_image(bytes)?;
     let small = decoded.resize_exact(24, 24, FilterType::Triangle).to_rgb8();
     Ok(pick(small.pixels().map(|p| (p[0], p[1], p[2]))))
 }

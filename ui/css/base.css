@@ -7,7 +7,7 @@ body {
   background-image: linear-gradient(180deg, var(--page-top), var(--page-bottom));
   background-attachment: fixed;
   color: var(--text);
-  font: 400 14px/1.4 var(--font);
+  font: 400 calc(14px * var(--text-scale, 1))/1.4 var(--font);
   letter-spacing: -0.15px;
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
@@ -64,7 +64,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   min-height: 36px; padding: 0 16px; border-radius: var(--r-control);
   background: var(--surface); color: var(--accent); border: var(--hair) solid var(--line);
-  font-size: 14px; line-height: 19px; font-weight: 600; letter-spacing: -0.15px; white-space: nowrap;
+  font-size: calc(14px * var(--text-scale, 1)); line-height: calc(19px * var(--text-scale, 1)); font-weight: 600; letter-spacing: -0.15px; white-space: nowrap;
   transition: background-color var(--t-hover) var(--ease-std), color var(--t-hover) var(--ease-std), border-color var(--t-hover) var(--ease-std), opacity var(--t-release) var(--ease-std);
 }
 .btn:not(:disabled):hover { background-color: color-mix(in srgb, var(--surface) 93%, var(--text)); }
@@ -79,7 +79,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .btn.danger:not(:disabled):hover { background-color: color-mix(in srgb, var(--danger-fill) 90%, #000); }
 .btn svg { flex: none; }
 /* Единственный главный глагол экрана. */
-.cta { min-height: 44px; padding: 0 24px; border-radius: var(--r-pill); font-size: 15px; }
+.cta { min-height: 44px; padding: 0 24px; border-radius: var(--r-pill); font-size: calc(15px * var(--text-scale, 1)); }
 .btn.busy { pointer-events: none; }
 
 .icon-btn {
@@ -103,7 +103,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .field {
   min-width: 0; min-height: 40px; padding: 0 12px; border-radius: var(--r-control);
   background: color-mix(in srgb, var(--surface) 82%, transparent);
-  border: var(--hair) solid var(--line); font-size: 14px; color: var(--text);
+  border: var(--hair) solid var(--line); font-size: calc(14px * var(--text-scale, 1)); color: var(--text);
   user-select: text; -webkit-user-select: text;
   transition: border-color var(--t-focus) var(--ease-std), box-shadow var(--t-focus) var(--ease-std);
 }
@@ -191,7 +191,7 @@ input[type="range"]:focus-visible { outline-offset: 0; border-radius: 4px; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 kbd {
-  display: inline-block; font: 500 12px/1 var(--mono); padding: 4px 7px; border-radius: 6px;
+  display: inline-block; font: 500 calc(12px * var(--text-scale, 1))/1 var(--mono); padding: 4px 7px; border-radius: 6px;
   border: var(--hair) solid var(--line); background: var(--surface); color: var(--text);
 }
 
@@ -211,5 +211,5 @@ kbd {
 .clipboard-copy-proxy { position: fixed; left: -10000px; top: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 
 .cover-dialog .cover-preview { display:block; width:min(100%,200px); aspect-ratio:1; height:auto; object-fit:cover; border-radius:16px; margin:0 auto; }
-.cover-dialog .cover-hint, .cover-dialog .cover-status { margin:0; font-size:13px; line-height:1.45; color:var(--text-2); }
+.cover-dialog .cover-hint, .cover-dialog .cover-status { margin:0; font-size: calc(13px * var(--text-scale, 1)); line-height: 1.45; color:var(--text-2); }
 .cover-dialog .cover-change { width:100%; }

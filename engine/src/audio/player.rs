@@ -18,7 +18,7 @@ use crossbeam_channel::{bounded, unbounded, Receiver, SendTimeoutError, Sender, 
 
 use super::convert::Converter;
 use super::sink::Sink;
-use super::eq::Equalizer;
+use super::processing::{Processor as Equalizer, AudioSettings};
 use super::spectrum::{Analyzer, Tap, BANDS};
 use crate::stream::{spawn_fetch, Decoder, FetchConfig, SharedBuffer};
 use crate::Error;
@@ -45,6 +45,7 @@ pub enum PlayerEvent {
 
 #[derive(Debug)]
 pub enum Command {
+    TrackBuffer {track_id:String,reply:StdSender<Option<SharedBuffer>>},
     Prepare {track_id:String,url:String,duration:f64,fetch:FetchConfig},
     ClearPrepared,
     SetTransitions {gapless:bool,crossfade:f64},
@@ -59,6 +60,7 @@ pub enum Command {
     SetVisualizer(bool),
     /// Усиление эквалайзера в dB для `eq::BANDS`; `None` (или все нули) отключает его.
     SetEqualizer(Option<[f32; 10]>),
+    SetAudioProcessing(AudioSettings),
     /// Закрывает звуковую карту, чтобы при следующем воспроизведении она открывалась снова
     /// (пользователь выбрал другой выход). Что бы ни играло, останавливается.
     ReopenSink,
@@ -136,6 +138,12 @@ impl Remote {
         let _ = self.commands.send(command);
     }
 
+    pub fn track_buffer(&self,track_id:&str)->Option<SharedBuffer> {
+        let (reply,receive)=mpsc::channel();
+        self.send(Command::TrackBuffer{track_id:track_id.into(),reply});
+        receive.recv_timeout(Duration::from_secs(2)).ok().flatten()
+    }
+
     pub fn play(&self, track_id: &str, url: &str, duration: f64, start: f64, fetch: FetchConfig) {
         self.send(Command::Play { track_id: track_id.to_string(), url: url.to_string(), duration, start, fetch });
     }
@@ -146,6 +154,7 @@ impl Remote {
     pub fn set_volume(&self, volume: f32) { self.send(Command::SetVolume(volume)); }
     pub fn set_visualizer(&self, on: bool) { self.send(Command::SetVisualizer(on)); }
     pub fn set_equalizer(&self, gains: Option<[f32; 10]>) { self.send(Command::SetEqualizer(gains)); }
+    pub fn set_audio_processing(&self, settings: AudioSettings) { if settings.valid(){self.send(Command::SetAudioProcessing(settings));} }
     pub fn reopen_sink(&self) { self.send(Command::ReopenSink); }
     pub fn stop(&self) { self.send(Command::Stop); }
 }
@@ -183,6 +192,7 @@ impl PlayerHandle {
     pub fn set_volume(&self, volume: f32) { self.send(Command::SetVolume(volume)); }
     pub fn set_visualizer(&self, on: bool) { self.send(Command::SetVisualizer(on)); }
     pub fn set_equalizer(&self, gains: Option<[f32; 10]>) { self.send(Command::SetEqualizer(gains)); }
+    pub fn set_audio_processing(&self, settings: AudioSettings) { if settings.valid(){self.send(Command::SetAudioProcessing(settings));} }
     pub fn reopen_sink(&self) { self.send(Command::ReopenSink); }
     pub fn stop(&self) { self.send(Command::Stop); }
 }
@@ -232,6 +242,7 @@ where
     let mut visualizer = false;
     let mut analyzer: Option<Analyzer> = None;
     let mut last_spectrum = Instant::now();
+    let mut audio_settings=AudioSettings::default();
     let mut eq_gains: Option<[f32; 10]> = None;
     let mut eq: Option<Equalizer> = None;
     let mut eq_for: Option<(u32, usize)> = None; // формат устройства, для которого были созданы фильтры
@@ -257,6 +268,7 @@ where
         };
         while let Some(command) = next.take().or_else(|| commands.try_recv().ok()) {
             match command {
+                Command::TrackBuffer{track_id,reply}=>{let _=reply.send(session.as_ref().filter(|active|active.track_id==track_id).map(|active|active.buffer.clone()));}
                 Command::SetNormalization(on)=>{normalization=on;prepared=None;}
                 Command::SetAnalysisDirectory(path)=>{analysis_dir=path;}
                 Command::Prepare{track_id,url,duration,fetch}=>{
@@ -268,13 +280,16 @@ where
                     }
                 }
                 Command::ClearPrepared=>{prepared=None;}
-                Command::SetTransitions{gapless:on,crossfade:seconds}=>{gapless=on;crossfade=if seconds.is_finite(){seconds.clamp(0.0,8.0)}else{0.0};}
+                Command::SetTransitions{gapless:on,crossfade:seconds}=>{gapless=on;crossfade=if seconds.is_finite(){seconds.clamp(0.0,10.0)}else{0.0};}
                 Command::Shutdown => return,
                 Command::SetVolume(v) => {
                     volume = if v.is_finite() { v.clamp(0.0, 1.0) } else { 1.0 };
                     if let Some(sink) = sink.as_mut() {
                         sink.set_volume(volume);
                     }
+                }
+                Command::SetAudioProcessing(settings) => {
+                    audio_settings=settings;eq_for=None;
                 }
                 Command::SetEqualizer(gains) => {
                     eq_gains = gains;
@@ -395,7 +410,7 @@ where
 
         let format = (output.sample_rate(), output.channels());
         if eq_for != Some(format) {
-            eq = Equalizer::transition(eq.take(), eq_gains.as_ref(), format.0, format.1);
+            eq = Equalizer::transition(eq.take(), eq_gains.as_ref(), format.0, format.1, audio_settings);
             eq_for = Some(format);
         }
         if !paused {

@@ -32,14 +32,14 @@ export function setPlaylistSync(playlist, on) {
   publish("playlistSync");
 }
 let running = false;
-function sharedProtection(currentKey){
+export function sharedProtection(currentKey){
   const manual=new Set(),protectedKeys=new Set();let complete=true;
   // Файлы загрузок общие для компьютера: чужое локальное закрепление тоже защищает файл.
   for(let i=0;i<localStorage.length;i++){
-    const key=localStorage.key(i);if(!/^pm\.personal\.[^.]+\.(playlistSync|manualDownloads)$/.test(key || ""))continue;
+    const key=localStorage.key(i);if(!/^pm\.personal\.[^.]+\.(playlistSync|manualDownloads|autoLikeDownloads)$/.test(key || ""))continue;
     let values;try{values=JSON.parse(localStorage.getItem(key));}catch{complete=false;continue;}
     if(!Array.isArray(values)){complete=false;continue;}
-    if(key.endsWith(".manualDownloads")){for(const id of values)manual.add(id);continue;}
+    if(key.endsWith(".manualDownloads") || key.endsWith(".autoLikeDownloads")){for(const id of values)manual.add(id);continue;}
     for(const other of values){
       if(key===`pm.personal.${accountId()}.playlistSync` && other.key===currentKey)continue;
       if(!Array.isArray(other.wanted))complete=false;
