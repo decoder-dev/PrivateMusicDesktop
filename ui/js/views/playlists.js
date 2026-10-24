@@ -59,7 +59,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
 
   const coverEditor=createCoverEditor({getPlaylist:()=>current,isSame:(a,b)=>!!a && !!b && same(a,b),toast,
     onBusy:busy=>{coverButton.disabled=busy;},
-    onSaved:async playlist=>{const account=accountId();forgetPlaylists();await ensurePlaylists();if(account===accountId() && current && same(current,playlist)){const fresh=allPlaylists().find(item=>same(item,playlist));if(fresh){current=fresh;detail.setCover(fresh.artwork_url);renderOwner();}}}});
+    onSaved:async playlist=>{const account=accountId();forgetPlaylists();await ensurePlaylists();if(account===accountId() && current && same(current,playlist)){const fresh=allPlaylists().find(item=>same(item,playlist));if(fresh){current=fresh;detail.setCover(fresh.artwork_url, fresh.title);renderOwner();}}}});
   const coverButton=h("button",{class:"icon-btn circle-btn playlist-cover",type:"button",title:t("cover.title"),"aria-label":t("cover.title"),onclick:()=>{if(current && isOwn(current))coverEditor.open(current);}},icon("image",18));
   const editButton = h("button", { class: "btn", type: "button", onclick: () => edit(), text: t("pl.edit") });
   const syncButton=h("button",{class:"btn",type:"button",text:ft("Сохранять офлайн"),onclick:async()=>{if(!current)return;try{setPlaylistSync(current,!isSynced(current));renderOwner();await syncPlaylists();}catch(error){toast(errorText(error),{error:true});}}});
@@ -163,7 +163,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
     detail.element.hidden = false;
     enter(detail.element);
     detail.setTitle(playlist.title);
-    detail.setCover(playlist.artwork_url);
+    detail.setCover(playlist.artwork_url, playlist.title);
     detail.setNote(playlist.description ?? "");
     detail.setTracks([]);
     detail.setStatus(t("loading"));

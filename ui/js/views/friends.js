@@ -188,7 +188,7 @@ export function createFriendsView({ play, onTrackAction, toast }) {
     playlistScreen.hidden = false;
     enter(playlistScreen);
     playlistTracks.setTitle(playlist.title);
-    playlistTracks.setCover(playlist.artwork_url);
+    playlistTracks.setCover(playlist.artwork_url, playlist.title);
     playlistTracks.setNote(playlist.description ?? "");
     playlistTracks.setTracks([]);
     playlistTracks.setStatus(t("loading"));

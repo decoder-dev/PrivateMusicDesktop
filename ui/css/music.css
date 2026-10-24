@@ -198,3 +198,10 @@ html[data-layout="phone"] .stat-row .stat-count { padding-right: 12px; }
 /* The checkbox sits beside its own label, not at the opposite edge of the card. */
 html .sync-panel > label.set-inline { flex-wrap: nowrap; justify-content: flex-start; align-items: flex-start; gap: 10px; text-align: left; }
 html .sync-panel > label.set-inline > input { flex: none; margin-top: 2px; }
+
+/* Collection pages without artwork show the same quiet initial as their grid card. */
+html .hero-art .art-box:is([data-art="missing"], [data-art="error"]) { background: var(--surface); }
+html .hero-art .art-box:is([data-art="missing"], [data-art="error"]) .art-ph { font-size: 72px; font-weight: 750; color: var(--text-2); }
+/* Phone: sliders take their own line so the explanation keeps a readable width. */
+html[data-layout="phone"] .set-row:has(> .audio-range) { flex-wrap: wrap; }
+html[data-layout="phone"] .set-row > .audio-range { flex: 1 1 100%; min-width: 0; order: 2; }
