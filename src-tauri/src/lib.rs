@@ -122,6 +122,7 @@ pub fn run() {
     #[cfg(desktop)]
     let builder = builder
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| tray::show_main(app)))
         .plugin(
             tauri_plugin_window_state::Builder::default()
@@ -145,6 +146,10 @@ pub fn run() {
             let handle = tauri_app.handle().clone();
             init_logging(&handle);
             #[cfg(desktop)]
+            tauri_app.manage(updater::UpdateState(Arc::new(updater::DesktopUpdater::new(
+                &handle.package_info().version.to_string(),
+            ))));
+            #[cfg(mobile)]
             tauri_app.manage(updater::UpdateState(Arc::new(pm_engine::update::Updater::new(
                 handle.path().app_cache_dir()?.join("updates"),
                 &handle.package_info().version.to_string(),

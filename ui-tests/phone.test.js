@@ -703,7 +703,7 @@ test("dark theme and another accent apply on the phone layout", async () => {
 
 const calledCommands = (page) => page.evaluate(() => window.__mock.calls.map((c) => c.command));
 
-test("Android: updates, window size, tray, shortcuts and track export are hidden, their commands are never sent", async () => {
+test("Android: updates are available while desktop-only settings stay hidden", async () => {
   const app = await phoneApp();
   try {
     const { page } = app;
@@ -712,14 +712,14 @@ test("Android: updates, window size, tray, shortcuts and track export are hidden
     await page.waitForSelector(".settings .set-body");
     await page.waitForTimeout(300);
     const text = (await page.locator(".settings").innerText()).toLowerCase();
-    for (const word of ["обновлени", "размер окна", "мини-плеер", "системный трей", "горячие клавиши", "устройство вывода", "визуализац"]) assert.ok(!text.includes(word), `"${word}" is not shown`);
+    for (const word of ["размер окна", "мини-плеер", "системный трей", "горячие клавиши", "устройство вывода", "визуализац"]) assert.ok(!text.includes(word), `"${word}" is not shown`);
     // What stays: sound options, the equaliser, Selena's tastes, the sleep timer, lyrics.
     for (const word of ["эквалайзер", "selena", "таймер сна", "предзагрузка"]) assert.ok(text.includes(word.toLowerCase()), `"${word}" stays`);
     // The jump chips of the screen do not lead to hidden sections.
     const chips = await page.locator(".settings-nav .btn").evaluateAll((nodes) => nodes.filter((n) => getComputedStyle(n).display !== "none").map((n) => n.textContent.trim()));
-    assert.deepEqual(chips, ["Звук", "Оформление", "Эквалайзер"]);
+    assert.deepEqual(chips, ["Звук", "Оформление", "Эквалайзер", "Обновления"]);
     const commands = await calledCommands(page);
-    for (const command of ["update_state", "update_check", "update_download", "output_devices", "set_output_device", "set_close_to_tray", "set_window_mode", "set_fullscreen"]) assert.ok(!commands.includes(command), `${command} was not called`);
+    for (const command of ["update_check", "update_download", "output_devices", "set_output_device", "set_close_to_tray", "set_window_mode", "set_fullscreen"]) assert.ok(!commands.includes(command), `${command} was not called`);
     // The track menu has no "save audio file": export is a stub on Android.
     await pressBack(page);
     await openLibraryTracks(page);

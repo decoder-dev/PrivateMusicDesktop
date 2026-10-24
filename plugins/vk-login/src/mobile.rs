@@ -36,6 +36,12 @@ pub(crate) fn init<R: Runtime>(
 }
 
 impl<R: Runtime> VkLogin<R> {
+    /// The host supplies only a checksum-verified APK from its private update cache.
+    pub fn install_update(&self, path: &std::path::Path) -> Result<()> {
+        self.plugin.run_mobile_plugin::<serde_json::Value>("installUpdate", serde_json::json!({"path":path}))
+            .map(|_| ()).map_err(Into::into)
+    }
+
     /// Receives every event of every sign-in, on a plugin thread.
     pub fn set_handler(&self, handler: impl Fn(LoginEvent) + Send + Sync + 'static) {
         self.events.set(std::sync::Arc::new(handler));

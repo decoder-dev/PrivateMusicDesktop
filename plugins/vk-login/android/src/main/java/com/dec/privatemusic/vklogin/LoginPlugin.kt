@@ -23,6 +23,9 @@ import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
 
 @InvokeArg
+class InstallUpdateArgs { lateinit var path: String }
+
+@InvokeArg
 class StartArgs {
     /** Native channel to Rust: every [LoginEvent] goes here, never to JavaScript. */
     lateinit var onEvent: Channel
@@ -70,6 +73,48 @@ class LoginPlugin(private val activity: Activity) : Plugin(activity) {
             LoginBridge.live = true
             activity.startActivity(Intent(activity, LoginActivity::class.java).putExtra(SmokeMode.EXTRA, true))
         }
+    }
+
+    @Command
+    fun installUpdate(invoke: Invoke) {
+        val args = invoke.parseArgs(InstallUpdateArgs::class.java)
+        try {
+            val apk = File(args.path).canonicalFile
+            val directory = File(activity.cacheDir, "updates").canonicalFile
+            require(apk.parentFile == directory && apk.isFile && UpdatePolicy.validName(apk.name))
+            val pm = activity.packageManager
+            @Suppress("DEPRECATION")
+            val flags = if (android.os.Build.VERSION.SDK_INT >= 28) android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES else android.content.pm.PackageManager.GET_SIGNATURES
+            @Suppress("DEPRECATION")
+            val archive = pm.getPackageArchiveInfo(apk.path, flags) ?: error("invalid APK")
+            @Suppress("DEPRECATION")
+            val current = pm.getPackageInfo(activity.packageName, flags)
+            @Suppress("DEPRECATION")
+            fun version(info: android.content.pm.PackageInfo): Long = if (android.os.Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
+            @Suppress("DEPRECATION")
+            fun signers(info: android.content.pm.PackageInfo): Set<String> {
+                val certificates = if (android.os.Build.VERSION.SDK_INT >= 28) info.signingInfo?.apkContentsSigners else info.signatures
+                return certificates.orEmpty().map { signature ->
+                    java.security.MessageDigest.getInstance("SHA-256").digest(signature.toByteArray()).joinToString("") { "%02x".format(it) }
+                }.toSet()
+            }
+            require(UpdatePolicy.accepts(activity.packageName, archive.packageName, version(current), version(archive), signers(current), signers(archive)))
+            activity.runOnUiThread {
+                try {
+                    if (android.os.Build.VERSION.SDK_INT >= 26 && !pm.canRequestPackageInstalls()) {
+                        activity.startActivity(Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:${activity.packageName}")))
+                        invoke.reject("install_permission")
+                    } else {
+                        val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", apk)
+                        val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        intent.clipData = ClipData.newRawUri("Private Music update", uri)
+                        activity.startActivity(intent)
+                        invoke.resolve()
+                    }
+                } catch (_: Exception) { invoke.reject("installer") }
+            }
+        } catch (_: Exception) { invoke.reject("installer") }
     }
 
     @Command

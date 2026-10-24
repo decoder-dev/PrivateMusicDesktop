@@ -82,6 +82,19 @@
       "appimage": {
         "bundleMediaFramework": false
       }
+    },
+    "createUpdaterArtifacts": false
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc5OTdFOEYxRTM4NUUzNjUKUldSbDQ0WGo4ZWlYZVdNK0J4SlpzTVZCc1lienN2WVVTL21hUXNYZXVKZm9PaTdVZGdxZzFzVTIK",
+      "endpoints": [
+        "https://github.com/decoder-dev/PrivateMusicDesktop/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      },
+      "requireSignedVersion": true
     }
   }
 }

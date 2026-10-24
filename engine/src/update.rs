@@ -272,6 +272,8 @@ fn platform() -> &'static str {
         "macos-universal.dmg"
     } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
         "linux-amd64.AppImage"
+    } else if cfg!(all(target_os = "android", target_arch = "aarch64")) {
+        "android-arm64.apk"
     } else {
         "unsupported"
     }
@@ -440,6 +442,21 @@ mod tests {
         assert!(select(&release, "macos-universal.dmg").is_err());
         release.assets[0].size = MAX_INSTALLER + 1;
         assert!(select(&release, "windows-x64-setup.exe").is_err());
+    }
+    #[test]
+    fn android_requires_signed_release_asset_with_the_exact_version() {
+        let mut release = Release {
+            tag_name: "v0.6.6".into(), body: None, draft: false, prerelease: false,
+            assets: vec![
+                Asset { id: 1, name: "PrivateMusic_0.6.6_android-arm64-unsigned.apk".into(), size: 100 },
+                Asset { id: 2, name: "SHA256SUMS.txt".into(), size: 200 },
+            ],
+        };
+        assert!(select(&release, "android-arm64.apk").is_err());
+        release.assets.push(Asset { id: 3, name: "PrivateMusic_0.6.6_android-arm64.apk".into(), size: 100 });
+        assert_eq!(select(&release, "android-arm64.apk").unwrap().installer.id, 3);
+        release.tag_name = "v0.6.7".into();
+        assert!(select(&release, "android-arm64.apk").is_err());
     }
     #[test]
     fn hash_manifest_requires_one_exact_filename() {

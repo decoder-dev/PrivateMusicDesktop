@@ -153,7 +153,7 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
       section(t("set.account"),
         h("div", { class: "set-row" }, accountName, h("button", { class: "btn", type: "button", onclick: () => onSignOut(), text: t("account.signOut") })),
         persistNote),
-      desktopOnly(section(t("update.title"), updater.element)),
+      section(t("update.title"), updater.element),
       section(t("set.about"),
         h("div", { class: "set-row" }, h("div", {}, h("strong", { text: "Private Music" }), version,
           h("div", { class: "set-note", text: t("set.disclaimer") }))),
@@ -253,8 +253,9 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
     },
     async show() {
       render();
-      // На телефоне нет ни выбора устройства вывода, ни установщика обновлений (их команды-заглушки).
-      if (!isAndroid()) { loadDevices(); updater.show(); }
+      // Output routing is desktop-only; updates are available on every supported platform.
+      if (!isAndroid()) loadDevices();
+      updater.show();
       try {
         const info = await api.appInfo();
         version.textContent = t("set.version", { version: info.version });

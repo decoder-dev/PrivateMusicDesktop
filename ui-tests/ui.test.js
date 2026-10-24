@@ -2836,13 +2836,12 @@ test("product: updates check and download inside the app, show progress and reva
  try{const {page}=app;await waitForLibrary(page);await page.click('.nav [data-view="settings"]');
   await page.locator('.update-panel').scrollIntoViewIfNeeded();
   await page.getByRole('button',{name:'Проверить обновления',exact:true}).click();
-  await page.waitForFunction(()=>document.querySelector('.update-panel').innerText.includes('Доступна версия 0.4.0'));
-  await page.getByRole('button',{name:'Скачать обновление',exact:true}).click();
+
   await page.waitForSelector('.update-panel progress:not([hidden])');
   assert.equal(await page.locator('.update-panel progress').getAttribute('value'),'50');
   await page.waitForFunction(()=>document.querySelector('.update-panel').innerText.includes('Обновление загружено и проверено'));
-  await page.locator('.update-actions .primary:not([hidden])').click();
-  assert.equal(await page.evaluate(()=>window.__mock.count('update_open')),1);
+  await page.waitForFunction(()=>window.__mock.count('update_open')===1);
+  assert.equal(await page.evaluate(()=>window.__mock.count('update_download')),1);
   assert.equal(page.context().pages().length,1);assert.deepEqual(app.problems,[]);
  }finally{await app.close();}
 });
@@ -2850,7 +2849,7 @@ test("product: updates check and download inside the app, show progress and reva
 test("product: update cancellation is shared across settings visits and failure messages survive UI refresh",async()=>{
  const app=await openApp({config:{signedIn:true,updateDelay:700}});
  try{const {page}=app;await waitForLibrary(page);await page.click('.nav [data-view="settings"]');
-  await page.getByRole('button',{name:'Проверить обновления',exact:true}).click();await page.getByRole('button',{name:'Скачать обновление',exact:true}).click();
+  await page.getByRole('button',{name:'Проверить обновления',exact:true}).click();await page.waitForSelector('.update-panel progress:not([hidden])');
   await page.getByRole('button',{name:'Отменить загрузку',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('.update-panel').innerText.includes('Загрузка отменена'));
   await page.waitForTimeout(750);

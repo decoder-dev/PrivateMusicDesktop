@@ -45,6 +45,10 @@ jobs:
       - name: Tests
         run: cargo test --workspace --locked
 
+      - name: Release manifest tests
+        if: runner.os == 'Linux'
+        run: python3 -m unittest discover -s scripts -p test_prepare_release.py
+
       - name: Install script
         if: runner.os == 'Linux'
         working-directory: .

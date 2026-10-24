@@ -74,8 +74,8 @@ and signing in again.
   system buttons come back through `bridge::dispatch`. Capability: `capabilities/mobile.json`
   (`media-session:default`).
 * Desktop-only commands have stubs on Android so the UI never meets "command not found":
-  window modes and full screen (no-op), output devices (empty), built-in updates (answer
-  "no installer for this system"), track export (error `unsupported`).
+  window modes and full screen (no-op), output devices (empty), track export (error `unsupported`).
+  Updates have a native implementation: download and verify the APK, then open Android installation.
 * The sign-in session is encrypted with an AES-256-GCM key in the Android
   Keystore (`SecureStorePlugin.kt`); only ciphertext is on disk
   (`files/secure/session.bin`). `allowBackup` is off, so it is never backed up.
@@ -127,7 +127,7 @@ desktop UI and its tests are unchanged.
   Reference: `PrivateMusic2` commit `ecf7adb` (`LibraryView.swift`, `ProfileView.swift`).
   Preview screenshots in [design/android](design/android/) use the UI-test mock backend and generated
   placeholder covers: light at 360×640, dark at 412×915. These are browser previews, not device captures.
-* **Hidden on Android** (`[data-desktop-only]`, `.desktop-only`, or not built): updates, window size
+* **Hidden on Android** (`[data-desktop-only]`, `.desktop-only`, or not built): window size
   and the mini window, close to tray, keyboard shortcuts, output device, the visualizer, export of a
   track to a file; the engine commands behind them are not called. Downloads and offline playlist sync,
   the equaliser, lyrics, friends, history, statistics, mixes and radio, smart playlists, Selena's tastes,

@@ -74,7 +74,22 @@ jobs:
         shell: bash
         working-directory: src-tauri
         # В пакет npm входит готовый CLI: никакого десятиминутного `cargo install`.
-        run: npx --yes @tauri-apps/cli@2 build --bundles ${{ matrix.bundles }} ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx --yes @tauri-apps/cli@2 build --config '{"bundle":{"createUpdaterArtifacts":true}}' --bundles ${{ matrix.bundles }} ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+
+      - name: Sign desktop updater packages (including DEB)
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          find target -type f \( -name '*-setup.exe' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.app.tar.gz' \) -path '*/release/bundle/*' -print0 | while IFS= read -r -d '' file; do
+            npx --yes @tauri-apps/cli@2 signer sign --app-version "$VERSION" "$file"
+          done
 
       # Окно входа VK должно загружаться в каждой системе, начиная с реальной сборки.
       - name: Sign-in window loads (Linux, macOS)
@@ -128,6 +143,8 @@ jobs:
             target/**/release/bundle/**/*.dmg
             target/**/release/bundle/**/*.deb
             target/**/release/bundle/**/*.AppImage
+            target/**/release/bundle/**/*.sig
+            target/**/release/bundle/**/*.app.tar.gz
           if-no-files-found: error
 
   android:
@@ -231,30 +248,15 @@ jobs:
           mkdir -p android-parts
           gh run download "$GITHUB_RUN_ID" --repo "$REPO" --name android-apk --dir android-parts
 
-      - name: Give the files plain names and checksum them
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Prepare installers, signatures and update manifest
         env:
           VERSION: ${{ needs.version.outputs.version }}
-        run: |
-          mkdir out
-          find parts -type f | while read -r file; do
-            case "$file" in
-              *-setup.exe)  name="PrivateMusic_${VERSION}_windows-x64-setup.exe" ;;
-              *.dmg)        name="PrivateMusic_${VERSION}_macos-universal.dmg" ;;
-              *.deb)        name="PrivateMusic_${VERSION}_linux-amd64.deb" ;;
-              *.AppImage)   name="PrivateMusic_${VERSION}_linux-amd64.AppImage" ;;
-              *) continue ;;
-            esac
-            cp "$file" "out/$name"
-          done
-          # The Android job verifies the release signature before uploading this APK.
-          android=$(find android-parts -type f -name 'PrivateMusic_*_android-arm64*.apk')
-          [ -n "$android" ] && [ "$(printf '%s\n' "$android" | grep -c .)" -eq 1 ] || { echo "expected exactly one Android APK, found: $android" >&2; exit 1; }
-          cp "$android" "out/$(basename "$android")"
-          expected=5
-          cd out
-          ls -l
-          [ "$(ls | wc -l)" -eq "$expected" ] || { echo "expected $expected files (four desktop installers and one Android APK)" >&2; exit 1; }
-          sha256sum * > SHA256SUMS.txt
+          REPO: ${{ github.repository }}
+        run: python3 scripts/prepare-release.py --parts parts --android android-parts --out out --version "$VERSION" --repo "$REPO"
 
       - name: Publish the combined release
         env:

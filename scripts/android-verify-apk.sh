@@ -41,7 +41,7 @@ check_badging() { # <label> <fixed-string>
   if printf '%s\n' "$badging" | grep -qF -- "$2"; then ok "$1"; else fail "badging has no: $2"; fi
 }
 check_badging "package id" "package: name='com.dec.privatemusic2.android'"
-for permission in INTERNET ACCESS_NETWORK_STATE FOREGROUND_SERVICE FOREGROUND_SERVICE_MEDIA_PLAYBACK POST_NOTIFICATIONS WAKE_LOCK; do
+for permission in REQUEST_INSTALL_PACKAGES INTERNET ACCESS_NETWORK_STATE FOREGROUND_SERVICE FOREGROUND_SERVICE_MEDIA_PLAYBACK POST_NOTIFICATIONS WAKE_LOCK; do
   check_badging "permission $permission" "uses-permission: name='android.permission.$permission'"
 done
 check_badging "launcher activity" "launchable-activity: name='com.dec.privatemusic2.android.MainActivity'"

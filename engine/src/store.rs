@@ -88,7 +88,7 @@ mod os_keyring;
 #[cfg(not(target_os = "android"))]
 pub use os_keyring::{load_update_token, update_token, KeyringStore};
 
-// На Android нет ни связки ключей, ни встроенного обновления: токен обновления не хранится.
+// Android updates use the public release endpoint; a separate GitHub token is not stored.
 #[cfg(target_os = "android")]
 pub fn update_token(_token: Option<&str>) -> Result<()> {
     Err(Error::Transport("secret store: not available on Android".into()))
