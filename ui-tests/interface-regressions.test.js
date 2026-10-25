@@ -142,3 +142,11 @@ for(const width of [320,412])test(`collection pin controls clear long titles at 
   }assert.deepEqual(app.problems,[]);
  }finally{await app.close();}
 });
+
+test('phone Home: the compact title keeps a left margin when there is no Back button',async()=>{
+ const app=await openApp({config:{...config,platform:'android'},phone:'small'});
+ try{const {page}=app;await page.locator('.navbar .nav-title').waitFor({state:'attached'});
+  const left=await page.locator('.navbar .nav-title').evaluate(el=>{const range=document.createRange();range.selectNodeContents(el);return range.getBoundingClientRect().left;});
+  assert.ok(left>=12,`title text starts at ${left}px`);assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});

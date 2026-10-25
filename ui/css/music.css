@@ -228,3 +228,6 @@ html[data-layout="phone"] :is(.lib-pinned, .lib-grid.list-layout) .lib-collectio
 /* Artist links in rows keep their compact look but get a larger touch area. */
 html[data-layout="phone"] .row .artist.link-text { position: relative; }
 html[data-layout="phone"] .row .artist.link-text::after { content: ""; position: absolute; inset: -6px; }
+
+/* Without a Back button the compact title keeps the same left margin as the page content. */
+html[data-layout="phone"]:not([data-style="material"]) .navbar:not(:has(.nav-back:not([hidden]))) .nav-title { padding-inline-start: 12px; }
