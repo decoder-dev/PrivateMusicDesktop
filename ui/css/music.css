@@ -231,3 +231,24 @@ html[data-layout="phone"] .row .artist.link-text::after { content: ""; position:
 
 /* Without a Back button the compact title keeps the same left margin as the page content. */
 html[data-layout="phone"]:not([data-style="material"]) .navbar:not(:has(.nav-back:not([hidden]))) .nav-title { padding-inline-start: 12px; }
+
+/* ------------------------------------------------------------------
+   One shape system for phone, desktop and every palette.
+   Buttons are pills; panels share one radius; artwork has three sizes.
+   Material keeps its own shapes. */
+:root { --pm-r-panel: 16px; --pm-r-field: 12px; --pm-r-art-s: 6px; --pm-r-art-m: 10px; --pm-r-art-l: 16px; }
+html[data-layout]:not([data-style="material"]) .btn { border-radius: 999px; }
+html[data-layout]:not([data-style="material"]) :is(.set-card, .group, .stat-list, .later-card, .sync-panel, .dl-summary, .resume-card, .lib-summary, .explore-row, .net-hint) { border-radius: var(--pm-r-panel); }
+html[data-layout]:not([data-style="material"]) :is(.stage, .player-dock .player, .player, .mix-tile.mobile-mix, .home-body .explore-row) { border-radius: var(--pm-r-panel); }
+html[data-layout]:not([data-style="material"]) :is(.field, .search-wrap) { border-radius: var(--pm-r-field); }
+html[data-layout]:not([data-style="material"]) .row .art-box,
+html[data-layout]:not([data-style="material"]) .player .now-art .art-box { border-radius: var(--pm-r-art-s); }
+html[data-layout]:not([data-style="material"]) :is(.card .card-art, .card .card-art .art-box, .stage-art, .stage-cover .art-box) { border-radius: var(--pm-r-art-m); }
+html[data-layout]:not([data-style="material"]) :is(.hero-art .art-box, .np .np-cover) { border-radius: var(--pm-r-art-l); }
+html[data-layout]:not([data-style="material"]) .artist-card .card-art, html[data-layout]:not([data-style="material"]) .artist-card .card-art .art-box { border-radius: 50%; }
+html[data-layout]:not([data-style="material"]) .np[data-mode="radial"] .np-cover { border-radius: 50%; }
+/* Headings: one weight and one size per level on every screen. */
+html[data-layout] .view-header h1 { font-weight: 800; }
+html[data-layout="phone"] :is(.shelf-title, .view h2:not(.stage-headline)) { font-size: calc(20px * var(--text-scale, 1)); font-weight: 700; }
+html[data-layout="wide"] :is(.shelf-title, .view h2) { font-size: calc(18px * var(--text-scale, 1)); font-weight: 700; }
+html[data-layout]:not([data-style="material"]) .card { border-radius: 12px; }
