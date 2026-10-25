@@ -70,7 +70,6 @@ object MediaHub {
             snapshot = PlaybackSnapshot(it, SystemClock.elapsedRealtime())
             focus?.onPlaybackState(it.kind)
         }
-        preferences?.onPlaybackChanged()
         syncService()
     }
 

@@ -16,6 +16,8 @@ class PlaybackPreferences(private val context: Context) {
     private val known = audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS).map { it.id }.toMutableSet()
     private var resumeBluetooth = true
     private var pauseAtZero = false
+    // Pause only when the volume is lowered to zero. A deliberate Play at zero stays playing.
+    private var lastVolume = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
     private val devices = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
             var connected = false
@@ -35,7 +37,7 @@ class PlaybackPreferences(private val context: Context) {
         }
     }
     private val volume = object : ContentObserver(main) {
-        override fun onChange(selfChange: Boolean) { onPlaybackChanged() }
+        override fun onChange(selfChange: Boolean) { onVolumeChanged() }
     }
     init {
         audio.registerAudioDeviceCallback(devices, main)
@@ -44,11 +46,13 @@ class PlaybackPreferences(private val context: Context) {
     fun configure(resume: Boolean, pause: Boolean) {
         resumeBluetooth = resume
         pauseAtZero = pause
-        onPlaybackChanged()
+        lastVolume = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
     }
-    fun onPlaybackChanged() {
-        if (pauseAtZero && MediaHub.snapshot?.info?.kind?.isActive == true &&
-            audio.getStreamVolume(AudioManager.STREAM_MUSIC) == 0) {
+    private fun onVolumeChanged() {
+        val current = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+        val lowered = lastVolume > 0 && current == 0
+        lastVolume = current
+        if (pauseAtZero && lowered && MediaHub.snapshot?.info?.kind?.isActive == true) {
             MediaHub.emit(ActionEvent.PAUSE)
         }
     }
