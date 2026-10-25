@@ -174,11 +174,14 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     h("div", { class: "np-bottom" },
       h("div", { class: "np-seek" }, elapsed, seek, total),
       transport,
-      volumeRow,
       h("div", { class: "np-quick" }, quickLyrics, quickQueue, quickEq, quickMore)));
 
   // One favourite button: beside the title on phones, after Repeat on desktop.
-  const placeFavorite = () => (isPhone() ? heading : transport).append(likeButton);
+  const placeFavorite = () => {
+    (isPhone() ? heading : transport).append(likeButton);
+    // Volume exists only on wide screens; phones use the hardware keys and keep a single scrubber.
+    if (isPhone()) volumeRow.remove(); else transport.after(volumeRow);
+  };
   placeFavorite();
   own(onLayoutChange(placeFavorite));
 

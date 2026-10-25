@@ -265,3 +265,5 @@ html[data-layout="wide"] .np-volume .np-btn { width: 36px; height: 36px; flex: n
 html[data-layout="wide"] .np-stage { container-type: size; }
 html[data-layout="wide"] .np-cover { width: max(120px, min(36vw, 52vh, calc(100cqh - 130px))); }
 html[data-layout="wide"] .np[data-side="lyrics"] .np-cover, html[data-layout="wide"] .np[data-side="queue"] .np-cover { width: max(120px, min(26vw, 40vh, calc(100cqh - 130px))); }
+
+html[data-layout]:not([data-style="material"]) :is(.hero-art.round .art-box, .art-box.round) { border-radius: 50%; }
