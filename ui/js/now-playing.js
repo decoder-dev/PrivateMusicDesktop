@@ -144,6 +144,24 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   // The sheet's grabber (phone layout only): drag it, or anything not a control, down to close.
   const grab = h("div", { class: "np-grab", "aria-hidden": "true" }, h("i"));
   const heading = h("div", { class: "np-heading" }, title);
+  // Volume stays reachable in the full-screen player on wide screens (phones use the hardware keys).
+  let lastVolume = 1;
+  const muteButton = h("button", { class: "np-btn np-mute", type: "button", title: t("mute"), "aria-label": t("mute"),
+    onclick: () => setVolume(store.player.volume > 0 ? 0 : lastVolume || 1) }, icon("volume", 20));
+  const volume = h("input", { type: "range", min: "0", max: "100", step: "1", value: "100", "aria-label": t("volume"),
+    oninput: () => setVolume(Number(volume.value) / 100) });
+  bindRange(volume);
+  const volumeRow = h("div", { class: "np-volume" }, muteButton, volume);
+  function setVolume(value) {
+    const clamped = Math.min(1, Math.max(0, value));
+    playbackAction(async () => { await api.setVolume(clamped); if (clamped > 0) lastVolume = clamped; });
+  }
+  function renderVolume(player) {
+    const level = Math.round((player.volume ?? 1) * 100);
+    if (volume.value !== String(level) && document.activeElement !== volume) { volume.value = String(level); syncRange(volume); }
+    const glyph = player.volume > 0 ? "volume" : "mute";
+    if (muteButton.dataset.glyph !== glyph) { muteButton.dataset.glyph = glyph; muteButton.replaceChildren(icon(glyph, 20)); }
+  }
   const transport = h("div", { class: "np-controls" }, shuffleButton, previousButton, playButton, nextButton, repeatButton, likeButton);
   const element = h("div", { class: "np", role: "dialog", "aria-modal": "true", "aria-label": t("np.open"), hidden: true },
     backdrop,
@@ -156,6 +174,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     h("div", { class: "np-bottom" },
       h("div", { class: "np-seek" }, elapsed, seek, total),
       transport,
+      volumeRow,
       h("div", { class: "np-quick" }, quickLyrics, quickQueue, quickEq, quickMore)));
 
   // One favourite button: beside the title on phones, after Repeat on desktop.
@@ -179,8 +198,14 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
 
   visualizer.setPlotBounds(() => {
     const frame=canvas.getBoundingClientRect();
-    const info=element.querySelector(".np-info").getBoundingClientRect();
     const bottom=element.querySelector(".np-bottom").getBoundingClientRect();
+    if (!isPhone()) {
+      // Wide screens keep a reserved strip below the controls: bars never sit behind text or buttons.
+      const quick=element.querySelector(".np-quick").getBoundingClientRect();
+      const top=quick.bottom+10-frame.top;
+      return {top,height:Math.max(0,frame.height-top-12),left:0,width:frame.width};
+    }
+    const info=element.querySelector(".np-info").getBoundingClientRect();
     const top=info.bottom+8-frame.top;
     const lane=seek.getBoundingClientRect();
     return {top,height:Math.max(0,bottom.top-frame.top-8-top),left:lane.left-frame.left,width:lane.width};
@@ -328,6 +353,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   // -------------------------------------------------------------- рендеринг
 
   function render(player) {
+    renderVolume(player);
     const track = player.track;
     const titleText = track ? track.title : t("nothing");
     if (title.textContent !== titleText) { title.textContent = titleText; title.title = titleText; }

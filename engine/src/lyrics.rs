@@ -54,9 +54,9 @@ pub fn parse_lrc(raw: &str) -> Vec<Line> {
             }
             rest = stripped[end + 1..].trim_start();
         }
-        let text = rest.trim();
+        let text = decode_entities(rest.trim());
         for time in stamps {
-            lines.push(Line { time, text: text.to_string() });
+            lines.push(Line { time, text: text.clone() });
         }
     }
     lines.sort_by(|a, b| a.time.total_cmp(&b.time));
@@ -64,6 +64,40 @@ pub fn parse_lrc(raw: &str) -> Vec<Line> {
         lines.remove(0);
     }
     lines
+}
+
+/// Decodes HTML character references in one pass: `&amp;lt;` becomes `&lt;`, never `<`.
+/// Some lyrics providers store `&#x27;` or `&quot;` in the text itself, which would otherwise be
+/// shown literally. Unknown or malformed references are kept as written.
+pub fn decode_entities(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find('&') {
+        out.push_str(&rest[..start]);
+        let tail = &rest[start + 1..];
+        let decoded = tail.find(';').filter(|end| *end <= 10).and_then(|end| {
+            let name = &tail[..end];
+            let ch = match name {
+                "amp" => Some('&'), "lt" => Some('<'), "gt" => Some('>'), "quot" => Some('"'), "apos" => Some('\''),
+                "nbsp" => Some(' '), "hellip" => Some('\u{2026}'), "ndash" => Some('\u{2013}'), "mdash" => Some('\u{2014}'),
+                "lsquo" => Some('\u{2018}'), "rsquo" => Some('\u{2019}'), "ldquo" => Some('\u{201C}'), "rdquo" => Some('\u{201D}'),
+                _ => name.strip_prefix('#').and_then(|number| {
+                    let code = match number.strip_prefix(['x', 'X']) {
+                        Some(hex) => u32::from_str_radix(hex, 16).ok(),
+                        None => number.parse::<u32>().ok(),
+                    }?;
+                    char::from_u32(code).filter(|c| !c.is_control() || matches!(c, '\n' | '\t'))
+                }),
+            };
+            ch.map(|c| (c, end + 1))
+        });
+        match decoded {
+            Some((ch, consumed)) => { out.push(ch); rest = &tail[consumed..]; }
+            None => { out.push('&'); rest = tail; }
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 fn parse_stamp(text: &str) -> Option<f64> {
@@ -182,7 +216,7 @@ fn best(track: &Track, candidates: Vec<Candidate>) -> Option<Lyrics> {
             .plain_lyrics
             .as_deref()
             .filter(|t| !t.trim().is_empty())
-            .map(|t| t.trim().to_string())
+            .map(|t| decode_entities(t.trim()))
             .or_else(|| (!synced.is_empty()).then(|| synced.iter().map(|l| l.text.as_str()).collect::<Vec<_>>().join("\n")))?
     } else {
         lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>().join("\n")
@@ -192,7 +226,7 @@ fn best(track: &Track, candidates: Vec<Candidate>) -> Option<Lyrics> {
 
 pub fn from_plain(source: &str, text: &str) -> Option<Lyrics> {
     let text = text.trim();
-    (!text.is_empty()).then(|| Lyrics { source: source.into(), text: text.into(), lines: Vec::new() })
+    (!text.is_empty()).then(|| Lyrics { source: source.into(), text: decode_entities(text), lines: Vec::new() })
 }
 
 pub struct LrcLib {
@@ -451,9 +485,7 @@ fn strip_html(fragment: &str) -> String {
             out.push(c);
         }
     }
-    for (entity, decoded) in [("&amp;", "&"), ("&quot;", "\""), ("&#39;", "'"), ("&apos;", "'"), ("&lt;", "<"), ("&gt;", ">"), ("&nbsp;", " ")] {
-        out = out.replace(entity, decoded);
-    }
+    let out = decode_entities(&out);
     out.lines().map(str::trim).filter(|line| !line.is_empty()).collect::<Vec<_>>().join("\n")
 }
 
@@ -678,6 +710,21 @@ pub fn describe(source: &str, error: &Error) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn html_character_references_are_decoded_once() {
+        assert_eq!(decode_entities("You&#x27;re &amp; I&#39;m &quot;here&quot; &#X41;&#66;"), "You're & I'm \"here\" AB");
+        assert_eq!(decode_entities("&amp;lt; &amp;#x27;"), "&lt; &#x27;");
+        assert_eq!(decode_entities("AT&T; R&B & a;b &unknown; &#xZZ; &#1114112; &"), "AT&T; R&B & a;b &unknown; &#xZZ; &#1114112; &");
+        assert_eq!(decode_entities("тест &#1090;&#x44d;"), "тест тэ");
+    }
+
+    #[test]
+    fn provider_text_with_character_references_is_shown_decoded() {
+        let lines = parse_lrc("[00:01.00]They gon&#x27;re gonna punk out &amp; fight");
+        assert_eq!(lines[0].text, "They gon're gonna punk out & fight");
+        assert_eq!(from_plain("t", "You&#x27;re here").unwrap().text, "You're here");
+    }
+
     use super::*;
 
     #[test]

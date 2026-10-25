@@ -252,3 +252,16 @@ html[data-layout] .view-header h1 { font-weight: 800; }
 html[data-layout="phone"] :is(.shelf-title, .view h2:not(.stage-headline)) { font-size: calc(20px * var(--text-scale, 1)); font-weight: 700; }
 html[data-layout="wide"] :is(.shelf-title, .view h2) { font-size: calc(18px * var(--text-scale, 1)); font-weight: 700; }
 html[data-layout]:not([data-style="material"]) .card { border-radius: 12px; }
+
+/* Wide full-screen player: the spectrum owns a strip under the controls instead of sitting behind them. */
+html[data-layout="wide"] .np:is([data-mode="bars"], [data-mode="mirror"], [data-mode="wave"]) .np-bottom { padding-bottom: 88px; }
+
+.np-volume { display: none; }
+html[data-layout="wide"] .np-volume { display: flex; align-items: center; gap: 8px; width: min(240px, 60vw); }
+html[data-layout="wide"] .np-volume input { flex: 1; min-width: 0; }
+html[data-layout="wide"] .np-volume .np-btn { width: 36px; height: 36px; flex: none; }
+
+/* Wide full-screen player: the cover shrinks to the space left for the title under it. */
+html[data-layout="wide"] .np-stage { container-type: size; }
+html[data-layout="wide"] .np-cover { width: max(120px, min(36vw, 52vh, calc(100cqh - 130px))); }
+html[data-layout="wide"] .np[data-side="lyrics"] .np-cover, html[data-layout="wide"] .np[data-side="queue"] .np-cover { width: max(120px, min(26vw, 40vh, calc(100cqh - 130px))); }

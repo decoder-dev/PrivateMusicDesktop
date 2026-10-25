@@ -27,7 +27,6 @@ export function createProfileView({ push, onSignOut }) {
   const account = h("section", { class: "group-section" }, sectionLabel(t("profile.account")),
     h("div", { class: "group" },
       groupRow({ glyph: "settings", title: t("nav.settings"), note: t("profile.settingsNote"), id: "settings", onclick: () => push("settings") }),
-      groupRow({ glyph: "sliders", title: t("profile.eq"), note: t("profile.eqNote"), id: "eq", onclick: () => push("settings", { section: "eq" }) }),
       groupRow({ glyph: "chart", title: t("nav.stats"), note: t("profile.statsNote"), id: "stats", onclick: () => push("stats") })));
   const about = h("section", { class: "group-section" }, sectionLabel(t("set.about")),
     h("div", { class: "group" },

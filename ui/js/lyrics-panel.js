@@ -10,6 +10,7 @@ import { parseLocalLrc,personalLyrics,savePersonalLyrics } from "./lyrics-person
 import { savedLyrics, rememberLyrics, forgetSavedLyrics } from "./saved-lyrics.js";
 import { accountId } from "./personal.js";
 import { toast } from "./toast.js";
+import { decodeEntities } from "./html-entities.js";
 import { errorText } from "./i18n.js";
 import { openMenu } from "./menu.js";
 
@@ -106,14 +107,14 @@ export function createLyricsPanel() {
         node: h("button", {
           type: "button", class: line.text ? "ly-line" : "ly-line gap", "data-i": String(index), title:t("lyrics.copyHint"),
           onclick: () => api.seek(Math.max(0,line.time+offset)),
-        }, line.text || "♪"),
+        }, decodeEntities(line.text) || "♪"),
       }));
       body.replaceChildren(h("div", { class: "ly-pad" }), ...lines.map((l) => l.node), h("div", { class: "ly-pad" }));
       body.classList.remove("plain");
     } else {
       lines = [];
       body.classList.add("plain");
-      body.replaceChildren(h("div", { class: "ly-text", text: lyrics.text }));
+      body.replaceChildren(h("div", { class: "ly-text", text: decodeEntities(lyrics.text) }));
       body.scrollTop = 0;
     }
     renderControls();

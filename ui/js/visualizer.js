@@ -71,7 +71,7 @@ export function createVisualizer(canvas) {
     context.clearRect(0, 0, width, height);
     if (mode === "off" || !bands.length || !width || !height) return;
     const count = bands.length;
-    const plot = phone() && mode !== "radial" ? (plotCache ??= plotBounds()) : null;
+    const plot = mode !== "radial" ? (plotCache ??= plotBounds()) : null;
     if (plot && plot.height < 4) return;
     const plotHeight = plot?.height ?? height;
     const plotTop = plot?.top ?? 0;

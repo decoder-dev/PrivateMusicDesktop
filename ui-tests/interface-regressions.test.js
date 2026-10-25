@@ -150,3 +150,32 @@ test('phone Home: the compact title keeps a left margin when there is no Back bu
   assert.ok(left>=12,`title text starts at ${left}px`);assert.deepEqual(app.problems,[]);
  }finally{await app.close();}
 });
+
+test('wide full-screen player: volume is reachable and the spectrum stays below the controls',async()=>{
+ const app=await openApp({config,viewport:{width:1280,height:800}});
+ try{const {page}=app;
+  await page.evaluate(()=>localStorage.setItem('pm.settings.v1',JSON.stringify({visualizer:'bars'})));await page.reload();
+  await page.locator('.main .row').nth(1).dblclick();await page.locator('.player:not(.is-empty)').waitFor();
+  await page.mouse.click(1225,746);await page.locator('.np:not([hidden])').waitFor();
+  const slider=page.locator('.np .np-volume input');await slider.waitFor();
+  await slider.fill('40');await page.waitForFunction(()=>Math.abs(window.__mock.state.player.volume-0.4)<0.01);
+  await page.locator('.np .np-mute').click();await page.waitForFunction(()=>window.__mock.state.player.volume===0);
+  await page.locator('.np .np-mute').click();await page.waitForFunction(()=>Math.abs(window.__mock.state.player.volume-0.4)<0.01);
+  await page.evaluate(()=>window.__mock.emit('pm-event',{type:'spectrum',bands:Array(64).fill(1)}));
+  const r=await page.evaluate(async()=>{
+   await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+   const canvas=document.querySelector('.np-canvas'),ctx=canvas.getContext('2d'),data=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+   let top=canvas.height,count=0;for(let y=0;y<canvas.height;y++)for(let x=0;x<canvas.width;x++)if(data[(y*canvas.width+x)*4+3]>4){top=Math.min(top,y);count++;}
+   const ratio=canvas.height/canvas.clientHeight,q=document.querySelector('.np-quick').getBoundingClientRect(),c=document.querySelector('.np-cover').getBoundingClientRect(),t=document.querySelector('.np-top').getBoundingClientRect();
+   return {count,top:canvas.getBoundingClientRect().top+top/ratio,quickBottom:q.bottom,coverTop:c.top,headerBottom:t.bottom};});
+  assert.ok(r.count>100,JSON.stringify(r));assert.ok(r.top>=r.quickBottom,JSON.stringify(r));assert.ok(r.coverTop>=r.headerBottom-1,'cover is not clipped by the header '+JSON.stringify(r));
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test('phone Profile has no separate Equaliser row that only forwards to Settings',async()=>{
+ const app=await openApp({config:{...config,platform:'android'},phone:'small'});
+ try{const {page}=app;await page.locator('.dock-tab[data-tab="profile"]').click();await page.locator('[data-row="settings"]').waitFor();
+  assert.equal(await page.locator('[data-row="eq"]').count(),0);assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
