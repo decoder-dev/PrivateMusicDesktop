@@ -198,3 +198,20 @@ for(const phone of ['small','pixel7','landscape']) {
     }finally{await app.close();}
   });
 }
+
+test("phone: the label of the player's equaliser switch toggles its own switch, not the hidden Settings one",async()=>{
+  const app=await openApp({config,phone:"small"});
+  try {
+    const {page}=app;
+    await openPlayer(app);
+    await page.locator(".np-quick button").nth(2).click();
+    const toggle=page.locator(".sheet .set-check input");
+    await toggle.waitFor();
+    await page.waitForTimeout(300);
+    assert.equal(await toggle.isChecked(),false);
+    await page.locator(".sheet .set-check span").first().click();
+    await page.waitForFunction(()=>document.querySelector(".sheet .set-check input").checked);
+    assert.equal(await page.evaluate(()=>[...document.querySelectorAll(".eq .set-check input")].filter(input=>!input.closest(".sheet")).some(input=>input.checked)),false);
+    assert.deepEqual(app.problems,[]);
+  }finally{await app.close();}
+});

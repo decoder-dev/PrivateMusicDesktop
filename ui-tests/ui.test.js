@@ -1588,7 +1588,7 @@ test("equaliser: presets and sliders reach the engine, off sends nothing, and it
     await page.waitForSelector(".eq");
     await page.selectOption(".eq select", "bass");
     await page.waitForFunction(() => JSON.stringify(window.__mock.state.eq) === JSON.stringify([6, 6, 5, 3, 1, 0, 0, 0, -1, -1]));
-    assert.equal(await page.isChecked("#eq-on"), true, "picking a preset turns it on");
+    assert.equal(await page.isChecked(".eq .set-check input"), true, "picking a preset turns it on");
 
     // Перетащите ползунок 1 kHz вверх с помощью клавиатуры: пользовательская кривая.
     await page.focus(".eq-slider >> nth=5");
@@ -1598,10 +1598,10 @@ test("equaliser: presets and sliders reach the engine, off sends nothing, and it
     assert.equal(await page.locator(".eq select").inputValue(), "custom");
     assert.equal(await page.evaluate(() => window.__mock.count("seek")), 0, "arrows on a slider never seek");
 
-    await page.uncheck("#eq-on");
+    await page.uncheck(".eq .set-check input");
     await page.waitForFunction(() => window.__mock.state.eq === null);
 
-    await page.check("#eq-on");
+    await page.check(".eq .set-check input");
     await page.waitForFunction(() => window.__mock.state.eq?.[5] === 2);
     await page.reload();
     await waitForLibrary(page);
@@ -2962,7 +2962,7 @@ test("refinement: equalizer remembers the custom curve, resets one band and surv
   await page.selectOption('.eq select','jazz');await page.selectOption('.eq select','custom');
   await page.waitForFunction(()=>window.__mock.state.eq?.[0]===4 && window.__mock.state.eq?.[5]===2);
   await page.locator('.eq-value').first().click();await page.waitForFunction(()=>window.__mock.state.eq?.[0]===0);
-  assert.match(await page.locator('.eq-curve').getAttribute('aria-label'),/1k Hz 2 дБ/);
+  assert.match(await page.locator('.eq-curve').getAttribute('aria-label'),/1k Гц 2 дБ/);
   await page.reload();await waitForLibrary(page);await page.click('.nav button[data-view=settings]');
   await page.selectOption('.eq select','bass');await page.selectOption('.eq select','custom');
   await page.waitForFunction(()=>window.__mock.state.eq?.[0]===0 && window.__mock.state.eq?.[1]===3);

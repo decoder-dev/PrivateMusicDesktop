@@ -224,3 +224,7 @@ html[data-layout="phone"] .lib-grid:not(.list-layout) .lib-collection > .collect
 html[data-layout="phone"] .lib-collection .lib-pin,
 html[data-layout="phone"] .lib-collection .lib-pin[aria-pressed="true"] { background: transparent; border: 0; box-shadow: none; }
 html[data-layout="phone"] :is(.lib-pinned, .lib-grid.list-layout) .lib-collection { border: 0; box-shadow: none; }
+
+/* Artist links in rows keep their compact look but get a larger touch area. */
+html[data-layout="phone"] .row .artist.link-text { position: relative; }
+html[data-layout="phone"] .row .artist.link-text::after { content: ""; position: absolute; inset: -6px; }

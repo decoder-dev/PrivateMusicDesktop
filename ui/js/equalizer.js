@@ -5,7 +5,7 @@ import { t, addStrings } from "./i18n.js";
 import { api } from "./api.js";
 import { bindRange, syncRange } from "./ui-parts.js";
 
-addStrings({ru:{"eq.curve":"Уровни частот", "eq.hint":"Автоматический запас громкости защищает усиленные частоты от перегруза. Нажмите на значение, чтобы обнулить полосу.","eq.resetBand":"Сбросить {band} Гц", "eq.db":"дБ", "eq.applyError":"Не удалось применить эквалайзер. Попробуйте ещё раз.", "eq.retry":"Повторить", "eq.jazz":"Джаз", "eq.classical":"Классика"},en:{"eq.curve":"Frequency levels", "eq.hint":"Automatic headroom protects boosted frequencies from overload. Select a value to reset its band.","eq.resetBand":"Reset {band} Hz", "eq.db":"dB", "eq.applyError":"Could not apply equaliser settings. Try again.", "eq.retry":"Retry", "eq.jazz":"Jazz", "eq.classical":"Classical"}});
+addStrings({ru:{"eq.curve":"Уровни частот", "eq.hint":"Автоматический запас громкости защищает усиленные частоты от перегруза. Нажмите на значение, чтобы обнулить полосу.","eq.resetBand":"Сбросить {band} Гц", "eq.band":"{band} Гц", "eq.db":"дБ", "eq.applyError":"Не удалось применить эквалайзер. Попробуйте ещё раз.", "eq.retry":"Повторить", "eq.jazz":"Джаз", "eq.classical":"Классика"},en:{"eq.curve":"Frequency levels", "eq.hint":"Automatic headroom protects boosted frequencies from overload. Select a value to reset its band.","eq.resetBand":"Reset {band} Hz", "eq.band":"{band} Hz", "eq.db":"dB", "eq.applyError":"Could not apply equaliser settings. Try again.", "eq.retry":"Retry", "eq.jazz":"Jazz", "eq.classical":"Classical"}});
 addStrings({"ru": {"eq.bassReduction": "Меньше баса", "eq.trebleReduction": "Меньше высоких", "eq.vocalReduction": "Меньше вокала", "eq.speech": "Речь", "eq.piano": "Фортепиано", "eq.lounge": "Лаунж", "eq.pop": "Поп", "eq.rnb": "R&B", "eq.hipHop": "Хип-хоп", "eq.dance": "Танцевальная", "eq.metal": "Метал", "eq.loudness": "Тонкомпенсация", "eq.smallSpeakers": "Маленькие динамики", "eq.headphones": "Наушники"}, "en": {"eq.bassReduction": "Bass reduction", "eq.trebleReduction": "Treble reduction", "eq.vocalReduction": "Vocal reduction", "eq.speech": "Speech", "eq.piano": "Piano", "eq.lounge": "Lounge", "eq.pop": "Pop", "eq.rnb": "R&B", "eq.hipHop": "Hip hop", "eq.dance": "Dance", "eq.metal": "Metal", "eq.loudness": "Loudness", "eq.smallSpeakers": "Small speakers", "eq.headphones": "Headphones"}});
 addStrings({ru:{"eq.previousBands":"Предыдущие частоты","eq.nextBands":"Следующие частоты","eq.visibleBands":"Полосы {from}–{to} из 10"},en:{"eq.previousBands":"Previous frequencies","eq.nextBands":"Next frequencies","eq.visibleBands":"Bands {from}–{to} of 10"}});
 export const LABELS = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
@@ -52,7 +52,7 @@ export function createEqualizerPanel({ settings, onSettingsChange }) {
   const dots=LABELS.map(()=>svg("circle",{r:3}));graph.append(...dots);
   const error=h("div",{class:"eq-error",hidden:true,role:"status"},h("span",{text:t("eq.applyError")}),h("button",{class:"btn",type:"button",text:t("eq.retry"),onclick:()=>send()}));
 
-  const toggle = h("input", { type: "checkbox", role: "switch", id: "eq-on", onchange: () => update({ on: toggle.checked },true) });
+  const toggle = h("input", { type: "checkbox", role: "switch", onchange: () => update({ on: toggle.checked },true) });
   const preset = h("select", { class: "field", "aria-label": t("eq.preset"),
     onchange: () => update({ gains: (preset.value === "custom" ? custom : PRESETS[preset.value]).slice(), preset: preset.value, on: true },true) },
     [...Object.keys(PRESETS), "custom"].map((id) => h("option", { value: id, text: t(`eq.${id}`) })));
@@ -64,7 +64,7 @@ export function createEqualizerPanel({ settings, onSettingsChange }) {
       "aria-label":t("eq.resetBand",{band:label}), onclick:()=>changeBand(band,0) });
     values.push(value);
     const input = h("input", {
-      type: "range", min: "-12", max: "12", step: "1", "aria-label": `${label} Hz`, class: "eq-slider",
+      type: "range", min: "-12", max: "12", step: "1", "aria-label": t("eq.band",{band:label}), class: "eq-slider",
       oninput: () => {
         changeBand(band,Number(input.value));
       },
@@ -96,7 +96,7 @@ export function createEqualizerPanel({ settings, onSettingsChange }) {
 
   const element = h("div", { class: "eq" },
     h("div", { class: "set-row" },
-      h("label", { class: "set-check", for: "eq-on" }, h("span", { text: t("eq.on") }), toggle),
+      h("label", { class: "set-check" }, h("span", { text: t("eq.on") }), toggle),
       h("div", { class: "set-inline" }, preset, reset)),
     graph,
     bands,bandNav,
@@ -111,7 +111,7 @@ export function createEqualizerPanel({ settings, onSettingsChange }) {
     toggle.checked = eq.on;
     preset.value = presetFor(eq.gains);
     element.classList.toggle("off", !eq.on);
-    graph.setAttribute("aria-label",`${t("eq.curve")}: ${eq.gains.map((g,i)=>`${LABELS[i]} Hz ${g} ${t("eq.db")}`).join(", ")}`);
+    graph.setAttribute("aria-label",`${t("eq.curve")}: ${eq.gains.map((g,i)=>`${t("eq.band",{band:LABELS[i]})} ${g} ${t("eq.db")}`).join(", ")}`);
     const points=eq.gains.map((gain,i)=>[12+i*64,56-gain*40/12]);
     line.setAttribute("points",points.map(p=>p.join(",")).join(" "));
     area.setAttribute("d",`M12,56 L${points.map(p=>p.join(",")).join(" L")} L588,56 Z`);
