@@ -8,6 +8,8 @@ use crate::Error;
 pub enum ElementaryKind {
     AdtsAac,
     Mp3,
+    /// A complete local container, probed by Symphonia after the file is buffered.
+    LocalFile,
 }
 
 #[derive(Default)]
@@ -68,6 +70,13 @@ impl SharedBuffer {
     pub fn set_kind(&self, kind: ElementaryKind) {
         let mut state = self.lock();
         state.kind = Some(kind);
+        self.inner.changed.notify_all();
+    }
+
+    pub(crate) fn finish_with_kind(&self, kind: ElementaryKind) {
+        let mut state = self.lock();
+        state.kind = Some(kind);
+        state.complete = true;
         self.inner.changed.notify_all();
     }
 

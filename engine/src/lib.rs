@@ -11,6 +11,7 @@ pub mod controller;
 pub mod error;
 pub mod history;
 pub mod lyrics;
+pub mod local_audio;
 pub mod media_sync;
 pub mod net;
 pub mod offline;

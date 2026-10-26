@@ -369,3 +369,41 @@ fn skipping_to_the_end_is_not_listening() {
     rig.wait("the track to end", |s| s.status == Status::Idle && s.position == 0.0);
     assert!(history.entries().is_empty(), "about two seconds of a twelve-second track were heard");
 }
+
+#[test]
+fn artwork_previous_skips_after_four_seconds_while_the_button_restarts() {
+    if !require_ffmpeg() { return; }
+    let (_dir, media) = media_dir();
+    let vk = FakeVk::start(media.base.clone(), true);
+    let rig = rig(&vk.base, 1.0);
+    let url = format!("{}/index.m3u8", media.base);
+    rig.controller.play_tracks((1..=2).map(|n| track(n, Some(url.clone()))).collect(), 1);
+    rig.wait("second track playing", |s| s.status == Status::Playing && s.track.as_ref().map(|t| t.track_id) == Some(2));
+    rig.controller.seek(6.0);
+    rig.wait("past the restart threshold", |s| s.position >= 5.5);
+    rig.controller.previous();
+    rig.wait("button restarts the second track", |s| s.position < 1.0 && s.track.as_ref().map(|t| t.track_id) == Some(2));
+    rig.controller.seek(6.0);
+    rig.wait("past the threshold again", |s| s.position >= 5.5);
+    rig.controller.previous_track();
+    rig.wait("gesture skips to the first track", |s| s.status == Status::Playing && s.track.as_ref().map(|t| t.track_id) == Some(1));
+}
+
+#[test]
+fn imported_audio_plays_without_a_vk_session_or_network_requests() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("Original.wav");
+    std::fs::write(&source, include_bytes!("fixtures/local-audio/sample.wav")).unwrap();
+    let offline = Arc::new(pm_engine::offline::OfflineStore::open(root.path().join("library")).unwrap());
+    let saved = offline.import_local(pm_engine::local_audio::inspect(&source, "Original.wav").unwrap()).unwrap();
+    let vk = FakeVk::start("http://127.0.0.1:9".into(), false);
+    let rig = rig(&vk.base, 0.05);
+    rig.controller.set_session(None);
+    rig.controller.set_offline(offline);
+    rig.controller.play_tracks(vec![saved.track.clone()], 0);
+    rig.wait("local audio playing", |s| s.status == Status::Playing);
+    assert_eq!(rig.controller.state().track.unwrap().id(), saved.track.id());
+    assert!(vk.calls.lock().unwrap().is_empty());
+    assert_eq!(rig.error_count(), 0);
+    assert!(source.is_file());
+}

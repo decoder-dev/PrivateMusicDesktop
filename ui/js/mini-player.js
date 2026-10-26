@@ -1,6 +1,6 @@
 import { ft } from "./feature-i18n.js";
 import { h, formatTime } from "./dom.js";
-import { api } from "./api.js";
+import { api, isLocalTrack } from "./api.js";
 import { icon } from "./icons.js";
 import { store, subscribe } from "./store.js";
 import { isLiked } from "./likes.js";
@@ -85,7 +85,8 @@ export function createMiniPlayer(onLike) {
       like.replaceChildren(icon(liked ? "heart-on" : "heart", 20));
     }
     like.setAttribute("aria-pressed", String(liked));
-    like.disabled = !p.track;
+    like.hidden = isLocalTrack(p.track);
+    like.disabled = !p.track || isLocalTrack(p.track);
     seek.max = String(p.duration || 1);
     if (document.activeElement !== seek) seek.value = String(p.position || 0);
     time.textContent = formatTime(p.position);

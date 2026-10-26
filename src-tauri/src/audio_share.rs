@@ -36,7 +36,7 @@ mod staging {
         let extension = source
             .extension()
             .and_then(|value| value.to_str())
-            .filter(|value| matches!(*value, "aac" | "mp3"))
+            .filter(|value| matches!(*value, "aac" | "mp3" | "m4a" | "wav" | "flac"))
             .ok_or(Error::InvalidRequest)?;
         let metadata = fs::symlink_metadata(source).map_err(|_| Error::Unavailable)?;
         if !metadata.is_file()
@@ -161,7 +161,7 @@ pub fn share(handle: &AppHandle, app: &App, track: &Track, allow_download: bool,
             .fetch_config()
             .offline_dir
             .ok_or(Error::InvalidRequest)?;
-        let cached = app.downloads().into_iter().find(|entry| {
+        let cached = app.saved_audio(&track.id()).filter(|entry| {
             entry.track.id() == track.id()
                 && std::fs::symlink_metadata(folder.join(&entry.file))
                     .is_ok_and(|meta| meta.is_file() && meta.len() == entry.bytes && meta.len() > 0)

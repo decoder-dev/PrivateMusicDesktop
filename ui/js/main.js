@@ -18,6 +18,9 @@ import { setDefaultTrackMenu, setDefaultBatchAction } from "./tracks-screen.js";
 import { trackShareLink } from "./share-links.js";
 import { copyLink, shareLink, shareAudio } from "./sharing.js";
 import { saveForLater } from "./listen-later.js";
+import { createLocalAudioView } from "./views/local-audio.js";
+import {copyTrackInformation} from "./track-information.js";
+import {isLocalTrack} from "./api.js";
 import { createAudioUploadView } from "./views/audio-upload.js";
 import { createPlaylistImportView } from "./views/playlist-import.js";
 import { rememberQueue } from "./queue-history.js";
@@ -199,7 +202,7 @@ async function addToPlaylist(playlist, track) {
 async function openTrackMenu(track, at, extra = []) {
   // Открытие меню не должно ждать VK или недоступной сети.
   const playlists = ownPlaylists();
-  ensurePlaylists().catch(() => {});
+  if (!isLocalTrack(track)) ensurePlaylists().catch(() => {});
   const targets = [
     ...playlists.map((playlist) => ({ label: playlist.title, action: "add-to", run: () => addToPlaylist(playlist, track) })),
     ...(playlists.length ? ["-"] : []),
@@ -217,21 +220,22 @@ async function openTrackMenu(track, at, extra = []) {
     { label: t("playNext"), action: "play-next", icon: "play-next", run: () => onTrackAction("play-next", track) },
     { label: t("playLast"), action: "play-last", icon: "queue-add", run: () => onTrackAction("play-last", track) },
     ...(isAndroid() ? [] : [{ label: t("export.audio"), action: "export", icon: "download", run: async () => { try { if (await api.exportTrack(track)) toast(t("export.saved")); await refreshDownloads(); } catch (error) { toast(errorText(error), { error: true }); } } }]),
-    { label: t("radio"), action: "radio", icon: "radio", run: () => playSimilar(track) },
+    ...(!isLocalTrack(track) ? [{ label: t("radio"), action: "radio", icon: "radio", run: () => playSimilar(track) }] : []),
+    {label:t("track.copyInfo"),action:"copy-info",icon:"copy",run:()=>copyTrackInformation(track)},
     ...(trackShareLink(track) ? [
       { label:t("share.copy"),action:"copy-link",icon:"copy",run:()=>copyLink(trackShareLink(track),toast) },
       ...(isAndroid() ? [{label:t("share.open"),action:"share-link",icon:"share",run:()=>shareLink(trackShareLink(track),`${track.artist} — ${track.title}`,toast)}] : []),
     ] : []),
-    ...(isDownloaded(track) ? [{label:t("file.details"),action:"file-details",icon:"downloaded",run:()=>shell?.fileDetails.open(track)}] : []),
+    ...(isLocalTrack(track) || isDownloaded(track) ? [{label:t("file.details"),action:"file-details",icon:"downloaded",run:()=>shell?.fileDetails.open(track)}] : []),
     ...(isAndroid() ? [{label:t("share.audio"),action:"share-audio",icon:"note",run:()=>shareAudio(track,toast)}] : []),
-    { label:ft("Предпочтения Selena"),action:"taste",icon:"sparkles",items:[
+    ...(!isLocalTrack(track) ? [{ label:ft("Предпочтения Selena"),action:"taste",icon:"sparkles",items:[
       {label:ft("Меньше такого"),action:"taste-less",run:()=>dislike(track,"less").catch(error=>toast(errorText(error),{error:true}))},
       {label:ft("Не предлагать этот трек"),action:"taste-track",run:()=>dislike(track,"tracks").catch(error=>toast(errorText(error),{error:true}))},
       {label:ft("Не предлагать исполнителя"),action:"taste-artist",run:()=>dislike(track,"artists").catch(error=>toast(errorText(error),{error:true}))},
-    ]},
+    ]}] : []),
     ...(goTo.length ? ["-", ...goTo] : []),
     "-",
-    { label: t("menu.addTo"), action: "add-to-playlist", icon: "playlist", items: targets },
+    ...(!isLocalTrack(track) ? [{ label: t("menu.addTo"), action: "add-to-playlist", icon: "playlist", items: targets }] : []),
     ...(store.player.track && trackKey(track) === trackKey(store.player.track) ? [
       { label: t("later.save"), action: "listen-later", icon: "history", run: () => {
         try { saveForLater(); toast(t("later.saved")); } catch (error) { toast(errorText(error), { error: true }); }
@@ -324,6 +328,7 @@ function buildShellParts() {
     library: libraryView,
     home: lazyView(() => createHomeView(ctx)),
     libraryHub: lazyView(() => createLibraryTab({ libraryView, push: ctx.push, newPlaylist, toast })),
+    localAudio: lazyView(() => createLocalAudioView(ctx)),
     audioUpload: lazyView(() => createAudioUploadView(ctx)),
     playlistImport: lazyView(() => createPlaylistImportView(ctx)),
     profile: lazyView(() => createProfileView({ push: ctx.push, onSignOut: signOut })),
@@ -351,6 +356,7 @@ function buildShellParts() {
     ["history", "nav.history", "history"],
     ["stats", "nav.stats", "chart"],
     ["downloads", "nav.downloads", "download"],
+    ["localAudio", "local.title", "note"],
     ["settings", "nav.settings", "settings"],
   ];
 

@@ -129,6 +129,12 @@ impl<R: Runtime> VkLogin<R> {
         serde_json::from_value(reply).map(Some).map_err(|_| Error::Native("invalid audio picker reply".into()))
     }
 
+    pub fn pick_local_audio(&self) -> Result<crate::PickedAudioBatch> {
+        let reply: serde_json::Value = self.plugin.run_mobile_plugin("pickLocalAudio", ())
+            .map_err(|error| Error::Native(error.to_string()))?;
+        serde_json::from_value(reply).map_err(|_| Error::Native("invalid audio picker reply".into()))
+    }
+
     /// Closes the screen if it is open (the Activity reports `Cancelled`).
     pub fn cancel(&self) -> Result<()> {
         self.plugin

@@ -20,6 +20,7 @@ impl ListeningEvent {
 }
 impl VkClient {
     pub fn broadcast(&self,session:&Session,track:Option<&Track>)->Result<()> {
+        if track.is_some_and(Track::is_local) { return Err(Error::InvalidRequest); }
         let params=track.map(|t|vec![("audio",t.id())]).unwrap_or_default();
         self.call_once(session,"audio.setBroadcast",&params)?;Ok(())
     }

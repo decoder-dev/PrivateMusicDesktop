@@ -632,7 +632,19 @@ impl Core {
     }
 
     pub fn downloads(&self) -> Vec<OfflineTrack> {
-        self.offline.as_ref().map(|o| o.list()).unwrap_or_default()
+        self.offline.as_ref().map(|o| o.list().into_iter().filter(|e| !e.track.is_local()).collect()).unwrap_or_default()
+    }
+
+    pub fn local_audio(&self) -> Vec<OfflineTrack> {
+        self.offline.as_ref().map(|o| o.list().into_iter().filter(|e| e.track.is_local()).collect()).unwrap_or_default()
+    }
+
+    pub fn saved_audio(&self, track_id: &str) -> Option<OfflineTrack> {
+        self.offline.as_ref()?.list().into_iter().find(|e| e.track.id() == track_id)
+    }
+
+    pub fn import_local_audio(&self, path: &std::path::Path, name: &str) -> Result<OfflineTrack> {
+        self.offline()?.import_local(crate::local_audio::inspect(path, name)?)
     }
 
     pub fn download_details(&self, track_id: &str) -> Option<crate::offline::DownloadDetails> {
@@ -640,7 +652,7 @@ impl Core {
     }
 
     pub fn downloads_size(&self) -> u64 {
-        self.offline.as_ref().map(|o| o.total_bytes()).unwrap_or(0)
+        self.downloads().iter().fold(0u64, |total, e| total.saturating_add(e.bytes))
     }
 
     /// Скачивает трек для прослушивания без подключения. Сначала запрашивается новый адрес потока: срок
@@ -683,7 +695,7 @@ impl Core {
         let store=self.offline()?;
         if store.details(&track.id()).is_some_and(|details|details.available){return Ok(false)}
         let Some(buffer)=self.controller.track_buffer(&track.id())else{return Ok(false)};
-        if !buffer.is_complete() || buffer.failure().is_some() || buffer.len() as u64>limit_bytes.saturating_sub(store.total_bytes()){return Ok(false)}
+        if !buffer.is_complete() || buffer.failure().is_some() || buffer.len() as u64>limit_bytes.saturating_sub(self.downloads_size()){return Ok(false)}
         let Some((kind,bytes))=buffer.completed_bytes()else{return Ok(false)};
         if bytes.is_empty() || self.session_epoch()?!=epoch{return Err(Error::Cancelled)}
         store.save(&Track{stream_url:None,..track.clone()},kind,&bytes)?;

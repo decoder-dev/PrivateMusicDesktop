@@ -128,6 +128,8 @@ pub fn is_usable_title(title: &str) -> bool {
 }
 
 impl Track {
+    pub fn is_local(&self) -> bool { self.owner_id == 0 && self.track_id > 0 }
+
     /// `owner_audio`, идентификатор VK и приложение iOS.
     pub fn id(&self) -> String {
         format!("{}_{}", self.owner_id, self.track_id)

@@ -72,6 +72,7 @@ pub(crate) fn kind_for_name(name: &str) -> Option<ElementaryKind> {
     match name.rsplit_once('.')?.1 {
         "aac" => Some(ElementaryKind::AdtsAac),
         "mp3" => Some(ElementaryKind::Mp3),
+        "m4a" | "wav" | "flac" => Some(ElementaryKind::LocalFile),
         _ => None,
     }
 }
@@ -84,7 +85,9 @@ fn run_offline(name: &str, config: &FetchConfig, buffer: &SharedBuffer) -> Resul
     }
     let kind = kind_for_name(name).ok_or(Error::InvalidRequest)?;
     let mut file = std::fs::File::open(dir.join(name)).map_err(|e| Error::Stream(format!("downloaded file: {e}")))?;
-    buffer.set_kind(kind);
+    // MP4 may keep its index at the end. Publish its type only once seeking
+    // from the end is possible, without changing progressive network playback.
+    if kind != ElementaryKind::LocalFile { buffer.set_kind(kind); }
     let mut chunk = vec![0u8; 256 * 1024];
     loop {
         if buffer.is_cancelled() {
@@ -92,6 +95,9 @@ fn run_offline(name: &str, config: &FetchConfig, buffer: &SharedBuffer) -> Resul
         }
         let n = std::io::Read::read(&mut file, &mut chunk).map_err(|e| Error::Stream(format!("downloaded file: {e}")))?;
         if n == 0 {
+            if kind == ElementaryKind::LocalFile {
+                buffer.finish_with_kind(kind);
+            }
             return Ok(());
         }
         if !buffer.push(&chunk[..n]) {
@@ -723,9 +729,10 @@ fn detect_container(data: &[u8]) -> Option<ContainerKind> {
             return Some(ContainerKind::MpegTs);
         }
     }
-    sniff_elementary(data).map(|kind| match kind {
-        ElementaryKind::AdtsAac => ContainerKind::Adts,
-        ElementaryKind::Mp3 => ContainerKind::Mp3,
+    sniff_elementary(data).and_then(|kind| match kind {
+        ElementaryKind::AdtsAac => Some(ContainerKind::Adts),
+        ElementaryKind::Mp3 => Some(ContainerKind::Mp3),
+        ElementaryKind::LocalFile => None,
     })
 }
 

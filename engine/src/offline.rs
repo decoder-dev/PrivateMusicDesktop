@@ -96,6 +96,9 @@ impl OfflineStore {
         let format = match Path::new(&entry.file).extension()?.to_str()? {
             "mp3" => "MP3",
             "aac" => "AAC",
+            "m4a" => "M4A",
+            "wav" => "WAV",
+            "flac" => "FLAC",
             _ => return None,
         };
         let available = fs::symlink_metadata(self.dir.join(&entry.file))
@@ -121,6 +124,68 @@ impl OfflineStore {
 
     /// Записывает звук и записывает его. Файл отображается атомарно, поэтому сбой в середине записи
     /// никогда не оставляет в индексе половину файла.
+    /// Import only a file already validated by the local audio probe. The UI never
+    /// supplies a destination name or filesystem path.
+    pub fn import_local(&self, mut audio: crate::local_audio::LocalAudio) -> Result<OfflineTrack> {
+        use std::io::{Read, Seek, Write};
+        use sha2::{Digest, Sha256};
+        let _write = self.writes.lock().unwrap_or_else(|p| p.into_inner());
+        let file = format!("local_{}.{}", audio.digest, audio.extension);
+        if !safe_offline_name(&file) { return Err(Error::InvalidRequest); }
+        let existing = { self.lock().get(&audio.track.id()).cloned() };
+        if let Some(existing) = existing {
+            if existing.file != file { return Err(Error::InvalidRequest); }
+            if self.details(&audio.track.id()).is_some_and(|details| details.available) { return Ok(existing); }
+        }
+        let temporary = self.dir.join(format!("{file}.part"));
+        let target = self.dir.join(&file);
+        audio.file.rewind().map_err(|_| Error::InvalidRequest)?;
+        // Recover our own partial file after an interrupted import. Removing a
+        // symlink here removes the link itself, never its target.
+        if fs::symlink_metadata(&temporary).is_ok() {
+            fs::remove_file(&temporary).map_err(|e| Error::Stream(format!("importing audio: {e}")))?;
+        }
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)] {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut output = options.open(&temporary).map_err(|e| Error::Stream(format!("importing audio: {e}")))?;
+        let copied = (|| -> std::io::Result<(u64, String)> {
+            let mut hash = Sha256::new();
+            let mut count = 0u64;
+            let mut block = [0; 65_536];
+            loop {
+                let n = audio.file.read(&mut block)?;
+                if n == 0 { break; }
+                count += n as u64;
+                if count > crate::local_audio::MAXIMUM_BYTES { return Err(std::io::ErrorKind::InvalidData.into()); }
+                output.write_all(&block[..n])?;
+                hash.update(&block[..n]);
+            }
+            output.sync_all()?;
+            Ok((count, hash.finalize().iter().map(|b| format!("{b:02x}")).collect()))
+        })();
+        drop(output);
+        if !copied.is_ok_and(|(bytes, digest)| bytes == audio.bytes && digest == audio.digest) {
+            let _ = fs::remove_file(&temporary); return Err(Error::InvalidRequest);
+        }
+        if let Err(error) = fs::rename(&temporary, &target) {
+            let _ = fs::remove_file(&temporary); return Err(Error::Stream(format!("importing audio: {error}")));
+        }
+        let entry = OfflineTrack { track: audio.track, file, bytes: audio.bytes, added: now() };
+        let mut index = self.lock();
+        let previous = index.insert(entry.track.id(), entry.clone());
+        if let Err(error) = self.write_index(&index) {
+            index.remove(&entry.track.id());
+            if let Some(previous) = previous { index.insert(previous.track.id(), previous); }
+            let _ = fs::remove_file(&target);
+            return Err(error);
+        }
+        Ok(entry)
+    }
+
     pub fn save(&self, track: &Track, kind: ElementaryKind, audio: &[u8]) -> Result<OfflineTrack> {
         let _write = self.writes.lock().unwrap_or_else(|p| p.into_inner());
         if track.track_id <= 0 || track.owner_id == 0 || audio.is_empty() {
@@ -129,6 +194,7 @@ impl OfflineStore {
         let extension = match kind {
             ElementaryKind::AdtsAac => "aac",
             ElementaryKind::Mp3 => "mp3",
+            ElementaryKind::LocalFile => return Err(Error::InvalidRequest),
         };
         let owner = if track.owner_id < 0 { format!("m{}", -track.owner_id) } else { track.owner_id.to_string() };
         let file = format!("{owner}_{}.{extension}", track.track_id);

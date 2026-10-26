@@ -1,4 +1,4 @@
-import {api,trackKey} from './api.js';
+import {api,trackKey,isLocalTrack} from './api.js';
 import {store,subscribe,own,publish} from './store.js';
 import {readPersonal,writePersonal,accountId,cleanTrack} from './personal.js';
 import {isDownloaded} from './downloads.js';
@@ -36,7 +36,7 @@ export function installVkIntegration(){
   if(!owner)return;
   const p=preferences(),player=store.player;
   if(!p.reporting){active=null;commands=commands.filter(c=>c.kind!=='reporting');errors.reporting=null;}
-  const playing=player.status==='playing',track=player.track;
+  const playing=player.status==='playing',track=isLocalTrack(player.track)?null:player.track;
   const desired=p.broadcast && playing && track?trackKey(track):null;
   if(!errors.broadcast && (desired!==lastBroadcast || wasEnabled && !p.broadcast)){
    commands=commands.filter(c=>c.kind!=='broadcast');commands.push({kind:'broadcast',owner,track:desired?cleanTrack(track):null});lastBroadcast=desired;

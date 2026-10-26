@@ -261,6 +261,66 @@ class LoginPlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     @Command
+    fun pickLocalAudio(invoke: Invoke) {
+        if (!audioPickerRunning.compareAndSet(false, true)) {
+            invoke.reject("Audio picker is already open"); return
+        }
+        try {
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "audio/*"
+                putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+            }
+            startActivityForResult(invoke, intent, "onLocalAudioPicked")
+        } catch (_: Exception) {
+            audioPickerRunning.set(false)
+            invoke.reject("Could not open the audio picker")
+        }
+    }
+
+    @ActivityCallback
+    fun onLocalAudioPicked(invoke: Invoke, result: ActivityResult) {
+        if (result.resultCode != Activity.RESULT_OK) {
+            audioPickerRunning.set(false)
+            invoke.resolve(JSObject().put("files", org.json.JSONArray())); return
+        }
+        val skipped = (result.data?.clipData?.itemCount ?: 0).minus(100).coerceAtLeast(0)
+        val uris = result.data?.clipData?.let { data ->
+            (0 until data.itemCount.coerceAtMost(100)).map { data.getItemAt(it).uri }
+        } ?: listOfNotNull(result.data?.data)
+        Thread({
+            val files = org.json.JSONArray()
+            val failed = org.json.JSONArray()
+            val folder = File(activity.cacheDir, "audio-picker")
+            try {
+                if (!folder.isDirectory && !folder.mkdirs()) throw java.io.IOException("Audio folder unavailable")
+                for (uri in uris) {
+                    var staged: File? = null
+                    var name = "audio"
+                    try {
+                        if (uri.scheme != "content") throw java.io.IOException("Unsupported audio provider")
+                        activity.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                            if (cursor.moveToFirst()) name = cursor.getString(0)?.take(256) ?: name
+                        }
+                        val extension = name.substringAfterLast('.', "").lowercase(java.util.Locale.ROOT)
+                        if (extension !in setOf("mp3", "m4a", "aac", "wav", "flac")) throw java.io.IOException("Unsupported audio")
+                        val target = File(folder, "pick-${UUID.randomUUID()}.$extension")
+                        staged = target
+                        val bytes = activity.contentResolver.openInputStream(uri)?.use { input ->
+                            target.outputStream().use { output -> AudioFilePolicy.copyBounded(input, output) }
+                        } ?: throw java.io.IOException("Audio could not be read")
+                        files.put(org.json.JSONObject().put("path", target.absolutePath).put("name", name).put("bytes", bytes))
+                    } catch (_: Exception) { staged?.delete(); failed.put(name) }
+                }
+                invoke.resolve(JSObject().put("files", files).put("failed", failed).put("skipped", skipped))
+            } catch (_: Exception) {
+                for (i in 0 until files.length()) File(files.getJSONObject(i).getString("path")).delete()
+                invoke.reject("Could not import audio")
+            } finally { audioPickerRunning.set(false) }
+        }, "pm-local-audio-picker").start()
+    }
+
+    @Command
     fun crashReport(invoke: Invoke) {
         try {
             invoke.resolve(JSObject().put("text", CrashReport.text(activity)))
@@ -290,7 +350,12 @@ class LoginPlugin(private val activity: Activity) : Plugin(activity) {
                 val files = AudioShareEnricher.prepare(file, args.title, args.artist, args.album, args.lyricsText, args.lyricsLrc, cover)
                 val uris = ArrayList(files.map { FileProvider.getUriForFile(activity, "${activity.packageName}.pm.audio.share", it) })
                 val intent = Intent(if (uris.size > 1) Intent.ACTION_SEND_MULTIPLE else Intent.ACTION_SEND).apply {
-                    type = if (uris.size > 1) "*/*" else if (files[0].extension == "m4a") "audio/mp4" else "audio/mpeg"
+                    type = if (uris.size > 1) "*/*" else when (files[0].extension) {
+                        "m4a" -> "audio/mp4"
+                        "wav" -> "audio/wav"
+                        "flac" -> "audio/flac"
+                        else -> "audio/mpeg"
+                    }
                     if (uris.size > 1) putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris) else putExtra(Intent.EXTRA_STREAM, uris[0])
                     putExtra(Intent.EXTRA_SUBJECT, file.nameWithoutExtension)
                     clipData = ClipData.newRawUri(file.name, uris[0]).also { data -> uris.drop(1).forEach { data.addItem(ClipData.Item(it)) } }

@@ -207,7 +207,7 @@ html[data-layout="phone"] .later-remove { flex: none; display: grid; place-items
 html[data-layout="phone"] .later-note { margin: 8px var(--gutter) 0; font: 400 calc(12px * var(--text-scale, 1))/calc(18px * var(--text-scale, 1)) var(--font); color: var(--text-2); }
 
 /* Import is a full phone page: content wraps, choices remain touchable. */
-.playlist-import-view .import-body, .audio-upload-view .import-body { display: grid; gap: 16px; padding: 0 var(--gutter, 24px) 24px; }
+.local-audio-view .import-body, .playlist-import-view .import-body, .audio-upload-view .import-body { display: grid; gap: 16px; padding: 0 var(--gutter, 24px) 24px; }
 .import-input, .import-review { display: grid; gap: 16px; min-width: 0; }
 .import-input > label { display: grid; gap: 8px; font-weight: 600; }
 .import-input .field { width: 100%; min-width: 0; }
@@ -248,3 +248,5 @@ html[data-layout="phone"] .eq-sheet .eq-slider { height: 120px; }
 html[data-layout="phone"] .eq-sheet .eq-hint { margin: 4px 14px 8px; }
 
 html[data-layout="phone"] .np:is([data-side="lyrics"], [data-side="queue"]) .np-canvas { visibility: hidden; }
+
+.local-audio-intro > .btn { justify-self: start; max-width: 100%; }

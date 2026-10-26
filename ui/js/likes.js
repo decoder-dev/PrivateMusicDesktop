@@ -2,7 +2,7 @@
 // в библиотеке, поэтому копия запоминается под ключом трека, из которого она взята, и любой из них
 // отображается как понравившийся.
 
-import { api, trackKey } from "./api.js";
+import { api, trackKey, isLocalTrack } from "./api.js";
 import { publish, own } from "./store.js";
 
 const inLibrary = new Map(); // клавиша библиотечного трека -> трек
@@ -48,6 +48,7 @@ export function onLibraryChange(listener) {
 
 /** Добавляет или удаляет; разрешается в "added"/"removed", отклоняется с ошибкой API. */
 export async function toggleLike(track) {
+  if(isLocalTrack(track))return null;
   const key = trackKey(track);
   if (!known || pending.has(key)) return null;
   const mine = epoch;

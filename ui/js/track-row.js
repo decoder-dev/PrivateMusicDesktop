@@ -1,4 +1,4 @@
-import { trackKey } from "./api.js";
+import { trackKey, isLocalTrack } from "./api.js";
 import { h, formatTime } from "./dom.js";
 import { icon } from "./icons.js";
 import { t } from "./i18n.js";
@@ -49,5 +49,5 @@ export function trackRow(track, { index = 0, selected = false, paused = false, a
         : h("div", { class: "artist", text: track.artist })),
     badges,
     h("div", { class: "time", text: formatTime(track.duration) }),
-    h("div", { class: "actions" }, like, download, buttons));
+    h("div", { class: "actions" }, isLocalTrack(track) ? null : like, isLocalTrack(track) ? null : download, buttons));
 }

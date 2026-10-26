@@ -7,6 +7,22 @@ import java.io.IOException
 /** Copy only the user-selected MP3, with a bound even when a provider reports no size. */
 internal object AudioFilePolicy {
     const val MAX_BYTES = 200_000_000L
+    fun copyBounded(input: InputStream, output: OutputStream, maximum: Long = 150_000_000L): Long {
+        var total = 0L
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+            if (Thread.currentThread().isInterrupted) throw IOException("Cancelled")
+            val n = input.read(buffer)
+            if (n < 0) break
+            if (n == 0) throw IOException("Audio could not be read")
+            total += n
+            if (total > maximum) throw IOException("Audio exceeds size limit")
+            output.write(buffer, 0, n)
+        }
+        if (total == 0L) throw IOException("Empty audio")
+        return total
+    }
+
     fun copyMp3(input: InputStream, output: OutputStream, maximum: Long = MAX_BYTES): Long {
         val header = ByteArray(3)
         var offset = 0

@@ -352,6 +352,7 @@ impl VkClient {
     /// Рекомендации VK для пользователя или «Похожие треки», если задан исходный трек (собственное
     /// радио-из-трека VK).
     pub fn recommendations(&self, session: &Session, seed: Option<&Track>) -> Result<Vec<Track>> {
+        if seed.is_some_and(Track::is_local) { return Err(Error::InvalidRequest); }
         self.recommendations_with(session, seed, false)
     }
 
@@ -1117,6 +1118,7 @@ impl VkClient {
     }
 
     fn refreshed_track_with(&self, session: &Session, track: &Track, attempts: u32) -> Result<Track> {
+        if track.is_local() { return Err(Error::InvalidRequest); }
         let value = self.call_limited(session, "audio.getById", &[("audios", track.audio_id_with_key())], attempts)?;
         let user = self.user_id(session).ok();
         let fresh = value

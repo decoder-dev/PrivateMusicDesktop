@@ -3,7 +3,7 @@ import { toggleWindowFullscreen as changeWindowFullscreen, isWindowFullscreen } 
 import { h, formatTime } from "./dom.js";
 import { icon } from "./icons.js";
 import { t } from "./i18n.js";
-import { api } from "./api.js";
+import { api, isLocalTrack } from "./api.js";
 import { store, subscribe, own } from "./store.js";
 import { createVisualizer, MODES } from "./visualizer.js";
 import { createLyricsPanel } from "./lyrics-panel.js";
@@ -15,6 +15,7 @@ import { createEqualizerPanel } from "./equalizer.js";
 import { openSheet } from "./mobile/sheet.js";
 import { artBox, bindRange, syncRange } from "./ui-parts.js";
 import { isPhone, isAndroid, onLayoutChange } from "./mobile/layout.js";
+import {attachArtworkGestures} from "./mobile/artwork-gestures.js";
 import { attachSheetDrag } from "./mobile/np-sheet.js";
 
 const IDLE_MS = 3000;
@@ -72,7 +73,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   const likeButton = h("button", { class: "np-btn np-like", type: "button", onclick: () => onLike?.(store.player.track) }, icon("heart", 20));
   function renderLike() {
     const track = store.player.track;
-    likeButton.hidden = !track;
+    likeButton.hidden = !track || isLocalTrack(track);
     if (!track) return;
     const liked = isLiked(track);
     const label = liked ? t("like.remove") : t("like.add");
@@ -554,6 +555,11 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   window.addEventListener("pm-window-mode",onWindowMode);
   own(()=>window.removeEventListener("pm-window-mode",onWindowMode));
   attachSheetDrag(element, () => close());
+  own(attachArtworkGestures(coverBox, {
+    next: () => playbackAction(() => api.next()),
+    previous: () => playbackAction(() => api.previousTrack()),
+    queue: () => setQueueOpen(true),
+  }));
   const onResize = () => { if (open) layoutBackdrop(); };
   window.addEventListener("resize", onResize);
   // Уменьшение движения можно включить во время работы приложения: затем остановите спектр.

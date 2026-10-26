@@ -92,6 +92,7 @@
     session: { signed_in: !!config.signedIn, profile: null, persistent: config.persistent !== false },
     player: { status: "idle", track: null, position: 0, duration: 0, volume: 1, shuffle: false, repeat: "off", queue_index: null, queue_len: 0, radio: null },
     queue: [],
+    localAudio: [],
     followedAlbums: [],
     history,
     statsEmpty: !!config.statsEmpty,
@@ -149,6 +150,13 @@
     },
     share_link: () => {},
     copy_link: () => {},
+    local_audio: () => state.localAudio,
+    import_local_audio: async () => {
+      await delay(config.localImportDelay ?? 5);
+      const tracks=(config.localImportTracks??[makeTrack(9001,{owner_id:0,title:'Local song',artist:'Local artist',artwork_url:null,artists:[],album:null})]);
+      for(const track of tracks)if(!state.localAudio.some(entry=>entry.track.track_id===track.track_id))state.localAudio.push({track,file:'local-fixture.wav',bytes:16044,added:1772620200});
+      return {imported:state.localAudio,failed:config.localImportFailed??[],skipped:config.localImportSkipped??0};
+    },
     choose_audio: async () => {
       const id=`audio-${++nextAudioFile}`;
       if(config.audioPickDelay) await delay(config.audioPickDelay);
@@ -219,6 +227,7 @@
     next: () => {
       if (state.player.queue_index + 1 < state.queue.length) { state.player.queue_index += 1; startCurrent(); emitQueue(); emitState(); }
     },
+    previous_track: () => commands.previous(),
     previous: () => {
       if (state.player.queue_index > 0) { state.player.queue_index -= 1; startCurrent(); emitQueue(); emitState(); }
     },
@@ -255,6 +264,7 @@
       return track;
     },
     remove_download: ({ trackId }) => {
+      state.localAudio = state.localAudio.filter(entry=>`${entry.track.owner_id}_${entry.track.track_id}`!==trackId);
       const before = (state.downloads ?? []).length;
       state.downloads = (state.downloads ?? []).filter((t) => `${t.owner_id}_${t.track_id}` !== trackId);
       return state.downloads.length !== before;

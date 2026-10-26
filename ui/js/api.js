@@ -17,6 +17,7 @@ export const api = {
   toggle: () => invoke("toggle"),
   next: () => invoke("next"),
   previous: () => invoke("previous"),
+  previousTrack: () => invoke("previous_track"),
   seek: (seconds) => invoke("seek", { seconds }),
   setVolume: (volume) => invoke("set_volume", { volume }),
   setShuffle: (on) => invoke("set_shuffle", { on }),
@@ -42,6 +43,8 @@ export const api = {
   setPlaylistCover: (fileId,playlist) => invoke("set_playlist_cover",{fileId,playlist}),
   discardCover: fileId => invoke("discard_cover",{fileId}),
   chooseAudio: () => invoke("choose_audio"),
+  localAudio: () => invoke("local_audio"),
+  importLocalAudio: () => invoke("import_local_audio"),
   uploadAudio: (fileId, artist, title) => invoke("upload_audio", { fileId, artist, title }),
   discardAudio: (fileId) => invoke("discard_audio", { fileId }),
   createPlaylist: (title, description, hidden = null) => invoke("create_playlist", { title, description, hidden }),
@@ -140,3 +143,5 @@ export async function loadAllPages(fetchPage, { pageSize = 200, onProgress, isCa
     offset = page.next_offset;
   }
 }
+
+export const isLocalTrack = track => !!track && track.owner_id === 0 && Number.isSafeInteger(track.track_id) && track.track_id > 0;

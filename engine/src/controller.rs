@@ -1306,8 +1306,12 @@ impl Controller {
         });
     }
 
-    pub fn previous(&self) {
-        let restart = {
+    pub fn previous(&self) { self.previous_with_restart(true); }
+
+    pub fn previous_track(&self) { self.previous_with_restart(false); }
+
+    fn previous_with_restart(&self, allow_restart: bool) {
+        let restart = allow_restart && {
             let inner = self.shared.lock();
             inner.queue.current().is_some() && inner.position > RESTART_THRESHOLD
         };

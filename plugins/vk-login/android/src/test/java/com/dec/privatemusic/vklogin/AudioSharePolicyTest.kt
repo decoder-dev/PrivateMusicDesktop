@@ -10,6 +10,10 @@ class AudioSharePolicyTest {
         val cache = Files.createTempDirectory("pm-audio-share").toFile()
         try {
             val folder = File(cache, "audio-share/share-abc-1").apply { mkdirs() }
+            for (extension in listOf("mp3", "aac", "m4a", "wav", "flac")) {
+                val audio = File(folder, "local.$extension").apply { writeText("selected audio") }
+                assertEquals(audio.canonicalFile, AudioSharePolicy.checked(cache, audio.absolutePath))
+            }
             val file = File(folder, "Artist — Title.aac").apply { writeText("audio") }
             assertEquals(file.canonicalFile, AudioSharePolicy.checked(cache, file.absolutePath))
             for (invalid in listOf(File(cache,"token.mp3"),File(folder,"secret.json"),File(folder,"empty.mp3"))) {

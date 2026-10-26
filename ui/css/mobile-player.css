@@ -156,3 +156,7 @@ html[data-layout="phone"] .dialog-actions .btn:disabled { color: var(--text-3); 
 html[data-layout="phone"] .net-dialog { text-align: left; width: min(360px, calc(100vw - 32px)); max-height: 80dvh; overflow-y: auto; padding: 20px 20px 0; }
 html[data-layout="phone"] .net-dialog h2, html[data-layout="phone"] .net-dialog .dialog-text { margin-inline: 0; }
 html[data-layout="phone"] .net-dialog .dialog-actions { margin: 8px -20px 0; }
+
+/* Leave vertical sheet/scroll gestures available while artwork handles track flicks. */
+html[data-layout="phone"] .np-cover { touch-action: pan-y; }
+.local-audio-intro { padding-block: 0 20px; }

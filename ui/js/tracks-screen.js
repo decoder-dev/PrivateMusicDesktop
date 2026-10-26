@@ -65,7 +65,7 @@ export function createTracksScreen({ title, filterable = false, playable = true,
     finally { batchBusy=false; renderSelection(); }
   }
   selectionBar.append(h("button",{class:"btn",type:"button",text:t("select.all"),onclick:()=>{ visible.forEach(track=>selected.add(trackKey(track))); renderSelection(); }}));
-  for (const action of ["queue","playlist","download",...(hooks.onBatchRemove ? ["remove"] : [])]) selectionBar.append(h("button",{class:"btn",type:"button","data-batch":action,text:t(`select.${action}`),onclick:()=>runBatch(action)}));
+  for (const action of (hooks.batchActions ?? ["queue","playlist","download",...(hooks.onBatchRemove ? ["remove"] : [])])) selectionBar.append(h("button",{class:"btn",type:"button","data-batch":action,text:t(`select.${action}`),onclick:()=>runBatch(action)}));
   selectionBar.append(h("button",{class:"btn",type:"button",text:t("select.clear"),onclick:()=>{selected.clear(); selecting=false; renderSelection();}}));
 
   const heading = h(level, { text: title });
@@ -83,7 +83,7 @@ export function createTracksScreen({ title, filterable = false, playable = true,
     ? h("button", { class: "icon-btn circle-btn", type: "button", hidden: true, title: t("shuffle"), "aria-label": t("shuffle"),
         onclick: () => visible.length && hooks.onPlay(visible, Math.floor(Math.random() * visible.length), { shuffle: true }) }, icon("shuffle", 16))
     : null;
-  const batchButton = playable ? h("button", { class:"btn",type:"button",text:t("batch.download"),hidden:true,onclick:async () => {
+  const batchButton = playable && hooks.downloadable !== false ? h("button", { class:"btn",type:"button",text:t("batch.download"),hidden:true,onclick:async () => {
     if (downloadJob()?.running) { cancelDownloads(); return; }
     try {
       const result=await downloadAll(visible.slice());
