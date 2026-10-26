@@ -51,7 +51,8 @@ export function createLibraryView({ play, onTrackAction, toast }) {
       tracks = all;
       setLibrary(all);
       screen.clearStatus();
-      screen.setTracks(all);
+      // Later pages extend the library the user may already be reading.
+      screen.setTracks(all, { preserveScroll: true });
     } catch (error) {
       if (mine === generation) screen.setStatus(errorText(error), { error: true });
       toast(errorText(error), { error: true });
