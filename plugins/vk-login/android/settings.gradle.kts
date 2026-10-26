@@ -27,3 +27,6 @@ rootProject.name = "tauri-plugin-vk-login"
 
 include(":tauri-android")
 project(":tauri-android").projectDir = File("./.tauri/tauri-api")
+
+// Apply the same security policy to standalone and application builds.
+apply(from = file("../../../scripts/android-dependency-constraints.gradle"))

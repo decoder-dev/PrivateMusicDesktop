@@ -2,7 +2,7 @@ name: Dependency security
 on:
   push:
     branches: [main]
-    paths: ["**/Cargo.toml", "**/Cargo.lock", "**/*.gradle.kts", "**/gradle.properties", ".github/workflows/dependency-security.yml", "scripts/security-android-prepare.sh"]
+    paths: ["**/Cargo.toml", "**/Cargo.lock", "**/*.gradle.kts", "**/*.gradle", "**/gradle.properties", ".github/workflows/dependency-security.yml", "scripts/security-android-prepare.sh"]
   pull_request:
     branches: [main]
   schedule:

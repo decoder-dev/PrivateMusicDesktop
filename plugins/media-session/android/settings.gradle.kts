@@ -33,3 +33,6 @@ project(":tauri-android").projectDir = file(
     (settings.providers.gradleProperty("tauriAndroidDir").orNull ?: System.getenv("TAURI_ANDROID_DIR"))
         ?: ".tauri/tauri-api"
 )
+
+// Apply the same security policy to standalone and application builds.
+apply(from = file("../../../scripts/android-dependency-constraints.gradle"))

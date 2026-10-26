@@ -1,0 +1,51 @@
+// Patch vulnerable transitive libraries in the Android build tooling and its isolated configurations.
+// Explicit compatible coordinates only; do not downgrade newer requested releases or replace native Netty artifacts.
+gradle.beforeProject { project ->
+    def patchedVersions = [
+        'com.fasterxml.jackson.core:jackson-databind': '2.18.12',
+        'com.fasterxml.jackson.core:jackson-core': '2.18.12',
+        'com.fasterxml.jackson.core:jackson-annotations': '2.18.12',
+        'com.fasterxml.jackson.datatype:jackson-datatype-json-org': '2.18.12',
+        'com.fasterxml.jackson:jackson-bom': '2.18.12',
+        'org.bouncycastle:bcprov-jdk18on': '1.86',
+        'org.bouncycastle:bcpkix-jdk18on': '1.86',
+        'org.bouncycastle:bcutil-jdk18on': '1.86',
+        'org.apache.commons:commons-compress': '1.28.0',
+        'org.apache.commons:commons-lang3': '3.21.0',
+        'org.apache.httpcomponents:httpclient': '4.5.14',
+        'org.bitbucket.b_c:jose4j': '0.9.7',
+        'org.jdom:jdom2': '2.0.6.1',
+    ]
+    def patchDependency = { details ->
+        def requested = details.requested
+        def target = patchedVersions[requested.group + ':' + requested.name]
+        if (requested.group == 'io.netty' && requested.version?.startsWith('4.1.')) {
+            target = '4.1.139.Final'
+        }
+        def current = requested.version
+        if (!target || !current || !(current ==~ /[0-9]+(?:\.[0-9]+)*(?:\.Final)?/)) {
+            return
+        }
+        def before = current.replaceFirst(/\.Final$/, '').tokenize('.').collect { it.toInteger() }
+        def after = target.replaceFirst(/\.Final$/, '').tokenize('.').collect { it.toInteger() }
+        def older = false
+        for (int i = 0; i < Math.max(before.size(), after.size()); i++) {
+            def left = i < before.size() ? before[i] : 0
+            def right = i < after.size() ? after[i] : 0
+            if (left != right) {
+                older = left < right
+                break
+            }
+        }
+        if (older) {
+            details.useVersion(target)
+            details.because('Security maintenance of compatible Android tooling libraries')
+        }
+    }
+    project.buildscript.configurations.configureEach {
+        resolutionStrategy.eachDependency(patchDependency)
+    }
+    project.configurations.configureEach {
+        resolutionStrategy.eachDependency(patchDependency)
+    }
+}
