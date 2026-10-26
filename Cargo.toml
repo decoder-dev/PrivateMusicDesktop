@@ -2,7 +2,7 @@
 members = ["engine", "src-tauri", "plugins/media-session", "plugins/vk-login"]
 # Поставляемый крейт iOS является зависимостью, а не частью этого рабочего пространства (у него есть
 # собственное, с паникой=аборт): держите его подальше от запусков `--workspace`, таких как clippy.
-exclude = ["native"]
+exclude = ["native", "vendor/glib"]
 resolver = "2"
 
 [workspace.package]
@@ -19,3 +19,7 @@ strip = "symbols"
 
 # pm_native создан для iOS с паникой = прерывание; настольное приложение продолжает разворачиваться,
 # поэтому плохой пакет на одном треке не может незаметно остановить весь процесс.
+
+# GTK3/WebKit in Tauri currently require glib 0.18. Keep its API and backport the upstream pointer fix.
+[patch.crates-io]
+glib = { path = "vendor/glib" }
