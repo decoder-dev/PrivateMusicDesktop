@@ -29,4 +29,4 @@ jobs:
           rustc -Vv
           cargo -V
           printf 'RUSTFLAGS=%s\n' "${RUSTFLAGS:-}"
-          cargo test --manifest-path vendor/glib/Cargo.toml --release --locked --lib -- --nocapture --test-threads=1
+          cargo test --manifest-path vendor/glib/Cargo.toml --release --locked --lib -- --nocapture --test-threads=4
