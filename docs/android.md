@@ -515,3 +515,9 @@ The browser review includes 87 captures across the phone routes, small-screen en
 text, seven palettes in light and dark, Material styling, and desktop layouts. README
 previews use test catalogue data and explicitly substitute bundled photographs for mock
 cover URLs. These checks do not establish performance on a physical phone.
+
+### Security updates for build dependencies
+
+`scripts/android-dependency-constraints.gradle` updates vulnerable transitive tooling libraries in both the application and standalone plugin builds, including the isolated `buildSrc` build. It covers buildscript classpaths and ordinary configurations. The policy only raises older compatible requests: newer Jackson releases and Netty native artifacts keep their requested versions. AGP, Kotlin, Gradle, compileSdk and application dependency APIs remain unchanged.
+
+The dependency submission workflow uses the same Gradle version as the Android wrappers. After changing these constraints, verify both APKs, Kotlin tests and the emulator, then inspect a fresh dependency submission. A green source scan alone does not validate the resolved build dependencies.

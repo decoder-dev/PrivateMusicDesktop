@@ -1,3 +1,6 @@
 include ':app'
 
 apply from: 'tauri.settings.gradle'
+
+// Keep application and standalone build tooling on the same patched library versions.
+apply from: file('../../../scripts/android-dependency-constraints.gradle')
