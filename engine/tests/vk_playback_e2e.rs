@@ -55,3 +55,21 @@ fn foreign_accounts_and_invalid_payloads_never_reach_vk(){
  let mut invalid=event();invalid.audio_id="invalid/id".into();assert_eq!(app.vk_report_playback(7,&[invalid]).unwrap_err(),Error::InvalidRequest);
  assert_eq!(app.vk_report_playback(7,&vec![event();33]).unwrap_err(),Error::InvalidRequest);
 }
+
+#[test]
+fn local_audio_never_reaches_vk_even_when_native_commands_are_called_directly() {
+    let api = FakeApi::start(|_, _, _| panic!("local metadata must stay on device"));
+    let app = app(&api.base);
+    let local = Track { owner_id: 0, ..foreign() };
+    assert_eq!(app.vk_broadcast(7, Some(&local)).unwrap_err(), Error::InvalidRequest);
+    for invalid_id in ["0_456", "00_456", "7_0", "7_-1", "7_1_2"] {
+        let mut invalid = event(); invalid.audio_id = invalid_id.into();
+        assert_eq!(app.vk_report_playback(7, &[invalid]).unwrap_err(), Error::InvalidRequest);
+    }
+    let client = VkClient::with_base(&api.base).unwrap();
+    let session = Session { access_token: "tok".into(), user_id: Some(7), expires_at: None,
+        api_user_agent: "test".into(), refresh_cookie: String::new(), web_user_agent: "test".into() };
+    assert_eq!(client.recommendations(&session, Some(&local)).unwrap_err(), Error::InvalidRequest);
+    assert_eq!(client.shuffled_recommendations(&session, &local).unwrap_err(), Error::InvalidRequest);
+    assert!(api.calls.lock().unwrap().is_empty());
+}

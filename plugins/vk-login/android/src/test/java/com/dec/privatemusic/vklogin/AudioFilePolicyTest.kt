@@ -27,4 +27,19 @@ class AudioFilePolicyTest {
             } catch (_: IOException) { }
         }
     }
+    @Test fun copiesOtherAudioBytesWithAnIndependentSizeBound() {
+        val bytes = byteArrayOf(82, 73, 70, 70, 1, 2, 3)
+        val output = ByteArrayOutputStream()
+        assertEquals(bytes.size.toLong(), AudioFilePolicy.copyBounded(ByteArrayInputStream(bytes), output, bytes.size.toLong()))
+        assertArrayEquals(bytes, output.toByteArray())
+        assertTrue(runCatching { AudioFilePolicy.copyBounded(ByteArrayInputStream(bytes), ByteArrayOutputStream(), 6) }.exceptionOrNull() is IOException)
+        assertTrue(runCatching { AudioFilePolicy.copyBounded(ByteArrayInputStream(byteArrayOf()), ByteArrayOutputStream()) }.exceptionOrNull() is IOException)
+    }
+    @Test fun rejectsAProviderThatMakesNoProgress() {
+        val stalled = object : java.io.InputStream() {
+            override fun read(): Int = 0
+            override fun read(bytes: ByteArray, offset: Int, count: Int): Int = 0
+        }
+        assertTrue(runCatching { AudioFilePolicy.copyBounded(stalled, ByteArrayOutputStream()) }.exceptionOrNull() is IOException)
+    }
 }

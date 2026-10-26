@@ -3,7 +3,7 @@ import { morph } from "./motion.js";
 import { h, formatTime } from "./dom.js";
 import { icon } from "./icons.js";
 import { t } from "./i18n.js";
-import { api } from "./api.js";
+import { api, isLocalTrack } from "./api.js";
 import { store, subscribe } from "./store.js";
 import { isLiked, isBusy } from "./likes.js";
 import { hasArtist, openArtistOf } from "./navigation.js";
@@ -69,7 +69,7 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
   const likeButton = h("button", { class: "icon-btn like", type: "button", hidden: true, onclick: () => onLike?.(store.player.track) }, icon("heart", 18));
   function renderLike() {
     const track = store.player.track;
-    likeButton.hidden = !track;
+    likeButton.hidden = !track || isLocalTrack(track);
     if (!track) return;
     const liked = isLiked(track);
     const label = liked ? t("like.remove") : t("like.add");

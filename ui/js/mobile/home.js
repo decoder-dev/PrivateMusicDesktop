@@ -5,7 +5,7 @@ import { playbackAction } from "../playback-action.js";
 // you played lately. The full mixes screen ("For you") is pushed from here.
 
 import { h } from "../dom.js";
-import { api } from "../api.js";
+import { api, isLocalTrack } from "../api.js";
 import { icon } from "../icons.js";
 import { errorText, t, tn } from "../i18n.js";
 import { formatTime } from "../dom.js";
@@ -83,7 +83,7 @@ export function createHomeView({ play, onTrackAction, toast, openTrackMenu, like
 
   function renderLike() {
     const track = store.player.track;
-    likeButton.hidden = !track;
+    likeButton.hidden = !track || isLocalTrack(track);
     if (!track) return;
     const liked = isLiked(track);
     likeButton.classList.toggle("on", liked);

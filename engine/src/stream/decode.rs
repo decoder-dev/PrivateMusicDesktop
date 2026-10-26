@@ -36,10 +36,11 @@ impl Decoder {
     /// идентификации.
     pub fn open(reader: BufferReader, kind: ElementaryKind) -> Result<Self> {
         let mut hint = Hint::new();
-        hint.with_extension(match kind {
-            ElementaryKind::AdtsAac => "aac",
-            ElementaryKind::Mp3 => "mp3",
-        });
+        match kind {
+            ElementaryKind::AdtsAac => { hint.with_extension("aac"); }
+            ElementaryKind::Mp3 => { hint.with_extension("mp3"); }
+            ElementaryKind::LocalFile => {}
+        }
         let source = MediaSourceStream::new(Box::new(reader), MediaSourceStreamOptions::default());
         let probed = symphonia::default::get_probe()
             .format(&hint, source, &FormatOptions { enable_gapless: true, ..Default::default() }, &MetadataOptions::default())

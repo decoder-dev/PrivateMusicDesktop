@@ -12,7 +12,7 @@ internal object AudioSharePolicy {
         require(input.absoluteFile == file && file.parentFile?.parentFile == root)
         require(Regex("share-[a-f0-9]+-[a-f0-9]+").matches(file.parentFile!!.name))
         require(file.isFile && file.length() in 1..MAX_BYTES)
-        require(file.extension in listOf("aac", "mp3"))
+        require(file.extension in listOf("aac", "mp3", "m4a", "wav", "flac"))
         return file
     }
 }

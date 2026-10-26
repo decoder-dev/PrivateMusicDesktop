@@ -33,6 +33,8 @@ impl<R: Runtime> VkLogin<R> {
         unsupported()
     }
 
+    pub fn pick_local_audio(&self) -> Result<crate::PickedAudioBatch> { Err(Error::Unsupported) }
+
     pub fn pick_audio(&self) -> Result<Option<crate::PickedAudio>> { Err(Error::Unsupported) }
 
     /// Always `Err(Error::Unsupported)` off Android.

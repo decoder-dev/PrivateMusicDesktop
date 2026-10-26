@@ -55,6 +55,16 @@ pub struct PickedAudio {
     pub bytes: u64,
 }
 
+#[derive(Deserialize, Default)]
+pub struct PickedAudioBatch {
+    #[serde(default)]
+    pub files: Vec<PickedAudio>,
+    #[serde(default)]
+    pub failed: Vec<String>,
+    #[serde(default)]
+    pub skipped: usize,
+}
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]

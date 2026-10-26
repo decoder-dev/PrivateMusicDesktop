@@ -11,7 +11,11 @@ pub struct ListeningEvent {
 }
 impl ListeningEvent {
     pub fn valid(&self)->bool {
-        matches!(self.e.as_str(),"music_start_playback"|"music_stop_playback") && self.uuid>0
+        let remote_audio = self.audio_id.split_once('_').is_some_and(|(owner, id)| {
+            owner.parse::<i64>().is_ok_and(|owner| owner != 0)
+                && id.parse::<i64>().is_ok_and(|id| id > 0)
+        });
+        matches!(self.e.as_str(),"music_start_playback"|"music_stop_playback") && self.uuid>0 && remote_audio
             && self.audio_id.len()<=64 && !self.audio_id.is_empty() && self.audio_id.chars().all(|c|c.is_ascii_digit()||c=='_'||c=='-')
             && self.track_code.len()<=4096 && self.duration<=86400
             && matches!(self.streaming_type.as_str(),"online"|"offline") && matches!(self.repeat_mode.as_str(),"off"|"all"|"one")
@@ -20,6 +24,7 @@ impl ListeningEvent {
 }
 impl VkClient {
     pub fn broadcast(&self,session:&Session,track:Option<&Track>)->Result<()> {
+        if track.is_some_and(Track::is_local) { return Err(Error::InvalidRequest); }
         let params=track.map(|t|vec![("audio",t.id())]).unwrap_or_default();
         self.call_once(session,"audio.setBroadcast",&params)?;Ok(())
     }

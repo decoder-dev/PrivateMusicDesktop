@@ -158,6 +158,11 @@ pub async fn next(state: TauriState<'_, AppState>) -> CommandResult<()> {
 }
 
 #[tauri::command]
+pub async fn previous_track(state: TauriState<'_, AppState>) -> CommandResult<()> {
+    control(state, move |controller| controller.previous_track()).await
+}
+
+#[tauri::command]
 pub async fn previous(state: TauriState<'_, AppState>) -> CommandResult<()> {
     control(state, move |controller| controller.previous()).await
 }
@@ -751,6 +756,18 @@ pub async fn export_track(track: Track) -> CommandResult<bool> {
     Err(CommandError { kind: "unsupported".into(), message: "Export is not available on this device".into(), retry_after: None })
 }
 
+
+#[tauri::command]
+pub async fn local_audio(state: TauriState<'_, AppState>) -> CommandResult<Vec<pm_engine::offline::OfflineTrack>> {
+    let app = state.app.clone();
+    blocking(move || Ok(app.local_audio())).await
+}
+
+#[tauri::command]
+pub async fn import_local_audio(handle: AppHandle, state: TauriState<'_, AppState>) -> CommandResult<crate::local_audio::ImportResult> {
+    let app = state.app.clone();
+    blocking(move || crate::local_audio::choose(&handle, &app)).await
+}
 
 #[tauri::command]
 pub async fn choose_audio(handle: AppHandle, state: TauriState<'_, AppState>) -> CommandResult<Option<crate::audio_upload::AudioFileInfo>> {

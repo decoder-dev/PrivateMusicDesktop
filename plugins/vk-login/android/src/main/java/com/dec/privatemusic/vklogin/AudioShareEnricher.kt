@@ -10,6 +10,15 @@ import java.nio.ByteBuffer
 internal object AudioShareEnricher {
     fun prepare(input: File, title: String, artist: String, album: String, lyrics: String, lrc: String, cover: File?): List<File> {
         require(lyrics.toByteArray().size <= 150_000 && lrc.toByteArray().size <= 200_000)
+        if (input.extension in setOf("m4a", "wav", "flac")) {
+            val files = mutableListOf(input)
+            if (lrc.isNotBlank() || lyrics.isNotBlank()) {
+                val sidecar = File(input.parentFile, input.nameWithoutExtension + if (lrc.isNotBlank()) ".lrc" else ".txt")
+                sidecar.writeText(if (lrc.isNotBlank()) lrc else lyrics, Charsets.UTF_8)
+                files.add(sidecar)
+            }
+            return files
+        }
         val image = cover?.also { require(it.parentFile == input.parentFile && it.extension == "jpg" && it.length() in 1..3_145_728) }?.readBytes()
         val metadata = AudioExportTags.Metadata(title.take(1000), artist.take(1000), album.take(1000), lyrics, image)
         val output = File(input.parentFile, input.nameWithoutExtension + if (input.extension == "aac") ".m4a" else ".tagged.mp3")

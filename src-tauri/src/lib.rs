@@ -4,6 +4,7 @@
 
 mod commands;
 mod audio_upload;
+mod local_audio;
 mod audio_share;
 mod playlist_cover;
 mod share;
@@ -302,7 +303,7 @@ pub fn run() {
             commands::pause,
             commands::resume,
             commands::next,
-            commands::previous,
+            commands::previous, commands::previous_track,
             commands::seek,
             commands::set_volume,
             commands::set_visualizer,
@@ -315,7 +316,7 @@ pub fn run() {
             commands::vk_report_playback,commands::month_plays,
             commands::lyrics, commands::lyrics_versions,
             commands::choose_cover, commands::set_playlist_cover, commands::discard_cover, commands::share_audio, commands::share_link, commands::copy_link, commands::copy_text, commands::network_usage, commands::crash_report,
-            commands::choose_audio, commands::upload_audio, commands::discard_audio,
+            commands::local_audio, commands::import_local_audio, commands::choose_audio, commands::upload_audio, commands::discard_audio,
             commands::create_playlist,
             commands::edit_playlist,
             commands::delete_playlist,

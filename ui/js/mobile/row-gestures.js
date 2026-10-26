@@ -77,6 +77,7 @@ export function attachRowGestures(list) {
 
   function paint(g, dx) {
     const side = dx > 0 ? "lead" : "trail";
+    if (side === "trail" && !g.row.querySelector('[data-action="like"]')) { end(); return; }
     if (!g.bg || g.bg.dataset.side !== side) {
       g.bg?.remove();
       g.bg = underlay(side);

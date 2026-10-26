@@ -362,6 +362,7 @@ impl VkClient {
     }
 
     fn recommendations_with(&self, session: &Session, seed: Option<&Track>, shuffle: bool) -> Result<Vec<Track>> {
+        if seed.is_some_and(Track::is_local) { return Err(Error::InvalidRequest); }
         let user = match session.user_id {
             Some(user) => Some(user),
             None => self.user_id(session).ok(),
@@ -1117,6 +1118,7 @@ impl VkClient {
     }
 
     fn refreshed_track_with(&self, session: &Session, track: &Track, attempts: u32) -> Result<Track> {
+        if track.is_local() { return Err(Error::InvalidRequest); }
         let value = self.call_limited(session, "audio.getById", &[("audios", track.audio_id_with_key())], attempts)?;
         let user = self.user_id(session).ok();
         let fresh = value

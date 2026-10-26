@@ -4,7 +4,7 @@ import { isAndroid } from './mobile/layout.js';
 import { toast } from './toast.js';
 import { t, addStrings } from './i18n.js';
 addStrings({ru:{'lyrics.copy':'Копировать текст','lyrics.copied':'Текст скопирован','lyrics.copyFailed':'Не удалось скопировать текст','lyrics.copyHint':'Удерживайте строку, чтобы скопировать. Касание перематывает песню.'},en:{'lyrics.copy':'Copy lyrics','lyrics.copied':'Lyrics copied','lyrics.copyFailed':'Could not copy lyrics','lyrics.copyHint':'Hold a line to copy it. Tap to seek in the song.'}});
-export async function copyLyricsText(text, isCurrent=()=>true) {
+export async function copyLyricsText(text, isCurrent=()=>true, successKey='lyrics.copied', failureKey='lyrics.copyFailed') {
   if(!isCurrent())return;
   const account=accountId();
   try{
@@ -20,8 +20,8 @@ export async function copyLyricsText(text, isCurrent=()=>true) {
         finally{field.remove();previous?.focus?.({preventScroll:true});}
       }
     }
-    if(account===accountId() && isCurrent())toast(t('lyrics.copied'));
-  }catch{if(account===accountId() && isCurrent())toast(t('lyrics.copyFailed'),{error:true});}
+    if(account===accountId() && isCurrent())toast(t(successKey));
+  }catch{if(account===accountId() && isCurrent())toast(t(failureKey),{error:true});}
 }
 // Delegate to the lyric body so line rerenders need no additional listeners.
 export function installLyricsCopy(body, identity) {
