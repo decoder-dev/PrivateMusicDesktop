@@ -1,7 +1,9 @@
 name: CI
 
 on:
+  # Branch pushes are already validated by pull_request; avoid building the same commit twice.
   push:
+    branches: ["main"]
   pull_request:
   workflow_dispatch:
 
