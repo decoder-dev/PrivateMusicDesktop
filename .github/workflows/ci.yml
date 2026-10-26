@@ -29,4 +29,15 @@ jobs:
           rustc -Vv
           cargo -V
           printf 'RUSTFLAGS=%s\n' "${RUSTFLAGS:-}"
-          cargo test --manifest-path vendor/glib/Cargo.toml --release --locked --lib -- --nocapture --test-threads=4
+          cargo test --manifest-path vendor/glib/Cargo.toml --release --locked --lib --no-run
+          python3 - <<'DIAG'
+          import os, subprocess
+          base = ["cargo", "test", "--manifest-path", "vendor/glib/Cargo.toml", "--release", "--locked", "--lib", "--"]
+          for backtrace, capture, threads in [("0", True, 4), ("full", True, 4), ("0", False, 4), ("full", False, 4), ("0", True, 1)]:
+              for attempt in range(3):
+                  env = dict(os.environ, RUST_BACKTRACE=backtrace)
+                  args = base + ["--test-threads=" + str(threads)] + ([] if capture else ["--nocapture"])
+                  result = subprocess.run(args, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                  print(f"CASE backtrace={backtrace} capture={capture} threads={threads} attempt={attempt} exit={result.returncode}", flush=True)
+                  print("\n".join(result.stdout.splitlines()[-12:]), flush=True)
+          DIAG
