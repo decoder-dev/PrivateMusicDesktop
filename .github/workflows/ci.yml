@@ -13,6 +13,16 @@ permissions:
   contents: read
 
 jobs:
+  glib-security:
+    name: GLib iterator security regression
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install GLib headers
+        run: sudo apt-get update && sudo apt-get install -y libglib2.0-dev pkg-config
+      - name: Exercise upstream iterators under optimization
+        run: cargo test --manifest-path vendor/glib/Cargo.toml --release --locked --lib variant_iter::tests
+
   check:
     name: Check (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
