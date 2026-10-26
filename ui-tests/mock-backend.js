@@ -99,7 +99,10 @@
   };
 
   const emit = (event, payload) => (handlers.get(event) ?? []).forEach((fn) => fn({ payload }));
-  const emitState = () => emit("pm-event", { type: "state", ...state.player });
+  const emitState = () => {
+    state.player.can_next = state.queue.length > 0 && (state.player.repeat === "all" || state.player.queue_index + 1 < state.queue.length);
+    emit("pm-event", { type: "state", ...state.player });
+  };
   const emitQueue = () => emit("pm-event", { type: "queue", tracks: state.queue, current: state.player.queue_index });
   const startCurrent = () => {
     const track = state.queue[state.player.queue_index] ?? null;

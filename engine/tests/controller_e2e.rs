@@ -407,3 +407,29 @@ fn imported_audio_plays_without_a_vk_session_or_network_requests() {
     assert_eq!(rig.error_count(), 0);
     assert!(source.is_file());
 }
+
+#[test]
+fn next_availability_tracks_queue_edits_repeat_and_the_actual_shuffle_order() {
+    let rig = rig("http://127.0.0.1:9", 1.0);
+    rig.controller.load_queue(vec![track(1, None)], 0, 0.0);
+    assert!(!rig.controller.state().can_next);
+    rig.events.lock().unwrap().clear();
+    rig.controller.play_last(track(2, None));
+    assert!(rig.controller.state().can_next);
+    assert!(rig.events.lock().unwrap().iter().any(|event| matches!(event, UiEvent::State(state) if state.can_next)),
+        "queue-only changes must update UI and native media-session controls");
+    rig.controller.remove_from_queue(1);
+    assert!(!rig.controller.state().can_next);
+    rig.controller.set_repeat(Repeat::All);
+    assert!(rig.controller.state().can_next);
+    rig.controller.set_repeat(Repeat::One);
+    assert!(!rig.controller.state().can_next, "manual Next does not use repeat-one");
+    rig.controller.set_repeat(Repeat::Off);
+    rig.controller.load_queue((1..=3).map(|id| track(id, None)).collect(), 2, 0.0);
+    assert!(!rig.controller.state().can_next);
+    rig.controller.set_shuffle(true);
+    assert_eq!(rig.controller.state().queue_index, Some(2));
+    assert!(rig.controller.state().can_next, "the last visible row may be first in shuffle order");
+    rig.controller.set_shuffle(false);
+    assert!(!rig.controller.state().can_next);
+}

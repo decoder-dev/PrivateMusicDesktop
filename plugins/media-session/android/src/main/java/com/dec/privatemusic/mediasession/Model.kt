@@ -30,6 +30,7 @@ data class PlaybackInfo(
     val positionMs: Long,
     val durationMs: Long,
     val rate: Float,
+    val canNext: Boolean = true,
 )
 
 /** What the host last told us, with the (monotonic) time it arrived. */
@@ -43,7 +44,7 @@ data class PlaybackSnapshot(val info: PlaybackInfo, val receivedAtMs: Long) {
  * Tauri channel) is `{"action": name}` or `{"action": name, "value": number|bool}`;
  * it must match `MediaAction` in `lib.rs`.
  */
-data class ActionEvent(val name: String, val value: Any? = null) {
+data class ActionEvent(val name: String, val value: Any? = null, val source: String? = null) {
     companion object {
         val PLAY = ActionEvent("play")
         val PAUSE = ActionEvent("pause")

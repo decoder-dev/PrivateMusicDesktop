@@ -180,4 +180,26 @@ class FocusStateMachineTest {
         // Playing again asks for it afresh.
         assertEquals(listOf(Effect.RequestFocus), m.onPlaybackState(PlaybackKind.PLAYING))
     }
+    @Test
+    fun focusGainWaitsForTheAsynchronousPauseAcknowledgment() {
+        val m = playing()
+        m.onFocusChange(Change.LOSS_TRANSIENT)
+        // A position/capability snapshot from before Pause is still in flight.
+        assertEquals(emptyList<Effect>(), m.onPlaybackState(PlaybackKind.PLAYING))
+        assertTrue(m.pausedByFocus)
+        assertEquals(emptyList<Effect>(), m.onFocusChange(Change.GAIN))
+        assertEquals(listOf(emit(ActionEvent.PLAY)), m.onPlaybackState(PlaybackKind.PAUSED))
+        assertEquals(emptyList<Effect>(), m.onPlaybackState(PlaybackKind.PAUSED))
+    }
+
+    @Test
+    fun stopDuringTheFocusHandshakeCancelsAutomaticResume() {
+        val m = playing()
+        m.onFocusChange(Change.LOSS_TRANSIENT)
+        m.onFocusChange(Change.GAIN)
+        m.onPlaybackState(PlaybackKind.STOPPED)
+        assertEquals(emptyList<Effect>(), m.onPlaybackState(PlaybackKind.PAUSED))
+        assertEquals(emptyList<Effect>(), m.onFocusChange(Change.GAIN))
+    }
+
 }

@@ -22,6 +22,8 @@ class MediaKeyMapperTest {
     fun theHeadsetHookIsLeftToTheClickCounter() {
         assertNull(MediaKeyMapper.actionFor(KeyEvent.KEYCODE_HEADSETHOOK))
         assertNull(MediaKeyMapper.actionFor(KeyEvent.KEYCODE_VOLUME_UP))
+        assertNull(MediaKeyMapper.actionFor(KeyEvent.KEYCODE_VOLUME_DOWN))
+        assertNull(MediaKeyMapper.actionFor(KeyEvent.KEYCODE_VOLUME_MUTE))
         assertNull(MediaKeyMapper.actionFor(KeyEvent.KEYCODE_A))
     }
 }

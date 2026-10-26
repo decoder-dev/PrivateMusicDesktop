@@ -55,4 +55,9 @@ class NotificationLayoutTest {
     fun intentActionsAreUnique() {
         assertEquals(ButtonId.entries.size, ButtonId.entries.map { it.intentAction }.toSet().size)
     }
+    @Test fun unavailableNextHasNoNotificationActionOrInvalidCompactIndex() {
+        assertEquals(listOf(ButtonId.PREVIOUS, ButtonId.PAUSE), NotificationLayout.buttons(PlaybackKind.PLAYING, false))
+        assertEquals(listOf(ButtonId.PREVIOUS, ButtonId.PLAY), NotificationLayout.buttons(PlaybackKind.PAUSED, false))
+        assertArrayEquals(intArrayOf(0, 1), NotificationLayout.compactIndices(PlaybackKind.PLAYING, false))
+    }
 }

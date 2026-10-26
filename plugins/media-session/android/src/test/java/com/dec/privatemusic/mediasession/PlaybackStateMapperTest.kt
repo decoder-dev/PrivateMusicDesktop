@@ -89,4 +89,13 @@ class PlaybackStateMapperTest {
         val snapshot = PlaybackSnapshot(info(PlaybackKind.PLAYING, position = 1_000), receivedAtMs = 100)
         assertEquals(3_000, snapshot.positionAt(2_100))
     }
+    @Test fun endOfQueueDoesNotAdvertiseNextButKeepsPauseAndPrevious() {
+        for (kind in listOf(PlaybackKind.PLAYING, PlaybackKind.PAUSED, PlaybackKind.BUFFERING)) {
+            val mapped = PlaybackStateMapper.map(info(kind).copy(canNext = false), true)
+            assertEquals(0L, mapped.actions and P.ACTION_SKIP_TO_NEXT)
+            assertTrue(has(mapped.actions, P.ACTION_SKIP_TO_PREVIOUS))
+            assertTrue(has(mapped.actions, P.ACTION_PLAY_PAUSE))
+            assertTrue(has(mapped.actions, P.ACTION_SEEK_TO))
+        }
+    }
 }

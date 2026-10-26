@@ -77,7 +77,11 @@ pub struct PlaybackInfo {
     pub position_secs: f64,
     pub duration_secs: f64,
     pub rate: f64,
+    #[serde(default = "default_can_next")]
+    pub can_next: bool,
 }
+
+fn default_can_next() -> bool { true }
 
 /// One `update` call. `metadata: None` with `clear_metadata: false` means
 /// "unchanged"; `clear_metadata: true` means nothing is loaded any more.
@@ -197,7 +201,7 @@ mod tests {
         let update = Update {
             metadata: None,
             clear_metadata: true,
-            playback: Some(PlaybackInfo { state: PlaybackKind::Buffering, position_secs: 1.5, duration_secs: 200.0, rate: 1.0 }),
+            playback: Some(PlaybackInfo { state: PlaybackKind::Buffering, position_secs: 1.5, duration_secs: 200.0, rate: 1.0, can_next: true }),
         };
         let value = serde_json::to_value(&update).unwrap();
         assert_eq!(value["playback"]["state"], "buffering");
@@ -205,4 +209,12 @@ mod tests {
         assert!(!update.is_empty());
         assert!(Update::default().is_empty());
     }
+    #[test]
+    fn older_playback_payloads_keep_their_transport_default() {
+        let legacy: PlaybackInfo = serde_json::from_str(r#"{"state":"playing","position_secs":0,"duration_secs":30,"rate":1}"#).unwrap();
+        assert!(legacy.can_next);
+        let ended: PlaybackInfo = serde_json::from_str(r#"{"state":"playing","position_secs":0,"duration_secs":30,"rate":1,"can_next":false}"#).unwrap();
+        assert!(!ended.can_next);
+    }
+
 }

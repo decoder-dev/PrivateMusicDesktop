@@ -52,6 +52,8 @@ pub struct State {
     pub repeat: Repeat,
     pub queue_index: Option<usize>,
     pub queue_len: usize,
+    /// Whether a manual skip has a queued destination or an active radio continuation.
+    pub can_next: bool,
     /// Установите, пока очередь пополняется из микса или радиоприемника.
     pub radio: Option<RadioKind>,
     pub radio_context: Option<RadioContinuation>,
@@ -283,6 +285,11 @@ impl Drop for Controller {
 }
 
 impl Inner {
+    fn can_next(&self) -> bool {
+        self.queue.peek_next(false).is_some() ||
+            (self.queue.current().is_some() && self.radio.as_ref().is_some_and(|r| !r.done))
+    }
+
     fn state(&self) -> State {
         State {
             status: self.status,
@@ -294,6 +301,7 @@ impl Inner {
             repeat: self.queue.repeat(),
             queue_index: self.queue.current_index(),
             queue_len: self.queue.len(),
+            can_next: self.can_next(),
             radio: self.radio.as_ref().map(|r| r.kind),
             radio_context: self.radio.as_ref().and_then(Radio::continuation),
         }
@@ -318,7 +326,14 @@ impl Shared {
         let mut events = Vec::new();
         let result = {
             let mut inner = self.lock();
+            let could_skip = inner.can_next();
             let result=f(&mut inner, &mut events);
+            let can_skip = inner.can_next();
+            // Appending/removing queue entries can change transport actions
+            // without changing the track, position or playback status.
+            if could_skip != can_skip && !events.iter().any(|event| matches!(event, UiEvent::State(state) if state.can_next == can_skip)) {
+                events.push(UiEvent::State(inner.state()));
+            }
             self.prepare_next(&mut inner);
             result
         };
@@ -555,6 +570,11 @@ impl Shared {
                     inner.refreshed.clear();
                     events.push(inner.queue_event());
                     self.start_current(inner, events);
+                } else if inner.radio.as_ref().is_some_and(|r| !r.done) {
+                    // One empty/error round does not exhaust the bounded retry budget.
+                    if let Some(radio) = inner.radio.as_mut() { radio.waiting = true; }
+                    self.maybe_refill(inner);
+                    events.push(UiEvent::State(inner.state()));
                 } else {
                     inner.status = Status::Idle;
                     inner.position = 0.0;
@@ -1170,6 +1190,7 @@ impl Controller {
     pub fn pause(&self) {
         self.shared.with(|inner, events| {
             inner.user_paused = true;
+            if let Some(radio) = inner.radio.as_mut() { radio.waiting = false; }
             if inner.status == Status::Loading {
                 // Пауза во время исцеления потока останавливает исцеление; Игра начинается снова
                 // отсюда.
@@ -1297,11 +1318,25 @@ impl Controller {
 
     pub fn next(&self) {
         self.shared.with(|inner, events| {
+            log::info!("next requested: queue_index={:?} queue_len={} available={} shuffle={} repeat={:?}",
+                inner.queue.current_index(), inner.queue.len(), inner.queue.peek_next(false).is_some(), inner.queue.shuffle(), inner.queue.repeat());
             if inner.queue.advance(false).is_some() {
                 inner.failures = 0;
                 inner.refreshed.clear();
                 events.push(inner.queue_event());
                 self.shared.start_current(inner, events);
+            } else if inner.queue.current().is_some() && inner.radio.as_ref().is_some_and(|r| !r.done) {
+                // Manual Next at the live tail must wait for the same radio source.
+                // Repeated taps share its existing request; no parallel refills.
+                if let Some(radio) = inner.radio.as_mut() { radio.waiting = true; }
+                inner.user_paused = false;
+                self.shared.cancel_recovery(inner, events);
+                inner.status = Status::Loading;
+                inner.position = 0.0;
+                inner.pending_start = 0.0;
+                self.shared.remote().stop();
+                self.shared.maybe_refill(inner);
+                events.push(UiEvent::State(inner.state()));
             }
         });
     }
@@ -1521,6 +1556,83 @@ mod tests {
             assert!(Instant::now() < deadline,"a cancelled timer must release playback state");
             std::thread::sleep(Duration::from_millis(5));
         }
+    }
+
+    fn radio_test_controller(fetch: RadioFetch) -> Controller {
+        let controller = Controller::new(VkClient::with_base("http://127.0.0.1:9").unwrap(),
+            || Ok(Box::new(crate::audio::SimulatedSink::new(44100,2,1.0)) as Box<dyn Sink>), |_| {},1.0);
+        let track = crate::vk::model::parse_track(&serde_json::json!({
+            "id":1,"owner_id":7,"title":"First","artist":"Artist","duration":100
+        }), Some(7)).unwrap();
+        controller.load_queue(vec![track], 0, 0.0);
+        controller.shared.with(|inner, _| {
+            inner.radio = Some(Radio::new(RadioKind::Personal, 1, fetch, 400, vec![], inner.queue.tracks()));
+        });
+        controller
+    }
+
+    fn wait_for_radio(controller: &Controller, predicate: impl Fn(&Inner) -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(4);
+        loop {
+            if predicate(&controller.shared.lock()) { return; }
+            assert!(Instant::now() < deadline, "radio did not settle: {:?}", controller.state());
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn radio_next_at_the_tail_waits_and_retries_a_failed_round() {
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let count = calls.clone();
+        let controller = radio_test_controller(Arc::new(move |_| {
+            let n = count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if n == 0 { return Err(Error::Timeout); }
+            Ok(vec![crate::vk::model::parse_track(&serde_json::json!({
+                "id":2,"owner_id":7,"title":"Next","artist":"Artist","duration":100
+            }), Some(7)).unwrap()])
+        }));
+        assert!(controller.state().can_next, "a live radio still has a continuation");
+        controller.next();
+        wait_for_radio(&controller, |inner| inner.queue.current_index() == Some(1));
+        assert!(calls.load(std::sync::atomic::Ordering::SeqCst) >= 2);
+        controller.stop();
+    }
+
+    #[test]
+    fn radio_end_retries_empty_rounds_until_the_bounded_budget_is_exhausted() {
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let count = calls.clone();
+        let controller = radio_test_controller(Arc::new(move |_| {
+            count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(vec![])
+        }));
+        let track_id = controller.state().track.unwrap().id();
+        controller.shared.on_player_event(PlayerEvent::Ended { track_id });
+        wait_for_radio(&controller, |inner| inner.radio.as_ref().unwrap().done && inner.status == Status::Idle);
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), (radio::ATTEMPTS * radio::MAX_BAD_ROUNDS) as usize);
+        assert!(!controller.state().can_next);
+    }
+
+    #[test]
+    fn pausing_during_radio_refill_does_not_restart_on_a_late_response() {
+        let gate = Arc::new((Mutex::new(false), std::sync::Condvar::new()));
+        let waiting = gate.clone();
+        let controller = radio_test_controller(Arc::new(move |_| {
+            let (lock, wake) = &*waiting;
+            let mut ready = lock.lock().unwrap();
+            while !*ready { ready = wake.wait(ready).unwrap(); }
+            Ok(vec![crate::vk::model::parse_track(&serde_json::json!({
+                "id":2,"owner_id":7,"title":"Next","artist":"Artist","duration":100
+            }), Some(7)).unwrap()])
+        }));
+        controller.next();
+        assert_eq!(controller.state().status, Status::Loading);
+        controller.pause();
+        *gate.0.lock().unwrap() = true;
+        gate.1.notify_all();
+        wait_for_radio(&controller, |inner| inner.queue.len() == 2 && !inner.radio.as_ref().unwrap().in_flight);
+        assert_eq!(controller.state().status, Status::Idle);
+        assert_eq!(controller.state().queue_index, Some(0));
     }
 
     #[test]

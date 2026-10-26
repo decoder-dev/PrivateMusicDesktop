@@ -50,6 +50,9 @@ class WireTest {
     @Test
     fun actionsUseTheSharedJsonShape() {
         assertEquals("""{"action":"play"}""", Wire.toJson(ActionEvent.PLAY).toString())
+        val pause = Wire.toJson(ActionEvent.PAUSE.copy(source = "zero_volume"))
+        assertEquals("pause", pause.getString("action"))
+        assertEquals("zero_volume", pause.getString("source"))
         val seek = Wire.toJson(ActionEvent.seekTo(42.5))
         assertEquals("seek_to", seek.getString("action"))
         assertEquals(42.5, seek.getDouble("value"), 0.0)
@@ -62,5 +65,13 @@ class WireTest {
     fun playbackKindsRoundTripTheWireNames() {
         for (kind in PlaybackKind.entries) assertEquals(kind, PlaybackKind.fromWire(kind.wire))
         assertEquals(PlaybackKind.STOPPED, PlaybackKind.fromWire(null))
+    }
+    @Test fun explicitNextAvailabilityIsPreservedAndLegacyPayloadsStillWork() {
+        val end = Wire.parseUpdate(JSONObject("""{"playback":{"state":"playing","can_next":false}}""")).playback!!
+        assertFalse(end.canNext)
+        val next = Wire.parseUpdate(JSONObject("""{"playback":{"state":"paused","can_next":true}}""")).playback!!
+        assertTrue(next.canNext)
+        val legacy = Wire.parseUpdate(JSONObject("""{"playback":{"state":"playing"}}""")).playback!!
+        assertTrue(legacy.canNext)
     }
 }

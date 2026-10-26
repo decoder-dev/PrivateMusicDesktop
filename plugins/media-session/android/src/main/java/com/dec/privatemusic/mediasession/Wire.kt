@@ -22,6 +22,7 @@ object Wire {
         }
         val playback = json.optJSONObject("playback")?.let { p ->
             PlaybackInfo(
+                canNext = p.optBoolean("can_next", true),
                 kind = PlaybackKind.fromWire(p.optString("state", "")),
                 positionMs = secondsToMs(p.optDouble("position_secs", 0.0)),
                 durationMs = secondsToMs(p.optDouble("duration_secs", 0.0)),
@@ -34,6 +35,7 @@ object Wire {
     fun toJson(event: ActionEvent): JSONObject {
         val json = JSONObject().put("action", event.name)
         if (event.value != null) json.put("value", event.value)
+        if (event.source != null) json.put("source", event.source)
         return json
     }
 

@@ -252,9 +252,9 @@ so the exact NDK is used. Then:
    cheaper than three; if it becomes too slow, keep only `private-music-desktop`;
 7. the Kotlin unit tests of both plugins (`testDebugUnitTest`, Gradle 8.14.3 from the media-session wrapper).
 
-**Job `emulator`** (needs `build`, 45 min limit, runs even when clippy or the Kotlin tests failed): downloads the
-debug APKs with `gh run download`, enables KVM, installs the emulator and the image
-`system-images;android-34;google_apis;x86_64`, creates a Pixel 6 AVD with 2 GB RAM and boots it headless
+**Jobs `emulator` (API 34 and API 36)** (need `build`, 45 min limit each, run even when clippy or the Kotlin tests failed): download the
+same debug APKs with `gh run download`, enable KVM, install the emulator and the matching
+`system-images;android-<api>;google_apis;x86_64` image, create a Pixel 6 AVD and boot it headless
 (`scripts/android-emulator-tests/boot-emulator.sh`, one retry; animations off). Then:
 
 * `scripts/android-emulator-tests/run.mjs` drives the real app (no mock backend, signed out) through the WebView
@@ -282,9 +282,9 @@ debug APKs with `gh run download`, enables KVM, installs the emulator and the im
 | `android-release-unsigned` | `PrivateMusic_<v>_android-arm64-unsigned.apk` and its `.sha256` |
 | `android-debug-x86_64` | the debug APK and the same with versionCode + 1 |
 | `android-kotlin-test-reports` | Gradle reports of the plugin unit tests |
-| `android-emulator-logs` | everything below |
+| `android-emulator-logs-api-34` / `android-emulator-logs-api-36` | everything below |
 
-**Reading the emulator logs** (`android-emulator-logs`): `summary.md` / `results.json` (also in the job summary) tell
+**Reading the emulator logs** (`android-emulator-logs-api-34` / `android-emulator-logs-api-36`): `summary.md` / `results.json` (also in the job summary) tell
 which step failed and why; `fail-NN.png` is the screen at the failure, `03-sign-in.png`, `08-landscape.png`,
 `06-vk-login-page.png` are normal screenshots (the sign-in Activity is `FLAG_SECURE`, so only the DevTools
 screenshot shows it); `logcat-full.txt` is the full `adb logcat -d` (search for `FATAL EXCEPTION`, `RustStdoutStderr`

@@ -20,11 +20,12 @@ pub struct Bridge<S: MediaSink> {
     sink: S,
     sync: MediaSync,
     buffering: bool,
+    can_next: Option<bool>,
 }
 
 impl<S: MediaSink> Bridge<S> {
     pub fn new(sink: S) -> Self {
-        Self { sink, sync: MediaSync::default(), buffering: false }
+        Self { sink, sync: MediaSync::default(), buffering: false, can_next: None }
     }
 
     /// Feed every [`UiEvent`]; only `State` matters. `now` is any monotonic
@@ -56,17 +57,24 @@ impl<S: MediaSink> Bridge<S> {
         } else {
             metadata.and_then(|m| m.as_ref()).map_or(0.0, |m| m.duration)
         };
-        let mut playback = updates.playback.map(|p| playback_info(p, duration, buffering));
-        if playback.is_none() && has_track && buffering != self.buffering && state.status != Status::Paused {
-            // Buffering started or ended without the OS-visible class changing.
+        let mut playback = updates.playback.map(|p| playback_info(p, duration, buffering, state.can_next));
+        if playback.is_none() && has_track && ((buffering != self.buffering && state.status != Status::Paused) || self.can_next != Some(state.can_next)) {
+            // Buffering or transport availability changed without a seek or track change.
             playback = Some(PlaybackInfo {
-                state: if buffering { PlaybackKind::Buffering } else { PlaybackKind::Playing },
+                state: match state.status {
+                    Status::Idle => PlaybackKind::Stopped,
+                    Status::Paused => PlaybackKind::Paused,
+                    Status::Loading | Status::Buffering => PlaybackKind::Buffering,
+                    Status::Playing => PlaybackKind::Playing,
+                },
                 position_secs: finite(state.position),
                 duration_secs: duration,
                 rate: 1.0,
+                can_next: state.can_next,
             });
         }
         self.buffering = buffering;
+        self.can_next = Some(state.can_next);
         Update {
             clear_metadata: matches!(metadata, Some(None)),
             metadata: metadata.and_then(|m| m.as_ref()).map(track_metadata),
@@ -83,14 +91,14 @@ fn finite(seconds: f64) -> f64 {
     }
 }
 
-fn playback_info(playback: Playback, duration: f64, buffering: bool) -> PlaybackInfo {
+fn playback_info(playback: Playback, duration: f64, buffering: bool, can_next: bool) -> PlaybackInfo {
     let (state, position) = match playback {
         Playback::Stopped => (PlaybackKind::Stopped, 0.0),
         Playback::Paused(p) => (PlaybackKind::Paused, p),
         Playback::Playing(p) if buffering => (PlaybackKind::Buffering, p),
         Playback::Playing(p) => (PlaybackKind::Playing, p),
     };
-    PlaybackInfo { state, position_secs: finite(position), duration_secs: duration, rate: 1.0 }
+    PlaybackInfo { state, position_secs: finite(position), duration_secs: duration, rate: 1.0, can_next }
 }
 
 fn track_metadata(m: &Metadata) -> TrackMetadata {
@@ -225,7 +233,7 @@ mod tests {
     fn state(status: Status, track: Option<Track>, position: f64) -> State {
         State {
             status, track, position, duration: 200.0, volume: 1.0, shuffle: false, repeat: Repeat::Off,
-            queue_index: Some(0), queue_len: 1, radio: None, radio_context: None,
+            queue_index: Some(0), queue_len: 1, can_next: false, radio: None, radio_context: None,
         }
     }
 
@@ -405,4 +413,27 @@ mod tests {
         ducker.set(&volume, false);
         assert!((volume.volume() - 0.6).abs() < 1e-6);
     }
+    #[test]
+    fn queue_only_changes_refresh_actions_without_metadata_or_playback_class_changes() {
+        for status in [Status::Playing, Status::Paused] {
+            let fake = Fake::default();
+            let mut bridge = Bridge::new(&fake);
+            let mut current = state(status, Some(track(1, None)), 20.0);
+            bridge.on_state(&current, 0.0).unwrap();
+            fake.updates.borrow_mut().clear();
+            current.can_next = true;
+            bridge.on_state(&current, 0.01).unwrap();
+            let updates = fake.updates.borrow();
+            assert_eq!(updates.len(), 1);
+            assert!(updates[0].metadata.is_none());
+            let playback = updates[0].playback.unwrap();
+            assert!(playback.can_next);
+            assert_eq!(playback.state, if status == Status::Paused { PlaybackKind::Paused } else { PlaybackKind::Playing });
+            drop(updates);
+            current.can_next = false;
+            bridge.on_state(&current, 0.02).unwrap();
+            assert!(!fake.updates.borrow().last().unwrap().playback.unwrap().can_next);
+        }
+    }
+
 }

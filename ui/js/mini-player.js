@@ -29,6 +29,8 @@ export function createMiniPlayer(onLike) {
       icon(glyph, 20),
     );
   const toggle = button(ft("Воспроизведение / пауза"), "play", () => api.toggle());
+  const previous = button(ft("Предыдущий"), "prev", () => api.previous());
+  const next = button(ft("Следующий"), "next", () => api.next());
   const like = button(ft("Избранное"), "heart", () => onLike(store.player.track));
   const seek = h("input", {
     type: "range",
@@ -53,21 +55,21 @@ export function createMiniPlayer(onLike) {
     h(
       "div",
       { class: "mini-transport" },
-      button(ft("Предыдущий"), "prev", () => api.previous()),
+      previous,
       toggle,
-      button(ft("Следующий"), "next", () => api.next()),
+      next,
       like,
     ),
     h("div", { class: "mini-progress" }, time, seek),
   );
   toggle.classList.add("mini-play");
-  let previous;
+  let previousKey;
   let lastGlyph, lastLiked;
   function render() {
     const p = store.player;
     const key = p.track ? `${p.track.owner_id}_${p.track.track_id}` : null;
-    if (key !== previous) {
-      previous = key;
+    if (key !== previousKey) {
+      previousKey = key;
       art.replaceChildren(artBox(p.track?.artwork_url));
     }
     const titleText=p.track?.title || ft("Выберите музыку");
@@ -84,6 +86,8 @@ export function createMiniPlayer(onLike) {
       lastLiked=liked;
       like.replaceChildren(icon(liked ? "heart-on" : "heart", 20));
     }
+    previous.disabled = toggle.disabled = !p.track && p.queue_len === 0;
+    next.disabled = (!p.track && p.queue_len === 0) || p.can_next === false;
     like.setAttribute("aria-pressed", String(liked));
     like.hidden = isLocalTrack(p.track);
     like.disabled = !p.track || isLocalTrack(p.track);

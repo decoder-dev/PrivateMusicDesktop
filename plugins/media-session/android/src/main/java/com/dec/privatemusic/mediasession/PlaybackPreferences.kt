@@ -53,7 +53,7 @@ class PlaybackPreferences(private val context: Context) {
         val lowered = lastVolume > 0 && current == 0
         lastVolume = current
         if (pauseAtZero && lowered && MediaHub.snapshot?.info?.kind?.isActive == true) {
-            MediaHub.emit(ActionEvent.PAUSE)
+            MediaHub.emit(ActionEvent.PAUSE.copy(source = "zero_volume"))
         }
     }
     companion object {

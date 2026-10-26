@@ -59,6 +59,7 @@ class PlaybackService : Service() {
         policy = ForegroundPolicy(startedAtMs = SystemClock.elapsedRealtime())
         session = MediaSessionCompat(this, "PrivateMusic").apply {
             setCallback(SessionCallback())
+            setPlaybackToLocal(AudioManager.STREAM_MUSIC)
             packageManager.getLaunchIntentForPackage(packageName)?.let {
                 setSessionActivity(
                     android.app.PendingIntent.getActivity(
@@ -174,7 +175,7 @@ class PlaybackService : Service() {
 
     private fun currentNotification(): Notification {
         val kind = MediaHub.snapshot?.info?.kind ?: PlaybackKind.STOPPED
-        return notifications.build(session.sessionToken, MediaHub.track, kind, MediaHub.artwork, foreground)
+        return notifications.build(session.sessionToken, MediaHub.track, kind, MediaHub.artwork, foreground, MediaHub.snapshot?.info?.canNext == true)
     }
 
     private fun apply(decision: ForegroundPolicy.Decision) {

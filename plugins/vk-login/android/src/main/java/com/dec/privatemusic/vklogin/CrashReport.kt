@@ -3,6 +3,7 @@ package com.dec.privatemusic.vklogin
 import android.app.ActivityManager
 import android.app.ApplicationExitInfo
 import android.content.Context
+import android.os.Debug
 import android.os.Build
 import android.util.Log
 import android.webkit.WebView
@@ -61,7 +62,7 @@ object CrashReport {
 
     fun text(context: Context): String {
         val out = StringBuilder()
-        out.append("Private Music crash report\n")
+        out.append("Private Music diagnostic report\n")
         out.append("time: ").append(stamp(System.currentTimeMillis())).append('\n')
         try {
             val info = context.packageManager.getPackageInfo(context.packageName, 0)
@@ -71,6 +72,13 @@ object CrashReport {
             .append(", Android ").append(Build.VERSION.RELEASE).append(" (API ").append(Build.VERSION.SDK_INT).append(")")
             .append(", ").append(Build.SUPPORTED_ABIS.joinToString("/")).append('\n')
         out.append("webview: ").append(webViewVersion()).append("\n\n")
+        try {
+            val memory = Debug.MemoryInfo()
+            Debug.getMemoryInfo(memory)
+            out.append("memory now: pss_kb=").append(memory.totalPss)
+                .append(" java_used_bytes=").append(Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory())
+                .append(" java_limit_bytes=").append(Runtime.getRuntime().maxMemory()).append("\n\n")
+        } catch (_: Exception) { out.append("memory now: unavailable\n\n") }
         if (Build.VERSION.SDK_INT >= 30) out.append(exitReasons(context))
         else out.append("process exit reasons: need Android 11 or newer\n")
         val trace = File(context.filesDir, TRACE_FILE)
@@ -101,6 +109,10 @@ object CrashReport {
         ApplicationExitInfo.REASON_DEPENDENCY_DIED -> "DEPENDENCY_DIED"
         ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "EXCESSIVE_RESOURCE_USAGE"
         ApplicationExitInfo.REASON_FREEZER -> "FREEZER"
+        ApplicationExitInfo.REASON_UNKNOWN -> "UNKNOWN (not specified by the system)"
+        ApplicationExitInfo.REASON_OTHER -> "OTHER (system decision)"
+        ApplicationExitInfo.REASON_PACKAGE_STATE_CHANGE -> "PACKAGE_STATE_CHANGE"
+        ApplicationExitInfo.REASON_PACKAGE_UPDATED -> "PACKAGE_UPDATED (app update)"
         else -> "UNKNOWN($reason)"
     }
 
@@ -113,7 +125,10 @@ object CrashReport {
             for (item in list) {
                 out.append(stamp(item.timestamp)).append("  ").append(reasonName(item.reason))
                     .append("  process=").append(item.processName).append("  status=").append(item.status)
-                    .append("  importance=").append(item.importance).append('\n')
+                    .append("  importance=").append(item.importance)
+                if (item.pss > 0) out.append("  pss_kb=").append(item.pss)
+                if (item.rss > 0) out.append("  rss_kb=").append(item.rss)
+                out.append('\n')
                 if (!item.description.isNullOrBlank()) out.append("  ").append(item.description).append('\n')
                 // An ANR trace is plain text; a native crash trace is binary protobuf, so only its description is used.
                 if (item.reason == ApplicationExitInfo.REASON_ANR) {
