@@ -36,12 +36,12 @@ kotlin {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.core:core-ktx:1.18.0")
     // MediaSessionCompat, PlaybackStateCompat, MediaStyle notification.
-    implementation("androidx.media:media:1.7.0")
+    implementation("androidx.media:media:1.8.0")
     implementation(project(":tauri-android"))
 
     testImplementation("junit:junit:4.13.2")
     // android.jar's org.json is a stub that throws in unit tests.
-    testImplementation("org.json:json:20240303")
+    testImplementation("org.json:json:20260814")
 }

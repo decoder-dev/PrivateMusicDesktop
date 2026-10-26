@@ -10,8 +10,8 @@ pluginManagement {
         gradlePluginPortal()
     }
     plugins {
-        id("com.android.library") version "8.9.3"
-        id("org.jetbrains.kotlin.android") version "2.0.21"
+        id("com.android.library") version "9.3.3"
+        id("org.jetbrains.kotlin.android") version "2.4.21"
     }
 }
 

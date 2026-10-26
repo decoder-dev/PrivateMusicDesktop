@@ -154,7 +154,7 @@ jobs:
           . scripts/android-ci-env.sh >/dev/null
           cargo clippy --target aarch64-linux-android -p private-music-desktop -p tauri-plugin-vk-login -p tauri-plugin-media-session --locked -- -D warnings
 
-      # JUnit без эмулятора. Обёртка Gradle 8.14.3 от плагина media-session подходит и vk-login (AGP 8.9.3 в обоих).
+      # JUnit без эмулятора. Обёртка Gradle 9.6.1 от плагина media-session подходит и vk-login (AGP 9.3.3 в обоих).
       - name: Kotlin unit tests (media-session)
         timeout-minutes: 20
         run: |
