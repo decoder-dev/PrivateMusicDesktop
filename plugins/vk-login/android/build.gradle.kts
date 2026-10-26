@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.dec.privatemusic.vklogin"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 26
@@ -33,12 +33,12 @@ kotlin {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.9.0")
-    implementation("androidx.exifinterface:exifinterface:1.3.7")
-    implementation("androidx.appcompat:appcompat:1.6.0")
+    implementation("androidx.core:core-ktx:1.19.1")
+    implementation("androidx.exifinterface:exifinterface:1.4.2")
+    implementation("androidx.appcompat:appcompat:1.8.0")
     implementation(project(":tauri-android"))
 
     testImplementation("junit:junit:4.13.2")
     // The platform's org.json is a stub in unit tests: use the real implementation.
-    testImplementation("org.json:json:20240303")
+    testImplementation("org.json:json:20260814")
 }

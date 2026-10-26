@@ -265,8 +265,8 @@ plugins/media-session/scripts/android-test.sh     # Kotlin unit tests (JUnit, no
 ```
 
 `android-test.sh` runs `gradlew testDebugUnitTest` in `android/`, a standalone build of
-the library (`settings.gradle.kts`, AGP 8.9.3, Kotlin 2.1.21, compileSdk 35). It needs
-`ANDROID_HOME` with platform 35 (and 36 for Tauri's own `tauri-android` module, which
+the library (`settings.gradle.kts`, AGP 9.3.3, Kotlin 2.4.21, compileSdk 37). It needs
+`ANDROID_HOME` with platform 37 (and 36 for Tauri's own `tauri-android` module, which
 Gradle downloads if the licences are accepted), JDK 17+, and finds Tauri's Android
 library in the cargo registry (`-PtauriAndroidDir` / `TAURI_ANDROID_DIR`). Use
 `GRADLE=gradle` to run an installed Gradle instead of downloading the wrapper.

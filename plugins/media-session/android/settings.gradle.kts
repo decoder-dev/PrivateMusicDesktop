@@ -11,8 +11,8 @@ pluginManagement {
     // Versions live here, not in build.gradle.kts: inside an app Tauri's project already has
     // the Android and Kotlin plugins on its classpath and refuses a second, versioned request.
     plugins {
-        id("com.android.library") version "8.9.3"
-        id("org.jetbrains.kotlin.android") version "2.1.21"
+        id("com.android.library") version "9.3.3"
+        id("org.jetbrains.kotlin.android") version "2.4.21"
     }
 }
 
