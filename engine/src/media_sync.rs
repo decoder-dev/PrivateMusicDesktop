@@ -147,7 +147,7 @@ pub fn apply(controller: &Controller, action: MediaAction) {
             _ => {}
         },
         MediaAction::Pause => {
-            if matches!(state.status, Status::Playing | Status::Buffering) {
+            if matches!(state.status, Status::Loading | Status::Playing | Status::Buffering) {
                 controller.pause();
             }
         }
@@ -182,7 +182,7 @@ mod tests {
     fn state(status: Status, track: Option<Track>, position: f64) -> State {
         State {
             status, track, position, duration: 200.0, volume: 1.0, shuffle: false, repeat: Repeat::Off,
-            queue_index: Some(0), queue_len: 1, radio: None, radio_context: None,
+            queue_index: Some(0), queue_len: 1, can_next: false, radio: None, radio_context: None,
         }
     }
 

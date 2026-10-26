@@ -31,6 +31,8 @@ T 30 adb shell dumpsys package "$pkg" > "$out/dumpsys-package.txt" 2>&1
 T 30 adb shell dumpsys activity activities > "$out/dumpsys-activities.txt" 2>&1
 T 30 adb shell ps -A 2>/dev/null | grep -E "$pkg|PID" > "$out/ps.txt"
 T 30 adb shell dumpsys meminfo "$pkg" > "$out/meminfo.txt" 2>&1
+T 30 adb shell dumpsys gfxinfo "$pkg" framestats > "$out/gfxinfo.txt" 2>&1
+T 30 adb shell dumpsys media_session > "$out/media-session.txt" 2>&1
 T 120 adb bugreport "$out/bugreport.zip" >/dev/null 2>&1 || rm -f "$out/bugreport.zip"
 # Native crash tombstones are only readable with root on user builds; google_apis images allow it.
 T 20 adb root >/dev/null 2>&1 && sleep 2 && T 60 adb pull /data/tombstones "$out/tombstones" >/dev/null 2>&1

@@ -32,6 +32,8 @@ class FocusStateMachine {
         private set
 
     private var playing = false
+    private var awaitingPause = false
+    private var gainBeforePause = false
 
     /** The app's own playback state changed (reported by the host). */
     fun onPlaybackState(kind: PlaybackKind): List<Effect> {
@@ -40,12 +42,24 @@ class FocusStateMachine {
         val effects = mutableListOf<Effect>()
         if (playing) {
             // The user (or the app) resumed by itself: that settles the question of "paused by focus".
-            pausedByFocus = false
+            if (!awaitingPause) {
+                pausedByFocus = false
+                gainBeforePause = false
+            }
             if (!hasFocus) effects += Effect.RequestFocus
         } else if (kind == PlaybackKind.STOPPED) {
             pausedByFocus = false
+            awaitingPause = false
+            gainBeforePause = false
             effects += endDuck()
             if (hasFocus) effects += release()
+        } else if (pausedByFocus && awaitingPause) {
+            awaitingPause = false
+            if (gainBeforePause) {
+                gainBeforePause = false
+                pausedByFocus = false
+                effects += Effect.Emit(ActionEvent.PLAY)
+            }
         } else if (wasPlaying && !pausedByFocus) {
             // Paused by the user: keep focus for now, the service releases it when it idles.
             effects += endDuck()
@@ -77,8 +91,13 @@ class FocusStateMachine {
             val effects = mutableListOf<Effect>()
             effects += endDuck()
             if (pausedByFocus) {
-                pausedByFocus = false
-                effects += Effect.Emit(ActionEvent.PLAY)
+                // Focus can return before Rust acknowledges Pause. Sending Play
+                // now would race the pause and could leave the player stopped.
+                if (awaitingPause) gainBeforePause = true
+                else {
+                    pausedByFocus = false
+                    effects += Effect.Emit(ActionEvent.PLAY)
+                }
             }
             effects
         }
@@ -87,6 +106,8 @@ class FocusStateMachine {
             // give the focus back, do not fight for it.
             hasFocus = false
             pausedByFocus = false
+            awaitingPause = false
+            gainBeforePause = false
             val effects = mutableListOf<Effect>()
             effects += endDuck()
             if (playing) effects += Effect.Emit(ActionEvent.PAUSE)
@@ -110,6 +131,8 @@ class FocusStateMachine {
     /** Headphones unplugged / Bluetooth gone (`ACTION_AUDIO_BECOMING_NOISY`). */
     fun onBecomingNoisy(): List<Effect> {
         pausedByFocus = false
+        awaitingPause = false
+        gainBeforePause = false
         return if (playing) listOf(Effect.Emit(ActionEvent.PAUSE)) else emptyList()
     }
 
@@ -118,6 +141,8 @@ class FocusStateMachine {
         if (!hasFocus && !pausedByFocus) return emptyList()
         if (pausedByFocus && !force) return emptyList()
         pausedByFocus = false
+        awaitingPause = false
+        gainBeforePause = false
         return endDuck() + release()
     }
 
@@ -135,6 +160,8 @@ class FocusStateMachine {
     private fun pauseForFocus(resumeLater: Boolean): List<Effect> {
         if (!playing) return emptyList()
         pausedByFocus = resumeLater
+        awaitingPause = resumeLater
+        gainBeforePause = false
         return listOf(Effect.Emit(ActionEvent.PAUSE))
     }
 }

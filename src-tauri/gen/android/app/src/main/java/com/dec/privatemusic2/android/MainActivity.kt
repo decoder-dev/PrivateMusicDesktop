@@ -1,6 +1,7 @@
 package com.dec.privatemusic2.android
 
 import android.graphics.Color
+import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -31,6 +32,9 @@ class MainActivity : TauriActivity() {
     val transparent = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT)
     enableEdgeToEdge(statusBarStyle = transparent, navigationBarStyle = transparent)
     super.onCreate(savedInstanceState)
+    // Hardware volume keys always control music, including before the first
+    // media-session update. Never route them through WebView transport shortcuts.
+    volumeControlStream = AudioManager.STREAM_MUSIC
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
       window.attributes.layoutInDisplayCutoutMode =

@@ -29,7 +29,12 @@ class AudioFocusController(context: Context, private val emit: (ActionEvent) -> 
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> FocusStateMachine.Change.LOSS_TRANSIENT_CAN_DUCK
             else -> null
         }
-        if (mapped != null) run(machine.onFocusChange(mapped))
+        if (mapped != null) run(machine.onFocusChange(mapped), when (mapped) {
+            FocusStateMachine.Change.GAIN -> "focus_gain"
+            FocusStateMachine.Change.LOSS -> "focus_loss"
+            FocusStateMachine.Change.LOSS_TRANSIENT -> "focus_transient"
+            FocusStateMachine.Change.LOSS_TRANSIENT_CAN_DUCK -> "focus_duck"
+        })
     }
 
     fun onPlaybackState(kind: PlaybackKind) = run(machine.onPlaybackState(kind))
@@ -45,14 +50,14 @@ class AudioFocusController(context: Context, private val emit: (ActionEvent) -> 
     /** Service is idle but may still be resumed from a transient loss: keep waiting for the gain. */
     fun onIdle() = run(machine.onIdle(force = false))
 
-    fun onBecomingNoisy() = run(machine.onBecomingNoisy())
+    fun onBecomingNoisy() = run(machine.onBecomingNoisy(), "headphones_disconnected")
 
-    private fun run(effects: List<FocusStateMachine.Effect>) {
+    private fun run(effects: List<FocusStateMachine.Effect>, source: String = "focus_state") {
         for (effect in effects) {
             when (effect) {
                 FocusStateMachine.Effect.RequestFocus -> request()
                 FocusStateMachine.Effect.AbandonFocus -> abandonSystem()
-                is FocusStateMachine.Effect.Emit -> emit(effect.event)
+                is FocusStateMachine.Effect.Emit -> emit(effect.event.copy(source = source))
             }
         }
     }

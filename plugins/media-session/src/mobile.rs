@@ -54,7 +54,23 @@ impl<R: Runtime> MediaSession<R> {
         let channel = Channel::<Value>::new(move |body| {
             if let InvokeResponseBody::Json(json) = body {
                 match serde_json::from_str::<MediaAction>(&json) {
-                    Ok(action) => handler(action),
+                    Ok(action) => {
+                        // Only fixed labels leave Android; never copy arbitrary
+                        // channel strings, metadata, URLs or credentials into logs.
+                        let value = serde_json::from_str::<Value>(&json).unwrap_or(Value::Null);
+                        let source = match value.get("source").and_then(Value::as_str) {
+                            Some("focus_gain") => "focus_gain",
+                            Some("focus_loss") => "focus_loss",
+                            Some("focus_transient") => "focus_transient",
+                            Some("focus_duck") => "focus_duck",
+                            Some("focus_state") => "focus_state",
+                            Some("headphones_disconnected") => "headphones_disconnected",
+                            Some("zero_volume") => "zero_volume",
+                            _ => "system_control",
+                        };
+                        log::info!("system playback action: {action:?} source={source}");
+                        handler(action);
+                    },
                     Err(error) => log::debug!("media session: unreadable action: {error}"),
                 }
             }

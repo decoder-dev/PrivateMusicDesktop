@@ -10,7 +10,6 @@ object PlaybackStateMapper {
         PlaybackStateCompat.ACTION_PLAY or
             PlaybackStateCompat.ACTION_PAUSE or
             PlaybackStateCompat.ACTION_PLAY_PAUSE or
-            PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
             PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
             PlaybackStateCompat.ACTION_STOP
 
@@ -24,14 +23,15 @@ object PlaybackStateMapper {
         val position = if (duration > 0) positionMs.coerceIn(0, duration) else positionMs.coerceAtLeast(0)
         // The scrubber is only useful when the length is known.
         val seek = if (duration > 0) PlaybackStateCompat.ACTION_SEEK_TO else 0L
+        val actions = BASE_ACTIONS or seek or if (info.canNext) PlaybackStateCompat.ACTION_SKIP_TO_NEXT else 0L
         return when (info.kind) {
             PlaybackKind.PLAYING ->
-                Mapped(PlaybackStateCompat.STATE_PLAYING, position, info.rate, BASE_ACTIONS or seek)
+                Mapped(PlaybackStateCompat.STATE_PLAYING, position, info.rate, actions)
             PlaybackKind.PAUSED ->
-                Mapped(PlaybackStateCompat.STATE_PAUSED, position, 0f, BASE_ACTIONS or seek)
+                Mapped(PlaybackStateCompat.STATE_PAUSED, position, 0f, actions)
             // Speed 0 while buffering: the scrubber must not run ahead of the sound.
             PlaybackKind.BUFFERING ->
-                Mapped(PlaybackStateCompat.STATE_BUFFERING, position, 0f, BASE_ACTIONS or seek)
+                Mapped(PlaybackStateCompat.STATE_BUFFERING, position, 0f, actions)
             PlaybackKind.STOPPED ->
                 Mapped(
                     PlaybackStateCompat.STATE_STOPPED,

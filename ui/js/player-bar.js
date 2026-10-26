@@ -177,7 +177,8 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
       muteButton.dataset.glyph=volumeGlyph;
       muteButton.replaceChildren(icon(volumeGlyph,18));
     }
-    previousButton.disabled = nextButton.disabled = playButton.disabled = !track && player.queue_len === 0;
+    previousButton.disabled = playButton.disabled = !track && player.queue_len === 0;
+    nextButton.disabled = (!track && player.queue_len === 0) || player.can_next === false;
   }
 
   subscribe("player", (player) => { render(player); renderLike(); });

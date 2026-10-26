@@ -409,7 +409,8 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     }
     syncRange(seek);
     seek.disabled = !track;
-    previousButton.disabled = nextButton.disabled = playButton.disabled = !track && player.queue_len === 0;
+    previousButton.disabled = playButton.disabled = !track && player.queue_len === 0;
+    nextButton.disabled = (!track && player.queue_len === 0) || player.can_next === false;
 
     if (!playing && open) visualizer.settle();
     wake();

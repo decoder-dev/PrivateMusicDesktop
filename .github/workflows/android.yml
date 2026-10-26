@@ -187,7 +187,11 @@ jobs:
           if-no-files-found: ignore
 
   emulator:
-    name: Emulator (API 34)
+    name: Emulator (API ${{ matrix.api }})
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [34, 36]
     needs: build
     # Даже если clippy или Kotlin-тесты упали, APK уже собраны и их можно проверить на эмуляторе.
     if: ${{ !cancelled() && needs.build.outputs.debug_ready == 'true' }}
@@ -199,6 +203,7 @@ jobs:
     env:
       PM_OUT: ${{ github.workspace }}/emulator-out
       PM_PACKAGE: com.dec.privatemusic2.android
+      SYSTEM_IMAGE: system-images;android-${{ matrix.api }};google_apis;x86_64
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -224,7 +229,7 @@ jobs:
         run: |
           set -euxo pipefail
           . scripts/android-ci-env.sh
-          scripts/android-ci-sdk.sh "emulator" "platform-tools" "build-tools;35.0.0" "system-images;android-34;google_apis;x86_64"
+          scripts/android-ci-sdk.sh "emulator" "platform-tools" "build-tools;35.0.0" "$SYSTEM_IMAGE"
           adb version
           emulator -version | head -3 || true
 
@@ -282,6 +287,6 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: android-emulator-logs
+          name: android-emulator-logs-api-${{ matrix.api }}
           path: emulator-out
           if-no-files-found: warn

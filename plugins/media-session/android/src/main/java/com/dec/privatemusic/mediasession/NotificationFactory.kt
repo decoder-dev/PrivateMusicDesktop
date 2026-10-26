@@ -34,11 +34,12 @@ class NotificationFactory(private val context: Context) {
         kind: PlaybackKind,
         artwork: Bitmap?,
         foreground: Boolean,
+        canNext: Boolean = true,
     ): Notification {
         ensureChannel()
-        val buttons = NotificationLayout.buttons(kind)
+        val buttons = NotificationLayout.buttons(kind, canNext)
         val style = MediaStyle().setMediaSession(token)
-        if (buttons.isNotEmpty()) style.setShowActionsInCompactView(*NotificationLayout.compactIndices(kind))
+        if (buttons.isNotEmpty()) style.setShowActionsInCompactView(*NotificationLayout.compactIndices(kind, canNext))
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_music)
             .setContentTitle(track?.title?.ifEmpty { null } ?: appLabel())

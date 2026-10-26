@@ -6,7 +6,7 @@ export const store = {
   session: { signed_in: false, profile: null, persistent: true },
   player: {
     status: "idle", track: null, position: 0, duration: 0, volume: 1,
-    shuffle: false, repeat: "off", queue_index: null, queue_len: 0,
+    shuffle: false, repeat: "off", queue_index: null, queue_len: 0, can_next: false,
   },
   queue: { tracks: [], current: null },
   view: "library",
