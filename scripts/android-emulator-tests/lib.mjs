@@ -4,6 +4,7 @@ import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { _android as android } from "playwright";
+import { markdownCell } from "./report-format.mjs";
 
 export const PACKAGE = process.env.PM_PACKAGE ?? "com.dec.privatemusic2.android";
 export const OUT = path.resolve(process.env.PM_OUT ?? "out");
@@ -259,7 +260,7 @@ export async function step(name, fn, { critical = false } = {}) {
 export function finish() {
   fs.writeFileSync(path.join(OUT, "results.json"), JSON.stringify(results, null, 2));
   const icon = { pass: "PASS", warn: "WARN", fail: "FAIL", skip: "SKIP" };
-  const rows = results.map((r) => `| ${icon[r.status]} | ${r.name} | ${String(r.detail ?? "").replace(/\|/g, "\\|").replace(/\n/g, " ").slice(0, 300)} |`);
+  const rows = results.map((r) => `| ${icon[r.status]} | ${markdownCell(r.name)} | ${markdownCell(r.detail)} |`);
   const table = ["| Result | Step | Detail |", "| --- | --- | --- |", ...rows].join("\n");
   fs.writeFileSync(path.join(OUT, "summary.md"), `${table}\n`);
   console.log(`\n${table}\n`);
