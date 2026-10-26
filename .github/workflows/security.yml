@@ -15,7 +15,7 @@ concurrency:
 jobs:
   codeql:
     name: CodeQL (${{ matrix.language }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     permissions:
       contents: read
@@ -38,7 +38,7 @@ jobs:
           category: /language:${{ matrix.language }}
   kotlin:
     name: CodeQL (Android Kotlin)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     permissions:
       contents: read

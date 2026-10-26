@@ -232,7 +232,7 @@ requests that touch the Android-relevant paths (`src-tauri`, `plugins`, `engine`
 the Android scripts) and by hand (`workflow_dispatch`). Only the two already pinned actions (`checkout`,
 `upload-artifact`) are used; everything else is plain `run:` steps, helpers are in `scripts/android-*.sh`.
 
-**Job `build`** (ubuntu-latest): Rust stable with `aarch64-linux-android` and `x86_64-linux-android`; the
+**Job `build`** (ubuntu-24.04): Rust stable with `aarch64-linux-android` and `x86_64-linux-android`; the
 preinstalled Android SDK at `$ANDROID_HOME`, plus NDK `27.2.12479018`, platforms 35 and 36 and build-tools 35.0.0 and
 36.0.0 when missing (`scripts/android-ci-sdk.sh`, licences accepted automatically); JDK 17 (21 as a fallback) from
 the runner. `scripts/android-ci-env.sh` drops the runner's own NDK variables and sources `scripts/android-env.sh`,

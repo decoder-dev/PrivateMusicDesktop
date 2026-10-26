@@ -22,7 +22,7 @@ permissions:
 jobs:
   version:
     name: Check the tag
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
       version: ${{ steps.tag.outputs.version }}
@@ -45,7 +45,7 @@ jobs:
 
   ui:
     name: Release UI checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: Install browser test dependencies
@@ -65,7 +65,7 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - { name: Linux, os: ubuntu-latest, bundles: "deb appimage", target: "" }
+          - { name: Linux, os: ubuntu-24.04, bundles: "deb appimage", target: "" }
           - { name: Windows, os: windows-latest, bundles: "nsis", target: "" }
           - { name: macOS, os: macos-latest, bundles: "app dmg", target: "universal-apple-darwin" }
     steps:
@@ -149,7 +149,7 @@ jobs:
           }
           scripts\upgrade-check.ps1 -Old $old -New $new
 
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: installers-${{ matrix.name }}
           path: |
@@ -164,7 +164,7 @@ jobs:
   android:
     name: Android APK
     needs: version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
       NDK_VERSION: 27.2.12479018
@@ -238,7 +238,7 @@ jobs:
           fi
           sha256sum dist/*.apk
 
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: android-apk
           path: dist/*.apk
@@ -248,7 +248,7 @@ jobs:
     name: Publish release
     needs: [version, ui, build, android]
     # Publish only when every platform has built successfully.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
       actions: read

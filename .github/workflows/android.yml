@@ -34,7 +34,7 @@ env:
 jobs:
   build:
     name: Build APK, checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     outputs:
       debug_ready: ${{ steps.uploaded.outputs.debug_ready }}
@@ -63,7 +63,7 @@ jobs:
       # Reuse compiled dependencies, while Cargo still checks every changed source and UI asset.
       # Credentials, SDK/NDK installations and signed artifacts are not cached here.
       - name: Cache Rust dependencies and Android build outputs
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: |
             ~/.cargo/registry
@@ -125,7 +125,7 @@ jobs:
           ls -l dist/debug
           sha256sum dist/debug/*.apk
 
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: android-release-unsigned
           path: |
@@ -133,7 +133,7 @@ jobs:
             dist/release/*.sha256
           if-no-files-found: error
 
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: android-debug-x86_64
           path: dist/debug/*.apk
@@ -179,7 +179,7 @@ jobs:
           done
           ls kotlin-reports || true
 
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:
           name: android-kotlin-test-reports
@@ -191,7 +191,7 @@ jobs:
     needs: build
     # Даже если clippy или Kotlin-тесты упали, APK уже собраны и их можно проверить на эмуляторе.
     if: ${{ !cancelled() && needs.build.outputs.debug_ready == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
       contents: read
@@ -279,7 +279,7 @@ jobs:
           . scripts/android-ci-env.sh >/dev/null || true
           scripts/android-emulator-tests/collect-artifacts.sh "$PM_OUT"
 
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:
           name: android-emulator-logs

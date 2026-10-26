@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-24.04, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
@@ -56,7 +56,7 @@ jobs:
 
   native:
     name: Rust native core
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: Test
@@ -64,7 +64,7 @@ jobs:
 
   ui:
     name: UI tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: Install
@@ -84,7 +84,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: Linux, os: ubuntu-latest, bundles: "deb appimage", target: "" }
+          - { name: Linux, os: ubuntu-24.04, bundles: "deb appimage", target: "" }
           - { name: Windows, os: windows-latest, bundles: "nsis", target: "" }
           - { name: macOS, os: macos-latest, bundles: "dmg", target: "universal-apple-darwin" }
     steps:
@@ -151,7 +151,7 @@ jobs:
           }
           scripts\upgrade-check.ps1 -Old $old -New $new
 
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: private-music-desktop-${{ matrix.name }}
           path: |
