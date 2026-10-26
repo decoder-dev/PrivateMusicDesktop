@@ -91,6 +91,24 @@ test("the library renders only the visible rows but scrolls through all of them"
   } finally { await app.close(); }
 });
 
+test("streamed library loading preserves the user's scroll position", async () => {
+  const app = await openApp({ config: { signedIn: true, pageDelay: 100 } });
+  try {
+    const { page } = app;
+    await page.waitForSelector(".main > .view:not([hidden]) .status.progress:not([hidden])");
+    const before = await page.evaluate(() => {
+      const list = document.querySelector(".main > .view:not([hidden]) .list");
+      list.scrollTop = 3000;
+      return list.scrollTop;
+    });
+    assert.ok(before > 1000, "first page must already be scrollable");
+    await page.waitForFunction(() => document.querySelector(".main > .view:not([hidden]) .meta")?.textContent === "1234 трека");
+    const after = await page.locator(".main > .view:not([hidden]) .list").evaluate((list) => list.scrollTop);
+    assert.ok(Math.abs(after - before) <= 1, `loading moved the reader from ${before} to ${after}`);
+    assert.deepEqual(app.problems, []);
+  } finally { await app.close(); }
+});
+
 test("filtering ignores case and treats ё as е", async () => {
   const app = await openApp({ config: { signedIn: true } });
   try {
