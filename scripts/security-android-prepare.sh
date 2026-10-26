@@ -2,7 +2,7 @@
 # Prepare Kotlin analysis/dependency resolution without compiling the Rust app or downloading an NDK.
 set -euo pipefail
 . scripts/android-ci-env.sh
-scripts/android-ci-sdk.sh "platforms;android-36" "platforms;android-37" "build-tools;36.0.0"
+scripts/android-ci-sdk.sh "platforms;android-36" "build-tools;36.0.0"
 metadata="$(mktemp)"
 trap 'rm -f "$metadata"' EXIT
 cargo metadata --locked --format-version 1 > "$metadata"

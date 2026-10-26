@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.dec.privatemusic.mediasession"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 26
@@ -36,7 +36,7 @@ kotlin {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.19.1")
+    implementation("androidx.core:core-ktx:1.18.0")
     // MediaSessionCompat, PlaybackStateCompat, MediaStyle notification.
     implementation("androidx.media:media:1.8.0")
     implementation(project(":tauri-android"))

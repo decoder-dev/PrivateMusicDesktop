@@ -184,7 +184,7 @@ jobs:
         run: |
           set -euxo pipefail
           . scripts/android-ci-env.sh
-          scripts/android-ci-sdk.sh "ndk;${NDK_VERSION}" "platforms;android-35" "platforms;android-36" "platforms;android-37" "build-tools;35.0.0" "build-tools;36.0.0"
+          scripts/android-ci-sdk.sh "ndk;${NDK_VERSION}" "platforms;android-35" "platforms;android-36" "build-tools;35.0.0" "build-tools;36.0.0"
 
       # Publish installable APKs only. Keep the signing key in a temporary file.
       - name: Load the release signing key

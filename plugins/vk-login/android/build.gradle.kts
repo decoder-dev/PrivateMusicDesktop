@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.dec.privatemusic.vklogin"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 26
@@ -33,7 +33,7 @@ kotlin {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.19.1")
+    implementation("androidx.core:core-ktx:1.18.0")
     implementation("androidx.exifinterface:exifinterface:1.4.2")
     implementation("androidx.appcompat:appcompat:1.8.0")
     implementation(project(":tauri-android"))

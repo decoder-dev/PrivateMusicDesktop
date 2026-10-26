@@ -15,7 +15,7 @@ val tauriProperties = Properties().apply {
 }
 
 android {
-    compileSdk = 37
+    compileSdk = 36
     buildToolsVersion = "36.0.0"
     namespace = "com.dec.privatemusic2.android"
     defaultConfig {
