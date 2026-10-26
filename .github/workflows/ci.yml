@@ -32,11 +32,14 @@ jobs:
           cargo test --manifest-path vendor/glib/Cargo.toml --release --locked --lib --no-run
           python3 - <<'DIAG'
           import os, subprocess
+          print("cpu_count", os.cpu_count(), "RUST_TEST_THREADS", os.environ.get("RUST_TEST_THREADS"))
           base = ["cargo", "test", "--manifest-path", "vendor/glib/Cargo.toml", "--release", "--locked", "--lib", "--"]
-          for backtrace, capture, threads in [("0", True, 4), ("full", True, 4), ("0", False, 4), ("full", False, 4), ("0", True, 1)]:
+          for backtrace, capture, threads in [(None, True, None), ("0", True, None), ("full", True, None), (None, True, 4), (None, True, 1)]:
               for attempt in range(3):
-                  env = dict(os.environ, RUST_BACKTRACE=backtrace)
-                  args = base + ["--test-threads=" + str(threads)] + ([] if capture else ["--nocapture"])
+                  env = dict(os.environ)
+                  if backtrace is None: env.pop("RUST_BACKTRACE", None)
+                  else: env["RUST_BACKTRACE"] = backtrace
+                  args = base + ([] if threads is None else ["--test-threads=" + str(threads)]) + ([] if capture else ["--nocapture"])
                   result = subprocess.run(args, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
                   print(f"CASE backtrace={backtrace} capture={capture} threads={threads} attempt={attempt} exit={result.returncode}", flush=True)
                   print("\n".join(result.stdout.splitlines()[-12:]), flush=True)
