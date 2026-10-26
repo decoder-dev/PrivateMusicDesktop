@@ -147,7 +147,7 @@ pub fn apply(controller: &Controller, action: MediaAction) {
             _ => {}
         },
         MediaAction::Pause => {
-            if matches!(state.status, Status::Playing | Status::Buffering) {
+            if matches!(state.status, Status::Loading | Status::Playing | Status::Buffering) {
                 controller.pause();
             }
         }

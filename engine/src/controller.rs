@@ -1627,9 +1627,11 @@ mod tests {
         }));
         controller.next();
         assert_eq!(controller.state().status, Status::Loading);
-        controller.pause();
+        crate::media_sync::apply(&controller, crate::media_sync::MediaAction::Pause);
+        let paused_status = controller.state().status;
         *gate.0.lock().unwrap() = true;
         gate.1.notify_all();
+        assert_eq!(paused_status, Status::Idle, "notification Pause must cancel loading too");
         wait_for_radio(&controller, |inner| inner.queue.len() == 2 && !inner.radio.as_ref().unwrap().in_flight);
         assert_eq!(controller.state().status, Status::Idle);
         assert_eq!(controller.state().queue_index, Some(0));
