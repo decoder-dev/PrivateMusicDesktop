@@ -5,6 +5,7 @@ import {isDownloaded} from './downloads.js';
 import {h} from './dom.js';
 import {addStrings,t,errorText} from './i18n.js';
 import {toast} from './toast.js';
+import {randomPlaybackId} from './random.js';
 addStrings({ru:{'vk.integration':'Интеграция VK','vk.broadcast':'Транслировать музыку в статус','vk.reporting':'Отправлять VK историю прослушивания','vk.note':'Обе функции выключены по умолчанию и включаются отдельно для каждого аккаунта. Передача истории помогает рекомендациям VK.','vk.retry':'Повторить подключение'},en:{'vk.integration':'VK integration','vk.broadcast':'Broadcast music to profile status','vk.reporting':'Send listening history to VK','vk.note':'Both options are off by default, separately for each account. Listening reports help VK recommendations.','vk.retry':'Retry integration'}});
 const preferences=()=>{const p=readPersonal('vkIntegration',{});return {broadcast:p.broadcast===true,reporting:p.reporting===true};};
 let errors={};
@@ -43,7 +44,7 @@ export function installVkIntegration(){
   wasEnabled=p.broadcast;
   if(p.reporting && !errors.reporting){
    if(active && (!playing || !track || trackKey(active.track)!==trackKey(track))){commands.push({kind:'reporting',owner,events:[event(active,'music_stop_playback')]});active=null;}
-   if(!active && playing && track){active={track:cleanTrack(track),uuid:crypto.getRandomValues(new Uint32Array(1))[0]%2147483646+1,started:Math.floor(Date.now()/1000),clock:Date.now()};commands.push({kind:'reporting',owner,events:[event(active,'music_start_playback')]});}
+   if(!active && playing && track){active={track:cleanTrack(track),uuid:randomPlaybackId(),started:Math.floor(Date.now()/1000),clock:Date.now()};commands.push({kind:'reporting',owner,events:[event(active,'music_start_playback')]});}
   }
   commands=commands.slice(-32);drain();
  }
