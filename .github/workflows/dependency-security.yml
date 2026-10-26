@@ -35,12 +35,12 @@ jobs:
       matrix:
         plugin: [media-session, vk-login]
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Android SDK and Tauri API sources
         run: bash scripts/security-android-prepare.sh
-      - uses: gradle/actions/dependency-submission@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
+      - uses: gradle/actions/dependency-submission@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
         with:
           gradle-version: '8.14.3'
           build-root-directory: plugins/${{ matrix.plugin }}/android
