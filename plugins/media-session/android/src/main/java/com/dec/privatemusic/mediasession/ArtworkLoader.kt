@@ -5,6 +5,7 @@ import android.graphics.BitmapFactory
 import android.util.Log
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -12,10 +13,12 @@ import java.util.concurrent.atomic.AtomicInteger
  * Downloads one artwork at a time on a background thread and keeps only the latest
  * bitmap. https only, size-limited (see [ArtworkPolicy]); URLs are never logged.
  */
-class ArtworkLoader {
-    private val executor = Executors.newSingleThreadExecutor { runnable ->
+class ArtworkLoader internal constructor(
+    private val executor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "media-artwork").apply { isDaemon = true }
-    }
+    },
+    private val openConnection: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
+) {
     private val generation = AtomicInteger()
 
     /** Supersedes any download in flight; its result will be dropped. */
@@ -27,8 +30,11 @@ class ArtworkLoader {
     fun load(url: String, onLoaded: (Bitmap?) -> Unit) {
         val mine = generation.incrementAndGet()
         executor.execute {
+            // Rapid track skips can queue several covers behind one slow request.
+            // Discard those before opening a connection, not only after decoding.
+            if (mine != generation.get()) return@execute
             val bitmap = try {
-                download(url)
+                download(url, mine)
             } catch (e: Exception) {
                 Log.d(TAG, "artwork unavailable (${e.javaClass.simpleName})")
                 null
@@ -37,18 +43,21 @@ class ArtworkLoader {
         }
     }
 
-    private fun download(start: String): Bitmap? {
+    private fun download(start: String, mine: Int): Bitmap? {
         var current = start
         repeat(ArtworkPolicy.MAX_REDIRECTS + 1) {
-            if (!ArtworkPolicy.isAllowedUrl(current)) return null
-            val connection = URL(current).openConnection() as HttpURLConnection
+            if (mine != generation.get() || !ArtworkPolicy.isAllowedUrl(current)) return null
+            val connection = openConnection(URL(current))
             try {
                 connection.instanceFollowRedirects = false
                 connection.connectTimeout = ArtworkPolicy.CONNECT_TIMEOUT_MS
                 connection.readTimeout = ArtworkPolicy.READ_TIMEOUT_MS
                 connection.setRequestProperty("Accept", "image/*")
                 when (connection.responseCode) {
-                    HttpURLConnection.HTTP_OK -> return decode(connection)
+                    HttpURLConnection.HTTP_OK -> {
+                        if (mine != generation.get()) return null
+                        return decode(connection)
+                    }
                     301, 302, 303, 307, 308 -> {
                         current = ArtworkPolicy.redirectTarget(current, connection.getHeaderField("Location"))
                             ?: return null
