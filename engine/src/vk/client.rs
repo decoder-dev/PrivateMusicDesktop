@@ -352,7 +352,6 @@ impl VkClient {
     /// Рекомендации VK для пользователя или «Похожие треки», если задан исходный трек (собственное
     /// радио-из-трека VK).
     pub fn recommendations(&self, session: &Session, seed: Option<&Track>) -> Result<Vec<Track>> {
-        if seed.is_some_and(Track::is_local) { return Err(Error::InvalidRequest); }
         self.recommendations_with(session, seed, false)
     }
 
@@ -363,6 +362,7 @@ impl VkClient {
     }
 
     fn recommendations_with(&self, session: &Session, seed: Option<&Track>, shuffle: bool) -> Result<Vec<Track>> {
+        if seed.is_some_and(Track::is_local) { return Err(Error::InvalidRequest); }
         let user = match session.user_id {
             Some(user) => Some(user),
             None => self.user_id(session).ok(),
