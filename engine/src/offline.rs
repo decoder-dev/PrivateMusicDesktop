@@ -209,8 +209,11 @@ impl OfflineStore {
             added: now(),
         };
         let mut index = self.lock();
-        index.insert(track.id(), entry.clone());
+        let previous = index.insert(track.id(), entry.clone());
         self.write_index(&index)?;
+        if let Some(previous) = previous.filter(|old| old.file != entry.file) {
+            let _ = fs::remove_file(self.dir.join(&previous.file));
+        }
         Ok(entry)
     }
 
@@ -263,6 +266,17 @@ mod tests {
         let reopened = OfflineStore::open(dir.path()).unwrap();
         assert_eq!(reopened.list().len(), 2);
         assert!(reopened.contains("7_1"));
+    }
+
+    #[test]
+    fn saving_with_a_new_container_removes_the_previous_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = OfflineStore::open(dir.path()).unwrap();
+        store.save(&track(7, 1), ElementaryKind::Mp3, b"mp3").unwrap();
+        assert!(dir.path().join("7_1.mp3").exists());
+        store.save(&track(7, 1), ElementaryKind::AdtsAac, b"aac").unwrap();
+        assert!(!dir.path().join("7_1.mp3").exists());
+        assert!(dir.path().join("7_1.aac").exists());
     }
 
     #[test]

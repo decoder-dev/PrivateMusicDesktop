@@ -7,6 +7,8 @@ use crate::{Error, Result};
 pub struct Converter {
     in_channels: usize,
     out_channels: usize,
+    in_rate: u32,
+    out_rate: u32,
     resampler: Option<FftFixedIn<f32>>,
     /// Поканальные семплы ожидают полного фрагмента ресемплера.
     pending: Vec<Vec<f32>>,
@@ -45,7 +47,7 @@ impl Converter {
                     .map_err(|e| Error::Stream(format!("resampler: {e}")))?,
             )
         };
-        Ok(Self { in_channels, out_channels, resampler, pending: vec![Vec::new(); out_channels] })
+        Ok(Self { in_channels, out_channels, in_rate, out_rate, resampler, pending: vec![Vec::new(); out_channels] })
     }
 
     /// Забудьте о буферизованных выборках (после поиска).
@@ -87,6 +89,36 @@ impl Converter {
                 }
             }
         }
+    }
+
+    /// Дожимает оставшиеся в буфере ресемплера сэмплы в конце потока.
+    pub fn flush(&mut self, out: &mut Vec<f32>) -> Result<()> {
+        let Some(resampler) = &mut self.resampler else {
+            return Ok(());
+        };
+        let remaining = self.pending.first().map_or(0, Vec::len);
+        if remaining == 0 {
+            return Ok(());
+        }
+        let needed = resampler.input_frames_next();
+        let block: Vec<Vec<f32>> = self
+            .pending
+            .iter_mut()
+            .map(|c| {
+                let mut padded: Vec<f32> = c.drain(..).collect();
+                padded.resize(needed, 0.0);
+                padded
+            })
+            .collect();
+        let resampled = resampler.process(&block, None).map_err(|e| Error::Stream(format!("resampler: {e}")))?;
+        let expected_frames = ((remaining as u64 * u64::from(self.out_rate)).div_ceil(u64::from(self.in_rate)) as usize)
+            .min(resampled[0].len());
+        for frame in 0..expected_frames {
+            for channel in &resampled {
+                out.push(channel[frame]);
+            }
+        }
+        Ok(())
     }
 }
 
@@ -169,6 +201,19 @@ mod tests {
         let mut out = Vec::new();
         c.process(&sine(44_100, 1, 0.01, 440.0), &mut out).unwrap();
         c.reset();
+        assert!(c.pending[0].is_empty());
+    }
+
+    #[test]
+    fn flush_drains_remaining_resampled_tail() {
+        let mut c = Converter::new(44_100, 2, 48_000, 2).unwrap();
+        let input = sine(44_100, 2, 0.01, 440.0);
+        let mut out = Vec::new();
+        c.process(&input, &mut out).unwrap();
+        assert!(out.is_empty());
+        c.flush(&mut out).unwrap();
+        assert!(!out.is_empty());
+        assert_eq!(out.len() % 2, 0);
         assert!(c.pending[0].is_empty());
     }
 }

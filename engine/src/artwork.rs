@@ -28,12 +28,12 @@ pub fn palette_from_url(raw: &str) -> Result<Palette> {
     palette_from_image(&image_bytes(raw)?)
 }
 
-fn image_bytes(raw: &str) -> Result<Vec<u8>> {
-    let url = Url::parse(raw).map_err(|_| Error::InvalidRequest)?;
-    if url.scheme() != "https" || is_local_host(&url) || !url.username().is_empty() || url.password().is_some() {
-        return Err(Error::InvalidRequest);
+fn http_client() -> Result<&'static reqwest::blocking::Client> {
+    static CLIENT: std::sync::OnceLock<reqwest::blocking::Client> = std::sync::OnceLock::new();
+    if let Some(client) = CLIENT.get() {
+        return Ok(client);
     }
-    let client = reqwest::blocking::Client::builder()
+    let built = reqwest::blocking::Client::builder()
         .connect_timeout(Duration::from_secs(8))
         .timeout(Duration::from_secs(15))
         .dns_resolver(std::sync::Arc::new(PublicResolver { allow_loopback: false }))
@@ -45,7 +45,15 @@ fn image_bytes(raw: &str) -> Result<Vec<u8>> {
             }
         }))
         .build()?;
-    let response = client.get(url).send()?;
+    Ok(CLIENT.get_or_init(|| built))
+}
+
+fn image_bytes(raw: &str) -> Result<Vec<u8>> {
+    let url = Url::parse(raw).map_err(|_| Error::InvalidRequest)?;
+    if url.scheme() != "https" || is_local_host(&url) || !url.username().is_empty() || url.password().is_some() {
+        return Err(Error::InvalidRequest);
+    }
+    let response = http_client()?.get(url).send()?;
     if !response.status().is_success() {
         return Err(Error::Http(response.status().as_u16()));
     }

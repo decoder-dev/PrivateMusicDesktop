@@ -14,6 +14,27 @@ mod staging {
     };
     pub const MAX_BYTES: u64 = 512 * 1024 * 1024;
     static NEXT: AtomicU64 = AtomicU64::new(0);
+    pub fn cleanup_expired(root: &Path) {
+        // Keep already granted URIs alive for a day; cleanup never touches other cache folders.
+        if let Ok(entries) = fs::read_dir(root) {
+            for entry in entries.flatten() {
+                if entry
+                    .file_name()
+                    .to_str()
+                    .is_some_and(|name| name.starts_with("share-"))
+                    && entry.file_type().is_ok_and(|kind| kind.is_dir())
+                    && entry
+                        .metadata()
+                        .ok()
+                        .and_then(|value| value.modified().ok())
+                        .and_then(|value| value.elapsed().ok())
+                        .is_some_and(|age| age > Duration::from_secs(86_400))
+                {
+                    let _ = fs::remove_dir_all(entry.path());
+                }
+            }
+        }
+    }
     pub struct Prepared {
         pub path: PathBuf,
         directory: PathBuf,
@@ -50,25 +71,7 @@ mod staging {
             return Err(Error::Cancelled);
         }
         fs::create_dir_all(root).map_err(|_| Error::Unavailable)?;
-        // Keep already granted URIs alive for a day; cleanup never touches other cache folders.
-        if let Ok(entries) = fs::read_dir(root) {
-            for entry in entries.flatten() {
-                if entry
-                    .file_name()
-                    .to_str()
-                    .is_some_and(|name| name.starts_with("share-"))
-                    && entry.file_type().is_ok_and(|kind| kind.is_dir())
-                    && entry
-                        .metadata()
-                        .ok()
-                        .and_then(|value| value.modified().ok())
-                        .and_then(|value| value.elapsed().ok())
-                        .is_some_and(|age| age > Duration::from_secs(86_400))
-                {
-                    let _ = fs::remove_dir_all(entry.path());
-                }
-            }
-        }
+        cleanup_expired(root);
         let id = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| Error::Unavailable)?
@@ -139,6 +142,14 @@ mod staging {
         }
         output.flush().map_err(|_| Error::Unavailable)?;
         Ok(prepared)
+    }
+}
+
+#[cfg(target_os = "android")]
+pub fn cleanup_cache(handle: &AppHandle) {
+    use tauri::Manager;
+    if let Ok(cache) = handle.path().app_cache_dir() {
+        staging::cleanup_expired(&cache.join("audio-share"));
     }
 }
 

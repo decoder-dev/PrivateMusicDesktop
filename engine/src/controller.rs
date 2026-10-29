@@ -254,6 +254,7 @@ struct Shared {
     taste: Mutex<crate::taste::Taste>,
     sleep_cancel: Mutex<Option<TimerCancel>>,
     recovery_cancel: Mutex<Option<TimerCancel>>,
+    stall_cancel: Mutex<Option<TimerCancel>>,
     sleep_deadline: Mutex<Option<Instant>>,
     inner: Mutex<Inner>,
     client: VkClient,
@@ -277,6 +278,7 @@ pub struct Controller {
 impl Drop for Controller {
     fn drop(&mut self) {
         self.shared.cancel_recovery_wait();
+        self.shared.cancel_stall_wait();
         if let Some(cancel) = self.shared.sleep_cancel.lock().unwrap_or_else(|p| p.into_inner()).take() {
             *cancel.0.lock().unwrap_or_else(|p| p.into_inner()) = true;
             cancel.1.notify_all();
@@ -619,6 +621,7 @@ impl Shared {
     /// попытках, все еще ожидающих отмены.
     fn cancel_recovery(&self, inner: &mut Inner, events: &mut Vec<UiEvent>) {
         self.cancel_recovery_wait();
+        self.cancel_stall_wait();
         inner.recovery_token += 1;
         inner.stall_token += 1;
         inner.gave_up = false;
@@ -665,6 +668,7 @@ impl Shared {
             // не должна расходовать бюджет повторных попыток новой попытки.
             self.remote().stop();
             // Ожидание, запрошенное сервером, не является зависшим декодером.
+            self.cancel_stall_wait();
             inner.stall_token += 1;
             // Загруженная копия, которую невозможно прочитать: получите ее один раз с VK.
             if std::mem::take(&mut inner.source_offline) {
@@ -768,15 +772,28 @@ impl Shared {
         }
     }
 
+    fn cancel_stall_wait(&self) {
+        if let Some(cancel) = self.stall_cancel.lock().unwrap_or_else(|p| p.into_inner()).take() {
+            *cancel.0.lock().unwrap_or_else(|p| p.into_inner()) = true;
+            cancel.1.notify_all();
+        }
+    }
+
     /// Звук иссяк и остался сухим: относитесь к нему как к неудачному стриму.
     fn watch_stall(self: &Arc<Self>, inner: &mut Inner, track_id: String) {
+        self.cancel_stall_wait();
+        let wake = Arc::new((Mutex::new(false), std::sync::Condvar::new()));
+        *self.stall_cancel.lock().unwrap_or_else(|p| p.into_inner()) = Some(wake.clone());
         inner.stall_token += 1;
         let token = inner.stall_token;
         let policy = self.policy();
         let after = policy.scaled(policy.stall_after.as_secs_f64());
         let shared = self.clone();
         std::thread::spawn(move || {
-            std::thread::sleep(after);
+            let cancelled = wake.1.wait_timeout_while(wake.0.lock().unwrap_or_else(|p| p.into_inner()), after, |cancelled| !*cancelled)
+                .unwrap_or_else(|p| p.into_inner());
+            if *cancelled.0 { return; }
+            drop(cancelled);
             let stalled = shared.with(|inner, _| {
                 (inner.stall_token == token && matches!(inner.status, Status::Buffering | Status::Loading) && !inner.source_offline)
                     .then(|| inner.queue.current().cloned().filter(|t| t.id() == track_id))
@@ -909,6 +926,7 @@ impl Shared {
                     if on && !inner.source_offline {
                         self.watch_stall(inner, track_id.clone());
                     } else {
+                        self.cancel_stall_wait();
                         inner.stall_token += 1;
                     }
                     events.push(UiEvent::State(inner.state()));
@@ -1028,6 +1046,7 @@ impl Controller {
             policy: Mutex::new(RecoveryPolicy::default()),
             sleep_cancel: Mutex::new(None),
             recovery_cancel: Mutex::new(None),
+            stall_cancel: Mutex::new(None),
             sleep_deadline: Mutex::new(None),
         });
         let callback_shared = shared.clone();
@@ -1230,9 +1249,13 @@ impl Controller {
     }
 
     pub fn seek(&self, seconds: f64) {
-        self.shared.with(|inner,_|{inner.prepared_tag=None;});
+        if !seconds.is_finite() {
+            return;
+        }
+        self.shared.remote().seek(seconds);
         self.shared.with(|inner, events| {
-            if inner.queue.current().is_none() || !seconds.is_finite() {
+            inner.prepared_tag = None;
+            if inner.queue.current().is_none() {
                 return;
             }
             let target = seconds.max(0.0);
@@ -1243,7 +1266,6 @@ impl Controller {
             }
             events.push(UiEvent::State(inner.state()));
         });
-        self.shared.remote().seek(seconds);
     }
 
     /// Переключается на другой вывод звука (`make_sink` оболочки решает, какой): устройство снова
@@ -1554,6 +1576,20 @@ mod tests {
         let deadline = Instant::now() + Duration::from_secs(1);
         while retained.upgrade().is_some() {
             assert!(Instant::now() < deadline,"a cancelled timer must release playback state");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn dropping_the_controller_releases_a_long_stall_watch() {
+        let controller = Controller::new(VkClient::with_base("http://127.0.0.1:9").unwrap(),
+            || Ok(Box::new(crate::audio::SimulatedSink::new(44100,2,1.0)) as Box<dyn Sink>), |_| {},1.0);
+        let retained = Arc::downgrade(&controller.shared);
+        controller.shared.with(|inner,_| controller.shared.watch_stall(inner,"unused".into()));
+        drop(controller);
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while retained.upgrade().is_some() {
+            assert!(Instant::now() < deadline,"a cancelled stall watch must release playback state");
             std::thread::sleep(Duration::from_millis(5));
         }
     }

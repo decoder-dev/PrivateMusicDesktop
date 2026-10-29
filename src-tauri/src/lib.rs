@@ -226,6 +226,8 @@ pub fn run() {
             // After the state exists: sign-in results and system media buttons both need it.
             #[cfg(mobile)]
             {
+                #[cfg(target_os = "android")]
+                audio_share::cleanup_cache(&handle);
                 mobile_login::install(&handle);
                 mobile_media::attach_actions(&handle);
             }

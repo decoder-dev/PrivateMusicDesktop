@@ -344,8 +344,11 @@ where
                     }
                 }
                 Command::Seek(seconds) => {
-                    if transition.is_some(){session=retired.take();}
-                    transition=None;
+                    if transition.is_some() {
+                        session = retired.take();
+                        prepared = None;
+                    }
+                    transition = None;
                     if let (Some(s), Some(sink)) = (session.as_mut(), sink.as_mut()) {
                         seek(s, sink.as_mut(), seconds);
                         s.tap.enabled=visualizer;
@@ -382,9 +385,24 @@ where
                     }
                     sink.set_paused(false);
                     paused = false;
+                    let format = (sink.sample_rate(), sink.channels());
+                    if eq_for != Some(format) {
+                        eq = Equalizer::transition(eq.take(), eq_gains.as_ref(), format.0, format.1, audio_settings);
+                        eq_for = Some(format);
+                    }
                     events(PlayerEvent::Loading { track_id: track_id.clone() });
-                    let reusable=prepared.take().filter(|next|next.track_id==track_id && start==0.0 && next.failure.is_none());
-                    let started=if let Some(mut next)=reusable{next.base_seconds=0.0;next.started=false;next.tap.enabled=visualizer;if let Some(eq)=eq.as_mut(){eq.process(&mut next.pending);}Ok(next)}else{start_session(track_id.clone(), &url, duration, start, fetch, DecodeConfig{rate:sink.sample_rate(),channels:sink.channels(),visualizer,normalization,analysis_dir:analysis_dir.clone()})};
+                    let reusable = prepared.take().filter(|next| next.track_id == track_id && start == 0.0 && next.failure.is_none());
+                    let started = if let Some(mut next) = reusable {
+                        next.base_seconds = 0.0;
+                        next.started = false;
+                        next.tap.enabled = visualizer;
+                        if let Some(eq) = eq.as_mut() {
+                            eq.process(&mut next.pending);
+                        }
+                        Ok(next)
+                    } else {
+                        start_session(track_id.clone(), &url, duration, start, fetch, DecodeConfig { rate: sink.sample_rate(), channels: sink.channels(), visualizer, normalization, analysis_dir: analysis_dir.clone() })
+                    };
                     match started {
                         Ok(started) => session = Some(started),
                         Err(error) => events(PlayerEvent::Failed { track_id, error }),
@@ -760,7 +778,22 @@ fn decode_loop(
                     send_chunk(&sender, &stop, Chunk::Failed { generation, error });
                     return;
                 }
-                if let Some(normalizer)=normalizer.as_ref(){normalizer.finish();}
+                converted.clear();
+                if let Err(error) = converter.flush(&mut converted) {
+                    send_chunk(&sender, &stop, Chunk::Failed { generation, error });
+                    return;
+                }
+                if !converted.is_empty() {
+                    if let Some(normalizer) = normalizer.as_mut() {
+                        normalizer.process(&mut converted);
+                    }
+                    if !send_chunk(&sender, &stop, Chunk::Audio { generation, samples: std::mem::take(&mut converted) }) {
+                        return;
+                    }
+                }
+                if let Some(normalizer) = normalizer.as_ref() {
+                    normalizer.finish();
+                }
                 at_end = true;
                 if !send_chunk(&sender, &stop, Chunk::End { generation }) {
                     return;

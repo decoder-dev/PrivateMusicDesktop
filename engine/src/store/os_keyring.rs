@@ -176,11 +176,14 @@ fn save_text(slots: &impl Slots, text: &str) -> Result<()> {
     let head = slots.get(ACCOUNT)?;
     let old_manifest = head.as_deref().and_then(manifest);
     let mut previous = None;
+    let mut old_bank_parts = [0usize; 2];
     if let Some(m) = old_manifest {
         for blob in std::iter::once(m.active).chain(m.previous) {
-            if read_blob(slots, &blob)?.is_some() {
+            if (blob.bank as usize) < old_bank_parts.len() {
+                old_bank_parts[blob.bank as usize] = old_bank_parts[blob.bank as usize].max(blob.parts.min(MAX_PARTS));
+            }
+            if previous.is_none() && read_blob(slots, &blob)?.is_some() {
                 previous = Some(blob);
-                break;
             }
         }
     }
@@ -196,18 +199,30 @@ fn save_text(slots: &impl Slots, text: &str) -> Result<()> {
         return Err(Error::Format("credential verification failed".into()));
     }
     // Восстановление никогда не должно автоматически восстанавливать другую учетную запись.
+    let mut discarded_previous: Option<Blob> = None;
     if let Some(blob) = &previous {
         let old = read_blob(slots, blob)?.and_then(|s| serde_json::from_str::<Session>(&s).ok());
         let new = serde_json::from_str::<Session>(text).ok();
         if old.as_ref().and_then(|s| s.user_id).is_none() || old.and_then(|s| s.user_id) != new.and_then(|s| s.user_id)
         {
-            previous = None;
+            discarded_previous = previous.take();
         }
     }
+    let active_bank = active.bank;
+    let active_parts = active.parts;
     let m = Manifest { active, previous };
     let json = serde_json::to_string(&m).map_err(|e| Error::Format(e.to_string()))?;
     // Единственный момент фиксации: существующие активные части до сих пор остаются нетронутыми.
     slots.set(ACCOUNT, &format!("{V2}{json}"))?;
+    for i in active_parts..old_bank_parts[active_bank as usize] {
+        let _ = slots.delete(&format!("{ACCOUNT}.v2.{active_bank}.{i}"));
+    }
+    if let Some(discarded) = discarded_previous {
+        let count = old_bank_parts[discarded.bank as usize].max(discarded.parts.min(MAX_PARTS));
+        for i in 0..count {
+            let _ = slots.delete(&format!("{ACCOUNT}.v2.{}.{i}", discarded.bank));
+        }
+    }
     let old = head.as_deref().map_or(0, part_count).min(MAX_PARTS);
     for index in 1..=old {
         let _ = slots.delete(&part_name(index));
