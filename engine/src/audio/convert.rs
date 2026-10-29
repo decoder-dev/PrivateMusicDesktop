@@ -105,7 +105,7 @@ impl Converter {
             .pending
             .iter_mut()
             .map(|c| {
-                let mut padded: Vec<f32> = c.drain(..).collect();
+                let mut padded = std::mem::take(c);
                 padded.resize(needed, 0.0);
                 padded
             })
