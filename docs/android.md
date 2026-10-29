@@ -521,3 +521,17 @@ cover URLs. These checks do not establish performance on a physical phone.
 `scripts/android-dependency-constraints.gradle` updates vulnerable transitive tooling libraries in both the application and standalone plugin builds, including the isolated `buildSrc` build. It covers buildscript classpaths and ordinary configurations. The policy only raises older compatible requests: newer Jackson releases and Netty native artifacts keep their requested versions. AGP, Kotlin, Gradle, compileSdk and application dependency APIs remain unchanged.
 
 The dependency submission workflow uses the same Gradle version as the Android wrappers. After changing these constraints, verify both APKs, Kotlin tests and the emulator, then inspect a fresh dependency submission. A green source scan alone does not validate the resolved build dependencies.
+
+### Playback check on the emulator and service canary
+
+Step 5d of the emulator run calls `debug_playback_selftest` (Android debug builds only): the engine saves a
+5 KB bundled tone into the offline store, plays it through the real output path and requires the position to
+move. The step is in observation mode: an emulator without a usable audio device logs a warning, but a crash or
+ANR fails the run. Once it has passed on CI for a few runs, turn the warning into a failure.
+
+`.github/workflows/canary.yml` runs daily without credentials: VK API answers with an error object, LRCLIB
+answers with a list, and the published `latest.json` lists every desktop target with signatures and downloadable
+packages. A red run means users may be affected before anyone reports it.
+
+Personal data kept in WebView `localStorage` is bounded: the automatic-cache ledger holds at most 6000 entries and
+the liked-download list at most 20000, so a large library cannot exhaust the few-MB quota.

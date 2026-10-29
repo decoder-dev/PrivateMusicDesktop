@@ -166,6 +166,19 @@ await step("5c. native clipboard accepts explicit generated lyric text",async()=
   return "generated text copied through Android IPC; empty text rejected";
 });
 
+await step("5d. real playback: a bundled tone plays through the audio output and the position moves",async()=>{
+  // Observation mode: an emulator without a usable audio device must not fail the build, but a crash/ANR must.
+  let result;
+  try{result=await call(page,"debug_playback_selftest");}
+  catch(error){
+    await assertNoCrash("after the playback self-test");
+    warn(`debug_playback_selftest failed: ${error.message}`);
+    return "no audio device or playback failed (warning); no crash";
+  }
+  await assertNoCrash("after the playback self-test");
+  return String(result);
+});
+
 await step("6a. VK sign-in page loads in the native Activity (smoke hook)", async () => {
   if (!(await needNetwork())) return "skipped: no network";
   await disconnect();

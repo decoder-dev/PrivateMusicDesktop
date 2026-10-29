@@ -351,7 +351,7 @@ pub fn run() {
             commands::output_devices,
             commands::set_output_device,
             commands::app_info,
-            commands::debug_secure_selftest, commands::debug_cover_selftest,
+            commands::debug_secure_selftest, commands::debug_cover_selftest, commands::debug_playback_selftest,
             commands::set_shuffle,
             commands::set_repeat,
             commands::jump,

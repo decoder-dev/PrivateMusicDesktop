@@ -687,6 +687,40 @@ impl Core {
         unreachable!("every download attempt returns or retries within the bound")
     }
 
+    /// Plays a short bundled tone through the real output path and reports whether the position moved.
+    /// For the Android emulator check only: it needs no account and removes its own file.
+    pub fn playback_selftest(&self, mp3: &[u8]) -> Result<String> {
+        use std::time::{Duration, Instant};
+        let track = Track {
+            track_id: 424_242, owner_id: 1, title: "Self-test tone".into(), artist: "Private Music".into(), album_title: None,
+            duration: 2, stream_url: None, artwork_url: None, access_key: None, lyrics_id: None, is_hq: false,
+            track_code: None, artists: Vec::new(), album: None,
+        };
+        let store = self.offline()?;
+        store.save(&track, crate::stream::ElementaryKind::Mp3, mp3)?;
+        let controller = self.controller();
+        let outcome = (|| {
+            controller.play_tracks(vec![track.clone()], 0);
+            let started = Instant::now();
+            let mut moved = 0.0f64;
+            while started.elapsed() < Duration::from_secs(25) {
+                let state = controller.state();
+                if state.track.as_ref().is_some_and(|t| t.track_id == track.track_id) {
+                    if state.status == crate::controller::Status::Playing { moved = moved.max(state.position); }
+                    if moved >= 0.6 { return Ok(format!("position reached {moved:.1} s")); }
+                }
+                if started.elapsed() > Duration::from_secs(8) && moved == 0.0 && state.status == crate::controller::Status::Idle {
+                    return Err(Error::Stream("playback stopped before the position moved".into()));
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Err(Error::Timeout)
+        })();
+        controller.stop();
+        let _ = store.remove(&track.id());
+        outcome
+    }
+
     /// Cache bytes already fetched for playback. This never starts another network stream.
     pub fn cache_playing(&self,track:&Track,user_id:i64,limit_bytes:u64)->Result<bool> {
         if !(1024*1024*1024..=32*1024*1024*1024).contains(&limit_bytes){return Err(Error::InvalidRequest)}

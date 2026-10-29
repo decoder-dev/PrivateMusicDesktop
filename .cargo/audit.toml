@@ -1,0 +1,11 @@
+# cargo-audit policy. Every ignored advisory needs a reason and a revisit condition.
+[advisories]
+ignore = [
+  # zip < 9 is a Windows-only dependency of tauri-plugin-updater (zip ^4). It extracts an update only when the
+  # signed manifest points to a .zip package; we publish an NSIS .exe for Windows, so the vulnerable
+  # `ZipArchive::extract` path is not used, and the package signature is verified before any extraction.
+  # Revisit when tauri-plugin-updater moves to zip >= 9.
+  "RUSTSEC-2026-0367",
+  "RUSTSEC-2026-0368",
+  "RUSTSEC-2026-0369",
+]

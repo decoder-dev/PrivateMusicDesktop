@@ -889,6 +889,21 @@ pub async fn debug_cover_selftest(handle: AppHandle) -> CommandResult<String> {
     }
 }
 
+/// Plays a bundled tone on the real audio path; Android debug builds only (the emulator check).
+#[tauri::command]
+pub async fn debug_playback_selftest(state: TauriState<'_, AppState>) -> CommandResult<String> {
+    #[cfg(all(target_os = "android", debug_assertions))]
+    {
+        let app = state.app.clone();
+        blocking(move || app.playback_selftest(include_bytes!("../fixtures/selftest-tone.mp3"))).await
+    }
+    #[cfg(not(all(target_os = "android", debug_assertions)))]
+    {
+        let _ = state;
+        Err(CommandError { kind: "unsupported".into(), message: "available in Android debug builds only".into(), retry_after: None })
+    }
+}
+
 #[tauri::command]
 pub async fn copy_text(handle: AppHandle, text: String) -> CommandResult<()> {
     blocking(move || crate::clipboard::copy(&handle, &text)).await

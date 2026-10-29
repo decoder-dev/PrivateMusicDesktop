@@ -25,6 +25,8 @@ export function createOfflineOptions(){
 
 // A cache entry grants eviction rights only for files this account created.
 // Every other account's manual/pinned/liked downloads protect the shared file.
+// localStorage is a few MB for the whole app: the cache ledger is bounded (32 GB / ~8 MB a track fits well below this).
+const CACHE_LEDGER_MAX=6000;
 const cacheEntries=()=>readPersonal('automaticCache',[]).filter(e=>e && /^-?\d+_\d+$/.test(e.id) && Number.isFinite(e.used));
 export function installAutomaticDownloads(){
   let disposed=false,running=false,likesDirty=true,scheduled=0,lastTrack=null;
@@ -58,7 +60,7 @@ export function installAutomaticDownloads(){
       if(preferences.likes && unmetered && likesDirty){
         const items=await loadAllPages((offset,count)=>api.library(offset,count),{isCancelled:()=>!valid() || !offlinePreferences().likes});
         if(!items || !valid())return;
-        writePersonal('autoLikeDownloads',items.map(trackKey));likesDirty=false;
+        writePersonal('autoLikeDownloads',items.map(trackKey).slice(-20000));likesDirty=false;
         for(const track of items)queue.set(trackKey(track),{track:cleanTrack(track),kind:'likes'});
       }
       for(const [key,item] of queue){
@@ -69,7 +71,7 @@ export function installAutomaticDownloads(){
         if(item.kind==='cache'){
           const created=await api.cachePlaying(item.track,current,p.limit*1024**3);
           if(!valid())return;
-          if(created){writePersonal('automaticCache',[...cacheEntries().filter(e=>e.id!==key),{id:key,used:Date.now()}].slice(-20000));queue.delete(key);await refreshDownloads();}
+          if(created){writePersonal('automaticCache',[...cacheEntries().filter(e=>e.id!==key),{id:key,used:Date.now()}].slice(-CACHE_LEDGER_MAX));queue.delete(key);await refreshDownloads();}
           continue;
         }
         if(!unmetered)continue;

@@ -1,0 +1,70 @@
+name: Service canary
+# Daily check of everything the app depends on that needs no account: VK API shape, lyrics service,
+# and the published update manifest. A red run means users may be affected before anyone reports it.
+on:
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  canary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check external services and the update manifest
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, sys, urllib.request, urllib.error
+          failures = []
+          def fetch(url, method="GET"):
+              # Release assets redirect to a storage host that may reject HEAD: ask for the first byte instead.
+              headers = {"User-Agent": "private-music-canary"}
+              if method == "HEAD":
+                  method, headers["Range"] = "GET", "bytes=0-0"
+              request = urllib.request.Request(url, method=method, headers=headers)
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      return response.status, response.read()
+              except urllib.error.HTTPError as error:
+                  return error.code, error.read()
+          def check(name, ok, detail=""):
+              print(("ok   " if ok else "FAIL ") + name + (f" — {detail}" if detail and not ok else ""))
+              if not ok: failures.append(name)
+
+          # VK answers an unauthenticated method call with a JSON error object: the endpoint and its shape are alive.
+          status, body = fetch("https://api.vk.ru/method/audio.get?v=5.131")
+          try:
+              payload = json.loads(body)
+              check("VK API answers with an error object", isinstance(payload.get("error", {}).get("error_code"), int), body[:200])
+          except Exception as error:
+              check("VK API answers with JSON", False, str(error))
+
+          status, body = fetch("https://lrclib.net/api/search?q=hello")
+          try:
+              check("LRCLIB search returns a list", status == 200 and isinstance(json.loads(body), list), f"status {status}")
+          except Exception as error:
+              check("LRCLIB search returns JSON", False, str(error))
+
+          repo = os.environ["REPO"]
+          base = f"https://github.com/{repo}/releases/latest/download/"
+          status, body = fetch(base + "latest.json")
+          if status != 200:
+              check("update manifest is published", False, f"status {status}")
+          else:
+              manifest = json.loads(body)
+              check("manifest version is semantic", bool(re.fullmatch(r"\d+\.\d+\.\d+", manifest.get("version", ""))))
+              expected = {"windows-x86_64-nsis", "darwin-aarch64-app", "darwin-x86_64-app", "linux-x86_64-appimage", "linux-x86_64-deb"}
+              check("manifest lists every desktop target", expected <= set(manifest.get("platforms", {})), str(sorted(manifest.get("platforms", {}))))
+              for target, entry in manifest.get("platforms", {}).items():
+                  check(f"{target} has a signature", bool(entry.get("signature", "").strip()))
+                  code, _ = fetch(entry["url"], "HEAD")
+                  check(f"{target} package is downloadable", code in (200, 206), f"status {code}")
+              code, _ = fetch(base + "SHA256SUMS.txt", "HEAD")
+              check("SHA256SUMS.txt is published", code in (200, 206), f"status {code}")
+          if failures:
+              print("\nFailed checks:", *failures, sep="\n  ")
+              sys.exit(1)
+          PY
