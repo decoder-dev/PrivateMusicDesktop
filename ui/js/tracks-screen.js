@@ -9,6 +9,7 @@ import { trackKey } from "./api.js";
 import { isLiked, isBusy } from "./likes.js";
 import { isDownloaded, isDownloading, downloadAll, downloadJob, cancelDownloads } from "./downloads.js";
 import { openArtistOf } from "./navigation.js";
+import { filterItems, filterWords } from "./track-filter.js";
 import { artBox, paintStatus, pageHero, searchField, headerOnScroll, setAmbience, fillPanel } from "./ui-parts.js";
 
 /**
@@ -36,7 +37,7 @@ addStrings({ ru: { "select.start":"Выбрать", "select.count":"Выбран
 export function createTracksScreen({ title, filterable = false, playable = true, heading: level = "h1", hero = false, kicker = "", hooks }) {
   let all = [];
   let visible = [];
-  let query = "";
+  let query = [];
   let lastActivation = { key: "", at: 0 };
   const selected = new Set();
   let selecting = false;
@@ -73,7 +74,7 @@ export function createTracksScreen({ title, filterable = false, playable = true,
   const filterPart = filterable
     ? searchField({
         placeholder: t("library.filterShort"), label: t("library.filter"),
-        oninput: (event) => { query = fold(event.target.value.trim()); applyFilter(); },
+        oninput: (event) => { query = filterWords(event.target.value); applyFilter(); },
       })
     : null;
   const playButton = playable
@@ -184,8 +185,8 @@ export function createTracksScreen({ title, filterable = false, playable = true,
   header.after(selectionBar);
 
   function applyFilter({ reset = true } = {}) {
-    visible = query
-      ? all.filter((track) => fold(track.title).includes(query) || fold(track.artist).includes(query))
+    visible = query.length
+      ? filterItems(all, query, (track) => [track.title, track.artist])
       : all;
     list.setItems(visible);
     const available=new Set(visible.map(trackKey));
@@ -240,7 +241,7 @@ export function createTracksScreen({ title, filterable = false, playable = true,
     /** Показывает прогрессивную загрузку, не выбрасывая список. */
     setProgress(tracks, total) {
       all = tracks;
-      visible = query ? all.filter((tr) => fold(tr.title).includes(query) || fold(tr.artist).includes(query)) : all;
+      visible = query.length ? filterItems(all, query, (tr) => [tr.title, tr.artist]) : all;
       list.setItems(visible);
       paintStatus(status, t("library.loaded", { n: tracks.length, total }), { extra: "progress" });
       renderEmpty();

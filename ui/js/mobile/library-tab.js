@@ -1,3 +1,4 @@
+import { filterItems, filterWords } from "../track-filter.js";
 // The Library tab, after the iOS LibraryView: a row of sections (All, Tracks,
 // Playlists, Albums) under a large title, a summary card for the downloads, shelves
 // of playlists and albums, and the liked tracks themselves. The toolbar holds the
@@ -6,7 +7,7 @@
 // The track list is the existing "My music" screen, moved into the Tracks
 // section: it keeps its filter, its play and shuffle buttons and its virtual list.
 
-import { h, fold } from "../dom.js";
+import { h } from "../dom.js";
 import { icon } from "../icons.js";
 import { errorText, t, tn } from "../i18n.js";
 import { subscribe } from "../store.js";
@@ -27,7 +28,7 @@ const SECTIONS = ["all", "tracks", "playlists", "albums"];
 export function createLibraryTab({ libraryView, push, newPlaylist, toast }) {
   let section = "all";
   let loadingData = 0;
-  const queries = { playlist: "", album: "" };
+  const queries = { playlist: [], album: [] };
 
   const heading = h("h1", { text: t("tab.library") });
   const sections = h("div", { class: "lib-sections", role: "tablist", "aria-label": t("tab.library") },
@@ -72,7 +73,7 @@ export function createLibraryTab({ libraryView, push, newPlaylist, toast }) {
     catch (error) { toast(errorText(error), { error: true }); }
   } });
   const collectionSearch = (kind) => searchField({ className: "lib-collection-search", placeholder: t("lib.searchCollections"),
-    oninput: event => { queries[kind] = fold(event.target.value.trim()); renderData(); } });
+    oninput: event => { queries[kind] = filterWords(event.target.value); renderData(); } });
   const playlistSearch = collectionSearch("playlist");
   const albumSearch = collectionSearch("album");
   const playlistLayout = layoutButton("playlist");
@@ -130,8 +131,8 @@ export function createLibraryTab({ libraryView, push, newPlaylist, toast }) {
     albumRow.replaceChildren(...albums.map((a) => albumCard(a, openAlbum)));
     playlistHead.element.hidden = playlistRow.hidden = playlists.length === 0;
     albumHead.element.hidden = albumRow.hidden = albums.length === 0;
-    const shownPlaylists = playlists.filter(item => fold(item.title).includes(queries.playlist));
-    const shownAlbums = albums.filter(item => fold(`${item.title} ${(item.artists ?? []).map(artist=>artist.name).join(" ")}`).includes(queries.album));
+    const shownPlaylists = filterItems(playlists, queries.playlist, item => [item.title]);
+    const shownAlbums = filterItems(albums, queries.album, item => [item.title, ...(item.artists ?? []).map(artist => artist.name)]);
     playlistGrid.replaceChildren(...shownPlaylists.map((p) => collection(p, "playlist")));
     albumGrid.replaceChildren(...shownAlbums.map((a) => collection(a, "album")));
     const pins = pinnedCollections();
@@ -139,8 +140,8 @@ export function createLibraryTab({ libraryView, push, newPlaylist, toast }) {
       (kind === "album" ? albums : playlists).find((fresh) => collectionKey(kind, fresh) === key) ?? item, kind)));
     pinnedHead.hidden = pinnedRow.hidden = pins.length === 0;
     renderLayout();
-    paintStatus(playlistsStatus, shownPlaylists.length || loadingData ? "" : t(queries.playlist ? "lib.noMatches" : "lib.noPlaylists"), { art: "playlist", extra: "compact" });
-    paintStatus(albumsStatus, shownAlbums.length || loadingData ? "" : t(queries.album ? "lib.noMatches" : "lib.noAlbums"), { art: "album", extra: "compact" });
+    paintStatus(playlistsStatus, shownPlaylists.length || loadingData ? "" : t(queries.playlist.length ? "lib.noMatches" : "lib.noPlaylists"), { art: "playlist", extra: "compact" });
+    paintStatus(albumsStatus, shownAlbums.length || loadingData ? "" : t(queries.album.length ? "lib.noMatches" : "lib.noAlbums"), { art: "album", extra: "compact" });
   }
 
   function renderSummary() {
@@ -168,7 +169,7 @@ export function createLibraryTab({ libraryView, push, newPlaylist, toast }) {
   subscribe("personal.pinnedCollections", renderData);
   subscribe("personal.collectionLayout", renderLayout);
   subscribe("session", () => {
-    queries.playlist = queries.album = "";
+    queries.playlist = []; queries.album = [];
     for (const search of [playlistSearch, albumSearch]) { search.input.value=""; search.sync(); }
     renderData();
   });
