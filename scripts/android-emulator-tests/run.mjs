@@ -167,13 +167,12 @@ await step("5c. native clipboard accepts explicit generated lyric text",async()=
 });
 
 await step("5d. real playback: a bundled tone plays through the audio output and the position moves",async()=>{
-  // Observation mode: an emulator without a usable audio device must not fail the build, but a crash/ANR must.
+  // Passed on API 34 and 36 emulators in CI: a failure here is a real playback regression.
   let result;
   try{result=await call(page,"debug_playback_selftest");}
   catch(error){
     await assertNoCrash("after the playback self-test");
-    warn(`debug_playback_selftest failed: ${error.message}`);
-    return "no audio device or playback failed (warning); no crash";
+    throw new Error(`debug_playback_selftest failed: ${error.message}`);
   }
   await assertNoCrash("after the playback self-test");
   return String(result);

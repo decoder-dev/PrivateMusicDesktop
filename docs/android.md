@@ -526,8 +526,8 @@ The dependency submission workflow uses the same Gradle version as the Android w
 
 Step 5d of the emulator run calls `debug_playback_selftest` (Android debug builds only): the engine saves a
 5 KB bundled tone into the offline store, plays it through the real output path and requires the position to
-move. The step is in observation mode: an emulator without a usable audio device logs a warning, but a crash or
-ANR fails the run. Once it has passed on CI for a few runs, turn the warning into a failure.
+move. It passed on the API 34 and API 36 emulators and is now a hard failure: playback that never starts, a crash or an
+ANR fails the run.
 
 `.github/workflows/canary.yml` runs daily without credentials: VK API answers with an error object, LRCLIB
 answers with a list, and the published `latest.json` lists every desktop target with signatures and downloadable
