@@ -3618,7 +3618,7 @@ dependencies = [
 
 [[package]]
 name = "pm_engine"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "cpal",
  "crossbeam-channel",
@@ -3752,7 +3752,7 @@ dependencies = [
 
 [[package]]
 name = "private-music-desktop"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "base64 0.22.1",
  "block2",
@@ -5405,7 +5405,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-media-session"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "log",
  "pm_engine",

@@ -140,8 +140,11 @@ pub fn run() {
     #[cfg(target_os = "android")]
     let builder = builder
         .plugin(secure_store::init())
-        .plugin(tauri_plugin_vk_login::init())
-        .plugin(tauri_plugin_media_session::init());
+        .plugin(tauri_plugin_vk_login::init());
+    // The session plugin has a no-op desktop/iOS implementation. Register it on every
+    // platform because startup preferences call its Rust API even when the OS controls
+    // are handled elsewhere; leaving it unregistered makes Manager::state panic.
+    let builder = builder.plugin(tauri_plugin_media_session::init());
     builder
         .setup(|tauri_app| {
             let handle = tauri_app.handle().clone();
