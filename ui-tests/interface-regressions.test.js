@@ -179,3 +179,12 @@ test('phone Profile has no separate Equaliser row that only forwards to Settings
   assert.equal(await page.locator('[data-row="eq"]').count(),0);assert.deepEqual(app.problems,[]);
  }finally{await app.close();}
 });
+
+for(const phone of ['landscape','small'])test(`sign-in card stays reachable from its top on ${phone}, also with the recovery block`,async()=>{
+ const app=await openApp({config:{signedIn:false,platform:'android',loginPending:true},phone});
+ try{const {page}=app;await page.locator('.login .box').waitFor();
+  await page.locator('.login .btn.primary').click();await page.evaluate(()=>window.__mock.emit('pm-login','loadfailed'));await page.waitForTimeout(300);
+  const r=await page.evaluate(()=>{const l=document.querySelector('.login');l.scrollTop=0;const b=document.querySelector('.login .box').getBoundingClientRect(),lb=l.getBoundingClientRect();return {boxTop:b.top,loginTop:lb.top,overflow:l.scrollHeight-l.clientHeight,boxBottom:b.bottom,canReachBottom:l.scrollHeight>=b.bottom-lb.top};});
+  assert.ok(r.boxTop>=r.loginTop-0.5,'the top of the card is cut off: '+JSON.stringify(r));assert.ok(r.canReachBottom,JSON.stringify(r));assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});

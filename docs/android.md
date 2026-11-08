@@ -535,3 +535,11 @@ packages. A red run means users may be affected before anyone reports it.
 
 Personal data kept in WebView `localStorage` is bounded: the automatic-cache ledger holds at most 6000 entries and
 the liked-download list at most 20000, so a large library cannot exhaust the few-MB quota.
+
+### Visual tour on the emulator
+
+Step 11 runs after every real check. It installs the `ui-tests` test backend into the real Android WebView,
+walks every phone screen (light theme) plus the main tabs (dark theme) and saves `adb screencap` images as
+`tour-*.png` in the emulator artifact (`android-emulator-logs-api-*`). These are reviewed by eye on every
+change: they show what browser emulation cannot, such as real fonts, system insets and WebView scrolling. A
+screen the walk cannot reach only warns; a crash fails the run.

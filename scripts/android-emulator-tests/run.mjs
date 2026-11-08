@@ -317,6 +317,45 @@ await step("10. no crash in the whole log, no uncaught page errors", async () =>
   return "clean";
 });
 
+// --------------------------------------------------------------------- visual tour (mock data)
+// After every real check: the same UI with the test backend from ui-tests, so each screen can be reviewed
+// as the real Android WebView renders it (fonts, insets, scrolling). Screenshots land in $PM_OUT/tour-*.png.
+// Navigation timing differs from Chromium, so a missed screen only warns; a crash still fails step 10's rules.
+await step("11. visual tour: every phone screen with test data, captured from the device", async () => {
+  const { everyPhoneScreen } = await import(path.join(root, "ui-tests/phone-screen-walk.js"));
+  const mock = fs.readFileSync(path.join(root, "ui-tests/mock-backend.js"), "utf8");
+  // The test backend must win over Tauri's own global, whichever script runs first.
+  const pin = `(()=>{const m=window.__TAURI__;Object.defineProperty(window,"__TAURI__",{configurable:false,get:()=>m,set:()=>{}});})();`;
+  const captured = [];
+  for (const scheme of ["light", "dark"]) try {
+    const tour = await freshPage();
+    await tour.addInitScript(`window.__mockConfig=${JSON.stringify({ signedIn: true, catalogMixes: true, history: [1, 2, 3], platform: "android" })};`);
+    await tour.addInitScript(mock + "\n" + pin);
+    await tour.addInitScript(`try{localStorage.setItem("pm.settings.v1",JSON.stringify({theme:"${scheme}"}))}catch{}`);
+    await tour.reload();
+    await tour.locator(".home-view .stage").first().waitFor({ timeout: 30_000 });
+    let index = 0;
+    const shoot = async (screen) => {
+      await sleep(250);
+      const file = await screencap(`tour-${scheme}-${String(++index).padStart(2, "0")}-${screen}`);
+      if (file) captured.push(path.basename(file));
+    };
+    if (scheme === "light") {
+      try { await everyPhoneScreen(tour, shoot); }
+      catch (error) { warn(`visual tour stopped after ${index} screens: ${error.message.split("\n")[0]}`); }
+    } else {
+      await shoot("home");
+      for (const [tabId, name] of [["library", "library"], ["search", "search"], ["profile", "profile"]]) {
+        try { await tour.locator(`.dock-tab[data-tab="${tabId}"]`).first().tap(); await shoot(name); }
+        catch (error) { warn(`dark tour: ${name}: ${error.message.split("\n")[0]}`); }
+      }
+    }
+  } catch (error) { warn(`visual tour (${scheme}) unavailable: ${error.message.split("\n")[0]}`); }
+  if (!(await pid())) throw new Error("the app is not running after the visual tour");
+  await assertNoCrash("after the visual tour");
+  return `${captured.length} screenshots`;
+});
+
 // ------------------------------------------------------------------------------------------- the end
 
 await disconnect();

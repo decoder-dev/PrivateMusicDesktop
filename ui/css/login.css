@@ -1,7 +1,8 @@
 /* Войдите в систему. */
-.login { position: relative; height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px; overflow: auto; }
+/* Auto margins centre the card but, unlike align-items:center, never push its top out of reach when it overflows. */
+.login { position: relative; height: 100%; display: flex; padding: 24px; overflow: auto; }
 .login::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 55%; pointer-events: none; background: linear-gradient(180deg, color-mix(in srgb, var(--role-station) 20%, transparent), transparent); }
-.login .box { position: relative; width: 100%; max-width: 360px; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; animation: view-in var(--t-page) var(--ease-out) backwards; }
+.login .box { position: relative; margin: auto; width: 100%; max-width: 360px; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; animation: view-in var(--t-page) var(--ease-out) backwards; }
 .login .app-icon { width: 64px; height: 64px; border-radius: 16px; display: grid; place-items: center; color: var(--on-accent); background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 100%, #fff 18%), var(--accent)); box-shadow: var(--sh-rest); margin-bottom: 6px; }
 .login h1 { font: 700 calc(28px * var(--text-scale, 1))/calc(34px * var(--text-scale, 1)) var(--font); letter-spacing: -0.4px; }
 .login p { color: var(--text-2); font-size: calc(15px * var(--text-scale, 1)); line-height: calc(21px * var(--text-scale, 1)); max-width: 320px; }
@@ -33,3 +34,7 @@
 .login-art .app-icon { position: absolute; left: 50%; top: 4px; width: 88px; height: 88px; margin: 0 0 0 -44px; border-radius: 26px; box-shadow: var(--sh-float), 0 10px 30px -6px color-mix(in srgb, var(--accent) 45%, transparent), inset 0 1px 0 rgb(255 255 255 / 0.3); }
 .login h1 { font-size: calc(32px * var(--text-scale, 1)); line-height: calc(38px * var(--text-scale, 1)); letter-spacing: -0.6px; text-wrap: balance; }
 @media (max-height: 560px) { .login-art { transform: scale(0.8); margin-bottom: 0; } }
+
+/* Landscape phones have ~400px of height: a smaller illustration keeps the whole card on screen. */
+html[data-layout="phone"][data-orientation="landscape"] .login-art { width: 168px; height: 84px; margin-bottom: 4px; }
+html[data-layout="phone"][data-orientation="landscape"] .login .box { gap: 8px; }
