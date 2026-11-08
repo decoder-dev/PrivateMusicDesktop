@@ -188,3 +188,28 @@ for(const phone of ['landscape','small'])test(`sign-in card stays reachable from
   assert.ok(r.boxTop>=r.loginTop-0.5,'the top of the card is cut off: '+JSON.stringify(r));assert.ok(r.canReachBottom,JSON.stringify(r));assert.deepEqual(app.problems,[]);
  }finally{await app.close();}
 });
+
+test('Material 3 is available on the desktop: style switch, drawer fits, M3 switch and pill buttons',async()=>{
+ const app=await openApp({config,viewport:{width:1280,height:800}});
+ try{const {page}=app;await page.locator('.nav [data-view="settings"]').click();
+  const select=page.getByRole('combobox',{name:'Вид приложения',exact:true});await select.selectOption('material');
+  assert.equal(await page.evaluate(()=>document.documentElement.dataset.style),'material');
+  const r=await page.evaluate(()=>{const nav=[...document.querySelectorAll('.nav button')].filter(b=>b.offsetParent),side=document.querySelector('.sidebar').getBoundingClientRect();
+   const sw=document.querySelector('.settings input[role="switch"]').getBoundingClientRect(),btn=getComputedStyle(document.querySelector('.settings .btn'));
+   return {navVisible:nav.every(b=>{const x=b.getBoundingClientRect();return x.top>=side.top-1&&x.bottom<=side.bottom+1;}),navRadius:getComputedStyle(nav[0]).borderTopLeftRadius,switch:[Math.round(sw.width),Math.round(sw.height)],btnRadius:btn.borderTopLeftRadius};});
+  assert.deepEqual(r,{navVisible:true,navRadius:'22px',switch:[52,32],btnRadius:'20px'});
+  await page.reload();await page.locator('.nav').waitFor();assert.equal(await page.evaluate(()=>document.documentElement.dataset.style),'material');
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test('Material 3 on a phone keeps the compact title off the edge and visible equaliser handles',async()=>{
+ const app=await openApp({config:{...config,platform:'android'},phone:'small'});
+ try{const {page}=app;await page.evaluate(()=>localStorage.setItem('pm-style','material'));await page.reload();await page.locator('.home-view .stage').waitFor();
+  const left=await page.locator('.navbar .nav-title').evaluate(el=>{const r=document.createRange();r.selectNodeContents(el);return r.getBoundingClientRect().left;});
+  assert.ok(left>=12,String(left));
+  await page.locator('.stage-cta').click();await page.locator('.player .now').click();await page.locator('.np-quick button').nth(2).click();await page.locator('.sheet .eq-slider').first().waitFor();
+  const thumb=await page.locator('.sheet .eq-slider').first().evaluate(el=>{const s=getComputedStyle(el,'::-webkit-slider-thumb');return [s.width,s.height];});
+  assert.notDeepEqual(thumb,['4px','20px']);assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});

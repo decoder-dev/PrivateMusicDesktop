@@ -21,7 +21,7 @@ import { STYLES, currentStyle, setStyle } from "../mobile/style.js";
 import { NP_THEMES, currentNpTheme, setNpTheme } from "../mobile/np-theme.js";
 import { openDiagnostics } from "../diagnostics.js";
 addStrings({ ru: { "set.nptheme": "Фон плеера", "set.nptheme.cover": "Обложка", "set.nptheme.aurora": "Аврора", "set.nptheme.plain": "Однотонный" }, en: { "set.nptheme": "Player background", "set.nptheme.cover": "Cover", "set.nptheme.aurora": "Aurora", "set.nptheme.plain": "Plain" } });
-addStrings({ ru: { "set.style": "Вид приложения", "set.style.ios": "Как в iOS", "set.style.material": "Material 3" }, en: { "set.style": "App style", "set.style.ios": "Like iOS", "set.style.material": "Material 3" } });
+addStrings({ ru: { "set.style": "Вид приложения", "set.style.ios": "Стандартный", "set.style.material": "Material 3", "set.style.note": "Material 3 — тональные цвета от акцента, панель навигации и кнопки в стиле Android. Работает на всех устройствах." }, en: { "set.style": "App style", "set.style.ios": "Standard", "set.style.material": "Material 3", "set.style.note": "Material 3: tonal colours from the accent, Android-style navigation and buttons. Works on every device." } });
 
 const IS_MAC = /Mac/i.test(navigator.platform || navigator.userAgent);
 const MOD = IS_MAC ? "⌘" : "Ctrl";
@@ -122,8 +122,8 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
       section(t("set.sound"),
         desktopOnly(row(t("set.output"), h("div", { class: "set-inline" }, deviceSelect, refreshButton), t("set.output.note"), "volume")),createAudioOptions(settings,onSettingsChange)),
       section(t("set.appearance"),
-        isAndroid() ? row(t("set.style"), h("select", { class: "field", "aria-label": t("set.style"), onchange: (event) => setStyle(event.target.value) },
-          STYLES.map((value) => h("option", { value, selected: value === currentStyle(), text: t(`set.style.${value}`) }))), null, "sparkles") : null,
+        row(t("set.style"), h("select", { class: "field", "aria-label": t("set.style"), onchange: (event) => setStyle(event.target.value) },
+          STYLES.map((value) => h("option", { value, selected: value === currentStyle(), text: t(`set.style.${value}`) }))), t("set.style.note"), "sparkles"),
         row(t("set.nptheme"), h("select", { class: "field", "aria-label": t("set.nptheme"), onchange: (event) => setNpTheme(event.target.value) },
           NP_THEMES.map((value) => h("option", { value, selected: value === currentNpTheme(), text: t(`set.nptheme.${value}`) }))), null, "sparkles"),
         row(t("set.textScale"),textScale,null,"lyrics"),

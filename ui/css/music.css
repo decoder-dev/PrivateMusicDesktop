@@ -248,9 +248,9 @@ html[data-layout]:not([data-style="material"]) :is(.hero-art .art-box, .np .np-c
 html[data-layout]:not([data-style="material"]) .artist-card .card-art, html[data-layout]:not([data-style="material"]) .artist-card .card-art .art-box { border-radius: 50%; }
 html[data-layout]:not([data-style="material"]) .np[data-mode="radial"] .np-cover { border-radius: 50%; }
 /* Headings: one weight and one size per level on every screen. */
-html[data-layout] .view-header h1 { font-weight: 800; }
-html[data-layout="phone"] :is(.shelf-title, .view h2:not(.stage-headline)) { font-size: calc(20px * var(--text-scale, 1)); font-weight: 700; }
-html[data-layout="wide"] :is(.shelf-title, .view h2) { font-size: calc(18px * var(--text-scale, 1)); font-weight: 700; }
+html[data-layout]:not([data-style="material"]) .view-header h1 { font-weight: 800; }
+html[data-layout="phone"]:not([data-style="material"]) :is(.shelf-title, .view h2:not(.stage-headline)) { font-size: calc(20px * var(--text-scale, 1)); font-weight: 700; }
+html[data-layout="wide"]:not([data-style="material"]) :is(.shelf-title, .view h2) { font-size: calc(18px * var(--text-scale, 1)); font-weight: 700; }
 html[data-layout]:not([data-style="material"]) .card { border-radius: 12px; }
 
 /* Wide full-screen player: the spectrum owns a strip under the controls instead of sitting behind them. */

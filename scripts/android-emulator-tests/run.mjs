@@ -327,11 +327,12 @@ await step("11. visual tour: every phone screen with test data, captured from th
   // The test backend must win over Tauri's own global, whichever script runs first.
   const pin = `(()=>{const m=window.__TAURI__;Object.defineProperty(window,"__TAURI__",{configurable:false,get:()=>m,set:()=>{}});})();`;
   const captured = [];
-  for (const scheme of ["light", "dark"]) try {
+  for (const scheme of ["light", "dark", "material"]) try {
     const tour = await freshPage();
     await tour.addInitScript(`window.__mockConfig=${JSON.stringify({ signedIn: true, catalogMixes: true, history: [1, 2, 3], platform: "android" })};`);
     await tour.addInitScript(mock + "\n" + pin);
-    await tour.addInitScript(`try{localStorage.setItem("pm.settings.v1",JSON.stringify({theme:"${scheme}"}))}catch{}`);
+    const theme = scheme === "dark" ? "dark" : "light";
+    await tour.addInitScript(`try{localStorage.setItem("pm.settings.v1",JSON.stringify({theme:"${theme}"}));localStorage.setItem("pm-style","${scheme === "material" ? "material" : "ios"}")}catch{}`);
     await tour.reload();
     await tour.locator(".home-view .stage").first().waitFor({ timeout: 30_000 });
     let index = 0;
