@@ -14,10 +14,25 @@ $binary = Join-Path $root 'bin/ffmpeg.exe'
 if (-not (Test-Path -LiteralPath $binary)) {
     New-Item -ItemType Directory -Path $CacheDirectory -Force | Out-Null
     $archive = Join-Path $CacheDirectory "$package.zip"
-    Invoke-WebRequest -Uri "https://github.com/GyanD/codexffmpeg/releases/download/$version/$package.zip" `
-        -OutFile $archive -MaximumRetryCount 3 -RetryIntervalSec 3 -TimeoutSec 300
-    if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne $expectedHash) {
-        throw 'Контрольная сумма ffmpeg не совпадает с закреплённой версией.'
+    # The same pinned archive from the GitHub release and from gyan.dev itself: when GitHub release
+    # downloads fail (504), the second source still matches the checksum.
+    $sources = @(
+        "https://github.com/GyanD/codexffmpeg/releases/download/$version/$package.zip",
+        "https://www.gyan.dev/ffmpeg/builds/packages/$package.zip"
+    )
+    $ok = $false
+    foreach ($source in $sources) {
+        try {
+            Invoke-WebRequest -Uri $source -OutFile $archive -MaximumRetryCount 3 -RetryIntervalSec 5 -TimeoutSec 300
+            if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -eq $expectedHash) { $ok = $true; break }
+            Write-Warning "ffmpeg from $source does not match the pinned checksum"
+        } catch {
+            Write-Warning "ffmpeg download from $source failed: $($_.Exception.Message)"
+        }
+        Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
+    }
+    if (-not $ok) {
+        throw 'Не удалось скачать ffmpeg с закреплённой контрольной суммой.'
     }
     Expand-Archive -LiteralPath $archive -DestinationPath $CacheDirectory -Force
 }

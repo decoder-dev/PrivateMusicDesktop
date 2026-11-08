@@ -1,6 +1,6 @@
 # glib 0.18.5 compatibility backport
 
-This directory contains the unmodified crates.io `glib` 0.18.5 source, apart from the two-line production fix in `src/variant_iter.rs`, five upstream-compatible test assertions in `src/collections/strv.rs`, this note and the test lockfile. The original license, authorship, API and package version are retained. Cargo cache marker files are not distributed.
+This directory contains the unmodified crates.io `glib` 0.18.5 source, apart from the two-line production fix in `src/variant_iter.rs`, the panic-free finalization in `src/main_context_futures.rs` (below), five upstream-compatible test assertions in `src/collections/strv.rs`, this note and the test lockfile. The original license, authorship, API and package version are retained. Cargo cache marker files are not distributed.
 
 - Original crate checksum: `233daaf6e83ae6a12a52055f568f9d7cf4671dabb78ff9560ab6da230ce00ee5`
 - Advisory: [RUSTSEC-2024-0429 / GHSA-wrw7-89jp-8q8g](https://rustsec.org/advisories/RUSTSEC-2024-0429.html)
@@ -15,6 +15,10 @@ Verification: `cargo test --manifest-path vendor/glib/Cargo.toml --release --loc
 ## Test compatibility
 
 The 0.18.5 `IntoStrV` test read the null terminator using `slice.get_unchecked(4)` on a four-element slice. That violates the slice-index precondition even though the underlying allocation has a fifth terminator slot. Under the current optimizer it failed with contradictory-looking equal lengths. The five assertions now use raw-pointer access to the allocated terminator, matching [glib 0.20’s tests](https://github.com/gtk-rs/gtk-rs-core/blob/337dde55bb1665a0a1286e689ec2819383d4e299/glib/src/collections/strv.rs). Production StrV code is unchanged.
+
+## Non-Send future finalization
+
+`TaskSource::finalize` in `src/main_context_futures.rs` hands a non-`Send` future to its main context when the source is finalized on another thread. If the context was finalized before that closure ran, GLib destroyed the closure on the finalizing thread, the future's `ThreadGuard` panicked inside the `extern "C"` destroy callback and the whole process aborted (`fatal runtime error: failed to initiate panic, error 3`). The upstream `test_spawn_from_within` hit this in about one release run in nine. The future is now only ever dropped on its owner thread and is leaked otherwise; leaking it is sound, while dropping it on another thread is not and the panic was fatal anyway. 150 consecutive release runs pass with the change.
 
 ## Static-analysis review
 

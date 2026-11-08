@@ -95,16 +95,24 @@ impl TaskSource {
                 ptr::drop_in_place(&mut (*source).future);
             }
             FutureWrapper::NonSend(ref mut future) => {
+                // Dropping the future here would panic inside this extern "C" callback, which aborts
+                // the process. Hand it to the context instead, and leak it wherever it still cannot be
+                // dropped on its owner thread: leaking is sound, a panic across FFI is not.
+                let future = mem::ManuallyDrop::new(ptr::read(future));
                 let context = ffi::g_source_get_context(source as *mut ffi::GSource);
                 if !context.is_null() {
-                    let future = ptr::read(future);
                     let context = MainContext::from_glib_none(context);
+                    // The closure can run on whichever thread acquires the context, or be destroyed
+                    // without running at all when the context is finalized first (the ManuallyDrop
+                    // then leaks the future instead of dropping it on this thread).
                     context.invoke(move || {
-                        drop(future);
+                        let future = mem::ManuallyDrop::into_inner(future);
+                        if future.is_owner() {
+                            drop(future);
+                        } else {
+                            mem::forget(future);
+                        }
                     });
-                } else {
-                    // This will panic
-                    ptr::drop_in_place(&mut (*source).future);
                 }
             }
         }
