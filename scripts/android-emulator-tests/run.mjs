@@ -86,6 +86,9 @@ let page;
 
 await step("1. the app starts and survives 20 s without a crash", async () => {
   await startApp();
+  // `am start -W` can return before the process has its package name (LaunchState UNKNOWN on a cold first
+  // start), so pidof would miss a healthy app: first wait for the process to appear, then watch it.
+  await waitFor("the app process", async () => Boolean(await pid()), { timeout: 30_000 });
   const began = Date.now();
   while (Date.now() - began < 20_000) {
     if (!(await pid())) throw new Error("the app process disappeared during the first 20 s");
