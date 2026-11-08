@@ -16,6 +16,7 @@ import android.webkit.WebView
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
@@ -90,6 +91,22 @@ class MediaSessionPlugin(private val activity: Activity) : Plugin(activity) {
     fun setArtworkUrl(invoke: Invoke) {
         val url = invoke.getArgs().let { if (it.isNull("url")) null else it.optString("url", "") }
         main.post { MediaHub.setArtworkOverride(url) }
+        invoke.resolve()
+    }
+
+    /**
+     * Status and navigation bar icons follow the app's own theme. MainActivity starts with
+     * SystemBarStyle.auto, which follows the system night mode only, so a dark app theme on a light
+     * system left dark clock and battery icons on a dark page (and the reverse).
+     */
+    @Command
+    fun setSystemBars(invoke: Invoke) {
+        val dark = invoke.getArgs().optBoolean("dark", false)
+        activity.runOnUiThread {
+            val controller = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
+            controller.isAppearanceLightStatusBars = !dark
+            controller.isAppearanceLightNavigationBars = !dark
+        }
         invoke.resolve()
     }
 

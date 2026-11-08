@@ -236,3 +236,29 @@ test('Material 3 dark on a phone: the page uses the tonal surface of the top bar
   assert.equal(r.main,r.navbar,JSON.stringify(r));assert.equal(r.indicator,'none');assert.deepEqual(app.problems,[]);
  }finally{await app.close();}
 });
+
+test('Android system bar icons follow the app theme, not only the system night mode',async()=>{
+ const app=await openApp({config:{...config,platform:'android'},phone:true,colorScheme:'light'});
+ try{const {page}=app;await page.waitForFunction(()=>window.__mock.state.systemBarsDark===false);
+  await page.evaluate(()=>{const s=JSON.parse(localStorage.getItem('pm.settings.v1')||'{}');localStorage.setItem('pm.settings.v1',JSON.stringify({...s,theme:'dark'}));});
+  await page.reload();await page.waitForFunction(()=>window.__mock.state.systemBarsDark===true);
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test('desktop never asks for system bar colours',async()=>{
+ const app=await openApp({config});
+ try{const {page}=app;await page.locator('.nav').waitFor();await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(()=>window.__mock.state.systemBarsDark),undefined);assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test('mini player: a playing track without a cover shows the note glyph, not a blank tile',async()=>{
+ const app=await openApp({config:{...config,platform:'android'},phone:true});
+ try{const {page}=app;await page.locator('.dock-tab[data-tab="library"]').click();await page.locator('.lib-sections [data-section="tracks"]').click();
+  const row=page.locator('.library-hub .row').filter({has:page.locator('.art-box[data-art="missing"]')}).first();await row.waitFor();await row.click();
+  await page.locator('.player:not(.is-empty)').waitFor();
+  await page.waitForFunction(()=>{const b=document.querySelector('.player .art-box');return b?.dataset.art==='missing'&&!!b.querySelector('.art-ph svg');});
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});

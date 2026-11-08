@@ -115,6 +115,11 @@ impl<R: Runtime> MediaSession<R> {
         self.enqueue("configurePlayback", json!({"resumeBluetooth":resume_bluetooth,"pauseAtZero":pause_at_zero}))
     }
 
+    /// Light or dark system bar icons to match the app theme (`dark` = light icons).
+    pub fn set_system_bars(&self, dark: bool) -> Result<()> {
+        self.enqueue("setSystemBars", json!({ "dark": dark }))
+    }
+
     pub async fn status(&self) -> Result<Status> {
         let mut status: Status = self.handle.run_mobile_plugin_async("status", json!({})).await?;
         status.available = true;

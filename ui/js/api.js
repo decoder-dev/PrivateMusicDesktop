@@ -92,6 +92,7 @@ export const api = {
   vkBroadcast: (userId,track) => invoke("vk_broadcast",{userId,track}),
   vkReportPlayback: (userId,events) => invoke("vk_report_playback",{userId,events}),
   setPlaybackPreferences: (resumeBluetooth,pauseAtZero) => invoke("set_playback_preferences",{resumeBluetooth,pauseAtZero}),
+  setSystemBars: (dark) => invoke("set_system_bars",{dark}),
   setHighQuality: (on) => invoke("set_high_quality",{on}),
   setAdvanceOnError: (on) => invoke("set_advance_on_error", {on}),
   setNormalization: (on) => invoke("set_normalization", { on }),

@@ -317,6 +317,7 @@ pub fn run() {
             commands::set_advance_on_error,
             commands::set_high_quality,
             commands::set_playback_preferences,
+            commands::set_system_bars,
             commands::vk_broadcast,
             commands::vk_report_playback,commands::month_plays,
             commands::lyrics, commands::lyrics_versions,

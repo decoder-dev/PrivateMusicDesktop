@@ -89,7 +89,20 @@ function applyAppearance() {
   document.documentElement.style.setProperty("--text-scale",String(({compact:0.85,system:1,large:1.1,extraLarge:1.2})[settings.textScale] ?? 1));
   applyPalette(settings);
   applyChrome();
+  syncSystemBars();
 }
+// Android draws the clock and battery icons over the page: keep them light on a dark theme and dark on a light
+// one, whatever the system night mode says (the native side only follows the system by itself).
+const systemDark = matchMedia("(prefers-color-scheme: dark)");
+let systemBarsSent = null;
+function syncSystemBars() {
+  if (!isAndroid()) return;
+  const dark = settings.theme === "dark" || (settings.theme === "system" && systemDark.matches);
+  if (dark === systemBarsSent) return;
+  systemBarsSent = dark;
+  api.setSystemBars(dark).catch(() => { systemBarsSent = null; });
+}
+systemDark.addEventListener("change", syncSystemBars);
 
 // Размытие и прозрачность предназначены для окна, на которое смотрят: упрощенный вид в настройках или
 // окно на заднем плане на некоторое время делает хром плоским.
@@ -720,7 +733,7 @@ onBack(30, () => !!shell?.phone.active && shell.phone.pop());
 
 async function start() {
   // The backend says what it runs on (an Android build reports "android").
-  api.appInfo().then((info) => setPlatform(info.platform)).catch(() => {});
+  api.appInfo().then((info) => { setPlatform(info.platform); syncSystemBars(); }).catch(() => {});
   unlisten = await Promise.all([
     listen("pm-event", onBackendEvent),
     listen("pm-login", async (result) => {

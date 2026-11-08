@@ -104,6 +104,7 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
   attachMiniGestures(element, { onNext: () => playbackAction(() => api.next()), onPrevious: () => playbackAction(() => api.previous()), onOpen: () => onExpand?.() });
 
   let coverUrl;
+  let tintUrl;
   let tintToken = 0;
 
   /** Панель меняет оттенок обложки один раз на трек. */
@@ -128,10 +129,13 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
     if(artist.textContent!==artistText) artist.textContent=artistText;
     artist.disabled = !hasArtist(track);
     const url = track?.artwork_url ?? null;
-    if (url !== coverUrl) {
-      coverUrl = url;
-      swapArt(coverSlot, url, { size: 22 }, () => coverUrl === url);
-      applyTint(url);
+    // A playing track without a cover shows the note glyph (as the Continue card does), not a blank tile;
+    // the key also changes when a coverless track starts after "nothing playing".
+    const coverKey = `${track ? "track" : "none"}|${url ?? ""}`;
+    if (coverKey !== coverUrl) {
+      coverUrl = coverKey;
+      swapArt(coverSlot, url, { size: 22, fallbackText: track ? undefined : "" }, () => coverUrl === coverKey);
+      if (url !== tintUrl) { tintUrl = url; applyTint(url); }
     }
     element.classList.toggle("is-empty", !track);
 

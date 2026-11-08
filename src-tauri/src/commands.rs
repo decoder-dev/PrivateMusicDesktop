@@ -934,6 +934,13 @@ pub async fn set_playback_preferences(handle:AppHandle,resume_bluetooth:bool,pau
     handle.media_session().configure_playback(resume_bluetooth,pause_at_zero).map_err(|_|Error::Unavailable.into())
 }
 
+/// Android: system bar icons follow the app theme, not only the system night mode.
+#[tauri::command]
+pub async fn set_system_bars(handle:AppHandle,dark:bool)->CommandResult<()> {
+    use tauri_plugin_media_session::MediaSessionExt;
+    handle.media_session().set_system_bars(dark).map_err(|_|Error::Unavailable.into())
+}
+
 #[tauri::command]
 pub async fn set_high_quality(state:TauriState<'_,AppState>,on:bool)->CommandResult<()> {control(state,move |controller|controller.set_high_quality(on)).await}
 
