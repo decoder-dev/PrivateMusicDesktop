@@ -21,9 +21,9 @@ on:
   workflow_dispatch:
     inputs:
       emulator_gpu:
-        description: "Emulator -gpu mode (software, swiftshader_indirect, swangle_indirect, guest)"
+        description: "Emulator -gpu mode (swangle_indirect, software, swiftshader_indirect, guest)"
         required: false
-        default: software
+        default: swangle_indirect
 
 concurrency:
   group: android-${{ github.workflow }}-${{ github.ref }}-${{ inputs.emulator_gpu || 'default' }}
@@ -290,7 +290,10 @@ jobs:
       - name: Boot the emulator
         timeout-minutes: 20
         env:
-          PM_EMULATOR_GPU: ${{ inputs.emulator_gpu || 'software' }}
+          # swangle_indirect (SwiftShader through ANGLE): with "software" and "guest" the host qemu process
+          # segfaulted on render-heavy screens (the VK page, the player) in about half of the runs since the
+          # November runner images; swangle_indirect ran both API levels clean in the comparison run.
+          PM_EMULATOR_GPU: ${{ inputs.emulator_gpu || 'swangle_indirect' }}
         run: |
           . scripts/android-ci-env.sh >/dev/null
           scripts/android-emulator-tests/boot-emulator.sh

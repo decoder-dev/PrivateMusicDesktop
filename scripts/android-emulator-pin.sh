@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Replaces the runner's Android emulator with a pinned build.
 #
-# The runners moved from emulator 37.2.12 to 37.2.13 in November 2026; with 37.2.13 the host qemu process
-# segfaulted (exit 139, "device offline") in about one emulator job in three, at random steps, while the
-# same app and image ran clean on 37.2.12 for weeks. The archive is checked against its SHA-256; if it
-# cannot be fetched, the preinstalled emulator stays and the job only warns.
+# The pinned build is the one the CI ran clean for weeks. The host qemu segfaults seen in November 2026 turned
+# out to come from the host software renderer (-gpu software), not from 37.2.13 (37.2.12 crashed the same
+# way); boot-emulator.sh now uses swangle_indirect, which ran clean with this build. The archive is checked
+# against its SHA-256; if it cannot be fetched, the preinstalled emulator stays and the job only warns.
 # Revisit: try a newer build (repository2-3.xml lists them) and move the pin when it runs clean.
 set -euo pipefail
 : "${ANDROID_HOME:?ANDROID_HOME is not set (source scripts/android-ci-env.sh first)}"

@@ -40,7 +40,7 @@ set_config hw.ramSize 2048
 set_config disk.dataPartition.size 6G
 set_config hw.keyboard yes
 set_config hw.gpu.enabled yes
-set_config hw.gpu.mode software
+set_config hw.gpu.mode "${PM_EMULATOR_GPU:-swangle_indirect}" # the -gpu flag below decides; kept in step
 echo "--- AVD config"; cat "$config"
 
 emulator_pid=""
@@ -61,7 +61,7 @@ attempt() { # <number>
   adb start-server
   local pid_file="$out/emulator-attempt-$1.pid"
   rm -f "$pid_file" "$out/emulator-exit-$1.txt"
-  nohup setsid bash "$(dirname "$0")/emulator-supervise.sh" "$out/emulator-exit-$1.txt" "$pid_file" "$emulator_bin" -avd "$avd" -no-window -no-audio -no-boot-anim -no-metrics -gpu "${PM_EMULATOR_GPU:-software}" -feature -Vulkan \
+  nohup setsid bash "$(dirname "$0")/emulator-supervise.sh" "$out/emulator-exit-$1.txt" "$pid_file" "$emulator_bin" -avd "$avd" -no-window -no-audio -no-boot-anim -no-metrics -gpu "${PM_EMULATOR_GPU:-swangle_indirect}" -feature -Vulkan \
     -no-snapshot -wipe-data -memory 3072 -cores 4 -accel on -netdelay none -netspeed full \
     > "$log" 2>&1 </dev/null &
   local supervisor_pid=$!
