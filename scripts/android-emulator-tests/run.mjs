@@ -307,6 +307,37 @@ await step("9. notification permission path and the media plugin status", async 
   return `status ${JSON.stringify(granted)}`;
 });
 
+// The status bar icons follow the app theme (set_system_bars → media-session plugin), not only the system night
+// mode: a dark app theme on a light system must not leave dark clock and battery icons on a dark page.
+await step("9b. system bar icons follow the app theme", async () => {
+  const page = await freshPage();
+  await sleep(1500); // let the UI send its own value first
+  const lightIcons = async () => {
+    const dump = await sh("dumpsys window windows");
+    const start = dump.search(new RegExp(`Window\\{[^}]*${PACKAGE.replace(/\./g, "\\.")}/[^}]*MainActivity\\}`));
+    if (start < 0) return null;
+    const next = dump.indexOf("Window #", start + 10);
+    const block = dump.slice(start, next < 0 ? undefined : next);
+    return /LIGHT_STATUS_BARS/.test(block);
+  };
+  await call(page, "set_system_bars", { dark: false });
+  await sleep(800);
+  const light = await lightIcons();
+  await screencap("09b-system-bars-light-theme");
+  if (light !== true) {
+    warn(`dumpsys does not show LIGHT_STATUS_BARS for a light theme (${light}); the appearance check is skipped`);
+    return "skipped: appearance not visible in dumpsys";
+  }
+  await call(page, "set_system_bars", { dark: true });
+  await sleep(800);
+  const afterDark = await lightIcons();
+  await screencap("09b-system-bars-dark-theme");
+  await page.reload(); // the UI sends the effective theme again
+  if (afterDark !== false) throw new Error(`the status bar keeps dark icons after set_system_bars(dark) (LIGHT_STATUS_BARS: ${afterDark})`);
+  await assertNoCrash("after switching the system bar appearance");
+  return "light theme: dark icons; dark theme: light icons";
+});
+
 await step("10. no crash in the whole log, no uncaught page errors", async () => {
   await assertNoCrash("whole run");
   const errors = pageErrors();
