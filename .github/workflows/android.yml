@@ -73,6 +73,20 @@ jobs:
           restore-keys: |
             android-rust-v1-${{ runner.os }}-${{ runner.arch }}-ndk${{ env.NDK_VERSION }}-${{ steps.rust.outputs.cache_key }}-${{ hashFiles('Cargo.lock', '**/Cargo.toml') }}-
 
+      # The Gradle distribution (~140 MB) comes from services.gradle.org, which is sometimes slow or down:
+      # keep it between runs so a short outage there does not block every build.
+      - name: Cache the Gradle distribution
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.gradle/wrapper/dists
+          key: gradle-dist-${{ runner.os }}-${{ hashFiles('**/gradle-wrapper.properties') }}
+
+      - name: Fetch the Gradle distribution (retries, verified mirror)
+        run: |
+          for props in src-tauri/gen/android/gradle/wrapper/gradle-wrapper.properties plugins/media-session/android/gradle/wrapper/gradle-wrapper.properties; do
+            scripts/gradle-dist-prefetch.sh "$props"
+          done
+
       # SDK на раннерах GitHub уже стоит в $ANDROID_HOME; здесь только то, чего не хватает. Лицензии принимаются
       # автоматически. Скрипт сам объясняет, чего нет и что установлено.
       - name: Android SDK, NDK, JDK, environment
