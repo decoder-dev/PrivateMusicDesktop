@@ -176,6 +176,10 @@ html .card.collection-card .name { grid-column: 2; grid-row: 1; align-self: end;
 html .card.collection-card .count { grid-column: 2; grid-row: 2; align-self: start; margin: 0; white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 html .card.collection-card:has(.art-box:is([data-art="missing"], [data-art="error"])) .card-art { display: none; }
 html .card.collection-card:has(.art-box:is([data-art="missing"], [data-art="error"])) :is(.name, .count) { grid-column: 1 / -1; }
+/* In a list where other collections do have covers, a coverless one keeps the empty cover column, so the
+   names line up instead of jumping left; still no fake tile is drawn. */
+html .grid:has(.card.collection-card .art-box[data-art="ready"]) .card.collection-card:has(.art-box:is([data-art="missing"], [data-art="error"])) .card-art { display: block; visibility: hidden; }
+html .grid:has(.card.collection-card .art-box[data-art="ready"]) .card.collection-card:has(.art-box:is([data-art="missing"], [data-art="error"])) :is(.name, .count) { grid-column: 2; }
 html .release-row .card.collection-card { width: 224px; }
 html .grid:has(> .collection-card),
 html[data-layout="phone"] .lib-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 224px), 1fr)); }

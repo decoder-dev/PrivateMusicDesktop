@@ -33,7 +33,7 @@ html[data-layout="phone"] .view-header .smart-tools > .btn {
   flex: 1 0 auto;
   white-space: normal;
 }
-html[data-layout="phone"] .sync-panel > .set-inline { flex-wrap: wrap; }
+html[data-layout="phone"] .sync-panel > div.set-inline { flex-wrap: wrap; }
 html[data-layout="phone"] .sync-panel > .set-inline > strong { flex: 1 1 120px; }
 html[data-layout="phone"] .sync-panel > .set-inline > .btn { max-width: 100%; white-space: normal; }
 html[data-layout="phone"] .fy-toolbar { flex-wrap: wrap; max-width: 100%; }

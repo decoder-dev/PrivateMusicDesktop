@@ -75,17 +75,42 @@ jobs:
 
       # The Gradle distribution (~140 MB) comes from services.gradle.org, which is sometimes slow or down:
       # keep it between runs so a short outage there does not block every build.
-      - name: Cache the Gradle distribution
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Saved right after the verified download (below), not at the end of the job: a later failure must not
+      # throw away a good distribution.
+      - name: Restore the Gradle distribution
+        id: gradle-dist
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.gradle/wrapper/dists
           key: gradle-dist-${{ runner.os }}-${{ hashFiles('**/gradle-wrapper.properties') }}
+
+      # Plugin and library jars (Android Gradle plugin, the Kotlin compiler, AndroidX). Some of them are
+      # redirected from Maven Central to GitHub releases, so a GitHub outage (504) failed the build even with
+      # the distribution in place; with this cache a warm run downloads nothing.
+      - name: Cache Gradle dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches/modules-2/files-2.1
+            ~/.gradle/caches/modules-2/metadata-*
+          key: gradle-deps-v1-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', '**/*.gradle', '**/gradle.properties', '**/libs.versions.toml', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-deps-v1-${{ runner.os }}-
 
       - name: Fetch the Gradle distribution (retries, verified mirror)
         run: |
           for props in src-tauri/gen/android/gradle/wrapper/gradle-wrapper.properties plugins/media-session/android/gradle/wrapper/gradle-wrapper.properties; do
             scripts/gradle-dist-prefetch.sh "$props"
           done
+          # Only a complete set is worth saving; the wrapper downloads whatever is missing itself.
+          if ls ~/.gradle/wrapper/dists/*/*/*.zip >/dev/null 2>&1; then echo "GRADLE_DIST_READY=1" >> "$GITHUB_ENV"; fi
+
+      - name: Save the Gradle distribution
+        if: steps.gradle-dist.outputs.cache-hit != 'true' && env.GRADLE_DIST_READY == '1'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.gradle/wrapper/dists
+          key: gradle-dist-${{ runner.os }}-${{ hashFiles('**/gradle-wrapper.properties') }}
 
       # SDK на раннерах GitHub уже стоит в $ANDROID_HOME; здесь только то, чего не хватает. Лицензии принимаются
       # автоматически. Скрипт сам объясняет, чего нет и что установлено.

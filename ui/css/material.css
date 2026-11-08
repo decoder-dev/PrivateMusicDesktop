@@ -39,7 +39,8 @@ html[data-style="material"], html[data-style="material"][data-palette] {
   --nav-h: 64px;
 }
 @media (prefers-color-scheme: dark) {
-  html[data-style="material"]:not([data-theme="light"]) {
+  html[data-style="material"]:not([data-theme="light"]),
+  html[data-style="material"][data-palette]:not([data-theme="light"]) {
     --md-bg: color-mix(in srgb, var(--accent) 5%, #141218);
     --md-c-low: color-mix(in srgb, var(--accent) 8%, #1d1b20);
     --md-c: color-mix(in srgb, var(--accent) 10%, #211f26);
@@ -51,7 +52,8 @@ html[data-style="material"], html[data-style="material"][data-palette] {
     --page-top: var(--md-bg); --page-bottom: var(--md-bg); --surface: var(--md-c);
   }
 }
-html[data-style="material"][data-theme="dark"] {
+html[data-style="material"][data-theme="dark"],
+html[data-style="material"][data-palette][data-theme="dark"] {
   --md-bg: color-mix(in srgb, var(--accent) 5%, #141218);
   --md-c-low: color-mix(in srgb, var(--accent) 8%, #1d1b20);
   --md-c: color-mix(in srgb, var(--accent) 10%, #211f26);
@@ -320,7 +322,7 @@ html[data-style="material"][data-layout="wide"] select.field, html[data-style="m
 
 /* Segmented buttons for the small tab groups (Selena / Recommendations, statistics periods, search kinds). */
 html[data-style="material"][data-layout="wide"] .tabs { border-radius: 20px; padding: 0; gap: 0; background: none; border: 1px solid var(--md-outline); overflow: hidden; }
-html[data-style="material"][data-layout="wide"] .tabs::before { display: none; }
+html[data-style="material"] .tabs::before { display: none; }
 html[data-style="material"][data-layout="wide"] .tabs button {
   border-radius: 0; min-height: 38px; padding: 0 16px; background: none; box-shadow: none; color: var(--text);
   font: 500 calc(14px * var(--text-scale, 1))/calc(20px * var(--text-scale, 1)) var(--font); letter-spacing: 0.1px;

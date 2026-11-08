@@ -49,6 +49,9 @@ jobs:
           persist-credentials: false
       - name: Android SDK and Tauri API sources
         run: bash scripts/security-android-prepare.sh
+      # Same verified prefetch as android.yml: services.gradle.org redirects to GitHub releases, which can 504.
+      - name: Fetch the Gradle distribution (retries, verified mirror)
+        run: scripts/gradle-dist-prefetch.sh plugins/media-session/android/gradle/wrapper/gradle-wrapper.properties
       - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           languages: java-kotlin

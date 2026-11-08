@@ -213,3 +213,26 @@ test('Material 3 on a phone keeps the compact title off the edge and visible equ
   assert.notDeepEqual(thumb,['4px','20px']);assert.deepEqual(app.problems,[]);
  }finally{await app.close();}
 });
+
+test('phone Library: coverless playlists line up with the ones that have covers; the sync checkbox sits beside its text',async()=>{
+ const app=await openApp({config:{...config,platform:'android'},phone:true});
+ try{const {page}=app;await page.locator('.dock-tab[data-tab="library"]').click();await page.locator('.lib-sections [data-section="playlists"]').click();
+  await page.waitForFunction(()=>[...document.querySelectorAll('.lib-grid .collection-card .art-box')].some(a=>a.dataset.art==='ready'));
+  const names=await page.evaluate(()=>[...document.querySelectorAll('.lib-grid .collection-card')].filter(c=>c.offsetParent).map(c=>[c.querySelector('.art-box').dataset.art,Math.round(c.querySelector('.name').getBoundingClientRect().left)]));
+  assert.ok(names.some(([a])=>a==='missing')&&names.some(([a])=>a==='ready'),JSON.stringify(names));
+  assert.equal(new Set(names.map(([,x])=>x)).size,1,'names start at different offsets: '+JSON.stringify(names));
+  await page.locator('.nav-btn[aria-label="Загрузки"]').click();
+  const box=await page.locator('.sync-panel > label.set-inline').locator('visible=true').first().evaluate(l=>{const i=l.querySelector('input').getBoundingClientRect(),r=document.createRange();r.selectNodeContents(l);const t=[...r.getClientRects()].filter(x=>x.width>40)[0];return {inputRight:i.right,textLeft:t.left,inputTop:i.top,textBottom:t.bottom};});
+  assert.ok(box.textLeft>box.inputRight&&box.inputTop<box.textBottom,'the checkbox is not beside its label: '+JSON.stringify(box));
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test('Material 3 dark on a phone: the page uses the tonal surface of the top bar and tabs have only the M3 underline',async()=>{
+ const app=await openApp({config:{...config,platform:'android'},phone:true,colorScheme:'dark'});
+ try{const {page}=app;await page.evaluate(()=>localStorage.setItem('pm-style','material'));await page.reload();await page.locator('.home-view .stage').waitFor();
+  await page.locator('.dock-tab[data-tab="search"]').click();await page.locator('.search-tabs [aria-selected="true"]').waitFor();
+  const r=await page.evaluate(()=>({navbar:getComputedStyle(document.querySelector('.navbar')).backgroundColor,main:getComputedStyle(document.querySelector('.main')).backgroundColor,indicator:getComputedStyle(document.querySelector('.search-tabs'),'::before').display}));
+  assert.equal(r.main,r.navbar,JSON.stringify(r));assert.equal(r.indicator,'none');assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
