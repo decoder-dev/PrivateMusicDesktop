@@ -84,6 +84,16 @@ jobs:
         if: runner.os == 'macOS'
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
+      # The tools CI keeps (see ci.yml); restore only, a release never writes the cache.
+      - name: Restore the Tauri bundler tools
+        if: runner.os != 'macOS'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/tauri
+            ~/AppData/Local/tauri
+          key: tauri-bundler-tools-${{ runner.os }}-v2
+
       - name: Build
         shell: bash
         working-directory: src-tauri

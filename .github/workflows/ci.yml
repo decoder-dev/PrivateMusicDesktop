@@ -113,6 +113,17 @@ jobs:
         if: runner.os == 'macOS'
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
+      # The bundler downloads NSIS (Windows) and the AppImage tools (Linux) from GitHub releases on every
+      # build; keep them so a GitHub download outage (504) does not fail an otherwise good build.
+      - name: Cache the Tauri bundler tools
+        if: runner.os != 'macOS'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/tauri
+            ~/AppData/Local/tauri
+          key: tauri-bundler-tools-${{ runner.os }}-v2
+
       - name: Build
         shell: bash
         working-directory: src-tauri
