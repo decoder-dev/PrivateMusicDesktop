@@ -1,8 +1,16 @@
 // Shared navigation through every phone screen, using visible controls.
 const visible = (page, selector) => page.locator(selector).locator("visible=true");
+/** Taps; a page without touch emulation (the Android WebView driven over DevTools) gets a click instead. */
+export async function press(locator) {
+  try { await locator.tap(); }
+  catch (error) {
+    if (!/does not support tap/.test(error.message)) throw error;
+    await locator.click();
+  }
+}
 const tap = async (page, selector) => {
   if (selector.includes(".sheet")) await page.waitForTimeout(300);
-  await visible(page, selector).first().tap();
+  await press(visible(page, selector).first());
   await page.waitForTimeout(120);
 };
 const see = (page, selector) => visible(page, selector).first().waitFor();
@@ -58,7 +66,7 @@ export async function everyPhoneScreen(page, check) {
   await tap(page, '.lib-sections [data-section="tracks"]');
   await see(page, ".library-hub .row");
   await tap(page, ".library-hub .select-toggle");
-  await visible(page, ".library-hub .row").nth(1).tap();
+  await press(visible(page, ".library-hub .row").nth(1));
   await check("selection");
   await tap(page, ".library-hub .select-toggle");
   await tap(page, '.lib-sections [data-section="all"]');

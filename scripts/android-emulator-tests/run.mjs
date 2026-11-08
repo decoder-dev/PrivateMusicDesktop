@@ -322,7 +322,7 @@ await step("10. no crash in the whole log, no uncaught page errors", async () =>
 // as the real Android WebView renders it (fonts, insets, scrolling). Screenshots land in $PM_OUT/tour-*.png.
 // Navigation timing differs from Chromium, so a missed screen only warns; a crash still fails step 10's rules.
 await step("11. visual tour: every phone screen with test data, captured from the device", async () => {
-  const { everyPhoneScreen } = await import(path.join(root, "ui-tests/phone-screen-walk.js"));
+  const { everyPhoneScreen, press } = await import(path.join(root, "ui-tests/phone-screen-walk.js"));
   const mock = fs.readFileSync(path.join(root, "ui-tests/mock-backend.js"), "utf8");
   // The test backend must win over Tauri's own global, whichever script runs first.
   const pin = `(()=>{const m=window.__TAURI__;Object.defineProperty(window,"__TAURI__",{configurable:false,get:()=>m,set:()=>{}});})();`;
@@ -341,13 +341,14 @@ await step("11. visual tour: every phone screen with test data, captured from th
       const file = await screencap(`tour-${scheme}-${String(++index).padStart(2, "0")}-${screen}`);
       if (file) captured.push(path.basename(file));
     };
-    if (scheme === "light") {
+    // Light and Material get the whole walk (Material is the style most worth checking on a real WebView).
+    if (scheme !== "dark") {
       try { await everyPhoneScreen(tour, shoot); }
-      catch (error) { warn(`visual tour stopped after ${index} screens: ${error.message.split("\n")[0]}`); }
+      catch (error) { warn(`${scheme} tour stopped after ${index} screens: ${error.message.split("\n")[0]}`); }
     } else {
       await shoot("home");
       for (const [tabId, name] of [["library", "library"], ["search", "search"], ["profile", "profile"]]) {
-        try { await tour.locator(`.dock-tab[data-tab="${tabId}"]`).first().tap(); await shoot(name); }
+        try { await press(tour.locator(`.dock-tab[data-tab="${tabId}"]`).first()); await shoot(name); }
         catch (error) { warn(`dark tour: ${name}: ${error.message.split("\n")[0]}`); }
       }
     }
