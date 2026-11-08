@@ -269,6 +269,7 @@ jobs:
           set -euxo pipefail
           . scripts/android-ci-env.sh
           scripts/android-ci-sdk.sh "emulator" "platform-tools" "build-tools;35.0.0" "$SYSTEM_IMAGE"
+          scripts/android-emulator-pin.sh
           adb version
           emulator -version | head -3 || true
 
