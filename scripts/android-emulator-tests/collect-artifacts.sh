@@ -13,6 +13,8 @@ if ! grep -q "device " "$out/adb-devices.txt"; then T 20 adb kill-server; T 20 a
 # Host evidence survives loss of the guest; never collect unrelated temporary files.
 T 5 sudo -n dmesg --ctime 2>&1 | tail -200 > "$out/host-kernel-tail.txt"
 cat /proc/sys/kernel/core_pattern > "$out/host-core-pattern.txt" 2>/dev/null || true
+# The runner hands cores to systemd-coredump: its report names the module and frames where qemu crashed.
+T 60 sudo -n coredumpctl info --no-pager 2>&1 | head -400 > "$out/host-coredump.txt"
 # Only emulator Crashpad minidumps from this disposable runner, never arbitrary /tmp files.
 mkdir -p "$out/emulator-minidumps"
 for crash_root in /tmp/android-"${USER:-runner}"/emu-crash-*.db; do
