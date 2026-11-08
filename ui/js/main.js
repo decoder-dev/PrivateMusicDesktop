@@ -71,6 +71,9 @@ import { closeMenu } from "./menu.js";
 addStrings({ ru: { "export.audio": "Сохранить аудиофайл…", "export.saved": "Аудиофайл сохранён" }, en: { "export.audio": "Save audio file…", "export.saved": "Audio file saved" } });
 
 initLayout();
+// Vertical range inputs (writing-mode on form controls) arrived in Chrome 124; older Android System WebViews
+// draw the equaliser faders flat. There the faders are horizontal sliders turned by 90° instead (music.css).
+{ const chrome = /Chrome\/(\d+)/.exec(navigator.userAgent); if (chrome && Number(chrome[1]) < 124) document.documentElement.dataset.vrange = "rotate"; }
 const root = document.getElementById("app");
 // Сохраняйте собственные меню треков приложения; подавлять команды браузера веб-просмотра (Сохранить
 // как, Печать, Обновить, инструменты разработчика) везде.

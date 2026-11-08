@@ -271,3 +271,18 @@ html[data-layout="wide"] .np-cover { width: max(120px, min(36vw, 52vh, calc(100c
 html[data-layout="wide"] .np[data-side="lyrics"] .np-cover, html[data-layout="wide"] .np[data-side="queue"] .np-cover { width: max(120px, min(26vw, 40vh, calc(100cqh - 130px))); }
 
 html[data-layout]:not([data-style="material"]) :is(.hero-art.round .art-box, .art-box.round) { border-radius: 50%; }
+
+/* Equaliser faders on WebViews without vertical range inputs (Chrome < 124, main.js sets data-vrange): a
+   horizontal slider of the fader's length, turned by -90° (minimum at the bottom), with margins that give it
+   back the fader's footprint. --w/--h are the fader's width and height in each context. */
+html[data-vrange="rotate"] input[type="range"].eq-slider {
+  --w: 28px; --h: 136px;
+  writing-mode: horizontal-tb; direction: ltr; --fill-dir: to right; flex: none;
+  width: var(--h) !important; height: var(--w);
+  margin: calc((var(--h) - var(--w)) / 2) calc((var(--w) - var(--h)) / 2);
+  transform: rotate(-90deg);
+}
+html[data-vrange="rotate"][data-layout="phone"] input[type="range"].eq-slider { --w: 44px; --h: 148px; }
+html[data-vrange="rotate"][data-layout="phone"] .eq-sheet input[type="range"].eq-slider { --h: 120px; }
+/* scrollbar-width needs Chrome 121; the band strip scrolls sideways without a visible bar everywhere. */
+html[data-layout="phone"] .eq-bands::-webkit-scrollbar { display: none; }

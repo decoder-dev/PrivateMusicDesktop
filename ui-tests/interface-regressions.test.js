@@ -262,3 +262,18 @@ test('mini player: a playing track without a cover shows the note glyph, not a b
   assert.deepEqual(app.problems,[]);
  }finally{await app.close();}
 });
+
+test('equaliser faders stay vertical on an Android WebView older than Chrome 124 (no vertical range inputs)',async()=>{
+ const app=await openApp({config:{...config,platform:'android'},phone:true});
+ try{const {page}=app;
+  await page.addInitScript(`Object.defineProperty(Navigator.prototype,"userAgent",{get:()=>"Mozilla/5.0 (Linux; Android 14; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/113.0.5672.136 Mobile Safari/537.36"});`);
+  await page.reload();await page.locator('.home-view .stage').waitFor();
+  assert.equal(await page.evaluate(()=>document.documentElement.dataset.vrange),'rotate');
+  await page.locator('.stage-cta').click();await page.locator('.player .now').click();await page.locator('.np-quick button').nth(2).click();
+  const slider=page.locator('.sheet .eq-slider').first();await slider.waitFor();await page.waitForTimeout(400);
+  const r=await slider.evaluate(el=>{const b=el.getBoundingClientRect(),s=getComputedStyle(el);return {w:Math.round(b.width),h:Math.round(b.height),mode:s.writingMode,transform:s.transform};});
+  assert.deepEqual([r.w,r.h,r.mode],[44,120,'horizontal-tb'],JSON.stringify(r));assert.notEqual(r.transform,'none');
+  const bb=await slider.boundingBox();await page.mouse.move(bb.x+bb.width/2,bb.y+bb.height/2);await page.mouse.down();await page.mouse.move(bb.x+bb.width/2,bb.y+8,{steps:4});await page.mouse.up();
+  await page.waitForFunction(()=>window.__mock.state.eq?.[0]>0);assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
