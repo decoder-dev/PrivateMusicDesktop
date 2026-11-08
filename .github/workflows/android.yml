@@ -19,9 +19,14 @@ on:
       - "scripts/android-emulator-tests/**"
       - ".github/workflows/android.yml"
   workflow_dispatch:
+    inputs:
+      emulator_gpu:
+        description: "Emulator -gpu mode (software, swiftshader_indirect, swangle_indirect, guest)"
+        required: false
+        default: software
 
 concurrency:
-  group: android-${{ github.workflow }}-${{ github.ref }}
+  group: android-${{ github.workflow }}-${{ github.ref }}-${{ inputs.emulator_gpu || 'default' }}
   cancel-in-progress: true
 
 permissions:
@@ -284,6 +289,8 @@ jobs:
 
       - name: Boot the emulator
         timeout-minutes: 20
+        env:
+          PM_EMULATOR_GPU: ${{ inputs.emulator_gpu || 'software' }}
         run: |
           . scripts/android-ci-env.sh >/dev/null
           scripts/android-emulator-tests/boot-emulator.sh
