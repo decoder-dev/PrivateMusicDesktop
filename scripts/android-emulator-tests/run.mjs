@@ -332,7 +332,14 @@ await step("9b. system bar icons follow the app theme", async () => {
   await sleep(800);
   const afterDark = await lightIcons();
   await screencap("09b-system-bars-dark-theme");
-  await page.reload(); // the UI sends the effective theme again
+  // Put back what the UI itself chose (no reload: a reload while native answers are in flight makes Tauri's IPC
+  // report "runCallback" of undefined in the new page).
+  const effectiveDark = await page.evaluate(() => {
+    let theme = "system";
+    try { theme = JSON.parse(localStorage.getItem("pm.settings.v1") || "{}").theme || "system"; } catch {}
+    return theme === "dark" || (theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+  });
+  await call(page, "set_system_bars", { dark: effectiveDark });
   if (afterDark !== false) throw new Error(`the status bar keeps dark icons after set_system_bars(dark) (LIGHT_STATUS_BARS: ${afterDark})`);
   await assertNoCrash("after switching the system bar appearance");
   return "light theme: dark icons; dark theme: light icons";
@@ -362,6 +369,8 @@ await step("11. visual tour: every phone screen with test data, captured from th
     const tour = await freshPage();
     await tour.addInitScript(`window.__mockConfig=${JSON.stringify({ signedIn: true, catalogMixes: true, history: [1, 2, 3], platform: "android" })};`);
     await tour.addInitScript(mock + "\n" + pin);
+    // The walk finds controls by their Russian labels; the emulator's system language is English.
+    await tour.addInitScript(`try{Object.defineProperty(Navigator.prototype,"language",{configurable:true,get:()=>"ru-RU"});Object.defineProperty(Navigator.prototype,"languages",{configurable:true,get:()=>["ru-RU","ru"]});}catch{}`);
     const theme = scheme === "dark" ? "dark" : "light";
     // The WebView keeps localStorage from the real checks above (the playback self-test leaves a "now playing"
     // snapshot), which the UI would restore over the test data: start each pass from an empty store, once.
