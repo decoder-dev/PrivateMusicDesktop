@@ -332,7 +332,9 @@ await step("11. visual tour: every phone screen with test data, captured from th
     await tour.addInitScript(`window.__mockConfig=${JSON.stringify({ signedIn: true, catalogMixes: true, history: [1, 2, 3], platform: "android" })};`);
     await tour.addInitScript(mock + "\n" + pin);
     const theme = scheme === "dark" ? "dark" : "light";
-    await tour.addInitScript(`try{localStorage.setItem("pm.settings.v1",JSON.stringify({theme:"${theme}"}));localStorage.setItem("pm-style","${scheme === "material" ? "material" : "ios"}")}catch{}`);
+    // The WebView keeps localStorage from the real checks above (the playback self-test leaves a "now playing"
+    // snapshot), which the UI would restore over the test data: start each pass from an empty store, once.
+    await tour.addInitScript(`try{if(sessionStorage.getItem("pm-tour")!=="${scheme}"){localStorage.clear();sessionStorage.setItem("pm-tour","${scheme}");}localStorage.setItem("pm.settings.v1",JSON.stringify({theme:"${theme}"}));localStorage.setItem("pm-style","${scheme === "material" ? "material" : "ios"}")}catch{}`);
     await tour.reload();
     await tour.locator(".home-view .stage").first().waitFor({ timeout: 30_000 });
     let index = 0;
