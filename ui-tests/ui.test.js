@@ -697,7 +697,8 @@ test("full screen: it follows the theme, and the controls fade instead of vanish
       // После паузы без движения указателя элементы управления исчезают (непрозрачность), они не
       // становятся display:none и не скрываются.
       await page.waitForFunction(() => document.querySelector(".np").classList.contains("idle"), null, { timeout: 6000 });
-      await page.waitForTimeout(400);
+      // The fade is a transition: wait for it to end instead of a fixed delay (a busy machine runs it late).
+      await page.waitForFunction(() => getComputedStyle(document.querySelector(".np-bottom")).opacity === "0", null, { timeout: 3000 });
       const faded = await page.evaluate(() => { const s = getComputedStyle(document.querySelector(".np-bottom")); return [s.opacity, s.visibility]; });
       assert.deepEqual(faded, ["0", "visible"]);
       await page.mouse.move(300, 300);
