@@ -368,7 +368,8 @@ await step("11. visual tour: every phone screen with test data, captured from th
   // The test backend must win over Tauri's own global, whichever script runs first.
   const pin = `(()=>{const m=window.__TAURI__;Object.defineProperty(window,"__TAURI__",{configurable:false,get:()=>m,set:()=>{}});})();`;
   const captured = [];
-  for (const scheme of ["light", "dark", "material"]) try {
+  // light and dark: the default design; then Material 3 and the classic look.
+  for (const scheme of ["light", "dark", "material", "classic"]) try {
     const tour = await freshPage();
     await tour.addInitScript(`window.__mockConfig=${JSON.stringify({ signedIn: true, catalogMixes: true, history: [1, 2, 3], platform: "android" })};`);
     await tour.addInitScript(mock + "\n" + pin);
@@ -377,7 +378,7 @@ await step("11. visual tour: every phone screen with test data, captured from th
     const theme = scheme === "dark" ? "dark" : "light";
     // The WebView keeps localStorage from the real checks above (the playback self-test leaves a "now playing"
     // snapshot), which the UI would restore over the test data: start each pass from an empty store, once.
-    await tour.addInitScript(`try{if(sessionStorage.getItem("pm-tour")!=="${scheme}"){localStorage.clear();sessionStorage.setItem("pm-tour","${scheme}");}localStorage.setItem("pm.settings.v1",JSON.stringify({theme:"${theme}"}));localStorage.setItem("pm-style","${scheme === "material" ? "material" : "ios"}")}catch{}`);
+    await tour.addInitScript(`try{if(sessionStorage.getItem("pm-tour")!=="${scheme}"){localStorage.clear();sessionStorage.setItem("pm-tour","${scheme}");}localStorage.setItem("pm.settings.v1",JSON.stringify({theme:"${theme}"}));localStorage.setItem("pm-style","${scheme === "material" ? "material" : scheme === "classic" ? "ios" : "premium"}")}catch{}`);
     await tour.reload();
     await tour.locator(".home-view .stage").first().waitFor({ timeout: 30_000 });
     let index = 0;
@@ -387,7 +388,7 @@ await step("11. visual tour: every phone screen with test data, captured from th
       if (file) captured.push(path.basename(file));
     };
     // Light and Material get the whole walk (Material is the style most worth checking on a real WebView).
-    if (scheme !== "dark") {
+    if (scheme === "light" || scheme === "material") {
       try { await everyPhoneScreen(tour, shoot); }
       catch (error) { warn(`${scheme} tour stopped after ${index} screens: ${error.message.split("\n")[0]}`); }
     } else {
