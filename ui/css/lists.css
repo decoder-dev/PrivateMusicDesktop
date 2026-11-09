@@ -112,3 +112,6 @@
 .sk-tiles { display: flex; gap: 12px; padding: 0 var(--gutter); overflow: hidden; width: 100%; }
 .sk-tile { flex: none; width: 220px; height: 72px; border-radius: var(--r-tile); }
 .status.loading.tiles, .status.loading.cards { padding-top: 4px; }
+
+/* Search: with recent queries listed, the "type a query" illustration is not repeated under them. */
+.show-recents .tab-pane .empty-state.has-il { display: none; }

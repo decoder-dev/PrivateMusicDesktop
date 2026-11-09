@@ -46,6 +46,9 @@ export function createSearchView({ play, onTrackAction, toast }) {
       if (event.key === "Enter") {
         clearTimeout(debounce);
         run(input.value);
+        saveRecent(normalize(input.value));
+        // The keyboard covers half of the results on a phone: Enter means "show me".
+        if (isPhone()) input.blur();
       }
     },
   });
@@ -53,7 +56,9 @@ export function createSearchView({ play, onTrackAction, toast }) {
 
   const screen = createTracksScreen({
     title: t("search.title"),
-    hooks: { emptyText: t("search.empty"), art: "search", onPlay: play, onAction: onTrackAction },
+    // A query enters "Вы искали" when the person acts on it (Enter, playing a result, opening an artist or an
+    // album), not every time the debounced search answers while they are still typing.
+    hooks: { emptyText: t("search.empty"), art: "search", onPlay: (...args) => { saveRecent(query); return play(...args); }, onAction: onTrackAction },
   });
   // Поле поиска находится в заголовке, рядом с заголовком.
   const header = screen.element.querySelector(".view-header");
@@ -84,10 +89,11 @@ export function createSearchView({ play, onTrackAction, toast }) {
   tracksPane.prepend(summary);
   renderRecent();
 
-  screen.list.element.addEventListener("scroll", () => {
-    const el = screen.list.element;
-    if (el.scrollTop + el.clientHeight > el.scrollHeight - 400) loadMore();
-  }, { passive: true });
+  // More results load near the end of whatever scrolls: the list itself on wide windows, the whole view on a
+  // phone (there the list is as tall as its rows and never scrolls on its own).
+  const nearEnd = (el) => { if (tab === "tracks" && el.scrollTop + el.clientHeight > el.scrollHeight - 400) loadMore(); };
+  screen.list.element.addEventListener("scroll", () => nearEnd(screen.list.element), { passive: true });
+  screen.element.addEventListener("scroll", () => nearEnd(screen.element), { passive: true });
 
   function renderTabs() {
     for (const button of tabs.querySelectorAll("button")) button.setAttribute("aria-selected", String(button.dataset.tab === tab));
@@ -100,6 +106,8 @@ export function createSearchView({ play, onTrackAction, toast }) {
     const visible = !query && recent.length > 0;
     recentHeading.hidden = !visible;
     recentList.hidden = !visible;
+    // The recent searches are the prompt: the "type a query" illustration would only repeat it below them.
+    screen.element.classList.toggle("show-recents", visible);
     recentList.replaceChildren(...recent.map((item) => {
       const use = h("button", { class: "search-recent-query", type: "button", onclick: () => {
         input.value = item;
@@ -141,7 +149,9 @@ export function createSearchView({ play, onTrackAction, toast }) {
     renderTabs();
     savedLyrics.close();
     if(id === 'lyrics'){sequence++;savedLyrics.render(query);}
-    else if(previous === 'lyrics')run(input.value);
+    // Back from Lyrics: the track results (and any pages loaded below them) are still valid unless the query
+    // changed while Lyrics was open, which cleared them.
+    else if(previous === 'lyrics' && (!query || !results.length || normalize(input.value) !== query))run(input.value);
     else if (id !== "tracks") loadShelf(id);
   }
 
@@ -156,7 +166,7 @@ export function createSearchView({ play, onTrackAction, toast }) {
 
   function renderShelf(id, items) {
     const { grid } = shelfParts[id];
-    grid.replaceChildren(...items.map((item) => (id === "artists" ? artistCard(item, openArtist) : albumCard(item, openAlbum))));
+    grid.replaceChildren(...items.map((item) => (id === "artists" ? artistCard(item, (...args) => { saveRecent(query); return openArtist(...args); }) : albumCard(item, (...args) => { saveRecent(query); return openAlbum(...args); }))));
     setShelfStatus(id, items.length ? "" : t(id === "artists" ? "search.noArtists" : "search.noAlbums"));
   }
 
@@ -188,7 +198,6 @@ export function createSearchView({ play, onTrackAction, toast }) {
       if (tab !== id) return;
       renderShelf(id, items);
       shelfParts[id].more.hidden=shelves[id].get(text).next==null;
-      saveRecent(text);
     } catch (error) {
       if (mine !== sequence || tab !== id) return;
       if (!append) setShelfStatus(id, errorText(error), { error: true });
@@ -221,7 +230,6 @@ export function createSearchView({ play, onTrackAction, toast }) {
       results = uniqueTracks(page.items);
       summary.textContent=t("search.found",{count:Number.isFinite(page.total)?page.total:results.length});
       summary.hidden=false;
-      saveRecent(text);
       nextOffset = advancingOffset(page.next_offset,0);
       screen.clearStatus();
       screen.setTracks(results);

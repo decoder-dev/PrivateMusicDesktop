@@ -321,3 +321,63 @@ for (const layout of ['phone','wide']) test(`search (${layout}): the empty promp
   assert.deepEqual(app.problems,[]);
  }finally{await app.close();}
 });
+
+async function openSearch(layout){
+ const app=await openApp(layout==='phone'?{config:{...config,platform:'android'},phone:true}:{config});
+ const {page}=app;
+ if(layout==='phone'){await page.locator('.home-view .stage').waitFor();await page.locator('.dock-tab[data-tab="search"]').click();}
+ else await page.locator('.nav [data-view="search"]').click();
+ return {app,page,field:page.locator('.main > .view:not([hidden]) input[type="search"]').first()};
+}
+const searches=page=>page.evaluate(()=>window.__mock.calls.filter(c=>c.command==='search').map(c=>c.args));
+
+for (const layout of ['phone','wide']) test(`search (${layout}): history keeps queries people act on, not every pause while typing`,async()=>{
+ const {app,page,field}=await openSearch(layout);
+ try{await page.evaluate(()=>localStorage.removeItem('search.recent.queries.v1'));
+  await field.click();await field.pressSequentially('кин',{delay:40});await page.waitForTimeout(700);
+  await field.pressSequentially('о',{delay:40});await page.waitForTimeout(700);
+  assert.equal(await page.evaluate(()=>localStorage.getItem('search.recent.queries.v1')),null,'nothing saved while typing');
+  await field.press('Enter');
+  await page.waitForFunction(()=>localStorage.getItem('search.recent.queries.v1')==='["кино"]');
+  if(layout==='phone')assert.notEqual(await page.evaluate(()=>document.activeElement?.type),'search','Enter puts the phone keyboard away');
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test('search (phone): results keep loading while the screen scrolls down',async()=>{
+ const {app,page,field}=await openSearch('phone');
+ try{await field.fill('рок');await field.press('Enter');
+  await page.locator('.main > .view:not([hidden]) .row').first().waitFor();
+  for(let i=0;i<6;i++){await page.evaluate(()=>{const v=document.querySelector('.main > .view:not([hidden])');v.scrollTop=v.scrollHeight;});await page.waitForTimeout(300);}
+  await page.waitForFunction(()=>window.__mock.calls.filter(c=>c.command==='search').some(c=>c.args.offset>=100));
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test('search: coming back from Lyrics keeps the track results without searching again',async()=>{
+ const {app,page,field}=await openSearch('wide');
+ try{await field.fill('рок');await field.press('Enter');
+  await page.locator('.main > .view:not([hidden]) .row').first().waitFor();await page.waitForTimeout(300);
+  const before=(await searches(page)).length;
+  await page.locator('.search-tabs [data-tab="lyrics"]').click();await page.locator('.search-tabs [data-tab="tracks"]').click();await page.waitForTimeout(500);
+  assert.equal((await searches(page)).length,before,'no new request');
+  assert.ok(await page.locator('.main > .view:not([hidden]) .row').count()>0,'the rows are still there');
+  await page.locator('.search-tabs [data-tab="lyrics"]').click();await field.fill('джаз');await field.dispatchEvent('input');await page.waitForTimeout(500);
+  await page.locator('.search-tabs [data-tab="tracks"]').click();
+  await page.waitForFunction(()=>window.__mock.last('search')?.args.query==='джаз');
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+for (const layout of ['phone','wide']) test(`search (${layout}): recent queries replace the "type a query" prompt`,async()=>{
+ const {app,page}=await openSearch(layout);
+ try{await page.evaluate(()=>localStorage.setItem('search.recent.queries.v1',JSON.stringify(['кино'])));await page.reload();
+  if(layout==='phone'){await page.locator('.home-view .stage').waitFor();await page.locator('.dock-tab[data-tab="search"]').click();}
+  else await page.locator('.nav [data-view="search"]').click();
+  await page.locator('.main > .view:not([hidden]) .search-recents').waitFor();
+  assert.equal(await page.locator('.main > .view:not([hidden]) .empty-state.has-il').isVisible(),false);
+  await page.locator('.main > .view:not([hidden]) .search-recent-remove').click();
+  await page.locator('.main > .view:not([hidden]) .empty-state.has-il',{hasText:'Введите запрос'}).waitFor({state:'visible'});
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
