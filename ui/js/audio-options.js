@@ -86,6 +86,7 @@ export function createAudioOptions(settings, onChange) {
       h("option", { value, text: value ? `${value} ${ft("с")}` : ft("Выключен") }),
     ),
   );
+  const androidOnly = (element) => { element.classList.add("android-only"); return element; };
   const row = (label, control, note) =>
     h(
       control.matches?.('input[type="checkbox"]') ? "label" : "div",
@@ -106,8 +107,9 @@ export function createAudioOptions(settings, onChange) {
     "div",
     { class: "audio-options" },
     row(t("audio.quality"),quality,t("audio.qualityNote")),
-    row(t("audio.bluetooth"),resumeBluetooth),
-    row(t("audio.pauseZero"),pauseAtZero),
+    // The system volume and Bluetooth hooks exist only in the Android media service (a no-op on desktop).
+    androidOnly(row(t("audio.bluetooth"),resumeBluetooth)),
+    androidOnly(row(t("audio.pauseZero"),pauseAtZero)),
     row(t("audio.advance"),advance,t("audio.advanceNote")),
     row(t("audio.preamp"),h("div",{class:"audio-range"},preamp,preampValue),t("audio.preampNote")),
     row(t("audio.compression"),compression,t("audio.compressionNote")),

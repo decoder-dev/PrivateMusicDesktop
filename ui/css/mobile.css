@@ -242,3 +242,4 @@ html[data-layout="phone"] .release-row > *, html[data-layout="phone"] .mix-grid 
 
 /* ---------- desktop-only parts are not shown on Android ---------- */
 html[data-platform="android"] .desktop-only, html[data-platform="android"] [data-desktop-only] { display: none !important; }
+html:not([data-platform="android"]) .android-only { display: none !important; }

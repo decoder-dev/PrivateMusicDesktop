@@ -421,3 +421,32 @@ for(const phone of ['small','pixel7'])test(`phone equalizer: every page shows wh
   assert.deepEqual(app.problems,[]);
  }finally{await app.close();}
 });
+
+test('desktop Settings: no Android-only playback switches; the output device and Refresh share a line',async()=>{
+ const app=await openApp({config,viewport:{width:1280,height:800}});
+ try{const {page}=app;await page.locator('.nav [data-view="settings"]').click();await page.locator('.settings .set-row').first().waitFor();
+  for(const name of ['Продолжать при подключении Bluetooth','Пауза при нулевой громкости телефона'])assert.equal(await page.getByRole('switch',{name,exact:true}).isVisible(),false,name);
+  assert.equal(await page.getByRole('switch',{name:'Высокое качество',exact:true}).isVisible(),true);
+  const r=await page.locator('.settings select[aria-label="Устройство вывода"]').evaluate(select=>{const s=select.getBoundingClientRect(),b=select.nextElementSibling.getBoundingClientRect();return {sameLine:Math.abs((s.top+s.bottom)/2-(b.top+b.bottom)/2)<2,gap:Math.round(b.left-s.right)};});
+  assert.deepEqual(r,{sameLine:true,gap:8});
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test('Android Settings keep the Bluetooth and zero-volume switches',async()=>{
+ const app=await openApp({config,phone:'small'});
+ try{const {page}=app;await page.locator('.dock-tab[data-tab="profile"]').click();await page.locator('[data-row="settings"]').click();
+  for(const name of ['Продолжать при подключении Bluetooth','Пауза при нулевой громкости телефона'])await page.getByRole('switch',{name,exact:true}).waitFor({state:'visible'});
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test('desktop Downloads: the offline-playlists card is inset like the other cards',async()=>{
+ const app=await openApp({config,viewport:{width:1280,height:800}});
+ try{const {page}=app;await page.locator('.nav [data-view="downloads"]').click();await page.locator('.sync-panel').waitFor();
+  const r=await page.locator('.sync-panel').evaluate(panel=>{const v=panel.closest('.view').getBoundingClientRect(),b=panel.getBoundingClientRect(),title=panel.closest('.view').querySelector('.view-header h1, .view-header h2').getBoundingClientRect();
+   return {left:Math.round(b.left-v.left),right:Math.round(v.right-b.right),alignedWithTitle:Math.abs(b.left-title.left)<1};});
+  assert.deepEqual(r,{left:20,right:20,alignedWithTitle:true});
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
