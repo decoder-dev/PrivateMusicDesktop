@@ -9,6 +9,7 @@ import { h, clear } from "./dom.js";
 import { icon } from "./icons.js";
 import { t, errorText, addStrings } from "./i18n.js";
 import { api, trackKey } from "./api.js";
+import { applyCustomAccent } from "./accent-custom.js";
 import { listen } from "./bridge.js";
 import { store, set, publish, subscribe, withScope, own } from "./store.js";
 import { toast } from "./toast.js";
@@ -87,6 +88,7 @@ function applyAppearance() {
   if (settings.theme === "system") delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = settings.theme;
   document.documentElement.dataset.accent = settings.accent;
+  applyCustomAccent(document.documentElement, settings.accent, settings.accentCustom);
   document.documentElement.dataset.haptics=settings.haptics?"on":"off";
   document.documentElement.dataset.homeStage=settings.homeStage?"on":"off";
   document.documentElement.style.setProperty("--text-scale",String(({compact:0.85,system:1,large:1.1,extraLarge:1.2})[settings.textScale] ?? 1));
@@ -310,7 +312,7 @@ function persistSettings(patch) {
 /** С экрана настроек: сохранено и перенесено туда, где они сейчас отображаются. */
 function applySettings(patch) {
   persistSettings(patch);
-  if ("textScale" in patch || "homeStage" in patch || "haptics" in patch || "theme" in patch || "accent" in patch || "flatChrome" in patch || "palette" in patch) applyAppearance();
+  if ("textScale" in patch || "homeStage" in patch || "haptics" in patch || "theme" in patch || "accent" in patch || "accentCustom" in patch || "flatChrome" in patch || "palette" in patch) applyAppearance();
   nowPlaying?.applySettings(patch);
 }
 

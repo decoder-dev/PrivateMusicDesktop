@@ -1,10 +1,11 @@
-// App style on every platform: "ios" (default, the standard look shared with the iPhone app) or "material" (Material 3).
-// Выбор хранится на устройстве и ставится на <html data-style>; CSS (css/material.css) держится на нем.
+// App style on every platform: "premium" (the default design, css/premium.css), "ios" (the classic look shared with
+// the iPhone app) or "material" (Material 3). Выбор хранится на устройстве и ставится на <html data-style>.
 const KEY = "pm-style";
-export const STYLES = ["ios", "material"];
+export const STYLES = ["premium", "ios", "material"];
+export const DEFAULT_STYLE = "premium";
 
 export function currentStyle() {
-  try { const value = localStorage.getItem(KEY); return STYLES.includes(value) ? value : "ios"; } catch { return "ios"; }
+  try { const value = localStorage.getItem(KEY); return STYLES.includes(value) ? value : DEFAULT_STYLE; } catch { return DEFAULT_STYLE; }
 }
 export function applyStyle(value = currentStyle()) {
   document.documentElement.dataset.style = value;

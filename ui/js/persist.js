@@ -64,7 +64,8 @@ export function loadSettings() {
     visualizer: ["bars", "mirror", "wave", "radial", "off"].includes(saved.visualizer) ? saved.visualizer : null,
     palette: PALETTES.includes(saved.palette) ? saved.palette : "classic",
     theme: ["system", "light", "dark"].includes(saved.theme) ? saved.theme : "system",
-    accent: ACCENTS.includes(RENAMED[saved.accent] ?? saved.accent) ? (RENAMED[saved.accent] ?? saved.accent) : "green",
+    accent: saved.accent === "custom" ? "custom" : ACCENTS.includes(RENAMED[saved.accent] ?? saved.accent) ? (RENAMED[saved.accent] ?? saved.accent) : "green",
+    accentCustom: typeof saved.accentCustom === "string" && /^#[0-9a-f]{6}$/i.test(saved.accentCustom) ? saved.accentCustom.toLowerCase() : "#1c7a45",
     flatChrome: saved.flatChrome === true,
     haptics: saved.haptics !== false,
   };

@@ -21,7 +21,7 @@ import { STYLES, currentStyle, setStyle } from "../mobile/style.js";
 import { NP_THEMES, currentNpTheme, setNpTheme } from "../mobile/np-theme.js";
 import { openDiagnostics } from "../diagnostics.js";
 addStrings({ ru: { "set.nptheme": "Фон плеера", "set.nptheme.cover": "Обложка", "set.nptheme.aurora": "Аврора", "set.nptheme.plain": "Однотонный" }, en: { "set.nptheme": "Player background", "set.nptheme.cover": "Cover", "set.nptheme.aurora": "Aurora", "set.nptheme.plain": "Plain" } });
-addStrings({ ru: { "set.style": "Вид приложения", "set.style.ios": "Стандартный", "set.style.material": "Material 3", "set.style.note": "Material 3 — тональные цвета от акцента, панель навигации и кнопки в стиле Android. Работает на всех устройствах." }, en: { "set.style": "App style", "set.style.ios": "Standard", "set.style.material": "Material 3", "set.style.note": "Material 3: tonal colours from the accent, Android-style navigation and buttons. Works on every device." } });
+addStrings({ ru: { "set.style": "Вид приложения", "set.style.ios": "Классический", "set.style.material": "Material 3", "set.style.premium": "Основной", "set.style.note": "Основной — новый дизайн приложения: цвета от выбранного акцента, тёмная карточка волны и плеер. Классический — прежний вид, Material 3 — в стиле Android. Работает на всех устройствах." }, en: { "set.style": "App style", "set.style.ios": "Classic", "set.style.material": "Material 3", "set.style.premium": "Default", "set.style.note": "Default: the new app design, colours from your accent, a dark mix card and player. Classic: the previous look. Material 3: Android style. Works on every device." } });
 
 const IS_MAC = /Mac/i.test(navigator.platform || navigator.userAgent);
 const MOD = IS_MAC ? "⌘" : "Ctrl";
