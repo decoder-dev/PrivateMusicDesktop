@@ -409,6 +409,9 @@ await step("12. touch seeking in the full-screen player (adb input on the device
   const { press } = await import(path.join(root, "ui-tests/phone-screen-walk.js"));
   const p = await freshPage();
   await p.reload();
+  // The tour ends on another tab, and the app reopens the last one: go Home first.
+  await p.locator(".dock-tab").first().waitFor({ timeout: 30_000 });
+  await press(p.locator('.dock-tab[data-tab="home"]').first());
   await p.locator(".home-view .stage").first().waitFor({ timeout: 30_000 });
   await press(p.locator(".stage-cta").first());
   await press(p.locator(".player .now").first());
