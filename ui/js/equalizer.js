@@ -79,16 +79,22 @@ export function createEqualizerPanel({ settings, onSettingsChange }) {
   const nextBands=h("button",{type:"button",class:"icon-btn","aria-label":t("eq.nextBands"),onclick:()=>scrollBands(1)},icon("chevronRight",18));
   const visibleBands=h("span",{class:"eq-band-range",role:"status"});
   const bandNav=h("div",{class:"eq-band-nav",hidden:true},previousBands,visibleBands,nextBands);
-  function scrollBands(direction){bands.scrollBy({left:direction*Math.max(44,bands.clientWidth-44),behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"instant":"smooth"});}
+  // Pages of whole bands: the column width is chosen so that floor(width / 44) bands fill the row exactly.
+  let bandWidth=0;
+  function scrollBands(direction){bands.scrollBy({left:direction*bands.clientWidth,behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"instant":"smooth"});}
   function updateBandNav(){
     if(disposed)return;
+    if(bands.clientWidth){
+      const width=bands.clientWidth/Math.min(sliders.length,Math.max(1,Math.floor(bands.clientWidth/44)));
+      if(Math.abs(width-bandWidth)>0.25){bandWidth=width;bands.style.setProperty("--eq-band",`${width}px`);}
+    }
     const overflow=bands.scrollWidth>bands.clientWidth+1;
     bandNav.hidden=!overflow || !bands.clientWidth;
     previousBands.disabled=bands.scrollLeft<=1;
     nextBands.disabled=bands.scrollLeft+bands.clientWidth>=bands.scrollWidth-1;
     if(!overflow)return;
     const bounds=bands.getBoundingClientRect();
-    const shown=sliders.map((slider,index)=>({index,rect:slider.element.getBoundingClientRect()})).filter(({rect})=>rect.right>bounds.left+1 && rect.left<bounds.right-1);
+    const shown=sliders.map((slider,index)=>({index,rect:slider.element.getBoundingClientRect()})).filter(({rect})=>rect.left>=bounds.left-1 && rect.right<=bounds.right+1);
     if(shown.length)visibleBands.textContent=t("eq.visibleBands",{from:shown[0].index+1,to:shown.at(-1).index+1});
   }
   bands.addEventListener("scroll",updateBandNav,{passive:true});

@@ -104,7 +104,8 @@ test('player artwork: a broken next cover cannot restore a stale image after dec
     await page.waitForTimeout(550);
     assert.equal(await page.locator('.np-cover img').count(),0);
     assert.equal(await page.locator('.np-placeholder').textContent(),'');
-    assert.equal(await page.locator('.np-cover').isVisible(),false);
+    assert.equal(await page.locator('.np-placeholder svg').count(),1);
+    assert.equal(await page.locator('.np-cover').isVisible(),true);
     assert.equal(await page.locator('.np-backdrop .show').count(),0);
     assert.equal(await page.locator('.np-title').textContent(),'Следующий');
     assert.deepEqual(app.problems,[]);

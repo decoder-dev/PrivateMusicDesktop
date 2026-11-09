@@ -49,6 +49,9 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   let queueOpen = false;
   let userChoseMode = MODES.includes(settings.visualizer);
   let dragging = false;
+  // A track without a cover: a note glyph the styles may show (the default design does; the classic look keeps
+  // the cover area empty and centres the title instead).
+  const placeholderArt = () => h("div", { class: "np-placeholder", "aria-hidden": "true" }, icon("note", 72));
   let idleTimer = 0;
   let paletteToken = 0;
   let coverUrl = null;
@@ -380,11 +383,11 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     const token = ++paletteToken;
     if (url) {
       const image = h("img", { src: url, alt: "", decoding: "async", referrerpolicy: "no-referrer", draggable: "false" });
-      image.addEventListener("error", () => { if (token === paletteToken) coverBox.replaceChildren(h("div", { class: "np-placeholder", "aria-hidden": "true" })); });
+      image.addEventListener("error", () => { if (token === paletteToken) coverBox.replaceChildren(placeholderArt()); });
       // Never show the previous track's cover under the new title while loading.
       coverBox.replaceChildren(image);
     } else {
-      coverBox.replaceChildren(h("div", { class: "np-placeholder", "aria-hidden": "true" }));
+      coverBox.replaceChildren(placeholderArt());
     }
     setBackdrop(url);
     const [a, b] = fallbackColors(track);

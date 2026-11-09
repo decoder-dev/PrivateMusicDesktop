@@ -3088,7 +3088,12 @@ test("studio: expanded player keeps the favourite after repeat and fits its cont
    });
    assert.ok(layout.heartLast && layout.fits,JSON.stringify(layout));
    if(width>640) assert.ok(Math.abs(layout.center-width/2)<2,JSON.stringify(layout));
-   await page.locator('.np-like').click();
+   // On a desktop the controls hide after 3 s of a still pointer while music plays, and the pointer's move on the way to
+   // the heart brings them back. Playwright's own actionability check would wait for a covered target without ever
+   // moving the pointer, so the click is forced: it still moves the mouse first, which wakes the controls.
+   assert.equal(await page.locator('.np-like').getAttribute('aria-pressed'),'true');
+   await page.locator('.np-like').click({force:true});
+   await page.locator('.np-like[aria-pressed="false"]').waitFor();
    assert.equal(await page.evaluate(()=>window.__mock.count('toggle')),0);
    assert.deepEqual(app.problems,[]);
   } finally { await app.close(); }

@@ -381,3 +381,43 @@ for (const layout of ['phone','wide']) test(`search (${layout}): recent queries 
   assert.deepEqual(app.problems,[]);
  }finally{await app.close();}
 });
+
+for(const style of ['premium','ios'])test(`phone Profile: group headings stay small upper-case labels (${style})`,async()=>{
+ const app=await openApp({config,phone:'small'});
+ try{const {page}=app;await page.evaluate(style=>{document.documentElement.dataset.style=style;},style);await page.locator('.dock-tab[data-tab="profile"]').click();await page.locator('[data-row="settings"]').waitFor();
+  const labels=await page.locator('.main > .view:not([hidden]) h2.group-label').evaluateAll(list=>list.filter(e=>e.offsetParent).map(e=>{const s=getComputedStyle(e);return {size:parseFloat(s.fontSize),transform:s.textTransform};}));
+  assert.ok(labels.length>0);for(const label of labels){assert.ok(label.size<=14,`heading is ${label.size}px`);assert.equal(label.transform,'uppercase');}
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+for(const style of ['premium','material','ios'])test(`phone player: a coverless track ${style!=='ios'?'gets a note tile the size of a cover':'keeps the cover area empty'} (${style})`,async()=>{
+ const app=await openApp({config:{...config,platform:'android'},phone:'small'});
+ try{const {page}=app;await page.evaluate(style=>{document.documentElement.dataset.style=style;},style);await player(page);await page.locator('.np:not([hidden]) .np-cover img').waitFor();
+  const size=await page.locator('.np-cover').evaluate(e=>Math.round(e.getBoundingClientRect().width));
+  await page.evaluate(async()=>{const {store}=await import('/js/store.js');window.__mock.emit('pm-event',{type:'state',...store.player,track:{...store.player.track,title:'Без обложки',artwork_url:null}});});
+  await page.locator('.np-cover .np-placeholder').waitFor({state:'attached'});
+  const result=await page.evaluate(()=>{const cover=document.querySelector('.np-cover'),main=document.querySelector('.np-main').getBoundingClientRect(),box=cover.getBoundingClientRect();
+   return {visible:cover.checkVisibility({visibilityProperty:true}),width:Math.round(box.width),height:Math.round(box.height),inside:box.top>=main.top-1&&box.bottom<=main.bottom+1};});
+  if(style!=='ios')assert.deepEqual(result,{visible:true,width:size,height:size,inside:true});
+  else assert.equal(result.visible,false);
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+for(const phone of ['small','pixel7'])test(`phone equalizer: every page shows whole bands and the label names exactly them (${phone})`,async()=>{
+ const app=await openApp({config,phone});
+ try{const {page}=app;await player(page);await page.locator('.np-quick button:nth-child(3)').click();await page.locator('.eq-sheet .eq-band-nav:not([hidden])').waitFor();
+  const check=()=>page.evaluate(()=>{const c=document.querySelector('.eq-sheet .eq-bands'),box=c.getBoundingClientRect();
+   const bands=[...c.children].map((b,i)=>({i:i+1,r:b.getBoundingClientRect()}));
+   const cut=bands.filter(({r})=>r.right>box.left+1&&r.left<box.right-1&&(r.left<box.left-1||r.right>box.right+1)).map(b=>b.i);
+   const full=bands.filter(({r})=>r.left>=box.left-1&&r.right<=box.right+1).map(b=>b.i);
+   return {cut,full,label:document.querySelector('.eq-sheet .eq-band-range').textContent,width:Math.min(...bands.map(b=>b.r.width))};});
+  await page.waitForTimeout(300);let r=await check();
+  assert.deepEqual(r.cut,[]);assert.ok(r.width>=44);assert.equal(r.label,`Полосы ${r.full[0]}–${r.full.at(-1)} из 10`);
+  await page.getByRole('button',{name:'Следующие частоты',exact:true}).click();
+  await page.waitForFunction(()=>{const c=document.querySelector('.eq-sheet .eq-bands');return c.scrollLeft+c.clientWidth>=c.scrollWidth-1;});await page.waitForTimeout(150);
+  r=await check();assert.deepEqual(r.cut,[]);assert.equal(r.full.at(-1),10);assert.equal(r.label,`Полосы ${r.full[0]}–10 из 10`);
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});

@@ -184,10 +184,14 @@ html .release-row .card.collection-card { width: 224px; }
 html .grid:has(> .collection-card),
 html[data-layout="phone"] .lib-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 224px), 1fr)); }
 html .hero-art:has(.art-box:is([data-art="missing"], [data-art="error"])) { display: none; }
-/* With no cover, the title and controls remain the player content. */
-html .np-cover:has(.np-placeholder) { visibility: hidden; box-shadow: none; background: transparent; }
-html .np[data-mode="off"] .np-main:has(.np-placeholder) { display: flex; flex-direction: column; justify-content: center; }
-html .np[data-mode="off"] .np-cover:has(.np-placeholder) { display: none; }
+/* With no cover, the classic design keeps the title and controls as the player content; the default and Material designs
+   show a tonal tile with a note glyph the size of a cover (as Apple Music and YouTube Music do). */
+html:not([data-style="premium"], [data-style="material"]) .np-cover:has(.np-placeholder) { visibility: hidden; box-shadow: none; background: transparent; }
+html:not([data-style="premium"], [data-style="material"]) .np[data-mode="off"] .np-main:has(.np-placeholder) { display: flex; flex-direction: column; justify-content: center; }
+html:not([data-style="premium"], [data-style="material"]) .np[data-mode="off"] .np-cover:has(.np-placeholder) { display: none; }
+html:is([data-style="premium"], [data-style="material"]) .np-cover:has(.np-placeholder) { background: color-mix(in srgb, var(--np-fg) 8%, transparent); box-shadow: none; }
+html:is([data-style="premium"], [data-style="material"]) .np-placeholder { color: color-mix(in srgb, var(--np-fg) 45%, transparent); }
+html:is([data-style="premium"], [data-style="material"]) .np-placeholder svg { width: 32%; height: auto; }
 html[data-layout="phone"] .stage:has(.art-box[data-art="missing"], .art-box[data-art="error"]) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "chip" "title" "start" "controls"; }
 html[data-layout="phone"] .stage-art:has(.art-box[data-art="missing"], .art-box[data-art="error"]) { display: none; }
 /* A short loading label avoids decorative skeletons and continuous repainting. */
@@ -253,7 +257,8 @@ html[data-layout]:not([data-style="material"]) .artist-card .card-art, html[data
 html[data-layout]:not([data-style="material"]) .np[data-mode="radial"] .np-cover { border-radius: 50%; }
 /* Headings: one weight and one size per level on every screen. */
 html[data-layout]:not([data-style="material"]) .view-header h1 { font-weight: 800; }
-html[data-layout="phone"]:not([data-style="material"]) :is(.shelf-title, .view h2:not(.stage-headline)) { font-size: calc(20px * var(--text-scale, 1)); font-weight: 700; }
+/* Group headings (Profile, Settings, Statistics) stay small upper-case labels: they are excluded here. */
+html[data-layout="phone"]:not([data-style="material"]) :is(.shelf-title, .view h2:not(.stage-headline, .group-label)):not(.set-section > h2) { font-size: calc(20px * var(--text-scale, 1)); font-weight: 700; }
 html[data-layout="wide"]:not([data-style="material"]) :is(.shelf-title, .view h2) { font-size: calc(18px * var(--text-scale, 1)); font-weight: 700; }
 html[data-layout]:not([data-style="material"]) .card { border-radius: 12px; }
 
