@@ -253,6 +253,10 @@ export function createSearchView({ play, onTrackAction, toast }) {
   }
 
   renderTabs();
+  // The list draws its empty state ("Введите запрос…" with its illustration) only from setTracks: paint it now,
+  // or a freshly opened Search shows a blank pane until something re-renders it (switching tabs did).
+  screen.setTracks([]);
+  screen.clearStatus();
   return {
     element: screen.element,
     // A phone keeps its keyboard down until the field is tapped.

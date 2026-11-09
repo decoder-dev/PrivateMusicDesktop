@@ -309,3 +309,15 @@ test('system media controls get a Like button that mirrors the current track and
   assert.deepEqual(app.problems,[]);
  }finally{await app.close();}
 });
+
+for (const layout of ['phone','wide']) test(`search (${layout}): the empty prompt with its illustration shows as soon as Search opens`,async()=>{
+ const app=await openApp(layout==='phone'?{config:{...config,platform:'android'},phone:true}:{config});
+ try{const {page}=app;
+  if(layout==='phone'){await page.locator('.home-view .stage').waitFor();await page.locator('.dock-tab[data-tab="search"]').click();}
+  else await page.locator('.nav [data-view="search"]').click();
+  const prompt=page.locator('.main > .view:not([hidden]) .empty-state.has-il',{hasText:'Введите запрос'});
+  await prompt.waitFor({state:'visible',timeout:3000});
+  assert.equal(await prompt.locator('svg, img, .il').count()>0,true,'the illustration is drawn');
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
