@@ -221,9 +221,9 @@ html .sync-panel > label.set-inline { flex-wrap: nowrap; justify-content: flex-s
 html .sync-panel > label.set-inline > input { flex: none; margin-top: 2px; }
 /* On the desktop the offline-playlists card keeps the same 20 px inset as the header and the other cards. */
 html[data-layout="wide"] .sync-panel { margin: 0 20px 12px; }
-/* Output device: the list narrows (a long device name is truncated by the select) so "Refresh" stays on its line. */
-html[data-layout="wide"] .settings .set-inline:has(> select + .btn) { flex-wrap: nowrap; }
-html[data-layout="wide"] .settings .set-inline:has(> select + .btn) > select { flex: 1 1 auto; min-width: 0; }
+/* Output device: the list narrows (a long device name is truncated by the select) so "Refresh" stays on its line;
+   only a very narrow window moves the button below. */
+html[data-layout="wide"] .settings .set-inline:has(> select + .btn) > select { flex: 1 1 160px; min-width: 0; }
 
 /* Phone: sliders take their own line so the explanation keeps a readable width. */
 html[data-layout="phone"] .set-row:has(> .audio-range) { flex-wrap: wrap; }
