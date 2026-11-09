@@ -106,6 +106,12 @@ html[data-style="premium"] ::selection { background: color-mix(in srgb, var(--ac
 html[data-style="premium"] :is(.view-header h1, .profile-name) { font-family: var(--font); font-weight: 800; letter-spacing: -0.025em; line-height: 1.2; text-wrap: balance; }
 html[data-style="premium"] .stage-headline { font-family: var(--pm-display); font-weight: 600; letter-spacing: -0.03em; line-height: 1.15; text-wrap: balance; }
 html[data-style="premium"] .np-title { font-family: var(--font); font-weight: 700; letter-spacing: -0.015em; line-height: 1.25; }
+/* The full-screen player sits on a tinted cover backdrop: pure black or white text, as in the standard look. */
+html[data-style="premium"] .np { --np-fg: #000000; --np-fg-2: color-mix(in srgb, #000000 62%, transparent); --np-glass: color-mix(in srgb, #000000 10%, transparent); --np-glass-hover: color-mix(in srgb, #000000 16%, transparent); }
+@media (prefers-color-scheme: dark) {
+  html[data-style="premium"]:not([data-theme="light"]) .np { --np-fg: #FFFFFF; --np-fg-2: color-mix(in srgb, #FFFFFF 62%, transparent); --np-glass: color-mix(in srgb, #FFFFFF 10%, transparent); --np-glass-hover: color-mix(in srgb, #FFFFFF 16%, transparent); }
+}
+html[data-style="premium"][data-theme="dark"] .np { --np-fg: #FFFFFF; --np-fg-2: color-mix(in srgb, #FFFFFF 62%, transparent); --np-glass: color-mix(in srgb, #FFFFFF 10%, transparent); --np-glass-hover: color-mix(in srgb, #FFFFFF 16%, transparent); }
 html[data-style="premium"] :is(.shelf-title, .view h2) { font-family: var(--font); font-weight: 700; letter-spacing: -0.01em; }
 /* Grouped-list headers, as in iOS: 13 px, upper case, secondary colour. */
 html[data-style="premium"] :is(.group-label, .set-section > h2) {
@@ -118,8 +124,8 @@ html[data-style="premium"] :is(.time, .duration, .count, .eq-value, .np-time, .s
 /* -------------------------------------------------------------------------------- shared components */
 /* Buttons (HIG): rounded rectangles. Primary is filled with the accent; the rest are grey fills with accent text. */
 html[data-style="premium"] .btn {
-  border-radius: 12px; min-height: 44px; padding: 0 18px; border: 0; background: var(--pm-state);
-  color: var(--accent); font: 600 calc(15px * var(--text-scale, 1))/1.2 var(--font); letter-spacing: 0; box-shadow: none; background-image: none;
+  border-radius: 12px; min-height: 44px; padding: 0 14px; border: 0; background: var(--pm-state);
+  color: var(--accent); font: 600 calc(14px * var(--text-scale, 1))/1.2 var(--font); letter-spacing: 0; box-shadow: none; background-image: none;
   transition: background-color 140ms var(--pm-ease), border-color 140ms var(--pm-ease), transform 120ms var(--pm-ease);
 }
 html[data-style="premium"] .btn:hover { background: var(--pm-state-press); }
@@ -318,7 +324,7 @@ html[data-style="premium"][data-layout="wide"] .player :is(.artist, .time, .now-
 html[data-style="premium"][data-layout="wide"] .player :is(.icon-btn, .controls button) { color: var(--pm-on-hero); }
 html[data-style="premium"][data-layout="wide"] .player :is(.icon-btn, .controls button):hover { background: var(--pm-hero-2); }
 /* A liked heart keeps the accent (its light variant on the dark bar), never the plain white of the other buttons. */
-html[data-style="premium"] .player .like.on { color: var(--accent); }
+html[data-style="premium"][data-layout] .player .like.on { color: var(--accent); }
 html[data-style="premium"][data-layout="wide"] .player .controls .play {
   width: 48px; height: 48px; border-radius: 50%; background: var(--pm-on-hero); color: var(--pm-hero); box-shadow: none;
 }
@@ -328,12 +334,14 @@ html[data-style="premium"][data-layout="wide"] .player { --accent: var(--pm-acce
 
 /* Full-screen player on the wide window. */
 html[data-style="premium"][data-layout="wide"] .np-cover { border-radius: 28px; }
-html[data-style="premium"][data-layout="wide"] .np .np-play {
-  width: 80px; height: 80px; border-radius: 50%; background: var(--np-fg, var(--pm-ink)); color: var(--np-bg, var(--pm-bg));
-}
+/* The play button keeps the standard size here: a bigger one shrinks the stage and leaves no room for the radial visualizer. */
+html[data-style="premium"][data-layout="wide"] .np .np-play { border-radius: 50%; background: var(--np-fg, var(--pm-ink)); color: var(--np-bg, var(--pm-bg)); }
 html[data-style="premium"][data-layout="wide"] :is(.np-side, .ly, .np-queue) { border-radius: 24px; }
 
 @media (prefers-reduced-motion: reduce) {
   html[data-style="premium"] :is(.btn, .dock-tab .dock-ico) { transition: none; }
   html[data-style="premium"] .btn:active { transform: none; }
 }
+
+/* Onest is wider than the system face: the discovery toolbar keeps one row at 780 px with 12 px button padding. */
+html[data-style="premium"] .discovery-view .fy-toolbar :is(.btn, .mix-tuning > summary) { padding-inline: 12px; }
