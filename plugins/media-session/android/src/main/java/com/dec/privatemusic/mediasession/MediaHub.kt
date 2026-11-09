@@ -77,6 +77,16 @@ object MediaHub {
         preferences?.configure(resumeBluetooth, pauseAtZero)
     }
 
+    /** Whether the current track is in My music; null hides the Like button (local files, nothing playing). */
+    var liked: Boolean? = null
+        private set
+
+    fun setLiked(value: Boolean?) {
+        if (liked == value) return
+        liked = value
+        PlaybackService.instance?.refresh()
+    }
+
     fun setArtworkOverride(url: String?) {
         artworkOverride = url
         reloadArtwork()

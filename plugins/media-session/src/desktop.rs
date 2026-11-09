@@ -38,6 +38,7 @@ impl<R: Runtime> MediaSession<R> {
     }
     pub fn configure_playback(&self, _resume_bluetooth: bool, _pause_at_zero: bool) -> Result<()> { Ok(()) }
     pub fn set_system_bars(&self, _dark: bool) -> Result<()> { Ok(()) }
+    pub fn set_liked(&self, _liked: Option<bool>) -> Result<()> { Ok(()) }
     pub async fn status(&self) -> Result<Status> {
         Ok(Status::default())
     }

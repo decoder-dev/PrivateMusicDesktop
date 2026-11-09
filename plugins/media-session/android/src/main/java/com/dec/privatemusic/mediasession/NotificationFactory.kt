@@ -35,11 +35,12 @@ class NotificationFactory(private val context: Context) {
         artwork: Bitmap?,
         foreground: Boolean,
         canNext: Boolean = true,
+        liked: Boolean? = null,
     ): Notification {
         ensureChannel()
-        val buttons = NotificationLayout.buttons(kind, canNext)
+        val buttons = NotificationLayout.buttons(kind, canNext, liked)
         val style = MediaStyle().setMediaSession(token)
-        if (buttons.isNotEmpty()) style.setShowActionsInCompactView(*NotificationLayout.compactIndices(kind, canNext))
+        if (buttons.isNotEmpty()) style.setShowActionsInCompactView(*NotificationLayout.compactIndices(kind, canNext, liked))
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_music)
             .setContentTitle(track?.title?.ifEmpty { null } ?: appLabel())
@@ -57,7 +58,7 @@ class NotificationFactory(private val context: Context) {
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setStyle(style)
         for (button in buttons) {
-            val (icon, label) = iconAndLabel(button)
+            val (icon, label) = iconAndLabel(button, liked == true)
             builder.addAction(icon, label, servicePending(button.intentAction, button.ordinal + 1))
         }
         if (artwork != null) {
@@ -66,13 +67,16 @@ class NotificationFactory(private val context: Context) {
         return builder.build()
     }
 
-    private fun iconAndLabel(button: ButtonId): Pair<Int, String> = when (button) {
+    private fun iconAndLabel(button: ButtonId, liked: Boolean): Pair<Int, String> = when (button) {
+        ButtonId.LIKE -> if (liked) R.drawable.ic_media_liked to likeLabel(true) else R.drawable.ic_media_like to likeLabel(false)
         ButtonId.PREVIOUS -> android.R.drawable.ic_media_previous to "Previous"
         ButtonId.PLAY -> android.R.drawable.ic_media_play to "Play"
         ButtonId.PAUSE -> android.R.drawable.ic_media_pause to "Pause"
         ButtonId.NEXT -> android.R.drawable.ic_media_next to "Next"
         ButtonId.STOP -> android.R.drawable.ic_menu_close_clear_cancel to "Stop"
     }
+
+    private fun likeLabel(liked: Boolean): String = likeText(liked)
 
     private fun averageColor(bitmap: Bitmap): Int = try {
         Bitmap.createScaledBitmap(bitmap, 1, 1, true).let { pixel ->
@@ -101,5 +105,16 @@ class NotificationFactory(private val context: Context) {
     companion object {
         const val CHANNEL_ID = "playback"
         private const val REQUEST_DISMISS = 100
+
+        /** The Like button's text (also its accessibility label), in the device language. */
+        fun likeText(liked: Boolean): String {
+            val russian = java.util.Locale.getDefault().language == "ru"
+            return when {
+                liked && russian -> "Убрать из Моей музыки"
+                liked -> "Remove from My music"
+                russian -> "Добавить в Мою музыку"
+                else -> "Add to My music"
+            }
+        }
     }
 }

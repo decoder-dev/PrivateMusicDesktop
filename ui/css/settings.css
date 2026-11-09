@@ -112,3 +112,8 @@
 .audio-value { min-width:54px; text-align:right; font-variant-numeric:tabular-nums; }
 
 .offline-note { padding:0 20px 16px; line-height: 1.5; }
+/* «Свой цвет»: пунктирное кольцо, пока цвет не выбран; системный выбор цвета открывается по нажатию. */
+.accent-opt.accent-custom::before { background: var(--sw-l, transparent); box-shadow: inset 0 0 0 1.5px var(--text-2); }
+.accent-opt.accent-custom:not([style*="--sw-l"])::before { background: conic-gradient(#e0483f, #e8a33d, #3fae6a, #3c84e0, #8a5cd6, #e0483f); }
+@supports (color: light-dark(#000, #fff)) { .accent-opt.accent-custom::before { background: light-dark(var(--sw-l, transparent), var(--sw-d, transparent)); } }
+.accent-custom-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; }

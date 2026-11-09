@@ -110,9 +110,54 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   const seek = h("input", {
     type: "range", min: "0", max: "0", step: "1", value: "0", "aria-label": t("seek"),
     oninput: () => { dragging = true; elapsed.textContent = formatTime(Number(seek.value)); total.textContent = remaining(Number(seek.max) - Number(seek.value)); },
-    onchange: () => { playbackAction(() => api.seek(Number(seek.value))); dragging = false; lyrics.snap(Number(seek.value)); },
+    // Keyboard and mouse changes; touch commits its own seek (below) and must not seek twice.
+    onchange: () => { if (seekTouch !== null || performance.now() - seekTouchEnded < 600) return; playbackAction(() => api.seek(Number(seek.value))); dragging = false; lyrics.snap(Number(seek.value)); },
   });
   bindRange(seek);
+  // Touch seeking is handled here rather than by the native range: on Android System WebViews a tap or a drag
+  // on the track did not move the thumb or send a seek (seen on a phone, not in desktop emulation). A finger
+  // anywhere on the 44 px lane sets the position, dragging follows it, lifting commits one seek.
+  let seekTouch = null;
+  let seekTouchEnded = -Infinity;
+  // The native range must not react to the finger at all (it would move and seek on its own).
+  seek.addEventListener("touchstart", (event) => { if (event.cancelable) event.preventDefault(); }, { passive: false });
+  const seekValueAt = (clientX) => {
+    const lane = seek.getBoundingClientRect();
+    const ratio = lane.width > 0 ? Math.min(1, Math.max(0, (clientX - lane.left) / lane.width)) : 0;
+    return Math.round(ratio * Number(seek.max));
+  };
+  const showSeek = (value) => {
+    seek.value = String(value);
+    syncRange(seek);
+    elapsed.textContent = formatTime(value);
+    total.textContent = remaining(Number(seek.max) - value);
+  };
+  seek.addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "mouse" || seek.disabled) return;
+    event.preventDefault();
+    seekTouch = event.pointerId;
+    dragging = true;
+    try { seek.setPointerCapture(event.pointerId); } catch { /* the pointer may already be gone */ }
+    showSeek(seekValueAt(event.clientX));
+  });
+  seek.addEventListener("pointermove", (event) => {
+    if (event.pointerId !== seekTouch) return;
+    event.preventDefault();
+    showSeek(seekValueAt(event.clientX));
+  });
+  const endSeekTouch = (event, commit) => {
+    if (event.pointerId !== seekTouch) return;
+    seekTouch = null;
+    seekTouchEnded = performance.now();
+    dragging = false;
+    if (!commit) return;
+    const value = seekValueAt(event.clientX);
+    showSeek(value);
+    playbackAction(() => api.seek(value));
+    lyrics.snap(value);
+  };
+  seek.addEventListener("pointerup", (event) => endSeekTouch(event, true));
+  seek.addEventListener("pointercancel", (event) => endSeekTouch(event, false));
 
   // Быстрые действия под транспортом: тексты песен, очередь и меню трека.
   const quick = (name, label, onclick, pressed) => {

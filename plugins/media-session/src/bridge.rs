@@ -125,7 +125,7 @@ pub fn to_engine_action(action: MediaAction) -> Option<media_sync::MediaAction> 
         MediaAction::Stop => E::Stop,
         MediaAction::SeekTo(s) => E::SeekTo(s),
         MediaAction::SeekBy(d) => E::SeekBy(d),
-        MediaAction::Duck(_) => return None,
+        MediaAction::Duck(_) | MediaAction::Like => return None,
     })
 }
 

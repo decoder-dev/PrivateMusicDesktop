@@ -110,6 +110,15 @@ class MediaSessionPlugin(private val activity: Activity) : Plugin(activity) {
         invoke.resolve()
     }
 
+    /** Like state of the current track: true/false shows the button filled/outlined, null hides it. */
+    @Command
+    fun setLiked(invoke: Invoke) {
+        val args = invoke.getArgs()
+        val liked = if (!args.has("liked") || args.isNull("liked")) null else args.optBoolean("liked")
+        main.post { MediaHub.setLiked(liked) }
+        invoke.resolve()
+    }
+
     @Command
     fun requestAudioFocus(invoke: Invoke) {
         main.post { MediaHub.requestFocus() }

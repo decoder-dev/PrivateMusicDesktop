@@ -115,6 +115,11 @@ impl<R: Runtime> MediaSession<R> {
         self.enqueue("configurePlayback", json!({"resumeBluetooth":resume_bluetooth,"pauseAtZero":pause_at_zero}))
     }
 
+    /// The notification's Like button: `Some(liked)` shows it (filled when liked), `None` hides it.
+    pub fn set_liked(&self, liked: Option<bool>) -> Result<()> {
+        self.enqueue("setLiked", json!({ "liked": liked }))
+    }
+
     /// Light or dark system bar icons to match the app theme (`dark` = light icons).
     pub fn set_system_bars(&self, dark: bool) -> Result<()> {
         self.enqueue("setSystemBars", json!({ "dark": dark }))

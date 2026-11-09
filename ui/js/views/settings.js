@@ -18,10 +18,11 @@ import { createAudioOptions } from "../audio-options.js";
 addStrings({ru:{"window.mini":"Мини-плеер"},en:{"window.mini":"Mini player"}});
 import { isAndroid, isPhone } from "../mobile/layout.js";
 import { STYLES, currentStyle, setStyle } from "../mobile/style.js";
+import { DEFAULT_CUSTOM_ACCENT, customAccentPair } from "../accent-custom.js";
 import { NP_THEMES, currentNpTheme, setNpTheme } from "../mobile/np-theme.js";
 import { openDiagnostics } from "../diagnostics.js";
 addStrings({ ru: { "set.nptheme": "Фон плеера", "set.nptheme.cover": "Обложка", "set.nptheme.aurora": "Аврора", "set.nptheme.plain": "Однотонный" }, en: { "set.nptheme": "Player background", "set.nptheme.cover": "Cover", "set.nptheme.aurora": "Aurora", "set.nptheme.plain": "Plain" } });
-addStrings({ ru: { "set.style": "Вид приложения", "set.style.ios": "Классический", "set.style.material": "Material 3", "set.style.premium": "Основной", "set.style.note": "Основной — новый дизайн приложения: цвета от выбранного акцента, тёмная карточка волны и плеер. Классический — прежний вид, Material 3 — в стиле Android. Работает на всех устройствах." }, en: { "set.style": "App style", "set.style.ios": "Classic", "set.style.material": "Material 3", "set.style.premium": "Default", "set.style.note": "Default: the new app design, colours from your accent, a dark mix card and player. Classic: the previous look. Material 3: Android style. Works on every device." } });
+addStrings({ ru: { "set.style": "Вид приложения", "set.accent.custom": "Свой цвет", "set.style.ios": "Классический", "set.style.material": "Material 3", "set.style.premium": "Основной", "set.style.note": "Основной — новый дизайн приложения: цвета от выбранного акцента, тёмная карточка волны и плеер. Классический — прежний вид, Material 3 — в стиле Android. Работает на всех устройствах." }, en: { "set.style": "App style", "set.accent.custom": "Custom colour", "set.style.ios": "Classic", "set.style.material": "Material 3", "set.style.premium": "Default", "set.style.note": "Default: the new app design, colours from your accent, a dark mix card and player. Classic: the previous look. Material 3: Android style. Works on every device." } });
 
 const IS_MAC = /Mac/i.test(navigator.platform || navigator.userAgent);
 const MOD = IS_MAC ? "⌘" : "Ctrl";
@@ -84,6 +85,12 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
   const accentButtons = ACCENTS.map((value) =>
     h("button", { type: "button", role: "radio", class: "accent-opt", "data-v": value, title: t(`set.accent.${value}`), "aria-label": t(`set.accent.${value}`), "aria-checked": "false", tabindex: "-1",
       onclick: () => pick({ accent: value }) }, icon("check", 18)));
+  // «Свой цвет»: любой цвет из системного выбора; светлый и тёмный варианты подбираются под контраст (accent-custom.js).
+  const customAccentInput = h("input", { type: "color", class: "accent-custom-input", tabindex: "-1", "aria-hidden": "true",
+    oninput: () => pick({ accent: "custom", accentCustom: customAccentInput.value }) });
+  const customAccentButton = h("button", { type: "button", role: "radio", class: "accent-opt accent-custom", "data-v": "custom", title: t("set.accent.custom"), "aria-label": t("set.accent.custom"), "aria-checked": "false", tabindex: "-1",
+    onclick: () => { customAccentInput.value = settings.accentCustom ?? DEFAULT_CUSTOM_ACCENT; customAccentInput.click(); } }, icon("check", 18), customAccentInput);
+  accentButtons.push(customAccentButton);
   const accentGrid = h("div", { class: "accent-grid", role: "radiogroup", "aria-label": t("set.accent") }, accentButtons);
   const paletteButtons = PALETTES.map((value) => h("button", { type: "button", role: "radio", class: "palette-opt", "data-palette-choice": value, "aria-checked": "false", onclick: () => pick({ palette: value, accent: PALETTE_ACCENT[value] }) }, h("span", { class: `palette-swatch palette-${value}`, "aria-hidden": "true" }), t(`palette.${value}`)));
   const paletteGrid = h("div", { class: "palette-grid", role: "radiogroup", "aria-label": t("palette.title") }, paletteButtons);
@@ -227,6 +234,10 @@ export function createSettingsView({ settings, onSettingsChange, onSignOut, toas
       button.setAttribute("aria-checked", String(on));
       button.tabIndex = on ? 0 : -1;
     }
+    const customPair = customAccentPair(settings.accentCustom ?? DEFAULT_CUSTOM_ACCENT);
+    // The custom dot shows its colour once chosen; until then a colour wheel says "pick any colour".
+    if (customPair && settings.accent === "custom") { customAccentButton.style.setProperty("--sw-l", customPair.light); customAccentButton.style.setProperty("--sw-d", customPair.dark); }
+    else { customAccentButton.style.removeProperty("--sw-l"); customAccentButton.style.removeProperty("--sw-d"); }
     for (const button of accentButtons) {
       const on = button.dataset.v === (settings.accent ?? "blue");
       button.setAttribute("aria-checked", String(on));

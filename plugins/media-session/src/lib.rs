@@ -119,6 +119,8 @@ pub enum MediaAction {
     SeekTo(f64),
     SeekBy(f64),
     Duck(bool),
+    /// The notification's Like button: the UI adds the current track to My music or removes it.
+    Like,
 }
 
 /// State of the background-playback prerequisites, for a settings screen.
@@ -188,7 +190,7 @@ mod tests {
         assert_eq!(serde_json::to_string(&MediaAction::Duck(true)).unwrap(), r#"{"action":"duck","value":true}"#);
         for action in [
             MediaAction::Play, MediaAction::Pause, MediaAction::Toggle, MediaAction::Next, MediaAction::Previous,
-            MediaAction::Stop, MediaAction::SeekTo(1.0), MediaAction::SeekBy(-10.0), MediaAction::Duck(false),
+            MediaAction::Stop, MediaAction::SeekTo(1.0), MediaAction::SeekBy(-10.0), MediaAction::Duck(false), MediaAction::Like,
         ] {
             let json = serde_json::to_string(&action).unwrap();
             assert_eq!(serde_json::from_str::<MediaAction>(&json).unwrap(), action);

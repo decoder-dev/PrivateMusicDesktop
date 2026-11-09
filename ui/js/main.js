@@ -147,6 +147,17 @@ async function play(tracks, index, { shuffle = false, radio = null } = {}) {
   }
 }
 
+// The Like button of the system media controls mirrors the current track: filled when it is in My music,
+// hidden (null) for local files and when nothing plays. A press there comes back as "media-like".
+let mediaLikedSent;
+function syncMediaLiked() {
+  const track = store.player?.track;
+  const liked = track && !isLocalTrack(track) ? isLiked(track) : null;
+  if (liked === mediaLikedSent) return;
+  mediaLikedSent = liked;
+  api.setMediaLiked(liked).catch(() => { mediaLikedSent = undefined; });
+}
+
 /** Сердца повсюду заканчиваются здесь. */
 export async function like(track) {
   if (!track) return;
@@ -488,6 +499,9 @@ function buildShellParts() {
   }
   // Content clears the mini player only while there is a track for it.
   subscribe("player", (player) => { document.documentElement.dataset.mini = player.track ? "on" : "off"; });
+  // System media controls (the Android notification, the desktop tray) carry a Like button for the current track.
+  subscribe("player", syncMediaLiked);
+  subscribe("likes", syncMediaLiked);
   own(() => { delete document.documentElement.dataset.mini; });
 
   return {
@@ -741,6 +755,7 @@ async function start() {
   api.appInfo().then((info) => { setPlatform(info.platform); syncSystemBars(); }).catch(() => {});
   unlisten = await Promise.all([
     listen("pm-event", onBackendEvent),
+    listen("media-like", () => like(store.player?.track)),
     listen("pm-login", async (result) => {
       login?.loginResult(String(result));
       if (result === "success") {

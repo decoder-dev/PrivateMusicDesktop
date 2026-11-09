@@ -70,6 +70,8 @@ html[data-layout="phone"] .np-seek {
   font-size: calc(11px * var(--text-scale, 1)); line-height: calc(16px * var(--text-scale, 1)); color: var(--np-fg-2);
 }
 html[data-layout="phone"] .np .np-seek input { grid-column: 1 / -1; grid-row: 1; --track: 4px; }
+/* The page handles touch seeking itself (now-playing.js): the browser must not pan or scroll from the lane. */
+html[data-layout="phone"] .np .np-seek input { touch-action: none; }
 html[data-layout="phone"] .np-seek span:first-child { grid-column: 1; grid-row: 2; text-align: left; }
 html[data-layout="phone"] .np-seek span:last-child { grid-column: 2; grid-row: 2; text-align: right; }
 html[data-layout="phone"] .np .np-seek input::-webkit-slider-thumb { width: 12px; height: 12px; margin-block-start: -4px; }

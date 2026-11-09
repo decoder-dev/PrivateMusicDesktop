@@ -403,6 +403,35 @@ await step("11. visual tour: every phone screen with test data, captured from th
   return `${captured.length} screenshots`;
 });
 
+// A real finger on the real WebView: `input tap` and `input swipe` on the full-screen player's progress lane must
+// seek (a phone showed taps and drags there doing nothing). Runs on the tour page, so the test backend records it.
+await step("12. touch seeking in the full-screen player (adb input on the device)", async () => {
+  const { press } = await import(path.join(root, "ui-tests/phone-screen-walk.js"));
+  const p = await freshPage();
+  await p.reload();
+  await p.locator(".home-view .stage").first().waitFor({ timeout: 30_000 });
+  await press(p.locator(".stage-cta").first());
+  await press(p.locator(".player .now").first());
+  const lane = p.locator(".np .np-seek input");
+  await lane.waitFor({ timeout: 15_000 });
+  await sleep(800);
+  const geo = await lane.evaluate((el) => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height, dpr: window.devicePixelRatio, max: Number(el.max) }; });
+  const seeks = () => p.evaluate(() => window.__mock.calls.filter((c) => c.command === "seek").map((c) => c.args.seconds));
+  const px = (v) => Math.round(v * geo.dpr);
+  const y = px(geo.y + geo.h / 2);
+  const before = (await seeks()).length;
+  await sh(`input tap ${px(geo.x + geo.w * 0.75)} ${y}`);
+  await waitFor("a seek after a tap", async () => (await seeks()).length > before, { timeout: 5_000 });
+  const tapped = (await seeks()).at(-1);
+  await sh(`input swipe ${px(geo.x + geo.w * 0.2)} ${y} ${px(geo.x + geo.w * 0.5)} ${y} 400`);
+  await waitFor("a seek after a drag", async () => (await seeks()).length > before + 1, { timeout: 5_000 });
+  const dragged = (await seeks()).at(-1);
+  const near = (value, fraction) => Math.abs(value - geo.max * fraction) <= geo.max * 0.06;
+  if (!near(tapped, 0.75) || !near(dragged, 0.5)) throw new Error(`seeks landed at ${tapped} and ${dragged} of ${geo.max} (expected about 75% and 50%)`);
+  if (!(await pid())) throw new Error("the app is not running after the touch seek check");
+  return `tap → ${tapped}s, drag → ${dragged}s of ${geo.max}s`;
+});
+
 // ------------------------------------------------------------------------------------------- the end
 
 await disconnect();

@@ -934,6 +934,16 @@ pub async fn set_playback_preferences(handle:AppHandle,resume_bluetooth:bool,pau
     handle.media_session().configure_playback(resume_bluetooth,pause_at_zero).map_err(|_|Error::Unavailable.into())
 }
 
+/// Like state of the current track for the system controls: the Android notification button and the
+/// desktop tray item. `None` hides them (local files, nothing playing).
+#[tauri::command]
+pub async fn set_media_liked(handle:AppHandle,liked:Option<bool>)->CommandResult<()> {
+    use tauri_plugin_media_session::MediaSessionExt;
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    crate::tray::set_liked(&handle, liked);
+    handle.media_session().set_liked(liked).map_err(|_|Error::Unavailable.into())
+}
+
 /// Android: system bar icons follow the app theme, not only the system night mode.
 #[tauri::command]
 pub async fn set_system_bars(handle:AppHandle,dark:bool)->CommandResult<()> {

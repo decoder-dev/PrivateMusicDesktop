@@ -6,7 +6,8 @@ enum class ButtonId(val intentAction: String) {
     PLAY("com.dec.privatemusic.mediasession.PLAY"),
     PAUSE("com.dec.privatemusic.mediasession.PAUSE"),
     NEXT("com.dec.privatemusic.mediasession.NEXT"),
-    STOP("com.dec.privatemusic.mediasession.STOP");
+    STOP("com.dec.privatemusic.mediasession.STOP"),
+    LIKE("com.dec.privatemusic.mediasession.LIKE");
 
     fun toEvent(): ActionEvent = when (this) {
         PREVIOUS -> ActionEvent.PREVIOUS
@@ -14,6 +15,7 @@ enum class ButtonId(val intentAction: String) {
         PAUSE -> ActionEvent.PAUSE
         NEXT -> ActionEvent.NEXT
         STOP -> ActionEvent.STOP
+        LIKE -> ActionEvent.LIKE
     }
 
     companion object {
@@ -22,15 +24,22 @@ enum class ButtonId(val intentAction: String) {
 }
 
 object NotificationLayout {
-    /** Previous / play-or-pause / next, in that order. Nothing to show when stopped. */
-    fun buttons(kind: PlaybackKind, canNext: Boolean = true): List<ButtonId> = when (kind) {
-        PlaybackKind.PLAYING, PlaybackKind.BUFFERING -> listOf(ButtonId.PREVIOUS, ButtonId.PAUSE, ButtonId.NEXT)
-        PlaybackKind.PAUSED -> listOf(ButtonId.PREVIOUS, ButtonId.PLAY, ButtonId.NEXT)
-        PlaybackKind.STOPPED -> emptyList()
-    }.filter { it != ButtonId.NEXT || canNext }
+    /**
+     * Previous / play-or-pause / next, in that order, then Like when the track can be added to My music
+     * (`liked` is null for tracks that cannot: local files, nothing playing). Nothing to show when stopped.
+     */
+    fun buttons(kind: PlaybackKind, canNext: Boolean = true, liked: Boolean? = null): List<ButtonId> {
+        val transport = when (kind) {
+            PlaybackKind.PLAYING, PlaybackKind.BUFFERING -> listOf(ButtonId.PREVIOUS, ButtonId.PAUSE, ButtonId.NEXT)
+            PlaybackKind.PAUSED -> listOf(ButtonId.PREVIOUS, ButtonId.PLAY, ButtonId.NEXT)
+            PlaybackKind.STOPPED -> emptyList()
+        }.filter { it != ButtonId.NEXT || canNext }
+        return if (transport.isNotEmpty() && liked != null) transport + ButtonId.LIKE else transport
+    }
 
-    /** All three buttons stay visible in the collapsed notification. */
-    fun compactIndices(kind: PlaybackKind, canNext: Boolean = true): IntArray = IntArray(buttons(kind, canNext).size) { it }
+    /** The transport buttons stay visible in the collapsed notification; Like shows when it is expanded. */
+    fun compactIndices(kind: PlaybackKind, canNext: Boolean = true, liked: Boolean? = null): IntArray =
+        buttons(kind, canNext, liked).withIndex().filter { it.value != ButtonId.LIKE }.map { it.index }.toIntArray()
 
     /** Ongoing (not swipeable) only while the user wants sound. */
     fun isOngoing(kind: PlaybackKind): Boolean = kind.isActive

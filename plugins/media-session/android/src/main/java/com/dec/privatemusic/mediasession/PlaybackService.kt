@@ -147,12 +147,21 @@ class PlaybackService : Service() {
         val now = SystemClock.elapsedRealtime()
         val position = snapshot?.positionAt(now) ?: 0
         val mapped = PlaybackStateMapper.map(info, track != null, position)
-        session.setPlaybackState(
-            PlaybackStateCompat.Builder()
-                .setActions(mapped.actions)
-                .setState(mapped.state, mapped.positionMs, mapped.speed, now)
-                .build(),
-        )
+        val state = PlaybackStateCompat.Builder()
+            .setActions(mapped.actions)
+            .setState(mapped.state, mapped.positionMs, mapped.speed, now)
+        // Android 13+ builds the media controls from the session: Like is a custom action there.
+        val liked = MediaHub.liked
+        if (track != null && liked != null) {
+            state.addCustomAction(
+                PlaybackStateCompat.CustomAction.Builder(
+                    ButtonId.LIKE.intentAction,
+                    NotificationFactory.likeText(liked),
+                    if (liked) R.drawable.ic_media_liked else R.drawable.ic_media_like,
+                ).build(),
+            )
+        }
+        session.setPlaybackState(state.build())
         if (kind == PlaybackKind.STOPPED && track == null) shownTrack = null
     }
 
@@ -175,7 +184,7 @@ class PlaybackService : Service() {
 
     private fun currentNotification(): Notification {
         val kind = MediaHub.snapshot?.info?.kind ?: PlaybackKind.STOPPED
-        return notifications.build(session.sessionToken, MediaHub.track, kind, MediaHub.artwork, foreground, MediaHub.snapshot?.info?.canNext == true)
+        return notifications.build(session.sessionToken, MediaHub.track, kind, MediaHub.artwork, foreground, MediaHub.snapshot?.info?.canNext == true, MediaHub.liked)
     }
 
     private fun apply(decision: ForegroundPolicy.Decision) {
@@ -275,6 +284,9 @@ class PlaybackService : Service() {
         override fun onSeekTo(pos: Long) = MediaHub.emit(ActionEvent.seekTo(pos.coerceAtLeast(0) / 1000.0))
         override fun onFastForward() = MediaHub.emit(ActionEvent.seekBy(MediaKeyMapper.SEEK_STEP_SECONDS))
         override fun onRewind() = MediaHub.emit(ActionEvent.seekBy(-MediaKeyMapper.SEEK_STEP_SECONDS))
+        override fun onCustomAction(action: String?, extras: android.os.Bundle?) {
+            if (action == ButtonId.LIKE.intentAction) MediaHub.emit(ActionEvent.LIKE)
+        }
 
         override fun onMediaButtonEvent(mediaButtonEvent: Intent): Boolean {
             val event = IntentCompat.getParcelableExtra(mediaButtonEvent, Intent.EXTRA_KEY_EVENT, KeyEvent::class.java)

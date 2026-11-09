@@ -60,4 +60,19 @@ class NotificationLayoutTest {
         assertEquals(listOf(ButtonId.PREVIOUS, ButtonId.PLAY), NotificationLayout.buttons(PlaybackKind.PAUSED, false))
         assertArrayEquals(intArrayOf(0, 1), NotificationLayout.compactIndices(PlaybackKind.PLAYING, false))
     }
+
+    @Test
+    fun likeComesLastAndStaysOutOfTheCompactView() {
+        assertEquals(listOf(ButtonId.PREVIOUS, ButtonId.PAUSE, ButtonId.NEXT, ButtonId.LIKE), NotificationLayout.buttons(PlaybackKind.PLAYING, true, false))
+        assertEquals(listOf(ButtonId.PREVIOUS, ButtonId.PLAY, ButtonId.NEXT, ButtonId.LIKE), NotificationLayout.buttons(PlaybackKind.PAUSED, true, true))
+        assertArrayEquals(intArrayOf(0, 1, 2), NotificationLayout.compactIndices(PlaybackKind.PLAYING, true, true))
+        assertArrayEquals(intArrayOf(0, 1), NotificationLayout.compactIndices(PlaybackKind.PLAYING, false, true))
+    }
+
+    @Test
+    fun noLikeWithoutAKnownStateOrWhenStopped() {
+        assertEquals(listOf(ButtonId.PREVIOUS, ButtonId.PAUSE, ButtonId.NEXT), NotificationLayout.buttons(PlaybackKind.PLAYING, true, null))
+        assertTrue(NotificationLayout.buttons(PlaybackKind.STOPPED, true, true).isEmpty())
+        assertEquals(ActionEvent.LIKE, ButtonId.LIKE.toEvent())
+    }
 }

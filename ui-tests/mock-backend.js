@@ -359,6 +359,7 @@
     vk_report_playback: ({events}) => {state.listeningEvents=[...(state.listeningEvents||[]),...events];},
     set_playback_preferences: args => {state.playbackPreferences=args;},
     set_system_bars: args => {state.systemBarsDark=args.dark;},
+    set_media_liked: args => {state.mediaLiked=args.liked;},
     set_high_quality: ({on}) => {state.highQuality=on;},
     set_advance_on_error: ({on}) => {state.advanceOnError=on;},
     set_audio_processing:({settings})=>{state.audioProcessing=settings;},

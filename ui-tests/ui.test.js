@@ -512,24 +512,29 @@ test("design: accents preserve their colour and adapt for contrast on the neutra
 });
 
 test("design: secondary text stays readable on the page and on surfaces in both themes", async () => {
-  for (const scheme of ["light", "dark"]) {
+  for (const scheme of ["light", "dark"]) for (const style of ["ios", "premium"]) {
     const app = await openApp({ config: { signedIn: true }, colorScheme: scheme });
     try {
       const { page } = app;
+      await page.evaluate((s) => localStorage.setItem("pm-style", s), style);
+      await page.reload();
       await waitForLibrary(page);
       const colours = await page.evaluate(() => {
         const read = (css) => { const el = document.createElement("div"); el.style.cssText = css; document.body.append(el); const s = getComputedStyle(el); const out = [s.color, s.backgroundColor]; el.remove(); return out; };
         const root = getComputedStyle(document.documentElement);
         return {
           text2: read("color: var(--text-2); background: var(--surface)"),
+          pageBottomColor: read("background: var(--page-bottom)")[1],
           pageTop: root.getPropertyValue("--page-top").trim(), pageBottom: root.getPropertyValue("--page-bottom").trim(), surface: root.getPropertyValue("--surface").trim(),
         };
       });
-      assert.deepEqual([colours.pageTop, colours.pageBottom, colours.surface], scheme === "dark" ? ["#121212", "#080808", "#1e1e1e"] : ["#ffffff", "#f6f6f6", "#f4f4f4"]);
+      // The classic look keeps the iPhone app's exact palette; the default design derives its own from the accent.
+      if (style === "ios") assert.deepEqual([colours.pageTop, colours.pageBottom, colours.surface], scheme === "dark" ? ["#121212", "#080808", "#1e1e1e"] : ["#ffffff", "#f6f6f6", "#f4f4f4"]);
       const [fg, bg] = colours.text2.map(parseColor);
-      assert.ok(contrast(over(fg, bg), bg.slice(0, 3)) >= 4.5, `${scheme}: secondary text on a surface`);
-      const onPage = contrast(over(fg, hexColor(colours.pageBottom)), hexColor(colours.pageBottom));
-      assert.ok(onPage >= 4.5, `${scheme}: secondary text on the page ${onPage.toFixed(2)}`);
+      assert.ok(contrast(over(fg, bg), bg.slice(0, 3)) >= 4.5, `${scheme}/${style}: secondary text on a surface`);
+      const pageBg = parseColor(colours.pageBottomColor).slice(0, 3);
+      const onPage = contrast(over(fg, pageBg), pageBg);
+      assert.ok(onPage >= 4.5, `${scheme}/${style}: secondary text on the page ${onPage.toFixed(2)}`);
     } finally { await app.close(); }
   }
 });

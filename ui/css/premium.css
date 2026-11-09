@@ -1,4 +1,5 @@
-/* «Премиум» (Settings → App style: html[data-style="premium"]), on every platform and both layouts.
+/* The default app design, «Основной» (html[data-style="premium"]), on every platform and both layouts.
+   Apple HIG structure in our execution: large titles, inset groups, tint for the current destination, 44 pt targets.
    A quiet studio look: a soft ground tinted by the accent, white cards with hairline borders, one dark "hero"
    surface (the home mix, the mini player, the desktop player bar, toasts), Unbounded for screen titles and Onest
    for everything else. All colours derive from the chosen accent (nine presets or a custom colour), so the style
@@ -34,7 +35,7 @@ html[data-style="premium"], html[data-style="premium"][data-palette] {
   --pm-hero-2: color-mix(in srgb, var(--accent) 16%, #1C2420);     /* chips and buttons on the hero */
   --pm-on-hero: #FFFFFF;
   --pm-on-hero-2: color-mix(in srgb, var(--accent) 10%, #B7C0BA);
-  --pm-accent-hero: color-mix(in srgb, var(--accent) 55%, #FFFFFF);
+  --pm-accent-hero: color-mix(in srgb, var(--accent) 55%, #FFFFFF);   /* the accent on the dark hero surface */
   --pm-shadow-float: 0 1px 2px rgb(15 19 17 / 0.12), 0 10px 24px -8px rgb(15 19 17 / 0.30);
   --pm-shadow-card: 0 1px 2px rgb(15 19 17 / 0.05);
   --pm-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -72,6 +73,7 @@ html[data-style="premium"], html[data-style="premium"][data-palette] {
     --pm-on-accent-soft: color-mix(in srgb, var(--accent) 45%, #FFFFFF);
     --pm-hero: color-mix(in srgb, var(--accent) 16%, #1A221E);
     --pm-hero-2: color-mix(in srgb, var(--accent) 20%, #26302B);
+    --pm-accent-hero: var(--accent);
     --pm-shadow-float: 0 1px 2px rgb(0 0 0 / 0.45), 0 12px 28px -10px rgb(0 0 0 / 0.65);
     --pm-shadow-card: none;
     color-scheme: dark;
@@ -89,6 +91,7 @@ html[data-style="premium"][data-palette][data-theme="dark"] {
   --pm-on-accent-soft: color-mix(in srgb, var(--accent) 45%, #FFFFFF);
   --pm-hero: color-mix(in srgb, var(--accent) 16%, #1A221E);
   --pm-hero-2: color-mix(in srgb, var(--accent) 20%, #26302B);
+  --pm-accent-hero: var(--accent);
   --pm-shadow-float: 0 1px 2px rgb(0 0 0 / 0.45), 0 12px 28px -10px rgb(0 0 0 / 0.65);
   --pm-shadow-card: none;
   color-scheme: dark;
@@ -99,25 +102,27 @@ html[data-style="premium"] :focus-visible { outline: 2px solid var(--accent); ou
 html[data-style="premium"] ::selection { background: color-mix(in srgb, var(--accent) 28%, transparent); }
 
 /* -------------------------------------------------------------------------------- type, on both layouts */
-html[data-style="premium"] :is(.view-header h1, .profile-name, .stage-headline, .np-title) {
-  font-family: var(--pm-display); font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; text-wrap: balance;
-}
+/* Large titles (Apple HIG): Onest 800 with tight tracking. Unbounded is kept for the brand moment, the mix card. */
+html[data-style="premium"] :is(.view-header h1, .profile-name) { font-family: var(--font); font-weight: 800; letter-spacing: -0.025em; line-height: 1.2; text-wrap: balance; }
+html[data-style="premium"] .stage-headline { font-family: var(--pm-display); font-weight: 600; letter-spacing: -0.03em; line-height: 1.15; text-wrap: balance; }
+html[data-style="premium"] .np-title { font-family: var(--font); font-weight: 700; letter-spacing: -0.015em; line-height: 1.25; }
 html[data-style="premium"] :is(.shelf-title, .view h2) { font-family: var(--font); font-weight: 700; letter-spacing: -0.01em; }
+/* Grouped-list headers, as in iOS: 13 px, upper case, secondary colour. */
 html[data-style="premium"] :is(.group-label, .set-section > h2) {
-  font: 600 calc(12px * var(--text-scale, 1))/1 var(--font); letter-spacing: 0.08em; text-transform: uppercase; color: var(--pm-ink-2);
+  font: 400 calc(13px * var(--text-scale, 1))/1.3 var(--font); letter-spacing: 0.02em; text-transform: uppercase; color: var(--pm-ink-2);
 }
 html[data-style="premium"] .row .title { font-weight: 600; letter-spacing: -0.005em; }
 html[data-style="premium"] .row .artist, html[data-style="premium"] .row .meta { color: var(--pm-ink-2); }
 html[data-style="premium"] :is(.time, .duration, .count, .eq-value, .np-time, .stat-count) { font-variant-numeric: tabular-nums; }
 
 /* -------------------------------------------------------------------------------- shared components */
-/* Buttons: pills. Primary is the accent; secondary is a white pill with a hairline. */
+/* Buttons (HIG): rounded rectangles. Primary is filled with the accent; the rest are grey fills with accent text. */
 html[data-style="premium"] .btn {
-  border-radius: 999px; min-height: 44px; padding: 0 18px; border: 1px solid var(--pm-line-strong); background: var(--pm-surface);
-  color: var(--pm-ink); font: 600 calc(14px * var(--text-scale, 1))/1.2 var(--font); letter-spacing: 0; box-shadow: none; background-image: none;
+  border-radius: 12px; min-height: 44px; padding: 0 18px; border: 0; background: var(--pm-state);
+  color: var(--accent); font: 600 calc(15px * var(--text-scale, 1))/1.2 var(--font); letter-spacing: 0; box-shadow: none; background-image: none;
   transition: background-color 140ms var(--pm-ease), border-color 140ms var(--pm-ease), transform 120ms var(--pm-ease);
 }
-html[data-style="premium"] .btn:hover { background: var(--pm-surface-2); border-color: color-mix(in srgb, var(--pm-ink) 26%, transparent); }
+html[data-style="premium"] .btn:hover { background: var(--pm-state-press); }
 html[data-style="premium"] .btn:active { transform: scale(0.97); }
 html[data-style="premium"] .btn.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; box-shadow: none; background-image: none; }
 html[data-style="premium"] .btn.primary:hover { background: color-mix(in srgb, var(--accent) 90%, var(--pm-ink)); }
@@ -127,22 +132,22 @@ html[data-style="premium"] .btn.primary:disabled { background: color-mix(in srgb
 html[data-style="premium"] :is(.icon-btn, .circle-btn) { border-radius: 999px; }
 html[data-style="premium"] :is(.icon-btn, .circle-btn):hover { background: var(--pm-state); }
 
-/* Fields and search: white with a 1.5 px border that turns accent on focus. */
+/* Search (HIG): a filled field without a border; the focus ring is the accent. */
 html[data-style="premium"] .search-field {
-  border-radius: 999px; background: var(--pm-surface); border: 1.5px solid var(--pm-line-strong); box-shadow: none;
+  border-radius: 12px; background: var(--pm-state-press); border: 0; box-shadow: none;
   -webkit-backdrop-filter: none; backdrop-filter: none;
 }
-html[data-style="premium"] .search-field:focus-within { border-color: var(--accent); }
+html[data-style="premium"] .search-field:focus-within { box-shadow: 0 0 0 2px var(--accent); }
 html[data-style="premium"] .search-field .field { background: none; border: 0; box-shadow: none; }
 html[data-style="premium"] :is(select.field, input.field:not([type="search"]), textarea.field) {
   border-radius: 12px; border: 1.5px solid var(--pm-line-strong); background-color: var(--pm-surface); box-shadow: none;
 }
 html[data-style="premium"] :is(select.field, input.field, textarea.field):focus { border-color: var(--accent); outline: none; }
 
-/* Segmented tabs: a soft track with a white sliding thumb. */
-html[data-style="premium"] .tabs { background: color-mix(in srgb, var(--pm-ink) 6%, transparent); border-radius: 999px; padding: 3px; border: 0; }
-html[data-style="premium"] .tabs::before { border-radius: 999px; background: var(--pm-surface); box-shadow: 0 1px 3px rgb(15 19 17 / 0.14); top: 3px; bottom: 3px; }
-html[data-style="premium"] .tabs button { border-radius: 999px; font-weight: 600; color: var(--pm-ink-2); }
+/* Segmented control (HIG): a grey track with a white sliding thumb. */
+html[data-style="premium"] .tabs { background: var(--pm-state); border-radius: 10px; padding: 2px; border: 0; }
+html[data-style="premium"] .tabs::before { border-radius: 8px; background: var(--pm-surface); box-shadow: 0 1px 3px rgb(15 19 17 / 0.14); top: 2px; bottom: 2px; }
+html[data-style="premium"] .tabs button { border-radius: 8px; font-weight: 600; color: var(--pm-ink-2); }
 html[data-style="premium"] .tabs button[aria-selected="true"] { color: var(--pm-ink); background: none; box-shadow: none; }
 
 /* Switches: the accent when on, a strong hairline track when off. */
@@ -156,9 +161,9 @@ html[data-style="premium"] input[type="range"]::-webkit-slider-thumb {
   box-shadow: 0 0 0 1px rgb(15 19 17 / 0.12), 0 2px 6px rgb(15 19 17 / 0.28);
 }
 
-/* Cards, groups and summaries: white, a hairline, 20 px corners, no glow. */
+/* Inset groups (HIG): surface on the grouped background, 16 px corners, a hairline so white reads on light grey. */
 html[data-style="premium"] :is(.set-card, .group, .stat-list, .sync-panel, .dl-summary, .later-card, .lib-summary, .resume-card) {
-  background: var(--pm-surface); border: 1px solid var(--pm-line); border-radius: 20px; box-shadow: var(--pm-shadow-card);
+  background: var(--pm-surface); border: 1px solid var(--pm-line); border-radius: 16px; box-shadow: none;
 }
 html[data-style="premium"] :is(.lib-summary-ico, .group-ico, .set-icon) { border-radius: 12px; background: var(--pm-accent-soft); color: var(--pm-on-accent-soft); }
 html[data-style="premium"] .set-row + .set-row { border-top: 1px solid var(--pm-line); }
@@ -204,21 +209,20 @@ html[data-style="premium"][data-layout="phone"] .main::before { display: none; }
 html[data-style="premium"][data-layout="phone"] .navbar { background: var(--pm-bg); }
 html[data-style="premium"][data-layout="phone"] .navbar::after { background: var(--pm-line); }
 html[data-style="premium"][data-layout="phone"] .navbar .nav-title { font-family: var(--font); font-weight: 700; letter-spacing: -0.01em; }
-html[data-style="premium"][data-layout="phone"] .view-header h1 { font-size: calc(26px * var(--text-scale, 1)); line-height: 1.1; }
+html[data-style="premium"][data-layout="phone"] .view-header h1 { font-size: calc(34px * var(--text-scale, 1)); line-height: 1.2; }
 html[data-style="premium"][data-layout="phone"] :is(.shelf-title, .home-body .shelf-title, .mix-catalog .shelf-title) {
   font-size: calc(20px * var(--text-scale, 1)); line-height: 1.3; letter-spacing: -0.01em; margin-top: 24px;
 }
 
-/* Tab bar: a white bar with a hairline; the current destination sits in an accent-soft pill. */
+/* Tab bar (HIG): a white bar with a hairline; the current destination is tinted with the accent, no pill. */
 html[data-style="premium"][data-layout="phone"] .dock { background: var(--pm-surface); border-top: 1px solid var(--pm-line); padding-top: 8px; }
 html[data-style="premium"][data-layout="phone"] :is(.dock-tabs, .dock-searchwrap) { box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; background: transparent; }
 html[data-style="premium"][data-layout="phone"] :is(.dock-tab, .dock-tab.dock-search) { color: var(--pm-ink-2); gap: 4px; }
-html[data-style="premium"][data-layout="phone"] :is(.dock-tab .dock-ico, .dock-tab.dock-search .dock-ico) {
-  width: 64px; height: 32px; border-radius: 16px; transition: background-color 180ms var(--pm-ease);
-}
-html[data-style="premium"][data-layout="phone"] .dock-tab[aria-current="page"] { color: var(--pm-ink); }
-html[data-style="premium"][data-layout="phone"] .dock-tab[aria-current="page"] .dock-ico { background: var(--pm-accent-soft); color: var(--pm-on-accent-soft); box-shadow: none; }
-html[data-style="premium"][data-layout="phone"] .dock-label { font: 600 calc(12px * var(--text-scale, 1))/1.2 var(--font); letter-spacing: 0; }
+html[data-style="premium"][data-layout="phone"] :is(.dock-tab .dock-ico, .dock-tab.dock-search .dock-ico) { width: 34px; height: 28px; border-radius: 0; background: none; box-shadow: none; }
+html[data-style="premium"][data-layout="phone"] .dock-tab[aria-current="page"] { color: var(--accent); }
+html[data-style="premium"][data-layout="phone"] .dock-tab[aria-current="page"] .dock-ico { background: none; color: var(--accent); box-shadow: none; }
+html[data-style="premium"][data-layout="phone"] .dock-label { font: 500 calc(11px * var(--text-scale, 1))/1.2 var(--font); letter-spacing: 0; }
+html[data-style="premium"][data-layout="phone"] .dock-tab[aria-current="page"] .dock-label { font-weight: 600; }
 
 /* Mini player: the dark hero pill floating over the tab bar. */
 html[data-style="premium"][data-layout="phone"] .player {
@@ -255,11 +259,12 @@ html[data-style="premium"][data-layout="phone"] .stage-btn { background: var(--p
 html[data-style="premium"][data-layout="phone"] .stage-btn.on { color: var(--pm-accent-hero); }
 html[data-style="premium"][data-layout="phone"] .stage-controls > .stage-btn:first-child { background: var(--accent); color: var(--on-accent); }
 html[data-style="premium"][data-layout="phone"] .stage-track { color: var(--pm-on-hero); }
-html[data-style="premium"][data-layout="phone"] .home-body .explore-row { border-radius: 16px; background: var(--pm-surface); border: 1px solid var(--pm-line); }
+html[data-style="premium"][data-layout="phone"] .home-body .explore-row { border-radius: 16px; background: var(--pm-surface); border: 0; }
 
 /* Library filters: chips; the current one is filled with ink. */
+html[data-style="premium"][data-layout="phone"] .library-hub .lib-sections { gap: 6px; }
 html[data-style="premium"][data-layout="phone"] .library-hub .lib-sections button {
-  min-height: 36px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--pm-line-strong); background: var(--pm-surface);
+  min-height: 44px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--pm-line-strong); background: var(--pm-surface);
   color: var(--pm-ink); font: 500 calc(14px * var(--text-scale, 1))/1 var(--font); box-shadow: none;
 }
 html[data-style="premium"][data-layout="phone"] .library-hub .lib-sections button[aria-selected="true"] { background: var(--pm-ink); color: var(--pm-bg); border-color: transparent; font-weight: 600; }
@@ -288,14 +293,14 @@ html[data-style="premium"][data-layout="phone"] :is(.np-side, .ly, .np-queue) { 
 html[data-style="premium"][data-layout="wide"] .shell { gap: 8px; padding: 8px; background: var(--pm-ground); }
 html[data-style="premium"][data-layout="wide"] .sidebar { background: transparent; border: 0; box-shadow: none; padding: 8px 4px; -webkit-backdrop-filter: none; backdrop-filter: none; }
 html[data-style="premium"][data-layout="wide"] .nav button {
-  min-height: 44px; height: 44px; padding: 0 14px; gap: 12px; border-radius: 999px; color: var(--pm-ink-2);
+  min-height: 36px; height: 36px; padding: 0 10px; gap: 10px; border-radius: 10px; color: var(--pm-ink-2);
   font: 500 calc(14px * var(--text-scale, 1))/1.2 var(--font);
 }
 html[data-style="premium"][data-layout="wide"] .nav button:hover { background: var(--pm-state); color: var(--pm-ink); }
 html[data-style="premium"][data-layout="wide"] .nav button[aria-current="page"] { background: var(--pm-accent-soft); color: var(--pm-on-accent-soft); font-weight: 600; }
 html[data-style="premium"][data-layout="wide"] .nav button[aria-current="page"] .icon { color: var(--pm-on-accent-soft); }
 html[data-style="premium"][data-layout="wide"] .main { border-radius: 24px; background: var(--pm-surface-2); border: 1px solid var(--pm-line); box-shadow: none; }
-html[data-style="premium"][data-layout="wide"] .view-header h1 { font-size: calc(30px * var(--text-scale, 1)); line-height: 1.1; font-weight: 600; }
+html[data-style="premium"][data-layout="wide"] .view-header h1 { font-size: calc(30px * var(--text-scale, 1)); line-height: 1.2; font-weight: 800; }
 html[data-style="premium"][data-layout="wide"] :is(.shelf-title, .view h2) { font-size: calc(20px * var(--text-scale, 1)); line-height: 1.3; }
 html[data-style="premium"][data-layout="wide"] .row { border-radius: 12px; }
 html[data-style="premium"][data-layout="wide"] .row:hover { background: var(--pm-state); }
@@ -312,6 +317,8 @@ html[data-style="premium"][data-layout="wide"] .player :is(.title, .now-title) {
 html[data-style="premium"][data-layout="wide"] .player :is(.artist, .time, .now-artist) { color: var(--pm-on-hero-2); }
 html[data-style="premium"][data-layout="wide"] .player :is(.icon-btn, .controls button) { color: var(--pm-on-hero); }
 html[data-style="premium"][data-layout="wide"] .player :is(.icon-btn, .controls button):hover { background: var(--pm-hero-2); }
+/* A liked heart keeps the accent (its light variant on the dark bar), never the plain white of the other buttons. */
+html[data-style="premium"] .player .like.on { color: var(--accent); }
 html[data-style="premium"][data-layout="wide"] .player .controls .play {
   width: 48px; height: 48px; border-radius: 50%; background: var(--pm-on-hero); color: var(--pm-hero); box-shadow: none;
 }

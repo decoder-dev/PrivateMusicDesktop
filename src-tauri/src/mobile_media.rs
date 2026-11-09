@@ -36,6 +36,11 @@ pub fn attach_actions(handle: &AppHandle) {
     let worker = std::thread::Builder::new().name("media-actions".into()).spawn(move || {
         let ducker = bridge::Ducker::default();
         for action in actions {
+            // Like changes the library, which the UI owns: it gets the request and answers with set_media_liked.
+            if action == tauri_plugin_media_session::MediaAction::Like {
+                let _ = tauri::Emitter::emit(&target, "media-like", ());
+                continue;
+            }
             if let Some(state) = target.try_state::<AppState>() {
                 bridge::dispatch(state.app.controller(), &ducker, action);
             }

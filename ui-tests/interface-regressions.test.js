@@ -277,3 +277,35 @@ test('equaliser faders stay vertical on an Android WebView older than Chrome 124
   await page.waitForFunction(()=>window.__mock.state.eq?.[0]>0);assert.deepEqual(app.problems,[]);
  }finally{await app.close();}
 });
+
+test('phone player: a tap and a finger drag on the progress lane seek (the page handles touch itself)',async()=>{
+ const app=await openApp({config:{...config,platform:'android'},phone:true});
+ try{const {page}=app;await player(page);
+  const lane=page.locator('.np .np-seek input');await lane.waitFor();await page.waitForTimeout(400);
+  const box=await lane.boundingBox();const max=Number(await lane.getAttribute('max'));
+  await page.touchscreen.tap(box.x+box.width*0.75,box.y+box.height/2);
+  await page.waitForFunction(()=>window.__mock.calls.some(c=>c.command==='seek'));
+  let seconds=await page.evaluate(()=>window.__mock.last('seek').args.seconds);
+  assert.ok(Math.abs(seconds-max*0.75)<=max*0.03,`tap at 75% sought to ${seconds} of ${max}`);
+  const cdp=await page.context().newCDPSession(page);const y=box.y+box.height/2;
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:box.x+box.width*0.2,y}]});
+  for(const f of [0.3,0.4,0.5])await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:box.x+box.width*f,y:y+3}]});
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await page.waitForFunction(()=>window.__mock.calls.filter(c=>c.command==='seek').length>=2);
+  seconds=await page.evaluate(()=>window.__mock.last('seek').args.seconds);
+  assert.ok(Math.abs(seconds-max*0.5)<=max*0.03,`drag to 50% sought to ${seconds} of ${max}`);
+  assert.equal(await page.evaluate(()=>window.__mock.calls.filter(c=>c.command==='seek').length),2,'one seek per gesture');
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
+test('system media controls get a Like button that mirrors the current track and toggles it',async()=>{
+ const app=await openApp({config});
+ try{const {page}=app;await page.locator('.track-list .row, .row').first().dblclick();
+  await page.waitForFunction(()=>window.__mock.state.mediaLiked===false||window.__mock.state.mediaLiked===true);
+  const before=await page.evaluate(()=>window.__mock.state.mediaLiked);
+  await page.evaluate(()=>window.__mock.emit('media-like'));
+  await page.waitForFunction((b)=>window.__mock.state.mediaLiked===!b,before);
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});

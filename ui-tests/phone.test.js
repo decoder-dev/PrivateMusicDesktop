@@ -864,14 +864,17 @@ test("Studio on a phone: Onest, the window frame and the sidebar chrome are gone
         const shell = getComputedStyle(document.querySelector(".shell"));
         const dock = getComputedStyle(document.querySelector(".player-dock"));
         const root = getComputedStyle(document.documentElement);
-        return { font: getComputedStyle(document.body).fontFamily, mainBorder: main.borderTopWidth, mainRadius: main.borderTopLeftRadius, pad: shell.paddingTop, dock: dock.display, bg: main.backgroundColor, page: root.getPropertyValue("--page-top").trim() };
+        const probe = document.createElement("i"); probe.style.background = "var(--page-top)"; document.body.append(probe);
+        const pageColour = getComputedStyle(probe).backgroundColor; probe.remove();
+        return { font: getComputedStyle(document.body).fontFamily, mainBorder: main.borderTopWidth, mainRadius: main.borderTopLeftRadius, pad: shell.paddingTop, dock: dock.display, bg: main.backgroundColor, page: pageColour };
       });
       assert.match(s.font, /Onest/);
       assert.equal(s.mainBorder, "0px");
       assert.equal(s.mainRadius, "0px");
       assert.equal(s.pad, "0px");
       assert.equal(s.dock, "contents");
-      assert.equal(s.bg, colorScheme === "dark" ? "rgb(18, 18, 18)" : "rgb(255, 255, 255)");
+      // The page is painted from the --page-top token (whatever the active style sets it to).
+      assert.equal(s.bg, s.page);
     } finally { await app.close(); }
   }
 });

@@ -318,6 +318,7 @@ pub fn run() {
             commands::set_high_quality,
             commands::set_playback_preferences,
             commands::set_system_bars,
+            commands::set_media_liked,
             commands::vk_broadcast,
             commands::vk_report_playback,commands::month_plays,
             commands::lyrics, commands::lyrics_versions,

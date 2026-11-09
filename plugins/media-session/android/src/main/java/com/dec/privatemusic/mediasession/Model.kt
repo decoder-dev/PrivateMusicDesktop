@@ -52,6 +52,8 @@ data class ActionEvent(val name: String, val value: Any? = null, val source: Str
         val NEXT = ActionEvent("next")
         val PREVIOUS = ActionEvent("previous")
         val STOP = ActionEvent("stop")
+        /** Add the current track to My music, or remove it (the UI decides which). */
+        val LIKE = ActionEvent("like")
         fun seekTo(seconds: Double) = ActionEvent("seek_to", seconds)
         fun seekBy(seconds: Double) = ActionEvent("seek_by", seconds)
         fun duck(on: Boolean) = ActionEvent("duck", on)
