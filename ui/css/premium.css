@@ -241,8 +241,9 @@ html[data-style="premium"][data-layout="phone"] .player .now-art .art-box,
 html[data-style="premium"][data-layout="phone"] .player .cover-button .art-box { border-radius: 10px; box-shadow: none; }
 html[data-style="premium"][data-layout="phone"] .player :is(.icon-btn, .controls button) { color: var(--pm-on-hero); }
 html[data-style="premium"][data-layout="phone"] .player .controls .play { background: none; color: var(--pm-on-hero); box-shadow: none; }
-/* Inside the dark player the accent is its light variant: the progress line and focus rings stay visible. */
-html[data-style="premium"][data-layout="phone"] .player { --accent: var(--pm-accent-hero); }
+/* Inside the dark player the accent is its light variant and text tokens are the hero's: every control and the
+   progress line stay visible whatever rule styles them (the Next button reads --text). */
+html[data-style="premium"][data-layout] .player { --accent: var(--pm-accent-hero); --text: var(--pm-on-hero); --text-2: var(--pm-on-hero-2); }
 html[data-style="premium"][data-layout="phone"] .player .art-ph { color: var(--pm-on-hero-2); }
 
 /* Home: the mix card is the dark hero, with a light chip, a display headline and an accent start button. */
@@ -330,7 +331,6 @@ html[data-style="premium"][data-layout="wide"] .player .controls .play {
 }
 html[data-style="premium"][data-layout="wide"] .player .controls .play:hover { background: color-mix(in srgb, var(--pm-on-hero) 88%, var(--pm-hero)); }
 html[data-style="premium"][data-layout="wide"] .player .now-art .art-box { border-radius: 12px; }
-html[data-style="premium"][data-layout="wide"] .player { --accent: var(--pm-accent-hero); }
 
 /* Full-screen player on the wide window. */
 html[data-style="premium"][data-layout="wide"] .np-cover { border-radius: 28px; }
