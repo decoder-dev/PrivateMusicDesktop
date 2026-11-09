@@ -240,7 +240,7 @@ jobs:
     # Даже если clippy или Kotlin-тесты упали, APK уже собраны и их можно проверить на эмуляторе.
     if: ${{ !cancelled() && needs.build.outputs.debug_ready == 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     permissions:
       contents: read
       actions: read
@@ -309,7 +309,8 @@ jobs:
           adb shell pm list packages | grep "$PM_PACKAGE"
 
       - name: Emulator tests (the real app, over WebView DevTools)
-        timeout-minutes: 20
+        # The visual tour walks four passes (default light and dark, Material 3, classic) on top of the checks.
+        timeout-minutes: 32
         working-directory: scripts/android-emulator-tests
         env:
           PM_CLEAR: "1"

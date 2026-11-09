@@ -362,14 +362,14 @@ await step("10. no crash in the whole log, no uncaught page errors", async () =>
 // After every real check: the same UI with the test backend from ui-tests, so each screen can be reviewed
 // as the real Android WebView renders it (fonts, insets, scrolling). Screenshots land in $PM_OUT/tour-*.png.
 // Navigation timing differs from Chromium, so a missed screen only warns; a crash still fails step 10's rules.
-await step("11. visual tour: every phone screen with test data, captured from the device", async () => {
-  const { everyPhoneScreen, press } = await import(path.join(root, "ui-tests/phone-screen-walk.js"));
+/** The app page with the test backend from ui-tests (signed in, test data), in one scheme: light/dark use the
+ *  default design, "material" Material 3, "classic" the classic look. Init scripts do not survive a reconnect,
+ *  so every check that needs test data sets its page up here. */
+async function mockPage(scheme) {
   const mock = fs.readFileSync(path.join(root, "ui-tests/mock-backend.js"), "utf8");
   // The test backend must win over Tauri's own global, whichever script runs first.
   const pin = `(()=>{const m=window.__TAURI__;Object.defineProperty(window,"__TAURI__",{configurable:false,get:()=>m,set:()=>{}});})();`;
-  const captured = [];
-  // light and dark: the default design; then Material 3 and the classic look.
-  for (const scheme of ["light", "dark", "material", "classic"]) try {
+  {
     const tour = await freshPage();
     await tour.addInitScript(`window.__mockConfig=${JSON.stringify({ signedIn: true, catalogMixes: true, history: [1, 2, 3], platform: "android" })};`);
     await tour.addInitScript(mock + "\n" + pin);
@@ -381,6 +381,16 @@ await step("11. visual tour: every phone screen with test data, captured from th
     await tour.addInitScript(`try{if(sessionStorage.getItem("pm-tour")!=="${scheme}"){localStorage.clear();sessionStorage.setItem("pm-tour","${scheme}");}localStorage.setItem("pm.settings.v1",JSON.stringify({theme:"${theme}"}));localStorage.setItem("pm-style","${scheme === "material" ? "material" : scheme === "classic" ? "ios" : "premium"}")}catch{}`);
     await tour.reload();
     await tour.locator(".home-view .stage").first().waitFor({ timeout: 30_000 });
+    return tour;
+  }
+}
+
+await step("11. visual tour: every phone screen with test data, captured from the device", async () => {
+  const { everyPhoneScreen, press } = await import(path.join(root, "ui-tests/phone-screen-walk.js"));
+  const captured = [];
+  // light and dark: the default design; then Material 3 and the classic look.
+  for (const scheme of ["light", "dark", "material", "classic"]) try {
+    const tour = await mockPage(scheme);
     let index = 0;
     const shoot = async (screen) => {
       await sleep(250);
@@ -408,12 +418,7 @@ await step("11. visual tour: every phone screen with test data, captured from th
 // seek (a phone showed taps and drags there doing nothing). Runs on the tour page, so the test backend records it.
 await step("12. touch seeking in the full-screen player (adb input on the device)", async () => {
   const { press } = await import(path.join(root, "ui-tests/phone-screen-walk.js"));
-  const p = await freshPage();
-  await p.reload();
-  // The tour ends on another tab, and the app reopens the last one: go Home first.
-  await p.locator(".dock-tab").first().waitFor({ timeout: 30_000 });
-  await press(p.locator('.dock-tab[data-tab="home"]').first());
-  await p.locator(".home-view .stage").first().waitFor({ timeout: 30_000 });
+  const p = await mockPage("touch-seek");
   await press(p.locator(".stage-cta").first());
   await press(p.locator(".player .now").first());
   const lane = p.locator(".np .np-seek input");
