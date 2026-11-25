@@ -54,6 +54,20 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.run_prepare()
         self.assertFalse(self.out.exists())
 
+    def test_installers_publish_when_the_updater_key_was_not_used(self):
+        for path in list(self.parts.iterdir()):
+            if path.name.endswith('.sig') or path.name.endswith('.tar.gz'):
+                path.unlink()
+        self.run_prepare()
+        names = sorted(path.name for path in self.out.iterdir())
+        self.assertIn('PrivateMusic_0.6.6_windows-x64-setup.exe', names)
+        self.assertIn('PrivateMusic_0.6.6_linux-amd64.deb', names)
+        self.assertIn('PrivateMusic_0.6.6_linux-amd64.AppImage', names)
+        self.assertIn('PrivateMusic_0.6.6_macos-universal.dmg', names)
+        self.assertIn('PrivateMusic_0.6.6_android-arm64.apk', names)
+        self.assertFalse((self.out / 'latest.json').exists())
+        self.assertTrue((self.out / 'UPDATER_DISABLED').is_file())
+
     def test_unsigned_android_is_not_published_as_installable(self):
         apk = next(self.android.iterdir())
         apk.rename(apk.with_name('PrivateMusic_0.6.6_android-arm64-unsigned.apk'))
