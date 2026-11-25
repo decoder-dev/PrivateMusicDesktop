@@ -72,7 +72,7 @@ export function createQueueView() {
 
   function render() {
     dirty = false;
-    screen.setTracks(store.queue.tracks);
+    screen.setTracks(store.queue.tracks, { preserveScroll: true });
   }
 
   subscribe("queue", () => {

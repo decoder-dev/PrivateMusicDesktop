@@ -20,6 +20,9 @@
 .list { position: relative; flex: 1 1 auto; overflow-y: auto; min-height: 0; padding-bottom: var(--clear); }
 .list .spacer { position: relative; width: 100%; }
 .list .window { position: absolute; left: 0; right: 0; }
+/* Recycled rows must not be scroll anchors: Chrome (and Android WebView) otherwise
+   pulls the scroller back toward the top when the window replaces them. */
+.list, .list .spacer, .list .window, .list .row { overflow-anchor: none; }
 .view.state-on > .list, .tab-pane.state-on > .list { display: none; }
 
 .row {

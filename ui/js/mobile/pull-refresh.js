@@ -28,7 +28,22 @@ export function attachPullToRefresh(scroller, onRefresh) {
   let refreshing = false;
   let armed = false;
 
-  const set = (px) => scroller.style.setProperty("--pull", `${px}px`);
+  // `ptr-offset` is what allows the CSS translate. It must not stay on after the
+  // gesture: a leftover translateY(0) resets the WebView scroll position.
+  const set = (px) => {
+    scroller.style.setProperty("--pull", `${px}px`);
+    if (px > 0) scroller.classList.add("ptr-offset");
+  };
+  let settleTimer = 0;
+  function dropOffset() {
+    if (pulling || refreshing || (parseFloat(scroller.style.getPropertyValue("--pull")) || 0) > 0) return;
+    scroller.classList.remove("ptr-offset");
+    scroller.removeEventListener("transitionend", onOffsetEnd);
+    clearTimeout(settleTimer);
+  }
+  function onOffsetEnd(event) {
+    if (event.propertyName === "transform") dropOffset();
+  }
   function state(next) {
     indicator.dataset.state = next;
     label.textContent = next === "loading" ? t("ptr.loading") : next === "ready" ? t("ptr.release") : t("ptr.pull");
@@ -36,11 +51,20 @@ export function attachPullToRefresh(scroller, onRefresh) {
   state("idle");
 
   function settle() {
+    const pull = parseFloat(scroller.style.getPropertyValue("--pull")) || 0;
     scroller.classList.remove("pulling");
-    set(0);
+    scroller.style.setProperty("--pull", "0px");
     pulling = false;
     armed = false;
     indicator.dataset.state = "idle";
+    if (pull <= 0 || matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      dropOffset();
+      return;
+    }
+    scroller.classList.add("ptr-offset");
+    scroller.addEventListener("transitionend", onOffsetEnd);
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(dropOffset, 400);
   }
 
   scroller.addEventListener("touchstart", (event) => {

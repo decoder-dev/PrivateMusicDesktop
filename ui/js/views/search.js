@@ -252,7 +252,8 @@ export function createSearchView({ play, onTrackAction, toast }) {
       const merged=uniqueTracks(results.concat(page.items));
       nextOffset = merged.length>results.length?advancingOffset(page.next_offset,offset):null;
       results=merged;
-      screen.setTracks(results);
+      // The person is already reading this list. Replacing it must not send them back to the top.
+      screen.setTracks(results, { preserveScroll: true });
     } catch (error) {
       if (mine === sequence) toast(errorText(error), { error: true });
     } finally {

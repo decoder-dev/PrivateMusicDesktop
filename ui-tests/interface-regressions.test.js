@@ -344,6 +344,49 @@ for (const layout of ['phone','wide']) test(`search (${layout}): history keeps q
  }finally{await app.close();}
 });
 
+for (const layout of ['phone','wide']) test(`search (${layout}): scrolling results stays put when the next page arrives`,async()=>{
+ const {app,page,field}=await openSearch(layout);
+ try{await field.fill('рок');await field.press('Enter');
+  await page.locator('.main > .view:not([hidden]) .row').first().waitFor();
+  const scroller = layout==='phone' ? '.main > .view:not([hidden])' : '.main > .view:not([hidden]) .list';
+  const placed=await page.evaluate(async(selector)=>{
+   const view=document.querySelector(selector);
+   const samples=[];
+   for (const y of [240,640,1100]) {
+    view.scrollTop=y;
+    view.dispatchEvent(new Event('scroll'));
+    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+    const edge=view.getBoundingClientRect().top+8;
+    const row=[...view.querySelectorAll('.row')].find(el=>{const r=el.getBoundingClientRect();return r.bottom>edge && r.top<edge+80;});
+    samples.push({y,top:view.scrollTop,title:row?.querySelector('.title')?.textContent??''});
+   }
+   const transform=getComputedStyle(document.querySelector('.main > .view:not([hidden])').firstElementChild).transform;
+   return {samples,transform};
+  },scroller);
+  for (const sample of placed.samples) {
+   assert.ok(Math.abs(sample.top-sample.y)<2,JSON.stringify(placed));
+   // The phone page starts with the large title, so a short scroll may not reach a row yet.
+   if (sample.y>=640) {
+    assert.match(sample.title,/^рок \d+$/,JSON.stringify(placed));
+    assert.notEqual(sample.title,'рок 1',JSON.stringify(placed));
+   }
+  }
+  if (layout==='phone') assert.equal(placed.transform,'none',JSON.stringify(placed));
+  const before=await page.evaluate((selector)=>{
+   const view=document.querySelector(selector);
+   view.scrollTop=Math.max(0,view.scrollHeight-view.clientHeight-80);
+   return view.scrollTop;
+  },scroller);
+  assert.ok(before>400,`list was not scrolled (${before})`);
+  await page.evaluate(async()=>{const {publish}=await import('/js/store.js');publish('likes');publish('downloads');});
+  await page.waitForFunction((offset)=>window.__mock.calls.filter(c=>c.command==='search').some(c=>c.args.offset>=offset),50);
+  await page.waitForTimeout(80);
+  const after=await page.evaluate((selector)=>document.querySelector(selector).scrollTop,scroller);
+  assert.ok(after>before-120,`scroll jumped ${before} → ${after}`);
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
 test('search (phone): results keep loading while the screen scrolls down',async()=>{
  const {app,page,field}=await openSearch('phone');
  try{await field.fill('рок');await field.press('Enter');

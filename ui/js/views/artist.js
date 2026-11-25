@@ -117,7 +117,7 @@ export function createArtistView({ play, onTrackAction, toast, back }) {
       if (mine !== generation) return;
       const known = new Set(trackItems.map((track) => `${track.owner_id}_${track.track_id}`));
       trackItems = trackItems.concat(page.items.filter((track) => !known.has(`${track.owner_id}_${track.track_id}`)));
-      tracks.setTracks(trackItems);
+      tracks.setTracks(trackItems, { preserveScroll: true });
       fitTracks(trackItems.length);
       trackNextOffset = page.next_offset;
     } catch (error) {

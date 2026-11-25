@@ -80,9 +80,12 @@ html[data-layout="phone"] .tab-pane { display: block; }
 html[data-layout="phone"] .artist-tracks .list { height: auto !important; }
 html[data-layout="phone"] .view > .status:not(.progress):not(.loading), html[data-layout="phone"] .view > .empty-state,
 html[data-layout="phone"] .tab-pane > .status:not(.progress):not(.loading), html[data-layout="phone"] .tab-pane > .empty-state { flex: none; padding-top: 48px; }
-/* Dragging a screen down from its top is pull to refresh (js/mobile/pull-refresh.js). */
-html[data-layout="phone"] .main > .view > :not(.ptr) { transform: translateY(var(--pull, 0px)); }
-html[data-layout="phone"] .main > .view:not(.pulling) > :not(.ptr) { transition: transform 280ms var(--ease-ios); }
+/* Dragging a screen down from its top is pull to refresh (js/mobile/pull-refresh.js).
+   The offset exists only while `ptr-offset` is set. A permanent translateY(0) on every
+   child makes Android WebView drop scrollTop back to the top whenever a virtual list
+   rewrites its rows, which is what happened while scrolling search results. */
+html[data-layout="phone"] .main > .view.ptr-offset > :not(.ptr) { transform: translateY(var(--pull, 0px)); }
+html[data-layout="phone"] .main > .view.ptr-offset:not(.pulling) > :not(.ptr) { transition: transform 280ms var(--ease-ios); }
 html[data-layout="phone"] .main > .view.pulling { overflow-y: hidden; }
 html[data-layout="phone"] .ptr {
   position: absolute; top: 0; left: 0; right: 0; height: 52px; display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -237,7 +240,7 @@ html[data-layout="phone"] .release-row > *, html[data-layout="phone"] .mix-grid 
 
 /* ---------- reduced motion: the screens just change ---------- */
 @media (prefers-reduced-motion: reduce) {
-  html[data-layout="phone"] .main > .view > :not(.ptr) { transition: none !important; }
+  html[data-layout="phone"] .main > .view.ptr-offset > :not(.ptr) { transition: none !important; }
 }
 
 /* ---------- desktop-only parts are not shown on Android ---------- */

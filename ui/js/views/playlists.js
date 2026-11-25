@@ -75,7 +75,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
       onPlay: play,
       onAction: onTrackAction,
       canBatchRemove:()=>!!current && isOwn(current),
-      onBatchRemove:async items=>{const playlist=current;if(!playlist || !isOwn(playlist))return;try{await removeSelected(items,async track=>{await api.removeFromPlaylist(playlist,track);changeCount(playlist,-1);tracks=tracks.filter(other=>!sameTrack(other,track));});}finally{if(current===playlist)detail.setTracks(tracks);}},
+      onBatchRemove:async items=>{const playlist=current;if(!playlist || !isOwn(playlist))return;try{await removeSelected(items,async track=>{await api.removeFromPlaylist(playlist,track);changeCount(playlist,-1);tracks=tracks.filter(other=>!sameTrack(other,track));});}finally{if(current===playlist)detail.setTracks(tracks,{preserveScroll:true});}},
       onMenu: (track, at, index) => openTrackMenu(track, at, current && isOwn(current)
         ? [{ label: t("menu.removeFrom"), action: "remove-from-playlist", icon: "trash", destructive: true, run: () => removeTrack(track, index) }]
         : []),
@@ -178,7 +178,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
       if (all === null) return;
       tracks = all;
       detail.clearStatus();
-      detail.setTracks(all);
+      detail.setTracks(all, { preserveScroll: true });
     } catch (error) {
       if (mine === detailGeneration) detail.setStatus(errorText(error), { error: true });
       toast(errorText(error), { error: true });
@@ -256,7 +256,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
       await api.removeFromPlaylist(playlist, track);
       if (playlist !== current) return;
       tracks = tracks.filter((_, i) => i !== index);
-      detail.setTracks(tracks);
+      detail.setTracks(tracks, { preserveScroll: true });
       changeCount(playlist, -1);
       toast(t("pl.removed", { title: playlist.title }), {
         action: { label: t("toast.undo"), run: () => undoRemove(playlist, track, index) },
@@ -273,7 +273,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
       changeCount(playlist, 1);
       if (playlist === current || (current && same(playlist, current))) {
         tracks = [...tracks.slice(0, index), track, ...tracks.slice(index)];
-        detail.setTracks(tracks);
+        detail.setTracks(tracks, { preserveScroll: true });
       }
     } catch (error) {
       toast(errorText(error), { error: true });

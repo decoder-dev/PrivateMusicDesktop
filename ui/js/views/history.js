@@ -42,7 +42,7 @@ export function createHistoryView({ play, onTrackAction, toast, openTrackMenu })
       if (mine !== generation) return;
       tracks = entries.map((entry) => entry.track);
       screen.clearStatus();
-      screen.setTracks(tracks);
+      screen.setTracks(tracks, { preserveScroll: true });
       clearButton.disabled = tracks.length === 0;
     } catch (error) {
       if (mine === generation) screen.setStatus(errorText(error), { error: true });
@@ -53,7 +53,7 @@ export function createHistoryView({ play, onTrackAction, toast, openTrackMenu })
     try {
       await api.historyRemove(trackKey(track));
       tracks = tracks.filter((other) => trackKey(other) !== trackKey(track));
-      screen.setTracks(tracks);
+      screen.setTracks(tracks, { preserveScroll: true });
       clearButton.disabled = tracks.length === 0;
       toast(t("history.removed"));
     } catch (error) {

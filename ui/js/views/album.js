@@ -118,7 +118,7 @@ export function createAlbumView({ play, onTrackAction, toast, back }) {
         offset = next;
       }
       tracks.clearStatus();
-      tracks.setTracks(collected);
+      tracks.setTracks(collected, { preserveScroll: true });
       listenButton.hidden = shuffleButton.hidden = collected.length === 0;
     } catch (error) {
       if (mine !== generation) return;

@@ -136,7 +136,7 @@ export function createFriendsView({ play, onTrackAction, toast }) {
       });
       if (all === null) return;
       tracks.clearStatus();
-      tracks.setTracks(all);
+      tracks.setTracks(all, { preserveScroll: true });
     } catch (error) {
       if (mine !== friendGeneration) return;
       tracks.setStatus(friendError(error), { error: true });
@@ -202,7 +202,7 @@ export function createFriendsView({ play, onTrackAction, toast }) {
       });
       if (all === null) return;
       playlistTracks.clearStatus();
-      playlistTracks.setTracks(all);
+      playlistTracks.setTracks(all, { preserveScroll: true });
     } catch (error) {
       if (mine !== playlistToken) return;
       playlistTracks.setStatus(friendError(error), { error: true });

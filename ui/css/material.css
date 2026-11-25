@@ -153,7 +153,8 @@ html[data-style="material"][data-layout="phone"] .tabs button[aria-selected="tru
 html[data-style="material"][data-layout="phone"] .lib-sections button[aria-selected="true"]::after { bottom: 0; height: 3px; left: 8px; right: 8px; border-radius: 3px 3px 0 0; }
 
 /* ---- списки и карточки ---- */
-html[data-style="material"][data-layout="phone"] .row { margin: 0; padding-left: 16px; grid-template-columns: 48px minmax(0, 1fr) auto auto 48px; column-gap: 16px; min-height: 64px; }
+html[data-style="material"][data-layout="phone"] { --row: 64px; }
+html[data-style="material"][data-layout="phone"] .row { margin: 0; padding-left: 16px; grid-template-columns: 48px minmax(0, 1fr) auto auto 48px; column-gap: 16px; min-height: var(--row); height: var(--row); }
 html[data-style="material"][data-layout="phone"] .row .art-box { --art-size: 48px; border-radius: 8px; }
 html[data-style="material"][data-layout="phone"] .row + .row::after, html[data-style="material"][data-layout="phone"] .window > .row:not(:first-child)::after { display: none; }
 html[data-style="material"][data-layout="phone"] .row .title { font: 400 calc(16px * var(--text-scale, 1))/calc(24px * var(--text-scale, 1)) var(--font); letter-spacing: 0.5px; }

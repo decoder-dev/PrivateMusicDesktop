@@ -56,7 +56,7 @@ export function createDownloadsView({ play, onTrackAction, toast }) {
 
   function render() {
     const { tracks, bytes } = downloads();
-    screen.setTracks(tracks);
+    screen.setTracks(tracks, { preserveScroll: true });
     summary.hidden = tracks.length === 0;
     sizeText.textContent = formatSize(bytes);
     countText.textContent = `${tn("library.count", tracks.length)} · ${t("dl.offline")}`;

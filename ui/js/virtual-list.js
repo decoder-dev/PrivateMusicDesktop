@@ -51,10 +51,18 @@ export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
     return spacer.getBoundingClientRect().top - scrolling.getBoundingClientRect().top + scrolling.scrollTop;
   }
 
+  // Строка в CSS (`--row`) и шаг виртуального списка должны совпадать. Иначе на Material 3
+  // (64 px) окно рисует строки поверх друг друга и прокрутка прыгает.
+  function itemHeight() {
+    const styled = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row"));
+    return Number.isFinite(styled) && styled > 0 ? styled : rowHeight;
+  }
+
   function render(force = true) {
     if(disposed) return;
     if(force) dirty=true;
     force=dirty;
+    const rowHeight = itemHeight();
     // Высота списка известна, даже когда он скрыт: при показе размер меняется и ResizeObserver перерисовывает.
     spacer.style.height = `${items.length * rowHeight}px`;
     // Список, которого нет на экране (отображение: нет), ничего не рисует; ResizeObserver ниже
@@ -108,8 +116,10 @@ export function createVirtualList({ rowHeight, renderRow, onRowEvent }) {
   root.addEventListener("scroll", schedule, { passive: true });
   const observer = new ResizeObserver(schedule);
   observer.observe(root);
+  const styleObserver = new MutationObserver(schedule);
+  styleObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-style", "data-layout"] });
   own(() => {
-    disposed=true;observer.disconnect();
+    disposed=true;observer.disconnect();styleObserver.disconnect();
     if(frame)cancelAnimationFrame(frame);
     root.removeEventListener("scroll",schedule);
     pageScroller?.removeEventListener("scroll",schedule);

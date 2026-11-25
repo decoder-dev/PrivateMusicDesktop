@@ -30,7 +30,7 @@ export function createLibraryView({ play, onTrackAction, toast }) {
     if (!loaded) return;
     if (added) tracks = [added, ...tracks.filter((t) => trackKey(t) !== trackKey(added))];
     if (removed) tracks = tracks.filter((t) => trackKey(t) !== trackKey(removed));
-    screen.setTracks(tracks);
+    screen.setTracks(tracks, { preserveScroll: true });
   });
 
   async function load() {

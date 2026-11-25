@@ -31,7 +31,7 @@ export function createLocalAudioView({play,onTrackAction,openTrackMenu,toast}) {
   screen.header.after(h('div',{class:'import-body local-audio-intro'},h('p',{class:'import-note',text:t('local.description')}),choose,status));
   async function load(){
     const mine=++request;
-    try {const records=await api.localAudio();if(!disposed && mine===request)screen.setTracks(records.map(record=>record.track));}
+    try {const records=await api.localAudio();if(!disposed && mine===request)screen.setTracks(records.map(record=>record.track),{preserveScroll:true});}
     catch(error){if(!disposed && mine===request)status.textContent=errorText(error);}
   }
   async function importFiles(){

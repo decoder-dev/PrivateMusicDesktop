@@ -452,9 +452,12 @@ test("pull to refresh: a drag down at the top of Home reloads it, and the browse
     assert.equal(await page.evaluate(() => window.__mock.count("recommendations")), 1);
     const finger = await drag(page, { x: 200, y: 200 }, { x: 200, y: 520 }, { steps: 16, end: false });
     assert.equal(await page.locator(".home-view .ptr").evaluate((n) => n.dataset.state), "ready");
+    assert.notEqual(await page.evaluate(() => getComputedStyle(document.querySelector(".home-view > :not(.ptr)")).transform), "none");
     await finger.release();
     await page.waitForFunction(() => window.__mock.count("recommendations") === 2);
     await page.waitForFunction(() => document.querySelector(".home-view .ptr").dataset.state === "idle");
+    // The offset animates back, then the translate is removed so later scrolling cannot jump.
+    await page.waitForFunction(() => getComputedStyle(document.querySelector(".home-view > :not(.ptr)")).transform === "none");
     // Library: the same on the Library tab.
     await tab(page, "library");
     await page.waitForFunction(() => window.__mock.count("playlists") >= 1);
