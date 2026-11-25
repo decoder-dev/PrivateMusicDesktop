@@ -1,3 +1,4 @@
+import { radioSnapshot } from "./radio-snapshot.js";
 import { PALETTES } from "./themes.js";
 // Что сохраняется при перезапуске: громкость, перемешивание, повтор и последняя очередь. Хранится в
 // собственном localStorage окна; здесь никогда не хранятся никакие учетные данные.
@@ -95,7 +96,7 @@ function trim(track) {
   };
 }
 
-export function saveQueue(tracks, index, position) {
+export function saveQueue(tracks, index, position, radio = null) {
   if (!tracks.length || index == null || index < 0 || index >= tracks.length) {
     try { localStorage.removeItem(QUEUE); } catch { /* хранилище может быть недоступно */ }
     return;
@@ -106,7 +107,7 @@ export function saveQueue(tracks, index, position) {
     start = Math.max(0, Math.min(index - 50, tracks.length - MAX_SAVED));
     end = start + MAX_SAVED;
   }
-  write(QUEUE, { tracks: tracks.slice(start, end).map(trim), index: index - start, position });
+  write(QUEUE, { tracks: tracks.slice(start, end).map(trim), index: index - start, position, radio: radioSnapshot(radio) });
 }
 
 export function loadQueue() {
@@ -114,7 +115,7 @@ export function loadQueue() {
   if (!saved || !Array.isArray(saved.tracks) || !saved.tracks.length) return null;
   const index = Number.isInteger(saved.index) ? saved.index : 0;
   if (index < 0 || index >= saved.tracks.length) return null;
-  return { tracks: saved.tracks, index, position: Number.isFinite(saved.position) ? saved.position : 0 };
+  return { tracks: saved.tracks, index, position: Number.isFinite(saved.position) ? saved.position : 0, radio: radioSnapshot(saved.radio) };
 }
 
 export function clearQueue() {

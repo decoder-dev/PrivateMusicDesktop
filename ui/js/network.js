@@ -296,6 +296,8 @@ async function connectivityBack() {
           else showChip(t("net.failed"), "failed");
           return;
         }
+        // Сессия недействительна: API ответил, но это не «связь восстановлена».
+        return;
       }
     }
     if (mine === connectionGeneration) confirmedBack(store.session.signed_in);

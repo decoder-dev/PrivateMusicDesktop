@@ -611,6 +611,9 @@ impl Shared {
             self.start_current(inner, events);
         } else {
             self.cancel_recovery(inner, events);
+            // Следующее нажатие Play снова может взять файл с диска. Иначе один сбой
+            // офлайн-копии навсегда предпочитает сеть.
+            inner.refreshed.clear();
             inner.status = Status::Idle;
             self.remote().stop();
             events.push(UiEvent::State(inner.state()));
@@ -1101,7 +1104,7 @@ impl Controller {
     /// же позиция, полный набор попыток.
     pub fn retry(&self) {
         self.shared.with(|inner, events| {
-            if inner.queue.current().is_none() || inner.source_offline {
+            if inner.queue.current().is_none() {
                 return;
             }
             let position = inner.position;

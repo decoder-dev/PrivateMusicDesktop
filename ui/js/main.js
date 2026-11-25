@@ -597,7 +597,12 @@ async function applyStartupState() {
     set("player", state);
     if (state.queue_len === 0) {
       const saved = loadQueue();
-      if (saved) await api.loadQueue(saved.tracks, saved.index, saved.position);
+      if (saved) {
+        if (saved.radio) await api.restoreRadio(saved.radio, saved.tracks, saved.index, saved.position);
+        else await api.loadQueue(saved.tracks, saved.index, saved.position);
+        // Выход мог случиться, пока очередь читалась с диска.
+        if (shell !== activeShell || !store.session.signed_in) return;
+      }
     }
   } catch (error) {
     toast(errorText(error), { error: true });
@@ -652,6 +657,10 @@ function onBackendEvent(event) {
         set("session", session);
         signedOut();
         toast(t("error.unauthorized"), { error: true });
+      }).catch(() => {
+        set("session", { signed_in: false, profile: null, persistent: true });
+        signedOut();
+        toast(t("error.unauthorized"), { error: true });
       });
       break;
   }
@@ -662,13 +671,13 @@ function scheduleQueueSave(state) {
   const now = Date.now();
   if (now - lastQueueSave < 5000 || !state.track) return;
   lastQueueSave = now;
-  saveQueue(store.queue.tracks, state.queue_index, state.position);
+  saveQueue(store.queue.tracks, state.queue_index, state.position, state.radio_context);
 }
 
 subscribe("queue", ({ tracks, current }) => {
   lastQueueSave = Date.now();
   const sameTrack = tracks[current] && store.player.track && trackKey(tracks[current]) === trackKey(store.player.track);
-  saveQueue(tracks, current, sameTrack ? store.player.position : 0);
+  saveQueue(tracks, current, sameTrack ? store.player.position : 0, store.player.radio_context);
 });
 
 // ------------------------------------------------------------------ ярлыки

@@ -210,7 +210,12 @@ impl OfflineStore {
         };
         let mut index = self.lock();
         let previous = index.insert(track.id(), entry.clone());
-        self.write_index(&index)?;
+        if let Err(error) = self.write_index(&index) {
+            index.remove(&track.id());
+            if let Some(previous) = previous { index.insert(previous.track.id(), previous); }
+            let _ = fs::remove_file(self.dir.join(&entry.file));
+            return Err(error);
+        }
         if let Some(previous) = previous.filter(|old| old.file != entry.file) {
             let _ = fs::remove_file(self.dir.join(&previous.file));
         }
@@ -250,6 +255,17 @@ mod tests {
             stream_url: Some("https://cdn.example/x.m3u8".into()), artwork_url: None, access_key: Some("k".into()),
             lyrics_id: None, is_hq: false, track_code: None, artists: Vec::new(), album: None,
         }
+    }
+
+    #[test]
+    fn a_failed_index_write_removes_the_new_file_and_keeps_the_old_index() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = OfflineStore::open(dir.path()).unwrap();
+        fs::create_dir(dir.path().join(INDEX)).unwrap();
+        let error = store.save(&track(7, 1), ElementaryKind::Mp3, b"audio").unwrap_err();
+        assert!(matches!(error, Error::Stream(_)));
+        assert!(store.list().is_empty(), "the in-memory index rolls back");
+        assert!(!dir.path().join("7_1.mp3").exists(), "the audio file is not left without an index");
     }
 
     #[test]

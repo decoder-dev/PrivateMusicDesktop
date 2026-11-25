@@ -2839,11 +2839,13 @@ test("product: tuned mix identities, playlist locators and restored track metada
    const valid=playlistLink('https://vk.com/music?z=audio_playlist-123_456_key%2Ftest');
    const invalid=['https://evil.example/playlist/-123_456','https://vk.com@evil.example/playlist/-123_456','https://vk.com/playlist/0_1','https://vk.com/playlist/1_0','https://vk.com:444/playlist/-1_2'].every(url=>{try{playlistLink(url);return false;}catch{return true;}});
    const track={track_id:1,owner_id:7,title:'t',artist:'a',duration:200,artists:[{id:'artist1',name:'a'}],album:{album_id:12,owner_id:-1,title:'album'},stream_url:'secret-expiring-url'};
-   saveQueue([track],0,73);const saved=loadQueue();
-   return {a,b,c,colors:new Set(colors).size,valid,invalid,mood:moodMatch('Desktop stop',['top']),saved};
+   const radio={source:{kind:'catalog',mix_id:'common',options:null},next_offset:40};
+   saveQueue([track],0,73,{source:radio.source,next_offset:40,secret:'drop-me'});const saved=loadQueue();
+   saveQueue([track],0,1,{source:{kind:'nope'},next_offset:1});const dropped=loadQueue();
+   return {a,b,c,colors:new Set(colors).size,valid,invalid,mood:moodMatch('Desktop stop',['top']),saved,radio,dropped};
   });
   assert.equal(output.a,output.b);assert.notEqual(output.a,output.c);assert.ok(output.colors>=10);assert.equal(output.valid.owner_id,-123);assert.equal(output.valid.access_key,'key');assert.equal(output.invalid,true);assert.equal(output.mood,false);
-  assert.equal(output.saved.position,73);assert.equal(output.saved.tracks[0].album.album_id,12);assert.equal(output.saved.tracks[0].artists[0].id,'artist1');assert.equal(output.saved.tracks[0].stream_url,null);assert.deepEqual(app.problems,[]);
+  assert.equal(output.saved.position,73);assert.equal(output.saved.tracks[0].album.album_id,12);assert.equal(output.saved.tracks[0].artists[0].id,'artist1');assert.equal(output.saved.tracks[0].stream_url,null);assert.deepEqual(output.saved.radio,output.radio);assert.equal(output.dropped.radio,null);assert.deepEqual(app.problems,[]);
  }finally{await app.close();}
 });
 

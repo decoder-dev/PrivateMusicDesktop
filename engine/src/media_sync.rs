@@ -144,6 +144,9 @@ pub fn apply(controller: &Controller, action: MediaAction) {
         MediaAction::Play => match state.status {
             Status::Paused => controller.resume(),
             Status::Idle => controller.toggle(),
+            // Гарнитура и экран блокировки шлют Play, пока трек ещё грузится. Пустой
+            // ответ оставлял воспроизведение висеть; повтор стартует текущий трек заново.
+            Status::Loading | Status::Buffering => controller.retry(),
             _ => {}
         },
         MediaAction::Pause => {
