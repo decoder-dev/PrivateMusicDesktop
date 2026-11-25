@@ -5,6 +5,22 @@ import {openApp} from './harness.js';
 const config={signedIn:true,catalogMixes:true};
 async function player(page){await page.locator('.stage-cta').click();await page.locator('.player .now').click();await page.locator('.np:not([hidden])').waitFor();}
 
+test('quiet stage is the default: warm page, serif titles, previous styles still selectable',async()=>{
+ const app=await openApp({config});
+ try{const {page}=app;
+  await page.waitForFunction(()=>document.documentElement.dataset.style==='stage');
+  const look=await page.evaluate(()=>{const h=document.querySelector('h1');const s=getComputedStyle(h);return {bg:getComputedStyle(document.body).backgroundColor,font:s.fontFamily,weight:s.fontWeight};});
+  assert.equal(look.bg,'rgb(243, 240, 232)',JSON.stringify(look));
+  assert.match(look.font,/Iowan|Palatino/);
+  await page.locator('.nav [data-view="settings"]').click();
+  await page.getByRole('combobox',{name:'Вид приложения',exact:true}).selectOption('premium');
+  await page.waitForFunction(()=>document.documentElement.dataset.style==='premium');
+  const classic=await page.evaluate(()=>getComputedStyle(document.body).backgroundColor);
+  assert.notEqual(classic,'rgb(243, 240, 232)');
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
 test('titles: desktop title follows the active section and resets on sign out',async()=>{
  const app=await openApp({config});
  try{const {page}=app;await page.waitForFunction(()=>document.title==='Моя музыка — Private Music');
