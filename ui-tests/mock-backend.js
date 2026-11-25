@@ -277,12 +277,12 @@
       return { categories: [{ type: "mood", title: "Настроение", options: config.noMoodSettings ? [] : [{ id: "calm", title: "Спокойствие" }, { id: "energy", title: "Энергия" }] }] };
     },
     mix: async () => {
-      await delay(20);
+      await delay(config.mixDelay ?? 20);
       if (config.forYouFails) throw { kind: "offline", message: "No internet connection." };
       return Array.from({ length: 100 }, (_, i) => makeTrack(7000 + i, { title: `Микс ${i + 1}` }));
     },
     catalog_mixes: async () => {
-      await delay(10);
+      await delay(config.catalogDelay ?? 10);
       if (config.catalogFails) throw { kind: "offline", message: "No internet connection." };
       if (config.noCatalog) return [];
       const common = { id: "common", title: "Мой микс", subtitle: "", artwork_url: null, section_title: null, options: null };
@@ -303,7 +303,7 @@
         makeAlbum(35, { title: "  " }),
       ];
     },
-    recommendations: async () => { await delay(20); return Array.from({ length: 30 }, (_, i) => makeTrack(8000 + i, { title: `Рек ${i + 1}` })); },
+    recommendations: async () => { await delay(config.recsDelay ?? 20); return Array.from({ length: 30 }, (_, i) => makeTrack(8000 + i, { title: `Рек ${i + 1}` })); },
     similar: async ({ track }) => {
       await delay(10);
       if (config.noSimilar) return [];

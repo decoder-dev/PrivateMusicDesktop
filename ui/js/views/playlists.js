@@ -71,7 +71,7 @@ export function createPlaylistsView({ play, onTrackAction, toast, openTrackMenu,
     hero: true,
     kicker: t("playlists.kicker"),
     hooks: {
-      emptyText: t("library.empty"),
+      emptyText: t("playlists.noTracks"),
       onPlay: play,
       onAction: onTrackAction,
       canBatchRemove:()=>!!current && isOwn(current),

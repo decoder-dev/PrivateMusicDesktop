@@ -13,7 +13,7 @@ import { removeSelected } from "../batch-remove.js";
 import { trackKey } from "../api.js";
 import { accountId } from "../personal.js";
 
-addStrings({ ru: { "queue.clearNext": "Очистить следующие", "queue.up": "Выше в очереди", "queue.down": "Ниже в очереди" }, en: { "queue.clearNext": "Clear up next", "queue.up": "Move up", "queue.down": "Move down" } });
+addStrings({ ru: { "queue.clearNext": "Очистить следующие", "queue.up": "Выше в очереди", "queue.down": "Ниже в очереди" }, en: { "queue.clearNext": "Clear upcoming", "queue.up": "Move up", "queue.down": "Move down" } });
 addStrings({ru:{"queue.history":"Предыдущие очереди","queue.undo":"Восстановить"},en:{"queue.history":"Previous queues","queue.undo":"Restore"}});
 addStrings({ru:{"queue.changed":"Очередь изменена"},en:{"queue.changed":"Queue changed"}});
 
