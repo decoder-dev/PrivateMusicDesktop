@@ -103,3 +103,20 @@ html[data-style="stage"] .mini,
 html[data-style="stage"] .player {
   border-radius: var(--r-card);
 }
+
+/* Меню, листы, диалоги, тосты и вход используют ту же поверхность, без стеклянного размытия. */
+html[data-style="stage"] :is(.menu, .dialog, .sheet, .toast, .tooltip, .login .box) {
+  background-color: var(--surface);
+  color: var(--text);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+html[data-style="stage"] :is(.login h1, .dialog h2, .sheet-title, .empty-state, .status) {
+  font-family: var(--font-display);
+}
+html[data-style="stage"] :is(.empty-state, .status, .login p) { color: var(--text-2); }
+html[data-style="stage"] .player-dock .player,
+html[data-layout="phone"][data-style="stage"] .player {
+  background: var(--surface);
+  color: var(--text);
+}
