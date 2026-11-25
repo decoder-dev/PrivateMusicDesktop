@@ -174,7 +174,7 @@ export function createFriendsView({ play, onTrackAction, toast }) {
     hero: true,
     kicker: t("playlists.kicker"),
     hooks: {
-      emptyText: t("library.empty"),
+      emptyText: t("playlists.noTracks"),
       onPlay: play,
       onAction: onTrackAction,
       back: backButton(t("playlists.back"), () => closePlaylist()),

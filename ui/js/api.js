@@ -134,7 +134,9 @@ export const api = {
 // Списки, поиск и полки делят два слота. Иначе старт телефона сразу бьёт в VK
 // библиотекой, плейлистами, альбомами, рекомендациями, миксами, релизами и историей.
 const catalogueGate = createCatalogueGate(2);
-for (const name of ["library", "playlists", "playlistTracks", "search", "searchArtists", "searchAlbums", "recommendations", "catalogMixes", "newReleases", "mix", "streamMix", "history", "followedAlbums", "friends", "friendTracks", "friendPlaylists", "artistTracks", "artistAlbums", "albumTracks", "similar", "lyrics", "lyricsVersions"]) {
+// mix, streamMix, similar, lyrics and lyricsVersions stay immediate: they start
+// playback or open the lyrics the person just asked for.
+for (const name of ["library", "playlists", "playlistTracks", "search", "searchArtists", "searchAlbums", "recommendations", "catalogMixes", "newReleases", "history", "followedAlbums", "friends", "friendTracks", "friendPlaylists", "artistTracks", "artistAlbums", "albumTracks"]) {
   const call = api[name];
   api[name] = (...args) => catalogueGate(() => call(...args));
 }
