@@ -84,6 +84,10 @@ const english = {
   "Удалить из моей музыки?": "Remove from my music?",
   "Удалить скачанные файлы?": "Remove downloaded files?",
   "Удалить записи истории?": "Remove history entries?",
-  "Удалить выбранное из очереди?": "Remove selected queue items?"
+  "Удалить выбранное из очереди?": "Remove selected queue items?",
+  "−0,5 с": "−0.5 s",
+  "+0,5 с": "+0.5 s",
+  "{n} строк с таймингом": "{n} timed lines",
+  "без тайминга": "no timing",
 };
 export const ft = (text,values={}) => (locale === "en" ? english[text] ?? text : text).replace(/\{(\w+)\}/g,(_,key)=>values[key] ?? `{${key}}`);

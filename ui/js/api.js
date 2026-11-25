@@ -1,4 +1,5 @@
 import { invoke } from "./bridge.js";
+import { createCatalogueGate } from "./catalogue-gate.js";
 
 // Каждый вызов преобразуется в данные или отклоняется с помощью { kind, message }.
 export const api = {
@@ -129,6 +130,14 @@ export const api = {
   /** «Повторить» для воспроизведения, остановленного из-за проблемы с подключением. */
   retryPlayback: () => invoke("retry_playback"),
 };
+
+// Списки, поиск и полки делят два слота. Иначе старт телефона сразу бьёт в VK
+// библиотекой, плейлистами, альбомами, рекомендациями, миксами, релизами и историей.
+const catalogueGate = createCatalogueGate(2);
+for (const name of ["library", "playlists", "playlistTracks", "search", "searchArtists", "searchAlbums", "recommendations", "catalogMixes", "newReleases", "mix", "streamMix", "history", "followedAlbums", "friends", "friendTracks", "friendPlaylists", "artistTracks", "artistAlbums", "albumTracks", "similar", "lyrics", "lyricsVersions"]) {
+  const call = api[name];
+  api[name] = (...args) => catalogueGate(() => call(...args));
+}
 
 export const trackKey = (track) => `${track.owner_id}_${track.track_id}`;
 
