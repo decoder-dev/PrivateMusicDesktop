@@ -45,6 +45,24 @@ test("the English queue offers to clear upcoming tracks", async () => {
   } finally { await app.close(); }
 });
 
+test("small phone lyric tools stay inside the screen at 1.3 text scale", async () => {
+  const app = await openApp({ config: { signedIn: true, catalogMixes: true, platform: "android" }, phone: "small" });
+  try {
+    const { page } = app;
+    await page.locator(".stage-cta").click();
+    await page.locator(".player .now").click();
+    await page.locator(".np:not([hidden])").waitFor();
+    await page.evaluate(() => document.documentElement.style.setProperty("--text-scale", "1.3"));
+    await page.getByRole("button", { name: "Текст", exact: true }).click();
+    await page.locator(".ly-edit-controls button", { hasText: "Сбросить" }).waitFor();
+    const clipped = await page.evaluate(() => [...document.querySelectorAll(".ly-edit-controls button")].filter((el) => {
+      const box = el.getBoundingClientRect();
+      return box.width > 0 && (box.right > innerWidth + 1 || box.left < -1);
+    }).map((el) => el.textContent));
+    assert.deepEqual(clipped, []);
+  } finally { await app.close(); }
+});
+
 test("starting the home mix is not held behind slow catalogue shelves", async () => {
   const app = await openApp({
     config: { signedIn: true, platform: "android", catalogMixes: true, recsDelay: 4000, catalogDelay: 4000 },

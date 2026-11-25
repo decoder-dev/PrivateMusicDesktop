@@ -77,7 +77,7 @@ test("phone: platform and layout are set on <html>, the sidebar gives way to the
     assert.equal(await page.locator(".sidebar").isVisible(), false);
     assert.equal(await page.locator(".dock").isVisible(), true);
     assert.deepEqual(await page.locator(".dock-tab").evaluateAll((nodes) => nodes.map((n) => n.dataset.tab)), ["home", "library", "profile", "search"]);
-    assert.equal(await page.locator('meta[name="theme-color"]').getAttribute("content"), "#ffffff");
+    assert.equal(await page.locator('meta[name="theme-color"]').getAttribute("content"), "#f3f0e8");
     assert.deepEqual(app.problems, []);
   } finally { await app.close(); }
 });
@@ -717,13 +717,13 @@ test("dark theme and another accent apply on the phone layout", async () => {
   const app = await phoneApp({ colorScheme: "dark" });
   try {
     const { page } = app;
-    assert.equal(await page.locator('meta[name="theme-color"]').getAttribute("content"), "#000000");
+    assert.equal(await page.locator('meta[name="theme-color"]').getAttribute("content"), "#121410");
     await tab(page, "profile");
     await tap(page, '[data-row="settings"]');
     await tap(page, '.accent-opt[data-v="green"]');
     assert.equal(await page.evaluate(() => document.documentElement.dataset.accent), "green");
     await tap(page, '.theme-opt[data-v="light"]');
-    await page.waitForFunction(() => document.querySelector('meta[name="theme-color"]').content === "#ffffff");
+    await page.waitForFunction(() => document.querySelector('meta[name="theme-color"]').content === "#f3f0e8");
   } finally { await app.close(); }
 });
 

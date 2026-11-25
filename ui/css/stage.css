@@ -156,6 +156,14 @@ html[data-style="stage"] .login-art .tile.a {
   background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 72%, #6b5344), color-mix(in srgb, var(--accent) 40%, #3d3228));
 }
 html[data-style="stage"] .ly-control { min-height: 44px; }
+/* На узком телефоне ряд правок текста не должен обрезать «Сбросить» за краем экрана. */
+html[data-layout="phone"] .ly-edit-controls {
+  flex-wrap: wrap;
+  overflow: visible;
+  justify-content: flex-start;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
 html[data-style="stage"] .login-art .tile.b {
   background: linear-gradient(145deg, color-mix(in srgb, var(--text) 22%, var(--surface)), color-mix(in srgb, var(--accent) 28%, #2c332c));
 }

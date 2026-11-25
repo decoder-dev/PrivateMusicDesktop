@@ -86,6 +86,14 @@ function syncKeyboard() {
 // ------------------------------------------------- status bar / theme-color
 
 let themeMeta = null;
+function hexColor(value) {
+  const text = String(value).trim();
+  if (/^#[0-9a-f]{6}$/i.test(text)) return text.toLowerCase();
+  const match = text.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  if (!match) return null;
+  return `#${match.slice(1, 4).map((part) => Number(part).toString(16).padStart(2, "0")).join("")}`;
+}
+
 /** Keeps <meta name="theme-color"> equal to the page background so the Android status bar blends in. */
 export function syncThemeColor() {
   themeMeta ??= document.querySelector('meta[name="theme-color"]:not([media])') ?? (() => {
@@ -94,17 +102,19 @@ export function syncThemeColor() {
     document.head.append(meta);
     return meta;
   })();
-  // Dark/light follow the same rules as tokens.css: forced theme first, then the system.
-  const forced = root.dataset.theme;
-  const dark = forced ? forced === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
-  const color = dark ? "#000000" : "#ffffff";
-  if (themeMeta.content !== color) themeMeta.content = color;
+  // Quiet stage (and every other style) paints the page itself. The status bar follows that colour.
+  const variable = getComputedStyle(document.documentElement).getPropertyValue("--page-top").trim();
+  const color = hexColor(variable) ?? hexColor(getComputedStyle(document.body).backgroundColor);
+  if (color && themeMeta.content !== color) themeMeta.content = color;
 }
 
 export function initLayout() {
   apply();
   syncKeyboard();
   syncThemeColor();
+  // The first call can run before the style attribute's colours are computed.
+  requestAnimationFrame(syncThemeColor);
+  window.addEventListener("load", syncThemeColor);
   window.addEventListener("resize", () => { apply(); syncKeyboard(); });
   window.addEventListener("orientationchange", apply);
   matchMedia("(pointer: coarse)").addEventListener?.("change", apply);
@@ -112,7 +122,7 @@ export function initLayout() {
   document.addEventListener("focusin", syncKeyboard);
   document.addEventListener("focusout", () => setTimeout(syncKeyboard, 0));
   window.visualViewport?.addEventListener("resize", syncKeyboard);
-  new MutationObserver(syncThemeColor).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+  new MutationObserver(() => requestAnimationFrame(syncThemeColor)).observe(root, { attributes: true, attributeFilter: ["data-theme", "data-style", "data-palette"] });
 }
 
 /** A short tick for the moments the iOS app gives haptics (like, long press). Silent where unsupported. */
