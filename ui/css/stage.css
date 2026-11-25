@@ -119,4 +119,42 @@ html[data-style="stage"] .player-dock .player,
 html[data-layout="phone"][data-style="stage"] .player {
   background: var(--surface);
   color: var(--text);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: var(--sh-bar);
+}
+
+/* Телефон: док, шапка и мини-плеер — сплошная поверхность, без стекла и акцентного свечения. */
+html[data-style="stage"][data-layout="phone"] .main::before { display: none; }
+html[data-style="stage"][data-layout="phone"] .dock {
+  background: var(--page-top);
+  border-top: 1px solid var(--line);
+}
+html[data-style="stage"][data-layout="phone"] :is(.dock-tabs, .dock-searchwrap, .navbar) {
+  background: var(--page-top);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+html[data-style="stage"][data-layout="phone"] .dock-tab[aria-current="page"] .dock-ico {
+  background: transparent;
+  box-shadow: none;
+  color: var(--accent);
+}
+html[data-style="stage"] .login .box {
+  padding: 28px 22px 22px;
+  border-radius: var(--r-card);
+  border: 1px solid var(--line);
+  box-shadow: var(--sh-card);
+}
+html[data-style="stage"] .btn.primary,
+html[data-style="stage"][data-layout="phone"] .btn.primary {
+  background-image: none;
+  box-shadow: none;
+}
+html[data-style="stage"] .login-art .tile.a {
+  background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 72%, #6b5344), color-mix(in srgb, var(--accent) 40%, #3d3228));
+}
+html[data-style="stage"] .login-art .tile.b {
+  background: linear-gradient(145deg, color-mix(in srgb, var(--text) 22%, var(--surface)), color-mix(in srgb, var(--accent) 28%, #2c332c));
 }
