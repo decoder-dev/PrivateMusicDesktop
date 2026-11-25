@@ -55,7 +55,7 @@ import { formDialog } from "./dialog.js";
 import { ensurePlaylists, ownPlaylists, addPlaylist, changeCount, forgetPlaylists } from "./my-playlists.js";
 import { loadSettings, saveSettings, saveQueue, loadQueue, clearQueue } from "./persist.js";
 import { handleBackendEvent as networkEvent, isNetworkError, setReloader, initNetwork, resetNetwork } from "./network.js";
-import { initLayout, isPhone, isAndroid, onLayoutChange, setPlatform } from "./mobile/layout.js";
+import { initLayout, isPhone, isAndroid, onLayoutChange, setPlatform, syncThemeColor } from "./mobile/layout.js";
 import "./mobile/style.js";
 import "./mobile/np-theme.js";
 import { onBack } from "./mobile/back.js";
@@ -88,6 +88,8 @@ function applyAppearance() {
   if (settings.theme === "system") delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = settings.theme;
   document.documentElement.dataset.accent = settings.accent;
+  syncThemeColor();
+  requestAnimationFrame(syncThemeColor);
   applyCustomAccent(document.documentElement, settings.accent, settings.accentCustom);
   document.documentElement.dataset.haptics=settings.haptics?"on":"off";
   document.documentElement.dataset.homeStage=settings.homeStage?"on":"off";
