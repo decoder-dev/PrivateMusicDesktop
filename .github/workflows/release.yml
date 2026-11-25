@@ -176,6 +176,8 @@ jobs:
     needs: version
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    outputs:
+      signing: ${{ steps.key.outputs.mode }}
     env:
       NDK_VERSION: 27.2.12479018
     steps:
@@ -212,19 +214,32 @@ jobs:
             printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$path"
             chmod 600 "$path"
             echo "path=$path" >> "$GITHUB_OUTPUT"
+            echo "mode=release" >> "$GITHUB_OUTPUT"
             echo "The four signing secrets are set: the APK will be signed by Gradle."
           else
-            echo "::error::All four ANDROID signing secrets are required to publish an installable APK."
-            exit 1
+            echo "::warning::ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD are not all set. The APK will be signed with a temporary debug key and will not update a release-signed install."
+            echo "mode=debug" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build release APK (arm64)
         env:
-          ANDROID_KEYSTORE_PATH: ${{ steps.key.outputs.path }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEYSTORE_PATH: ${{ steps.key.outputs.mode == 'release' && steps.key.outputs.path || '' }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ steps.key.outputs.mode == 'release' && secrets.ANDROID_KEYSTORE_PASSWORD || '' }}
+          ANDROID_KEY_ALIAS: ${{ steps.key.outputs.mode == 'release' && secrets.ANDROID_KEY_ALIAS || '' }}
+          ANDROID_KEY_PASSWORD: ${{ steps.key.outputs.mode == 'release' && secrets.ANDROID_KEY_PASSWORD || '' }}
         run: scripts/android-build.sh release aarch64 dist
+
+      - name: Debug-sign when the release keystore is not configured
+        if: steps.key.outputs.mode == 'debug'
+        run: |
+          set -euo pipefail
+          . scripts/android-ci-env.sh >/dev/null
+          mapfile -t unsigned < <(find dist -maxdepth 1 -type f -name '*-unsigned.apk' | sort)
+          [ "${#unsigned[@]}" -eq 1 ]
+          version="$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)"
+          signed="dist/PrivateMusic_${version}_android-arm64.apk"
+          scripts/android-debug-sign.sh "${unsigned[0]}" "$signed"
+          rm -f "${unsigned[0]}"
 
       - name: Remove the signing key
         if: always()
@@ -287,11 +302,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.version.outputs.tag }}
           REPO: ${{ github.repository }}
+          SIGNING: ${{ needs.android.outputs.signing }}
         run: |
           notes="docs/releases/${TAG#v}.md"
           if [ ! -f "$notes" ]; then
             notes="$RUNNER_TEMP/release-notes.md"
             printf '%s\n' "Private Music ${TAG#v}: Windows, macOS, Linux and Android." > "$notes"
+          fi
+          if [ "$SIGNING" = "debug" ]; then
+            cat >> "$notes" <<'EOF'
+
+> **Подпись Android.** Секреты `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` и `ANDROID_KEY_PASSWORD` не заданы, поэтому APK подписан временным отладочным ключом этой сборки. Файл устанавливается, но не обновляет уже установленную копию, и следующий выпуск не встанет поверх него. Постоянный ключ нужен, чтобы обновления с GitHub Releases сохраняли данные; как его создать, написано в docs/android.md.
+EOF
           fi
           gh release create "$TAG" out/* --repo "$REPO" --target "$GITHUB_SHA" --latest \
             --title "Private Music ${TAG#v}" --notes-file "$notes"

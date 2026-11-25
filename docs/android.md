@@ -50,10 +50,23 @@ Release builds are signed only when all four variables are set:
     ANDROID_KEYSTORE_PATH  ANDROID_KEYSTORE_PASSWORD  ANDROID_KEY_ALIAS  ANDROID_KEY_PASSWORD
 
 Otherwise Gradle prints a warning and the release APK is **unsigned**
-(zipaligned), with no fallback key. No keystore or password is ever stored in
-the repository. Sign afterwards:
+(zipaligned). No keystore or password is ever stored in the repository.
+Sign afterwards, always with the same key:
 
-    $ANDROID_HOME/build-tools/35.0.0/apksigner sign --ks <jks> --ks-key-alias <alias> app-universal-release-unsigned.apk
+    $ANDROID_HOME/build-tools/35.0.0/apksigner sign --ks release.jks --ks-key-alias privatemusic app-universal-release-unsigned.apk
+
+Create that keystore once and keep a backup outside the repository:
+
+    keytool -genkeypair -v -keystore release.jks -storetype PKCS12 \
+      -keyalg RSA -keysize 2048 -validity 10000 -alias privatemusic \
+      -dname "CN=Private Music, O=Private Music, C=US"
+    base64 -w0 release.jks
+
+GitHub Actions secrets for the release workflow (the base64 text is
+`ANDROID_KEYSTORE_BASE64`; the other three are the store password, the alias
+`privatemusic` and the key password):
+
+    ANDROID_KEYSTORE_BASE64  ANDROID_KEYSTORE_PASSWORD  ANDROID_KEY_ALIAS  ANDROID_KEY_PASSWORD
 
 Always use the **same key**: Android installs an update over the previous
 version only when the signature matches, and only then do the app's data (the
@@ -214,14 +227,17 @@ is higher: it grows with the version, `0.6.1` = 601). A different key means unin
 removes the signed-in session. Keep the keystore and its passwords backed up: without the key there are no
 updates for the installed copies.
 
-Release signing in CI requires **all four** repository secrets. The `Android APK` job signs the APK itself
+Release signing uses **all four** repository secrets. The `Android APK` job signs the APK itself
 (Gradle reads them; the key is a temporary file removed at the end) and the asset is named
 `PrivateMusic_<version>_android-arm64.apk` without "unsigned":
 
-    ANDROID_KEYSTORE_BASE64    the .jks file, base64 (`base64 -w0 release.jks`)
+    ANDROID_KEYSTORE_BASE64    the keystore file, base64 (`base64 -w0 release.jks`)
     ANDROID_KEYSTORE_PASSWORD  ANDROID_KEY_ALIAS  ANDROID_KEY_PASSWORD
 
-With any of them missing the release job fails instead of publishing an uninstallable APK. Standalone
+If any secret is missing, the job still publishes an installable APK, but it is signed with a
+**temporary debug key** created for that run and the GitHub release notes say so. That APK installs
+on a phone, will not update a copy signed with the stable key, and the next release will not install
+over it. Standalone
 Android CI still builds unsigned test artifacts. The shared release waits for all
 platform builds, including Android: a failed Android build prevents publication of a partial release.
 
