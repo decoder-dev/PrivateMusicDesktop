@@ -186,12 +186,12 @@ html[data-layout="phone"] .lib-grid { grid-template-columns: repeat(auto-fill, m
 html .hero-art:has(.art-box:is([data-art="missing"], [data-art="error"])) { display: none; }
 /* With no cover, the classic design keeps the title and controls as the player content; the default and Material designs
    show a tonal tile with a note glyph the size of a cover (as Apple Music and YouTube Music do). */
-html:not([data-style="premium"], [data-style="material"]) .np-cover:has(.np-placeholder) { visibility: hidden; box-shadow: none; background: transparent; }
-html:not([data-style="premium"], [data-style="material"]) .np[data-mode="off"] .np-main:has(.np-placeholder) { display: flex; flex-direction: column; justify-content: center; }
-html:not([data-style="premium"], [data-style="material"]) .np[data-mode="off"] .np-cover:has(.np-placeholder) { display: none; }
-html:is([data-style="premium"], [data-style="material"]) .np-cover:has(.np-placeholder) { background: color-mix(in srgb, var(--np-fg) 8%, transparent); box-shadow: none; }
-html:is([data-style="premium"], [data-style="material"]) .np-placeholder { color: color-mix(in srgb, var(--np-fg) 45%, transparent); }
-html:is([data-style="premium"], [data-style="material"]) .np-placeholder svg { width: 32%; height: auto; }
+html:not([data-style="premium"], [data-style="material"], [data-style="stage"]) .np-cover:has(.np-placeholder) { visibility: hidden; box-shadow: none; background: transparent; }
+html:not([data-style="premium"], [data-style="material"], [data-style="stage"]) .np[data-mode="off"] .np-main:has(.np-placeholder) { display: flex; flex-direction: column; justify-content: center; }
+html:not([data-style="premium"], [data-style="material"], [data-style="stage"]) .np[data-mode="off"] .np-cover:has(.np-placeholder) { display: none; }
+html:is([data-style="premium"], [data-style="material"], [data-style="stage"]) .np-cover:has(.np-placeholder) { background: color-mix(in srgb, var(--np-fg) 8%, transparent); box-shadow: none; }
+html:is([data-style="premium"], [data-style="material"], [data-style="stage"]) .np-placeholder { color: color-mix(in srgb, var(--np-fg) 45%, transparent); }
+html:is([data-style="premium"], [data-style="material"], [data-style="stage"]) .np-placeholder svg { width: 32%; height: auto; }
 html[data-layout="phone"] .stage:has(.art-box[data-art="missing"], .art-box[data-art="error"]) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "chip" "title" "start" "controls"; }
 html[data-layout="phone"] .stage-art:has(.art-box[data-art="missing"], .art-box[data-art="error"]) { display: none; }
 /* A short loading label avoids decorative skeletons and continuous repainting. */
