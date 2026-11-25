@@ -98,10 +98,21 @@ jobs:
         shell: bash
         working-directory: src-tauri
         # В пакет npm входит готовый CLI: никакого десятиминутного `cargo install`.
+        # Без ключа обновлений установщики всё равно собираются. Подписи нужны только
+        # для обновления из уже установленного приложения.
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: npx --yes @tauri-apps/cli@2 build --config '{"bundle":{"createUpdaterArtifacts":true}}' --bundles ${{ matrix.bundles }} ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+        run: |
+          set -euo pipefail
+          args=(npx --yes @tauri-apps/cli@2 build --bundles ${{ matrix.bundles }})
+          if [ -n "${{ matrix.target }}" ]; then args+=(--target "${{ matrix.target }}"); fi
+          if [ -n "${TAURI_SIGNING_PRIVATE_KEY}" ]; then
+            args+=(--config '{"bundle":{"createUpdaterArtifacts":true}}')
+          else
+            echo "::warning::TAURI_SIGNING_PRIVATE_KEY is not set. Installers will be published without in-app update signatures."
+          fi
+          "${args[@]}"
 
       - name: Sign desktop updater packages (including DEB)
         shell: bash
@@ -111,6 +122,10 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           set -euo pipefail
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY}" ]; then
+            echo "No updater key: skipping signatures."
+            exit 0
+          fi
           find target -type f \( -name '*-setup.exe' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.app.tar.gz' \) -path '*/release/bundle/*' -print0 | while IFS= read -r -d '' file; do
             npx --yes @tauri-apps/cli@2 signer sign --app-version "$VERSION" "$file"
           done
@@ -313,6 +328,12 @@ jobs:
             cat >> "$notes" <<'EOF'
 
 > **Подпись Android.** Секреты `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` и `ANDROID_KEY_PASSWORD` не заданы, поэтому APK подписан временным отладочным ключом этой сборки. Файл устанавливается, но не обновляет уже установленную копию, и следующий выпуск не встанет поверх него. Постоянный ключ нужен, чтобы обновления с GitHub Releases сохраняли данные; как его создать, написано в docs/android.md.
+EOF
+          fi
+          if [ -f out/UPDATER_DISABLED ]; then
+            cat >> "$notes" <<'EOF'
+
+> **Обновление на компьютере.** Секреты `TAURI_SIGNING_PRIVATE_KEY` и `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` не заданы. Установщики Windows, macOS и Linux в этом выпуске ставятся вручную. Обновление из уже установленного приложения заработает после добавления ключа.
 EOF
           fi
           gh release create "$TAG" out/* --repo "$REPO" --target "$GITHUB_SHA" --latest \
