@@ -5,6 +5,20 @@ import {openApp} from './harness.js';
 const config={signedIn:true,catalogMixes:true};
 async function player(page){await page.locator('.stage-cta').click();await page.locator('.player .now').click();await page.locator('.np:not([hidden])').waitFor();}
 
+test('language setting switches the interface to English and back',async()=>{
+ const app=await openApp({config});
+ try{const {page}=app;await page.waitForFunction(()=>document.querySelector('h1')?.textContent==='Моя музыка');
+  await page.evaluate(()=>{const saved=JSON.parse(localStorage.getItem('pm.settings.v1')??'{}');localStorage.setItem('pm.settings.v1',JSON.stringify({...saved,language:'en'}));});
+  await page.reload();
+  await page.waitForFunction(()=>document.documentElement.lang==='en' && document.querySelector('h1')?.textContent==='My music');
+  await page.locator('.nav [data-view="settings"]').click();
+  assert.equal(await page.getByRole('combobox',{name:'Language',exact:true}).inputValue(),'en');
+  await page.getByRole('combobox',{name:'Language',exact:true}).selectOption('ru');
+  await page.waitForFunction(()=>document.querySelector('h1')?.textContent==='Моя музыка');
+  assert.deepEqual(app.problems,[]);
+ }finally{await app.close();}
+});
+
 test('quiet stage is the default: warm page, serif titles, previous styles still selectable',async()=>{
  const app=await openApp({config});
  try{const {page}=app;

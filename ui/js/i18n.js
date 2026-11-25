@@ -576,7 +576,16 @@ const dictionary = {
   },
 };
 
-const language = (navigator.language || "ru").toLowerCase().startsWith("ru") ? "ru" : "en";
+function storedLanguage() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("pm.settings.v1") ?? "null");
+    if (saved?.language === "ru" || saved?.language === "en") return saved.language;
+  } catch { /* настройки ещё не записаны или повреждены */ }
+  return (navigator.language || "ru").toLowerCase().startsWith("ru") ? "ru" : "en";
+}
+
+const language = storedLanguage();
+if (typeof document !== "undefined") document.documentElement.lang = language;
 
 /** "ru" или "en": для дат и чисел, которые браузер форматирует сам. */
 export const locale = language;
