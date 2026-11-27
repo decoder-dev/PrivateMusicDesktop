@@ -37,12 +37,24 @@ class RustPlayerApiTest {
         api.close()
     }
 
+    @Test
+    fun stateSendsExactlyOneNativeCommand() = runBlocking {
+        val transport = FakeTransport()
+        val api = RustPlayerApi(transport)
+        api.state()
+        assertEquals(1, transport.commandCount)
+        assertEquals("""{"command":"player_state"}""", transport.lastCommand)
+        api.close()
+    }
+
     private class FakeTransport : RustTransport {
         val gate = Mutex(locked = true)
         var eventsSent = 0
+        var commandCount = 0
         var lastCommand = ""
 
         override fun command(raw: String): String {
+            commandCount += 1
             lastCommand = raw
             return "{}"
         }

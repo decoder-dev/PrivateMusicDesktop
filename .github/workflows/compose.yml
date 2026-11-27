@@ -32,12 +32,21 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/gradle-build-action@v3
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.0'
+      - name: Install native audio dependencies
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libdbus-1-dev pkg-config
       - name: Run shared and rendering tests
         working-directory: compose
         run: gradle --no-daemon :composeApp:desktopTest
+      - name: Upload desktop test reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: compose-test-results
+          path: compose/composeApp/build/test-results/desktopTest/*.xml
+          if-no-files-found: ignore
       - name: Upload Compose screenshots
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -58,7 +67,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/gradle-build-action@v3
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.0'
       - name: Android SDK, NDK and Rust target
