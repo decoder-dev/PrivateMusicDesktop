@@ -87,7 +87,7 @@ val packageDesktopNative by tasks.registering(Copy::class) {
     into(generatedNativeResources.map { it.dir(jnaResourcePrefix) })
 }
 
-tasks.matching { it.name == "processDesktopMainResources" }.configureEach {
+tasks.matching { it.name == "processDesktopMainResources" || it.name == "desktopProcessResources" }.configureEach {
     dependsOn(packageDesktopNative)
 }
 
