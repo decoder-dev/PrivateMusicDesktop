@@ -51,6 +51,8 @@ val rustTarget = when (rustAbi) {
     else -> error("Unsupported Rust ABI: $rustAbi")
 }
 val rustRoot = rootDir.resolve("rust-ffi")
+val rustOutput = System.getenv("CARGO_TARGET_DIR")?.let { file(it) } ?: rustRoot.resolve("target")
+val nativeLibrary = rustOutput.resolve("$rustTarget/release/libprivate_music_engine.so")
 
 tasks.register<Exec>("cargoBuildPrivateMusic") {
     workingDir = rustRoot
@@ -59,7 +61,10 @@ tasks.register<Exec>("cargoBuildPrivateMusic") {
 
 tasks.register<Copy>("packagePrivateMusicJni") {
     dependsOn("cargoBuildPrivateMusic")
-    from(rustRoot.resolve("target/$rustTarget/release/libprivate_music_engine.so"))
+    doFirst {
+        require(nativeLibrary.isFile) { "Missing native engine: $nativeLibrary" }
+    }
+    from(nativeLibrary)
     into("src/main/jniLibs/$rustAbi")
 }
 
