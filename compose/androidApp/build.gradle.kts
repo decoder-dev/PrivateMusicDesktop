@@ -62,7 +62,6 @@ tasks.register<Exec>("cargoBuildPrivateMusic") {
 tasks.register<Copy>("packagePrivateMusicJni") {
     dependsOn("cargoBuildPrivateMusic")
     from(nativeLibrary)
-    failOnMissingFile()
     into("src/main/jniLibs/$rustAbi")
 }
 
