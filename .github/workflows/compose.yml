@@ -34,7 +34,7 @@ jobs:
           java-version: '17'
       - uses: gradle/gradle-build-action@v3
         with:
-          gradle-version: '9.3.0'
+          gradle-version: '9.5.0'
       - name: Run shared and rendering tests
         working-directory: compose
         run: gradle --no-daemon :composeApp:desktopTest
@@ -60,7 +60,7 @@ jobs:
           java-version: '17'
       - uses: gradle/gradle-build-action@v3
         with:
-          gradle-version: '9.3.0'
+          gradle-version: '9.5.0'
       - name: Android SDK, NDK and Rust target
         run: |
           set -euxo pipefail
