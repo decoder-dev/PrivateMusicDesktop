@@ -38,8 +38,7 @@ jobs:
       - name: Linux system libraries
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libasound2-dev libdbus-1-dev \
+          sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libasound2-dev libdbus-1-dev \
             libssl-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev ffmpeg
 
       - name: ffmpeg (test fixtures)
@@ -86,7 +85,16 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Test
         working-directory: ui-tests
+        env:
+          PM_SCREENSHOTS: ${{ runner.temp }}/pm-screenshots
         run: npm test
+      - name: Upload UI screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui-screenshots
+          path: ${{ runner.temp }}/pm-screenshots
+          if-no-files-found: ignore
 
   bundle:
     name: Bundle (${{ matrix.name }})
@@ -105,8 +113,7 @@ jobs:
       - name: Linux system libraries
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libasound2-dev libdbus-1-dev \
+          sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libasound2-dev libdbus-1-dev \
             libssl-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev
 
       - name: macOS targets
