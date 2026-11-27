@@ -63,7 +63,7 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: dtolnay/rust-toolchain@stable
-      - uses: gradle/gradle-build-action@v3
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.0'
       - name: Linux native and packaging dependencies
@@ -104,7 +104,7 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: dtolnay/rust-toolchain@stable
-      - uses: gradle/gradle-build-action@v3
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.0'
       - name: Android SDK, NDK and Rust target
