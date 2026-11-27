@@ -47,6 +47,17 @@ class RustPlayerApiTest {
         api.close()
     }
 
+    @Test
+    fun playTracksEncodesRustRequiredDefaults() = runBlocking {
+        val transport = FakeTransport()
+        val api = RustPlayerApi(transport)
+        api.playTracks(listOf(demoTracks.first()), 0)
+        assertTrue(transport.lastCommand.contains("\"is_hq\":false"))
+        assertTrue(transport.lastCommand.contains("\"artists\":[]"))
+        assertTrue(transport.lastCommand.contains("\"stream_url\":null"))
+        api.close()
+    }
+
     private class FakeTransport : RustTransport {
         val gate = Mutex(locked = true)
         var eventsSent = 0

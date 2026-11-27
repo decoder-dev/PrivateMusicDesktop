@@ -2,6 +2,7 @@ package com.dec.privatemusic.player
 
 /** Offline catalog used by rendering tests and the opt-in desktop demo mode. */
 class DemoCatalogApi : CatalogApi {
+    override val isDemo: Boolean = true
     private val offline = mutableListOf<OfflineTrack>()
 
     override fun library(offset: Int, count: Int): TrackPage = TrackPage(demoTracks.drop(offset).take(count), demoTracks.size)

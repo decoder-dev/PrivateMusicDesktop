@@ -18,6 +18,8 @@ class CatalogViewModel(
     private val api: CatalogApi,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
+    val isDemo: Boolean get() = api.isDemo
+
     private val mutableLibrary = MutableStateFlow<List<Track>>(emptyList())
     private val mutableSearch = MutableStateFlow<List<Track>>(emptyList())
     private val mutableMixes = MutableStateFlow<List<MusicMix>>(emptyList())
