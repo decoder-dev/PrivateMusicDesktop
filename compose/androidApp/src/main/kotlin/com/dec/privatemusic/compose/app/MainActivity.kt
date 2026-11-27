@@ -24,6 +24,7 @@ class MainActivity : ComponentActivity() {
         if (result.resultCode == RESULT_OK) {
             result.data?.getStringExtra("session")?.let {
                 sessions.saveJson(it)
+                sessions.sync()
                 sessionViewModel.refresh()
             }
         }
