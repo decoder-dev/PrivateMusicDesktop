@@ -71,7 +71,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "PrivateMusic"
-            packageVersion = "1.0.0"
+            packageVersion = "1.0.1"
         }
     }
 }

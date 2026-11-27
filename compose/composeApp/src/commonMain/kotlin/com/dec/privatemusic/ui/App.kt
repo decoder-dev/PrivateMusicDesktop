@@ -42,7 +42,12 @@ fun PrivateMusicApp(viewModel: PlayerViewModel, sessionViewModel: SessionViewMod
     val catalog = remember { CatalogViewModel(platformCatalogApi()) }
     val library by catalog.library.collectAsState()
     val recommendations by catalog.searchResults.collectAsState()
-    val homeTracks = library.ifEmpty { recommendations.ifEmpty { demoTracks } }
+    val catalogError by catalog.error.collectAsState()
+    val homeTracks = when {
+        catalog.isDemo -> library.ifEmpty { recommendations.ifEmpty { demoTracks } }
+        session.signed_in -> library.ifEmpty { recommendations }
+        else -> emptyList()
+    }
     var screen by remember { mutableStateOf(Screen.Home) }
     val scope = rememberCoroutineScope()
 
@@ -83,10 +88,10 @@ fun PrivateMusicApp(viewModel: PlayerViewModel, sessionViewModel: SessionViewMod
                     Screen.Home -> HomeScreen(
                         state = state,
                         tracks = homeTracks,
-                        error = error,
+                        error = error ?: catalogError,
                         onPlay = { index -> scope.launch { viewModel.play(homeTracks, index) } },
                         onDownload = { track -> catalog.download(track) },
-                        onOpenPlayer = { screen = Screen.Player },
+                        onOpenPlayer = { screen = if (state.track != null) Screen.Player else Screen.Profile },
                         onOpenQueue = { screen = Screen.Queue },
                         onOpenProfile = { screen = Screen.Profile },
                         onOpenSearch = { screen = Screen.Search },
@@ -101,7 +106,7 @@ fun PrivateMusicApp(viewModel: PlayerViewModel, sessionViewModel: SessionViewMod
                         onLyrics = { screen = Screen.Lyrics },
                     )
                     Screen.Queue -> QueueScreen(
-                        tracks = queue.ifEmpty { demoTracks },
+                        tracks = queue.ifEmpty { if (catalog.isDemo) demoTracks else emptyList() },
                         current = state.queue_index,
                         onBack = { screen = if (state.track != null) Screen.Player else Screen.Home },
                         onJump = { index -> scope.launch { viewModel.jump(index) } },
@@ -171,6 +176,9 @@ private fun HomeScreen(
             }
         }
         if (error != null) item { Text(error, color = MaterialTheme.colorScheme.error) }
+        if (tracks.isEmpty() && error == null) item {
+            Text("Пока нет треков. Откройте «Профиль» и войдите в VK, чтобы загрузить свою музыку.", color = TextSecondary)
+        }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Рекомендации", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))

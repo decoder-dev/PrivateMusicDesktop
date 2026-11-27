@@ -30,7 +30,10 @@ interface RustTransport {
 
 class RustPlayerApi(
     private val transport: RustTransport,
-    private val json: Json = Json { ignoreUnknownKeys = true },
+    private val json: Json = Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+    },
 ) : PlayerApi, CatalogApi {
     override suspend fun state(): PlayerState = decode(buildJsonObject { put("command", "player_state") })
 
