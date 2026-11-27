@@ -1,0 +1,75 @@
+name: Compose Multiplatform
+
+on:
+  pull_request:
+    paths:
+      - "compose/**"
+      - ".github/workflows/compose.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust FFI
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build native engine
+        run: cargo build --manifest-path compose/rust-ffi/Cargo.toml
+
+  ui:
+    name: Compose UI tests and screenshots
+    needs: rust
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/gradle-build-action@v3
+        with:
+          gradle-version: '9.3.0'
+      - name: Run shared and rendering tests
+        working-directory: compose
+        run: gradle --no-daemon :composeApp:desktopTest
+      - name: Upload Compose screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: compose-screenshots
+          path: compose/composeApp/build/screenshots/*.png
+          if-no-files-found: error
+
+  android:
+    name: Compose Android APK
+    needs: rust
+    runs-on: ubuntu-24.04
+    env:
+      NDK_VERSION: 27.2.12479018
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/gradle-build-action@v3
+        with:
+          gradle-version: '9.3.0'
+      - name: Android SDK, NDK and Rust target
+        run: |
+          set -euxo pipefail
+          . scripts/android-ci-env.sh
+          scripts/android-ci-sdk.sh "ndk;${NDK_VERSION}" "platforms;android-36" "build-tools;36.0.0"
+          rustup target add aarch64-linux-android
+      - name: Build APK with Rust JNI library
+        working-directory: compose
+        run: gradle --no-daemon :composeApp:assembleDebug -Dpm.rust.abi=arm64-v8a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: compose-android-debug
+          path: compose/composeApp/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
