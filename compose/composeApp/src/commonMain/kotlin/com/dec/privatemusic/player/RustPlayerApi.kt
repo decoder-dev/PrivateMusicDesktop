@@ -32,7 +32,7 @@ class RustPlayerApi(
     private val transport: RustTransport,
     private val json: Json = Json { ignoreUnknownKeys = true },
 ) : PlayerApi, CatalogApi {
-    override suspend fun state(): PlayerState = decode(command(buildJsonObject { put("command", "player_state") }))
+    override suspend fun state(): PlayerState = decode(buildJsonObject { put("command", "player_state") })
 
     override suspend fun playTracks(tracks: List<Track>, index: Int) = unitCommand(buildJsonObject {
         put("command", "play_tracks")
