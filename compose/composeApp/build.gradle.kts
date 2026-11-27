@@ -4,12 +4,13 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     kotlin("multiplatform")
     kotlin("plugin.serialization")
+    kotlin("plugin.compose")
     id("org.jetbrains.compose")
     id("com.android.kotlin.multiplatform.library")
 }
 
 kotlin {
-    androidLibrary {
+    android {
         namespace = "com.dec.privatemusic.compose"
         compileSdk = 36
         minSdk = 26
@@ -53,7 +54,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "PrivateMusicCompose"
-            packageVersion = "0.1.0"
+            packageVersion = "1.0.0"
         }
     }
 }
