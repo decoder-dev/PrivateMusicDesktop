@@ -11,10 +11,12 @@ class NativeEngineSmokeTest {
         val previous = System.getProperty("pm.compose.demo")
         try {
             System.setProperty("pm.compose.demo", "0")
+            System.setProperty("pm.compose.trace", "1")
             val api = platformPlayerApi()
             assertTrue(api.state().status.isNotBlank())
             api.close()
         } finally {
+            System.clearProperty("pm.compose.trace")
             if (previous == null) System.clearProperty("pm.compose.demo")
             else System.setProperty("pm.compose.demo", previous)
         }

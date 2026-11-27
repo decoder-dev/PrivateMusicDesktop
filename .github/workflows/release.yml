@@ -5,7 +5,9 @@ on:
     tags: ["v*"]
   pull_request:
     paths:
-      - "compose/**"
+      - "compose/settings.gradle.kts"
+      - "compose/composeApp/build.gradle.kts"
+      - "compose/androidApp/build.gradle.kts"
       - ".github/workflows/release.yml"
       - "docs/releases/**"
   workflow_dispatch:

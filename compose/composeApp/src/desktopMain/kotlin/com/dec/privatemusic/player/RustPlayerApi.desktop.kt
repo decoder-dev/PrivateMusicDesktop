@@ -19,7 +19,9 @@ private val sharedApi by lazy { RustPlayerApi(sharedTransport) }
 private class JnaTransport : RustTransport {
     private val pointer = JnaEngine.pm_engine_new()
 
-    override fun command(raw: String): String = read { JnaEngine.pm_engine_command(pointer, raw) }
+    override fun command(raw: String): String = read { JnaEngine.pm_engine_command(pointer, raw) }.also { response ->
+        if (System.getProperty("pm.compose.trace") == "1") println("Native command: $raw; response: $response")
+    }
     override fun poll(): String? = JnaEngine.pm_engine_poll_event(pointer)?.let { pointer ->
         pointer.getString(0).also { JnaEngine.pm_string_free(pointer) }
     }
