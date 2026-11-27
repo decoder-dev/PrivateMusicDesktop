@@ -53,6 +53,8 @@ class DemoPlayerApi : PlayerApi {
         playTracks(queue, index)
     }
 
+    override suspend fun playRadio(source: kotlinx.serialization.json.JsonObject, tracks: List<Track>, index: Int, nextOffset: Int?) = playTracks(tracks, index)
+
     override fun events(): Flow<String> = flow {
         while (true) {
             delay(250)

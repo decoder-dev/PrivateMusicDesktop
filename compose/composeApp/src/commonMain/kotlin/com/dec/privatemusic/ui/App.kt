@@ -21,11 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.dec.privatemusic.player.PlayerState
-import com.dec.privatemusic.player.PlayerViewModel
-import com.dec.privatemusic.player.SeekGate
-import com.dec.privatemusic.player.Track
-import com.dec.privatemusic.player.demoTracks
+import com.dec.privatemusic.player.*
 import kotlinx.coroutines.launch
 
 private val Background = Color(0xFF101012)
@@ -35,18 +31,23 @@ private val Accent = Color(0xFFE3C66B)
 private val TextPrimary = Color(0xFFF5F3F7)
 private val TextSecondary = Color(0xFFADA7B1)
 
-private enum class Screen { Home, Player, Queue }
+private enum class Screen { Home, Player, Queue, Profile, Search, Mixes, Downloads, Lyrics }
 
 @Composable
-fun PrivateMusicApp(viewModel: PlayerViewModel) {
+fun PrivateMusicApp(viewModel: PlayerViewModel, sessionViewModel: SessionViewModel, onLogin: (() -> Unit)?, onLogout: () -> Unit) {
     val state by viewModel.state.collectAsState()
     val queue by viewModel.queue.collectAsState()
     val error by viewModel.error.collectAsState()
+    val session by sessionViewModel.state.collectAsState()
+    val catalog = remember { CatalogViewModel(platformCatalogApi()) }
     var screen by remember { mutableStateOf(Screen.Home) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(viewModel) { viewModel.start() }
+    LaunchedEffect(sessionViewModel) { sessionViewModel.start() }
     DisposableEffect(viewModel) { onDispose { viewModel.close() } }
+    DisposableEffect(sessionViewModel) { onDispose { sessionViewModel.close() } }
+    DisposableEffect(catalog) { onDispose { catalog.close() } }
 
     MaterialTheme(
         colorScheme = darkColorScheme(
@@ -82,12 +83,17 @@ fun PrivateMusicApp(viewModel: PlayerViewModel) {
                         onPlay = { index -> scope.launch { viewModel.play(demoTracks, index) } },
                         onOpenPlayer = { screen = Screen.Player },
                         onOpenQueue = { screen = Screen.Queue },
+                        onOpenProfile = { screen = Screen.Profile },
+                        onOpenSearch = { screen = Screen.Search },
+                        onOpenMixes = { screen = Screen.Mixes },
+                        onOpenDownloads = { screen = Screen.Downloads },
                     )
                     Screen.Player -> FullPlayer(
                         state = state,
                         viewModel = viewModel,
                         onClose = { screen = Screen.Home },
                         onQueue = { screen = Screen.Queue },
+                        onLyrics = { screen = Screen.Lyrics },
                     )
                     Screen.Queue -> QueueScreen(
                         tracks = queue.ifEmpty { demoTracks },
@@ -95,6 +101,11 @@ fun PrivateMusicApp(viewModel: PlayerViewModel) {
                         onBack = { screen = if (state.track != null) Screen.Player else Screen.Home },
                         onJump = { index -> scope.launch { viewModel.jump(index) } },
                     )
+                    Screen.Profile -> ProfileScreen(session, onLogin, onLogout)
+                    Screen.Search -> SearchScreen(catalog) { tracks, index -> scope.launch { viewModel.play(tracks, index) } }
+                    Screen.Mixes -> MixesScreen(catalog) { launch -> scope.launch { viewModel.playRadio(launch.source, launch.tracks, 0, launch.nextOffset) } }
+                    Screen.Downloads -> DownloadsScreen(catalog) { tracks, index -> scope.launch { viewModel.play(tracks, index) } }
+                    Screen.Lyrics -> LyricsScreen(state.track, catalog)
                 }
             }
         }
@@ -109,6 +120,10 @@ private fun HomeScreen(
     onPlay: (Int) -> Unit,
     onOpenPlayer: () -> Unit,
     onOpenQueue: () -> Unit,
+    onOpenProfile: () -> Unit,
+    onOpenSearch: () -> Unit,
+    onOpenMixes: () -> Unit,
+    onOpenDownloads: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -117,6 +132,14 @@ private fun HomeScreen(
     ) {
         item {
             Text("Главная", color = TextPrimary, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = onOpenProfile) { Text("Профиль") }
+                TextButton(onClick = onOpenSearch) { Text("Поиск") }
+                TextButton(onClick = onOpenMixes) { Text("Миксы") }
+                TextButton(onClick = onOpenDownloads) { Text("Загрузки") }
+            }
         }
         item {
             Card(
@@ -149,7 +172,7 @@ private fun HomeScreen(
 }
 
 @Composable
-private fun TrackRow(track: Track, active: Boolean, onClick: () -> Unit) {
+internal fun TrackRow(track: Track, active: Boolean, onClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = if (active) SurfaceRaised else Color.Transparent),
@@ -204,7 +227,7 @@ private fun MiniPlayer(state: PlayerState, onOpen: () -> Unit, onToggle: () -> U
 }
 
 @Composable
-private fun FullPlayer(state: PlayerState, viewModel: PlayerViewModel, onClose: () -> Unit, onQueue: () -> Unit) {
+private fun FullPlayer(state: PlayerState, viewModel: PlayerViewModel, onClose: () -> Unit, onQueue: () -> Unit, onLyrics: () -> Unit) {
     val scope = rememberCoroutineScope()
     var seekVersion by remember { mutableStateOf(0) }
     val seekGate = remember { SeekGate(scope, onSettle = { seekVersion += 1 }) }
@@ -262,7 +285,8 @@ private fun FullPlayer(state: PlayerState, viewModel: PlayerViewModel, onClose: 
                 ) { Text(if (state.status == "playing") "Ⅱ" else "▶", fontSize = 28.sp) }
                 TransportButton("⏭", "Следующий трек") { scope.launch { viewModel.next() } }
             }
-            Spacer(Modifier.height(12.dp))
+            TextButton(onClick = onLyrics, enabled = state.track != null) { Text("Текст песни") }
+            Spacer(Modifier.height(4.dp))
             Text("Потяните мини-плеер вверх, чтобы вернуться сюда", color = TextSecondary, fontSize = 12.sp)
         }
     }
@@ -284,7 +308,7 @@ private fun QueueScreen(tracks: List<Track>, current: Int?, onBack: () -> Unit, 
 }
 
 @Composable
-private fun CoverArt(modifier: Modifier = Modifier) {
+internal fun CoverArt(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier.clip(RoundedCornerShape(16.dp))
             .background(Brush.linearGradient(listOf(Color(0xFFD9D3C3), Color(0xFF7F754E), Color(0xFF343129)))),

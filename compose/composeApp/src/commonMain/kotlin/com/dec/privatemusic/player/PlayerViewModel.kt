@@ -58,6 +58,7 @@ class PlayerViewModel(
     fun seek(seconds: Double) = run { api.seek(seconds) }
     fun setVolume(volume: Float) = run { api.setVolume(volume) }
     fun jump(index: Int) = run { api.jump(index) }
+    fun playRadio(source: kotlinx.serialization.json.JsonObject, tracks: List<Track>, index: Int, nextOffset: Int?) = run { api.playRadio(source, tracks, index, nextOffset) }
 
     private fun run(action: suspend () -> Unit) {
         scope.launch {

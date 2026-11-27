@@ -13,6 +13,8 @@ private interface NativeEngine : Library {
 }
 
 private object JnaEngine : NativeEngine by Native.load("private_music_engine", NativeEngine::class.java)
+private val sharedTransport by lazy { JnaTransport() }
+private val sharedApi by lazy { RustPlayerApi(sharedTransport) }
 
 private class JnaTransport : RustTransport {
     private val pointer = JnaEngine.pm_engine_new()
@@ -31,5 +33,9 @@ private class JnaTransport : RustTransport {
 }
 
 actual fun platformPlayerApi(): PlayerApi =
-    if (System.getProperty("pm.compose.demo") == "1") DemoPlayerApi()
-    else RustPlayerApi(JnaTransport())
+    if (System.getProperty("pm.compose.demo") == "1") DemoPlayerApi() else sharedApi
+
+actual fun platformSignIn(session: Session) = sharedApi.signIn(session)
+actual fun platformSignOut() = sharedApi.signOut()
+actual fun platformSessionState(): SessionState = sharedApi.sessionState()
+actual fun platformCatalogApi(): RustPlayerApi = sharedApi

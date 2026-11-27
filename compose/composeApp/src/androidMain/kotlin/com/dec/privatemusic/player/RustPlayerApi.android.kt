@@ -1,5 +1,8 @@
 package com.dec.privatemusic.player
 
+private val sharedTransport by lazy { JniTransport() }
+private val sharedApi by lazy { RustPlayerApi(sharedTransport) }
+
 private class JniTransport : RustTransport {
     private val pointer = RustPlayerApiJni.pm_engine_new()
 
@@ -8,7 +11,11 @@ private class JniTransport : RustTransport {
     override fun free() = RustPlayerApiJni.pm_engine_free(pointer)
 }
 
-actual fun platformPlayerApi(): PlayerApi = RustPlayerApi(JniTransport())
+actual fun platformPlayerApi(): PlayerApi = sharedApi
+actual fun platformSignIn(session: Session) = sharedApi.signIn(session)
+actual fun platformSignOut() = sharedApi.signOut()
+actual fun platformSessionState(): SessionState = sharedApi.sessionState()
+actual fun platformCatalogApi(): RustPlayerApi = sharedApi
 
 object RustPlayerApiJni {
     init {

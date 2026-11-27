@@ -68,6 +68,28 @@ class RustPlayerApi(
         return json.decodeFromJsonElement(response)
     }
 
+    fun signIn(session: Session) = unitCommand(buildJsonObject { put("command", "sign_in"); put("session", json.encodeToJsonElement(session)) })
+    fun signOut() = unitCommand(buildJsonObject { put("command", "sign_out") })
+    fun sessionState(): SessionState = decode(buildJsonObject { put("command", "session_state") })
+    fun library(offset: Int = 0, count: Int = 200): TrackPage = decode(buildJsonObject { put("command", "library"); put("offset", offset); put("count", count) })
+    fun search(query: String, offset: Int = 0, count: Int = 100): TrackPage = decode(buildJsonObject { put("command", "search"); put("query", query); put("offset", offset); put("count", count) })
+    fun catalogMixes(): List<MusicMix> = decode(buildJsonObject { put("command", "catalog_mixes") })
+    fun streamMix(id: String, options: String? = null, offset: Int = 0): List<Track> = decode(buildJsonObject { put("command", "stream_mix"); put("mix_id", id); put("options", options); put("offset", offset) })
+    override suspend fun playRadio(source: JsonObject, tracks: List<Track>, index: Int, nextOffset: Int?) = unitCommand(buildJsonObject { put("command", "play_radio"); put("source", source); putJsonArray("tracks") { tracks.forEach { add(json.encodeToJsonElement(Track.serializer(), it)) } }; put("index", index); put("next_offset", nextOffset) })
+    fun recommendations(): List<Track> = decode(buildJsonObject { put("command", "recommendations") })
+    fun newReleases(): List<Album> = decode(buildJsonObject { put("command", "new_releases") })
+    fun downloads(): List<OfflineTrack> = decode(buildJsonObject { put("command", "downloads") })
+    fun download(track: Track): OfflineTrack = decode(buildJsonObject { put("command", "download"); put("track", json.encodeToJsonElement(track)) })
+    fun removeDownload(trackId: String): Boolean = decode(buildJsonObject { put("command", "remove_download"); put("track_id", trackId) })
+    fun lyrics(track: Track): Lyrics? = decode(buildJsonObject { put("command", "lyrics"); put("track", json.encodeToJsonElement(track)) })
+    fun addToLibrary(track: Track): Track = decode(buildJsonObject { put("command", "add_to_library"); put("track", json.encodeToJsonElement(track)) })
+    fun removeFromLibrary(track: Track) = unitCommand(buildJsonObject { put("command", "remove_from_library"); put("track", json.encodeToJsonElement(track)) })
+    fun setShuffle(on: Boolean) = unitCommand(buildJsonObject { put("command", "set_shuffle"); put("on", on) })
+    fun setRepeat(repeat: String) = unitCommand(buildJsonObject { put("command", "set_repeat"); put("repeat", repeat) })
+    fun setEqualizer(gains: List<Float>) = unitCommand(buildJsonObject { put("command", "set_equalizer"); putJsonArray("gains") { gains.forEach { add(it) } } })
+    fun outputDevices(): List<String> = decode(buildJsonObject { put("command", "output_devices") })
+    fun setOutputDevice(name: String?) = unitCommand(buildJsonObject { put("command", "set_output_device"); put("name", name) })
+
     override fun events(): Flow<String> = flow {
         while (currentCoroutineContext().isActive) {
             val raw = transport.poll()
