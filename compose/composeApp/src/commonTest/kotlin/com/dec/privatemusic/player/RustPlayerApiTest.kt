@@ -1,0 +1,58 @@
+package com.dec.privatemusic.player
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withTimeout
+
+class RustPlayerApiTest {
+    @Test
+    fun nativeEventsAreBroadcastToAllCollectors() = runBlocking {
+        val transport = FakeTransport()
+        val api = RustPlayerApi(transport)
+        val first = async { api.events().first() }
+        val second = async { api.events().first() }
+        delay(50)
+        transport.gate.unlock()
+        withTimeout(2_000) {
+            assertEquals("""{"status":"playing"}""", first.await())
+            assertEquals("""{"status":"playing"}""", second.await())
+        }
+        api.close()
+        assertEquals(1, transport.eventsSent)
+    }
+
+    @Test
+    fun equalizerGainsAreEncodedAsJsonNumbers() = runBlocking {
+        val transport = FakeTransport()
+        val api = RustPlayerApi(transport)
+        api.setEqualizer(listOf(0.25f, -1.5f))
+        assertTrue(transport.lastCommand.contains("0.25"))
+        assertTrue(transport.lastCommand.contains("-1.5"))
+        api.close()
+    }
+
+    private class FakeTransport : RustTransport {
+        val gate = Mutex(locked = true)
+        var eventsSent = 0
+        var lastCommand = ""
+
+        override fun command(raw: String): String {
+            lastCommand = raw
+            return "{}"
+        }
+
+        override fun poll(): String? {
+            if (gate.isLocked || eventsSent > 0) return null
+            eventsSent += 1
+            return """{"status":"playing"}"""
+        }
+
+        override fun free() = Unit
+    }
+}

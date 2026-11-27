@@ -1,0 +1,87 @@
+name: Compose Multiplatform
+
+on:
+  pull_request:
+    paths:
+      - "compose/**"
+      - ".github/workflows/compose.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust FFI
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install native audio dependencies
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libdbus-1-dev pkg-config
+      - name: Build native engine
+        run: cargo build --manifest-path compose/rust-ffi/Cargo.toml
+
+  ui:
+    name: Compose UI tests and screenshots
+    needs: rust
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/gradle-build-action@v3
+        with:
+          gradle-version: '9.5.0'
+      - name: Run shared and rendering tests
+        working-directory: compose
+        run: gradle --no-daemon :composeApp:desktopTest
+      - name: Upload Compose screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: compose-screenshots
+          path: compose/composeApp/build/screenshots/*.png
+          if-no-files-found: error
+
+  android:
+    name: Compose Android APK
+    needs: rust
+    runs-on: ubuntu-24.04
+    env:
+      NDK_VERSION: 27.2.12479018
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/gradle-build-action@v3
+        with:
+          gradle-version: '9.5.0'
+      - name: Android SDK, NDK and Rust target
+        run: |
+          set -euxo pipefail
+          . scripts/android-ci-env.sh
+          scripts/android-ci-sdk.sh "ndk;${NDK_VERSION}" "platforms;android-36" "build-tools;36.0.0"
+          rustup target add aarch64-linux-android
+      - name: Build APK with Rust JNI library
+        working-directory: compose
+        run: gradle --no-daemon :androidApp:assembleDebug -Dpm.rust.abi=arm64-v8a
+      - name: Verify Rust JNI library is packaged
+        run: unzip -l compose/androidApp/build/outputs/apk/debug/androidApp-debug.apk | grep 'lib/arm64-v8a/libprivate_music_engine.so'
+      - name: Verify media service and permissions in APK
+        run: |
+          "$ANDROID_HOME/build-tools/36.0.0/aapt2" dump xmltree --file AndroidManifest.xml compose/androidApp/build/outputs/apk/debug/androidApp-debug.apk > compose/androidApp/build/outputs/apk/debug/manifest.txt
+          grep -q 'PlaybackService' compose/androidApp/build/outputs/apk/debug/manifest.txt || { echo 'PlaybackService is missing'; exit 1; }
+          grep -q 'POST_NOTIFICATIONS' compose/androidApp/build/outputs/apk/debug/manifest.txt || { echo 'Notification permission is missing'; exit 1; }
+          grep -q 'FOREGROUND_SERVICE_MEDIA_PLAYBACK' compose/androidApp/build/outputs/apk/debug/manifest.txt || { echo 'Media playback foreground permission is missing'; exit 1; }
+          # aapt2 prints the enum as its native bit mask (FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK = 1 << 4).
+          grep -Eq 'foregroundServiceType.*0x0*10' compose/androidApp/build/outputs/apk/debug/manifest.txt || { echo 'mediaPlayback service type is missing'; exit 1; }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: compose-android-debug
+          path: compose/androidApp/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
