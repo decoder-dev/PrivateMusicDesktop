@@ -4,20 +4,34 @@ plugins {
     kotlin("plugin.compose")
 }
 
+val releaseKeystore = System.getenv("ANDROID_KEYSTORE_PATH").orEmpty()
+val hasReleaseSigning = releaseKeystore.isNotBlank()
+
 android {
     namespace = "com.dec.privatemusic.compose.app"
     compileSdk = 36
     buildToolsVersion = "36.0.0"
     defaultConfig {
-        applicationId = "com.dec.privatemusic.compose.app"
+        applicationId = "com.dec.privatemusic2.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 10000
+        versionName = "1.0.0"
+    }
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
     }
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
+            if (hasReleaseSigning) signingConfig = signingConfigs.getByName("release")
         }
         getByName("debug") {
             isDebuggable = true

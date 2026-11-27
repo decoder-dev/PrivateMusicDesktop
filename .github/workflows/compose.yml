@@ -35,6 +35,8 @@ jobs:
       - uses: gradle/gradle-build-action@v3
         with:
           gradle-version: '9.5.0'
+      - name: Install native audio dependencies
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libdbus-1-dev pkg-config
       - name: Run shared and rendering tests
         working-directory: compose
         run: gradle --no-daemon :composeApp:desktopTest

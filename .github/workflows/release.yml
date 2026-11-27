@@ -1,220 +1,119 @@
 name: Release
 
-# Собирает установщики и публикует их как выпуск GitHub либо из отправленного тега (v0.2.0), либо путем
-# запуска рабочего процесса вручную с именем тега: затем тег создается в фиксации, для которой
-# предназначен запуск.
 on:
   push:
     tags: ["v*"]
+  pull_request:
+    paths:
+      - "compose/**"
+      - ".github/workflows/release.yml"
+      - "docs/releases/**"
   workflow_dispatch:
     inputs:
-      tag:
-        description: "Tag to build (must match the version in tauri.conf.json), e.g. v0.2.0"
+      version:
+        description: "Version to build without publishing, for example v1.0.0"
+        default: "v1.0.0"
         required: true
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: compose-release-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
   contents: read
 
+env:
+  RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
+
 jobs:
-  version:
-    name: Check the tag
+  validate:
+    name: Validate Compose release version
     runs-on: ubuntu-24.04
     outputs:
-      tag: ${{ steps.tag.outputs.tag }}
-      version: ${{ steps.tag.outputs.version }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - id: tag
+      - id: version
         env:
-          INPUT_TAG: ${{ inputs.tag }}
+          VERSION: ${{ env.RELEASE_VERSION }}
         run: |
-          tag="${INPUT_TAG:-$GITHUB_REF_NAME}"
-          version="${tag#v}"
-          declared=$(python3 -c "import json;print(json.load(open('src-tauri/tauri.conf.json'))['version'])")
-          cargo_version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
-          if [ "$version" != "$declared" ] || [ "$version" != "$cargo_version" ]; then
-            echo "Tag $tag, tauri.conf.json $declared, Cargo.toml $cargo_version must agree." >&2
-            exit 1
-          fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          version="${VERSION#v}"
+          grep -q "packageVersion = \"$version\"" compose/composeApp/build.gradle.kts
+          grep -q "versionName = \"$version\"" compose/androidApp/build.gradle.kts
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-  ui:
-    name: Release UI checks
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install browser test dependencies
-        working-directory: ui-tests
-        run: |
-          npm ci --no-audit --no-fund
-          npx playwright install --with-deps chromium
-      - name: Check the complete interface
-        working-directory: ui-tests
-        run: npm test
-
-  build:
-    name: Build (${{ matrix.name }})
-    needs: version
+  desktop:
+    name: Desktop (${{ matrix.artifact }})
+    needs: validate
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
-          - { name: Linux, os: ubuntu-24.04, bundles: "deb appimage", target: "" }
-          - { name: Windows, os: windows-latest, bundles: "nsis", target: "" }
-          - { name: macOS, os: macos-latest, bundles: "app dmg", target: "universal-apple-darwin" }
+          - { os: windows-latest, artifact: windows-x64, extension: msi }
+          - { os: ubuntu-24.04, artifact: linux-amd64, extension: deb }
+          - { os: macos-13, artifact: macos-x64, extension: dmg }
+          - { os: macos-14, artifact: macos-arm64, extension: dmg }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@v5
         with:
-          ref: ${{ github.sha }}
-
-      - name: Linux system libraries
+          distribution: temurin
+          java-version: '17'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: gradle/gradle-build-action@v3
+        with:
+          gradle-version: '9.5.0'
+      - name: Linux native and packaging dependencies
         if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libasound2-dev libdbus-1-dev \
-            libssl-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev
-
-      - name: macOS targets
-        if: runner.os == 'macOS'
-        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
-
-      # The tools CI keeps (see ci.yml); restore only, a release never writes the cache.
-      - name: Restore the Tauri bundler tools
-        if: runner.os != 'macOS'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cache/tauri
-            ~/AppData/Local/tauri
-          key: tauri-bundler-tools-${{ runner.os }}-v2
-
-      - name: Build
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libdbus-1-dev pkg-config fakeroot
+      - name: Build desktop package with Rust resource
+        working-directory: compose
+        run: gradle --no-daemon :composeApp:packageDistributionForCurrentOS
+      - name: Collect and name package
         shell: bash
-        working-directory: src-tauri
-        # В пакет npm входит готовый CLI: никакого десятиминутного `cargo install`.
-        # Без ключа обновлений установщики всё равно собираются. Подписи нужны только
-        # для обновления из уже установленного приложения.
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          EXTENSION: ${{ matrix.extension }}
+          ARTIFACT: ${{ matrix.artifact }}
+          VERSION: ${{ needs.validate.outputs.version }}
         run: |
           set -euo pipefail
-          args=(npx --yes @tauri-apps/cli@2 build --bundles ${{ matrix.bundles }})
-          if [ -n "${{ matrix.target }}" ]; then args+=(--target "${{ matrix.target }}"); fi
-          if [ -n "${TAURI_SIGNING_PRIVATE_KEY}" ]; then
-            args+=(--config '{"bundle":{"createUpdaterArtifacts":true}}')
-          else
-            echo "::warning::TAURI_SIGNING_PRIVATE_KEY is not set. Installers will be published without in-app update signatures."
-          fi
-          "${args[@]}"
-
-      - name: Sign desktop updater packages (including DEB)
-        shell: bash
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          VERSION: ${{ needs.version.outputs.version }}
-        run: |
-          set -euo pipefail
-          if [ -z "${TAURI_SIGNING_PRIVATE_KEY}" ]; then
-            echo "No updater key: skipping signatures."
-            exit 0
-          fi
-          find target -type f \( -name '*-setup.exe' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.app.tar.gz' \) -path '*/release/bundle/*' -print0 | while IFS= read -r -d '' file; do
-            npx --yes @tauri-apps/cli@2 signer sign --app-version "$VERSION" "$file"
-          done
-
-      # Окно входа VK должно загружаться в каждой системе, начиная с реальной сборки.
-      - name: Sign-in window loads (Linux, macOS)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          binary=$(find target -path '*release/bundle/macos/*.app/Contents/MacOS/private-music-desktop' -print -quit)
-          [ -n "$binary" ] || binary=target/${{ matrix.target }}/release/private-music-desktop
-          scripts/smoke-login.sh "$binary"
-
-      - name: Sign-in window loads (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $report = Join-Path $env:RUNNER_TEMP 'smoke.txt'
-          $env:PM_SMOKE_LOGIN = $report
-          $app = Start-Process -FilePath 'target\release\private-music-desktop.exe' -PassThru
-          if (-not $app.WaitForExit(150000)) { $app.Kill(); Write-Host 'the app did not finish in time' }
-          Write-Host "app exited with $($app.ExitCode)"
-          if (Test-Path $report) { Get-Content $report } else { Write-Host '(no report)' }
-          $log = Join-Path $env:LOCALAPPDATA 'com.dec.privatemusic2.desktop\logs\private-music.log'
-          if (Test-Path $log) { Write-Host "--- $log"; Get-Content $log }
-          if (-not ((Test-Path $report) -and (Select-String -Path $report -Pattern '^loaded ' -Quiet))) { exit 1 }
-
-      - name: Fixed window presets and fullscreen (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: scripts\smoke-window.ps1 -Binary 'target\release\private-music-desktop.exe'
-
-      # Обновление устанавливается поверх старой версии и должно сохранить данные для входа и данные.
-      - name: Installing over the last release keeps the sign-in (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $new = (Get-ChildItem 'target\release\bundle\nsis\*-setup.exe' | Select-Object -First 1).FullName
-          gh release download --repo '${{ github.repository }}' --pattern '*-setup.exe' --dir "$env:RUNNER_TEMP\previous"
-          $previous = Get-ChildItem "$env:RUNNER_TEMP\previous\*-setup.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($previous) { $old = $previous.FullName } else {
-            Write-Host '::notice::No earlier release exists: installing the new build over itself instead.'
-            $old = $new
-          }
-          scripts\upgrade-check.ps1 -Old $old -New $new
-
+          package=$(find compose/composeApp/build/compose/binaries -type f -name "*.${EXTENSION}" | head -1)
+          [ -n "$package" ]
+          mkdir -p dist
+          cp "$package" "dist/PrivateMusic_${VERSION}_${ARTIFACT}.${EXTENSION}"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: installers-${{ matrix.name }}
-          path: |
-            target/**/release/bundle/**/*-setup.exe
-            target/**/release/bundle/**/*.dmg
-            target/**/release/bundle/**/*.deb
-            target/**/release/bundle/**/*.AppImage
-            target/**/release/bundle/**/*.sig
-            target/**/release/bundle/**/*.app.tar.gz
+          name: compose-v1-${{ matrix.artifact }}
+          path: dist/*
           if-no-files-found: error
 
   android:
-    name: Android APK
-    needs: version
+    name: Android release APK
+    needs: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 90
-    outputs:
-      signing: ${{ steps.key.outputs.mode }}
     env:
       NDK_VERSION: 27.2.12479018
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@v5
         with:
-          ref: ${{ github.sha }}
-
-      - name: Rust and Android targets
-        run: |
-          set -euxo pipefail
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup default stable
-          rustup target add aarch64-linux-android
-
-      - name: Android SDK, NDK, JDK, environment
+          distribution: temurin
+          java-version: '17'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: gradle/gradle-build-action@v3
+        with:
+          gradle-version: '9.5.0'
+      - name: Android SDK, NDK and Rust target
         run: |
           set -euxo pipefail
           . scripts/android-ci-env.sh
-          scripts/android-ci-sdk.sh "ndk;${NDK_VERSION}" "platforms;android-35" "platforms;android-36" "build-tools;35.0.0" "build-tools;36.0.0"
-
-      # Publish installable APKs only. Keep the signing key in a temporary file.
-      - name: Load the release signing key
+          scripts/android-ci-sdk.sh "ndk;${NDK_VERSION}" "platforms;android-36" "build-tools;36.0.0"
+          rustup target add aarch64-linux-android
+      - name: Load optional release signing key
         id: key
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -225,116 +124,78 @@ jobs:
           set -euo pipefail
           if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
             umask 077
-            path="$RUNNER_TEMP/release.jks"
-            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$path"
-            chmod 600 "$path"
-            echo "path=$path" >> "$GITHUB_OUTPUT"
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            chmod 600 "$RUNNER_TEMP/release.jks"
+            echo "path=$RUNNER_TEMP/release.jks" >> "$GITHUB_OUTPUT"
             echo "mode=release" >> "$GITHUB_OUTPUT"
-            echo "The four signing secrets are set: the APK will be signed by Gradle."
           else
-            echo "::warning::ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD are not all set. The APK will be signed with a temporary debug key and will not update a release-signed install."
+            echo "::warning::Release signing secrets are incomplete; using a temporary debug signature."
             echo "mode=debug" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Build release APK (arm64)
+      - name: Build Android release with Rust JNI
+        working-directory: compose
         env:
-          ANDROID_KEYSTORE_PATH: ${{ steps.key.outputs.mode == 'release' && steps.key.outputs.path || '' }}
+          ANDROID_KEYSTORE_PATH: ${{ steps.key.outputs.path }}
           ANDROID_KEYSTORE_PASSWORD: ${{ steps.key.outputs.mode == 'release' && secrets.ANDROID_KEYSTORE_PASSWORD || '' }}
           ANDROID_KEY_ALIAS: ${{ steps.key.outputs.mode == 'release' && secrets.ANDROID_KEY_ALIAS || '' }}
           ANDROID_KEY_PASSWORD: ${{ steps.key.outputs.mode == 'release' && secrets.ANDROID_KEY_PASSWORD || '' }}
-        run: scripts/android-build.sh release aarch64 dist
-
-      - name: Debug-sign when the release keystore is not configured
-        if: steps.key.outputs.mode == 'debug'
+        run: gradle --no-daemon :androidApp:assembleRelease -Dpm.rust.abi=arm64-v8a
+      - name: Sign fallback package and collect APK
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+          MODE: ${{ steps.key.outputs.mode }}
         run: |
           set -euo pipefail
           . scripts/android-ci-env.sh >/dev/null
-          mapfile -t unsigned < <(find dist -maxdepth 1 -type f -name '*-unsigned.apk' | sort)
-          [ "${#unsigned[@]}" -eq 1 ]
-          version="$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)"
-          signed="dist/PrivateMusic_${version}_android-arm64.apk"
-          scripts/android-debug-sign.sh "${unsigned[0]}" "$signed"
-          rm -f "${unsigned[0]}"
-
-      - name: Remove the signing key
+          mkdir -p dist
+          output="dist/PrivateMusic_${VERSION}_android-arm64.apk"
+          unsigned="compose/androidApp/build/outputs/apk/release/androidApp-release-unsigned.apk"
+          if [ -f "$unsigned" ]; then
+            [ "$MODE" = "debug" ]
+            scripts/android-debug-sign.sh "$unsigned" "$output"
+          else
+            cp compose/androidApp/build/outputs/apk/release/androidApp-release.apk "$output"
+          fi
+          apksigner="$(find "$ANDROID_HOME/build-tools/36.0.0" -name apksigner -type f | head -1)"
+          "$apksigner" verify --verbose "$output"
+          aapt2="$ANDROID_HOME/build-tools/36.0.0/aapt2"
+          "$aapt2" dump badging "$output" | grep -q "versionName='$VERSION'"
+          "$aapt2" dump badging "$output" | grep -q "package: name='com.dec.privatemusic2.android'"
+          unzip -l "$output" | grep -q 'lib/arm64-v8a/libprivate_music_engine.so'
+      - name: Remove signing key
         if: always()
         run: rm -f "$RUNNER_TEMP/release.jks"
-
-      - name: Check the APK
-        env:
-          VERSION: ${{ needs.version.outputs.version }}
-        run: |
-          set -euxo pipefail
-          . scripts/android-ci-env.sh >/dev/null
-          scripts/android-verify-apk.sh dist/*.apk arm64-v8a release
-          aapt2="$(find "$ANDROID_HOME/build-tools" -name aapt2 -type f | sort -V | tail -1)"
-          name="$("$aapt2" dump badging dist/*.apk | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -1)"
-          [ "$name" = "$VERSION" ] || { echo "APK versionName $name differs from the tag version $VERSION" >&2; exit 1; }
-          if ls dist/*-unsigned.apk >/dev/null 2>&1; then
-            echo "::error::Release APK must be signed."
-            exit 1
-          else
-            "$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)" verify --verbose dist/*.apk
-          fi
-          sha256sum dist/*.apk
-
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: android-apk
+          name: compose-v1-android-arm64
           path: dist/*.apk
           if-no-files-found: error
 
   publish:
-    name: Publish release
-    needs: [version, ui, build, android]
-    # Publish only when every platform has built successfully.
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [validate, desktop, android]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
-      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@v4
         with:
-          ref: ${{ github.sha }}
-
-      - name: Download the installers built above
+          pattern: compose-v1-*
+          path: out
+          merge-multiple: true
+      - name: Checksums and release
         env:
           GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.validate.outputs.version }}
         run: |
-          gh run download "$GITHUB_RUN_ID" --repo "$REPO" --pattern 'installers-*' --dir parts
-          mkdir -p android-parts
-          gh run download "$GITHUB_RUN_ID" --repo "$REPO" --name android-apk --dir android-parts
-
-      - name: Prepare installers, signatures and update manifest
-        env:
-          VERSION: ${{ needs.version.outputs.version }}
-          REPO: ${{ github.repository }}
-        run: python3 scripts/prepare-release.py --parts parts --android android-parts --out out --version "$VERSION" --repo "$REPO"
-
-      - name: Publish the combined release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.version.outputs.tag }}
-          REPO: ${{ github.repository }}
-          SIGNING: ${{ needs.android.outputs.signing }}
-        run: |
-          notes="docs/releases/${TAG#v}.md"
-          if [ ! -f "$notes" ]; then
-            notes="$RUNNER_TEMP/release-notes.md"
-            printf '%s\n' "Private Music ${TAG#v}: Windows, macOS, Linux and Android." > "$notes"
-          fi
-          if [ "$SIGNING" = "debug" ]; then
-            cat >> "$notes" <<'EOF'
-
-> **Подпись Android.** Секреты `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` и `ANDROID_KEY_PASSWORD` не заданы, поэтому APK подписан временным отладочным ключом этой сборки. Файл устанавливается, но не обновляет уже установленную копию, и следующий выпуск не встанет поверх него. Постоянный ключ нужен, чтобы обновления с GitHub Releases сохраняли данные; как его создать, написано в docs/android.md.
-EOF
-          fi
-          if [ -f out/UPDATER_DISABLED ]; then
-            cat >> "$notes" <<'EOF'
-
-> **Обновление на компьютере.** Секреты `TAURI_SIGNING_PRIVATE_KEY` и `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` не заданы. Установщики Windows, macOS и Linux в этом выпуске ставятся вручную. Обновление из уже установленного приложения заработает после добавления ключа.
-EOF
-          fi
-          gh release create "$TAG" out/* --repo "$REPO" --target "$GITHUB_SHA" --latest \
-            --title "Private Music ${TAG#v}" --notes-file "$notes"
+          set -euo pipefail
+          cd out
+          sha256sum PrivateMusic_* > SHA256SUMS.txt
+          cd ..
+          notes="docs/releases/${VERSION}.md"
+          [ -f "$notes" ]
+          gh release create "$TAG" out/* --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "Private Music $VERSION" --notes-file "$notes" --latest
