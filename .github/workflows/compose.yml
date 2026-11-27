@@ -75,10 +75,11 @@ jobs:
       - name: Verify media service and permissions in APK
         run: |
           "$ANDROID_HOME/build-tools/36.0.0/aapt2" dump xmltree --file AndroidManifest.xml compose/androidApp/build/outputs/apk/debug/androidApp-debug.apk > compose/androidApp/build/outputs/apk/debug/manifest.txt
-          grep -q 'PlaybackService' compose/androidApp/build/outputs/apk/debug/manifest.txt
-          grep -q 'POST_NOTIFICATIONS' compose/androidApp/build/outputs/apk/debug/manifest.txt
-          grep -q 'FOREGROUND_SERVICE_MEDIA_PLAYBACK' compose/androidApp/build/outputs/apk/debug/manifest.txt
-          grep -q 'mediaPlayback' compose/androidApp/build/outputs/apk/debug/manifest.txt
+          grep -q 'PlaybackService' compose/androidApp/build/outputs/apk/debug/manifest.txt || { echo 'PlaybackService is missing'; exit 1; }
+          grep -q 'POST_NOTIFICATIONS' compose/androidApp/build/outputs/apk/debug/manifest.txt || { echo 'Notification permission is missing'; exit 1; }
+          grep -q 'FOREGROUND_SERVICE_MEDIA_PLAYBACK' compose/androidApp/build/outputs/apk/debug/manifest.txt || { echo 'Media playback foreground permission is missing'; exit 1; }
+          # aapt2 prints the enum as its native bit mask (FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK = 1 << 4).
+          grep -Eq 'foregroundServiceType.*0x0*10' compose/androidApp/build/outputs/apk/debug/manifest.txt || { echo 'mediaPlayback service type is missing'; exit 1; }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: compose-android-debug
