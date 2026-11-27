@@ -19,6 +19,7 @@ test("a catalog mix rejected by VK starts untuned and keeps that continuation", 
     const calls = await page.evaluate(() => window.__mock.calls.filter(call => call.command === "stream_mix").map(call => call.args.options));
     assert.deepEqual(calls, ['{"mood":["calm"]}', null]);
     assert.equal(await page.evaluate(() => window.__mock.last("play_radio").args.source.options), null);
+    if (process.env.PM_SCREENSHOTS) await page.screenshot({ path: `${process.env.PM_SCREENSHOTS}/mix-untuned-playing.png` });
     assert.deepEqual(app.problems, []);
   } finally { await app.close(); }
 });

@@ -42,6 +42,7 @@ test("the scrubber does not flash the pre-seek position while the command is pen
     assert.ok(Math.abs(Number(await lane.inputValue()) - max * 0.75) <= max * 0.03);
     await page.evaluate(() => window.__finishSeek());
     await page.waitForFunction(() => Math.abs(window.__mock.state.player.position - window.__mock.last("seek").args.seconds) < 0.01);
+    if (process.env.PM_SCREENSHOTS) await page.screenshot({ path: `${process.env.PM_SCREENSHOTS}/phone-seek-confirmed.png` });
     assert.deepEqual(app.problems, []);
   } finally { await app.close(); }
 });
