@@ -36,7 +36,7 @@ class VkLoginActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val close = Button(this).apply { text = "✕"; setOnClickListener { finish() } }
-        val done = Button(this).apply { text = "Продолжить"; setOnClickListener { checkSession() } }
+        val done = Button(this).apply { text = "Продолжить"; setOnClickListener { lastHeader = null; checkSession(manual = true) } }
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             addView(close, LinearLayout.LayoutParams(dp(56), dp(56)))
@@ -76,11 +76,11 @@ class VkLoginActivity : Activity() {
         }, 1500)
     }
 
-    private fun checkSession() {
+    private fun checkSession(manual: Boolean = false) {
         if (finished || exchanging) return
         val manager = CookieManager.getInstance()
         val pairs = SessionCookies.merge(manager.getCookie(TOKEN_URL), manager.getCookie("https://vk.ru/"))
-        val header = SessionCookies.sessionHeader(pairs, true) ?: return
+        val header = SessionCookies.sessionHeader(pairs, manual) ?: return
         if (header == lastHeader) return
         lastHeader = header
         exchanging = true
@@ -90,8 +90,7 @@ class VkLoginActivity : Activity() {
                 exchanging = false
                 outcome.onSuccess { result ->
                     if (result != null) finishWith(result)
-                    else lastHeader = null
-                }.onFailure { lastHeader = null }
+                }
             }
         }
     }
