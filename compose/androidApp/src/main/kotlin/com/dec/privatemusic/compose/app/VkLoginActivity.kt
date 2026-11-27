@@ -79,7 +79,7 @@ class VkLoginActivity : Activity() {
     private fun checkSession() {
         if (finished || exchanging) return
         val manager = CookieManager.getInstance()
-        val pairs = SessionCookies.merge(manager.getCookie(TOKEN_URL), manager.getCookie("https://vk.ru/")
+        val pairs = SessionCookies.merge(manager.getCookie(TOKEN_URL), manager.getCookie("https://vk.ru/"))
         val header = SessionCookies.sessionHeader(pairs, true) ?: return
         if (header == lastHeader) return
         lastHeader = header
@@ -126,7 +126,7 @@ class VkLoginActivity : Activity() {
 private object SessionCookies {
     private val names = setOf("remixsid", "remixsid6", "remixnsid")
 
-    fun merge(vararg headers: String?): List<Pair<String, String> {
+    fun merge(vararg headers: String?): List<Pair<String, String>> {
         val result = LinkedHashMap<String, String>()
         headers.filterNotNull().forEach { header ->
             header.split(';').forEach { part ->

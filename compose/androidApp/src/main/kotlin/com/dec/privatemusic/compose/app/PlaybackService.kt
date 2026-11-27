@@ -47,7 +47,6 @@ class PlaybackService : android.app.Service() {
         api = platformPlayerApi()
         createChannel()
         session = MediaSessionCompat(this, "PrivateMusic").apply {
-            setFlags(MediaSessionCompat.FLAG_HANDLE_MEDIA_BUTTONS or MediaSessionCompat.FLAG_HANDLE_TRANSPORT_CONTROLS)
             setCallback(object : MediaSessionCompat.Callback() {
                 override fun onPlay() = command { api.toggle() }
                 override fun onPause() = command { api.toggle() }
@@ -86,11 +85,11 @@ class PlaybackService : android.app.Service() {
         }
     }
 
-    private fun decodeState(raw: String): PlayerState? = runCatching {
-        val body = json.parseToJsonElement(raw) as? JsonObject ?: return null
+    private fun decodeState(raw: String): PlayerState? {
+        val body = runCatching { json.parseToJsonElement(raw) }.getOrNull() as? JsonObject ?: return null
         if (body["type"] != null) return null
-        json.decodeFromJsonElement(PlayerState.serializer(), body)
-    }.getOrNull()
+        return runCatching { json.decodeFromJsonElement(PlayerState.serializer(), body) }.getOrNull()
+    }
 
     private fun update(next: PlayerState) {
         val oldTrack = state.track
