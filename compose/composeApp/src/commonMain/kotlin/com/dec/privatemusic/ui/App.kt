@@ -112,6 +112,12 @@ fun PrivateMusicApp(viewModel: PlayerViewModel, sessionViewModel: SessionViewMod
                     Screen.Downloads -> DownloadsScreen(catalog) { tracks, index -> scope.launch { viewModel.play(tracks, index) } }
                     Screen.Lyrics -> LyricsScreen(state.track, catalog)
                 }
+                if (screen !in setOf(Screen.Home, Screen.Player, Screen.Queue)) {
+                    FloatingActionButton(
+                        onClick = { screen = if (screen == Screen.Lyrics) Screen.Player else Screen.Home },
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp).semantics { contentDescription = "Назад" },
+                    ) { Text("‹", fontSize = 28.sp) }
+                }
             }
         }
     }

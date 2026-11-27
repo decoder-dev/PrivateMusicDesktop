@@ -72,6 +72,13 @@ jobs:
         run: gradle --no-daemon :androidApp:assembleDebug -Dpm.rust.abi=arm64-v8a
       - name: Verify Rust JNI library is packaged
         run: unzip -l compose/androidApp/build/outputs/apk/debug/androidApp-debug.apk | grep 'lib/arm64-v8a/libprivate_music_engine.so'
+      - name: Verify media service and permissions in APK
+        run: |
+          "$ANDROID_HOME/build-tools/36.0.0/aapt2" dump xmltree --file AndroidManifest.xml compose/androidApp/build/outputs/apk/debug/androidApp-debug.apk > compose/androidApp/build/outputs/apk/debug/manifest.txt
+          grep -q 'PlaybackService' compose/androidApp/build/outputs/apk/debug/manifest.txt
+          grep -q 'POST_NOTIFICATIONS' compose/androidApp/build/outputs/apk/debug/manifest.txt
+          grep -q 'FOREGROUND_SERVICE_MEDIA_PLAYBACK' compose/androidApp/build/outputs/apk/debug/manifest.txt
+          grep -q 'mediaPlayback' compose/androidApp/build/outputs/apk/debug/manifest.txt
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: compose-android-debug
