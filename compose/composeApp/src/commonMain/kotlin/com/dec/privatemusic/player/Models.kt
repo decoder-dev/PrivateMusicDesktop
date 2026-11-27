@@ -1,6 +1,6 @@
 package com.dec.privatemusic.player
 
-import kotlinx.serialization.JsonElement
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.Serializable
 
 @Serializable
