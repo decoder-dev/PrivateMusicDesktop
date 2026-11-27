@@ -29,7 +29,7 @@ class SessionStore(context: Context) {
             val data = Base64.decode(stored, Base64.NO_WRAP)
             val key = key()
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, data.copyOfRange(0, 12))
+            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, data.copyOfRange(0, 12)))
             val raw = cipher.doFinal(data.copyOfRange(12, data.size)).toString(Charsets.UTF_8)
             platformSignIn(rawToSession(raw))
         }

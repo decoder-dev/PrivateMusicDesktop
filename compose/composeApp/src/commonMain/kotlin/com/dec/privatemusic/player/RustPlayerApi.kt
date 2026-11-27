@@ -91,7 +91,7 @@ class RustPlayerApi(
     fun removeFromLibrary(track: Track) = unitCommand(buildJsonObject { put("command", "remove_from_library"); put("track", json.encodeToJsonElement(track)) })
     fun setShuffle(on: Boolean) = unitCommand(buildJsonObject { put("command", "set_shuffle"); put("on", on) })
     fun setRepeat(repeat: String) = unitCommand(buildJsonObject { put("command", "set_repeat"); put("repeat", repeat) })
-    fun setEqualizer(gains: List<Float>) = unitCommand(buildJsonObject { put("command", "set_equalizer"); putJsonArray("gains") { gains.forEach { add(it) } } })
+    fun setEqualizer(gains: List<Float>) = unitCommand(buildJsonObject { put("command", "set_equalizer"); putJsonArray("gains") { gains.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } } })
     fun outputDevices(): List<String> = decode(buildJsonObject { put("command", "output_devices") })
     fun setOutputDevice(name: String?) = unitCommand(buildJsonObject { put("command", "set_output_device"); put("name", name) })
 

@@ -40,11 +40,15 @@ fun PrivateMusicApp(viewModel: PlayerViewModel, sessionViewModel: SessionViewMod
     val error by viewModel.error.collectAsState()
     val session by sessionViewModel.state.collectAsState()
     val catalog = remember { CatalogViewModel(platformCatalogApi()) }
+    val library by catalog.library.collectAsState()
+    val recommendations by catalog.searchResults.collectAsState()
+    val homeTracks = library.ifEmpty { recommendations.ifEmpty { demoTracks } }
     var screen by remember { mutableStateOf(Screen.Home) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(viewModel) { viewModel.start() }
     LaunchedEffect(sessionViewModel) { sessionViewModel.start() }
+    LaunchedEffect(session.signed_in) { if (session.signed_in) catalog.start() }
     DisposableEffect(viewModel) { onDispose { viewModel.close() } }
     DisposableEffect(sessionViewModel) { onDispose { sessionViewModel.close() } }
     DisposableEffect(catalog) { onDispose { catalog.close() } }
@@ -78,9 +82,10 @@ fun PrivateMusicApp(viewModel: PlayerViewModel, sessionViewModel: SessionViewMod
                 when (screen) {
                     Screen.Home -> HomeScreen(
                         state = state,
-                        tracks = demoTracks,
+                        tracks = homeTracks,
                         error = error,
-                        onPlay = { index -> scope.launch { viewModel.play(demoTracks, index) } },
+                        onPlay = { index -> scope.launch { viewModel.play(homeTracks, index) } },
+                        onDownload = { track -> catalog.download(track) },
                         onOpenPlayer = { screen = Screen.Player },
                         onOpenQueue = { screen = Screen.Queue },
                         onOpenProfile = { screen = Screen.Profile },
@@ -101,7 +106,7 @@ fun PrivateMusicApp(viewModel: PlayerViewModel, sessionViewModel: SessionViewMod
                         onBack = { screen = if (state.track != null) Screen.Player else Screen.Home },
                         onJump = { index -> scope.launch { viewModel.jump(index) } },
                     )
-                    Screen.Profile -> ProfileScreen(session, onLogin, onLogout)
+                    Screen.Profile -> ProfileScreen(session, onLogin, onLogout) { sessionViewModel.refresh() }
                     Screen.Search -> SearchScreen(catalog) { tracks, index -> scope.launch { viewModel.play(tracks, index) } }
                     Screen.Mixes -> MixesScreen(catalog) { launch -> scope.launch { viewModel.playRadio(launch.source, launch.tracks, 0, launch.nextOffset) } }
                     Screen.Downloads -> DownloadsScreen(catalog) { tracks, index -> scope.launch { viewModel.play(tracks, index) } }
@@ -118,6 +123,7 @@ private fun HomeScreen(
     tracks: List<Track>,
     error: String?,
     onPlay: (Int) -> Unit,
+    onDownload: (Track) -> Unit,
     onOpenPlayer: () -> Unit,
     onOpenQueue: () -> Unit,
     onOpenProfile: () -> Unit,
@@ -166,13 +172,13 @@ private fun HomeScreen(
             }
         }
         itemsIndexed(tracks, key = { _, track -> track.key }) { index, track ->
-            TrackRow(track = track, active = state.track?.key == track.key, onClick = { onPlay(index) })
+            TrackRow(track = track, active = state.track?.key == track.key, onClick = { onPlay(index) }, onDownload = { onDownload(track) })
         }
     }
 }
 
 @Composable
-internal fun TrackRow(track: Track, active: Boolean, onClick: () -> Unit) {
+internal fun TrackRow(track: Track, active: Boolean, onClick: () -> Unit, onDownload: (() -> Unit)? = null) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = if (active) SurfaceRaised else Color.Transparent),
@@ -185,6 +191,11 @@ internal fun TrackRow(track: Track, active: Boolean, onClick: () -> Unit) {
                 Text(track.artist, color = TextSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Text(formatTime(track.duration), color = TextSecondary, fontSize = 13.sp)
+            if (onDownload != null) {
+                IconButton(onClick = onDownload, modifier = Modifier.semantics { contentDescription = "Скачать ${track.title}" }) {
+                    Text("↓", color = TextPrimary, fontSize = 22.sp)
+                }
+            }
         }
     }
 }
