@@ -15,7 +15,7 @@ import kotlinx.serialization.json.put
 data class MixLaunch(val source: JsonObject, val tracks: List<Track>, val nextOffset: Int?)
 
 class CatalogViewModel(
-    private val api: RustPlayerApi,
+    private val api: CatalogApi,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
     private val mutableLibrary = MutableStateFlow<List<Track>>(emptyList())
