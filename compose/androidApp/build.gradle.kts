@@ -61,10 +61,8 @@ tasks.register<Exec>("cargoBuildPrivateMusic") {
 
 tasks.register<Copy>("packagePrivateMusicJni") {
     dependsOn("cargoBuildPrivateMusic")
-    doFirst {
-        require(nativeLibrary.isFile) { "Missing native engine: $nativeLibrary" }
-    }
     from(nativeLibrary)
+    failOnMissingFile()
     into("src/main/jniLibs/$rustAbi")
 }
 
