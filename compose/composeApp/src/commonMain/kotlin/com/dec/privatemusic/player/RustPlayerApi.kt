@@ -3,6 +3,7 @@ package com.dec.privatemusic.player
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -68,7 +69,7 @@ class RustPlayerApi(
     }
 
     override fun events(): Flow<String> = flow {
-        while (isActive) {
+        while (currentCoroutineContext().isActive) {
             val raw = transport.poll()
             if (raw != null) emit(raw) else delay(25)
         }
