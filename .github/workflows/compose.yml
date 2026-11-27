@@ -32,7 +32,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/gradle-build-action@v3
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.0'
       - name: Install native audio dependencies
@@ -60,7 +60,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/gradle-build-action@v3
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.0'
       - name: Android SDK, NDK and Rust target
