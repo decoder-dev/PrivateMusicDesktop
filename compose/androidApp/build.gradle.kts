@@ -42,6 +42,7 @@ dependencies {
     implementation(project(":composeApp"))
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.core:core-ktx:1.16.0")
+    implementation("androidx.media:media:1.7.1")
 }
 
 val rustAbi = System.getProperty("pm.rust.abi") ?: "arm64-v8a"
