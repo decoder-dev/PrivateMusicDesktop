@@ -55,7 +55,17 @@ class CatalogViewModel(
         mutableSearch.value = if (query.isBlank()) api.recommendations() else api.search(query).items
     }
 
-    fun playMix(mix: MusicMix): MixLaunch {
+    fun playMix(mix: MusicMix, onReady: (MixLaunch) -> Unit) {
+        scope.launch {
+            mutableLoading.value = true
+            runCatching { loadMix(mix) }
+                .onSuccess(onReady)
+                .onFailure { mutableError.value = it.message }
+            mutableLoading.value = false
+        }
+    }
+
+    private fun loadMix(mix: MusicMix): MixLaunch {
         var options = mix.options
         var tracks = try {
             api.streamMix(mix.id, options)
@@ -91,7 +101,10 @@ class CatalogViewModel(
         refreshDownloads()
     }
 
-    fun lyrics(track: Track) = run { mutableLyrics.value = api.lyrics(track) }
+    fun lyrics(track: Track) = run {
+        mutableLyrics.value = null
+        mutableLyrics.value = api.lyrics(track)
+    }
 
     private fun run(action: () -> Unit) {
         scope.launch {

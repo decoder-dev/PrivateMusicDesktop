@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.sp
 import com.dec.privatemusic.player.*
 
 @Composable
-fun ProfileScreen(session: SessionState, onLogin: (() -> Unit)?, onLogout: () -> Unit) {
+fun ProfileScreen(session: SessionState, onLogin: (() -> Unit)?, onLogout: () -> Unit, onSessionChanged: () -> Unit) {
     var manualLogin by remember { mutableStateOf(false) }
     CatalogColumn("Профиль") {
         item {
@@ -37,11 +37,11 @@ fun ProfileScreen(session: SessionState, onLogin: (() -> Unit)?, onLogout: () ->
             }
         }
     }
-    if (manualLogin) SessionLoginDialog(onDismiss = { manualLogin = false })
+    if (manualLogin) SessionLoginDialog(onDismiss = { manualLogin = false }, onSessionChanged = onSessionChanged)
 }
 
 @Composable
-private fun SessionLoginDialog(onDismiss: () -> Unit) {
+private fun SessionLoginDialog(onDismiss: () -> Unit, onSessionChanged: () -> Unit) {
     var token by remember { mutableStateOf("") }
     var cookie by remember { mutableStateOf("") }
     var userId by remember { mutableStateOf("") }
@@ -66,6 +66,7 @@ private fun SessionLoginDialog(onDismiss: () -> Unit) {
                         refresh_cookie = cookie,
                         web_user_agent = "Mozilla/5.0",
                     ))
+                    onSessionChanged()
                     onDismiss()
                 }
             }) { Text("Войти") }
@@ -87,7 +88,7 @@ fun SearchScreen(catalog: CatalogViewModel, onPlay: (List<Track>, Int) -> Unit) 
             }
         }
         itemsIndexed(tracks, key = { _, track -> track.key }) { index, track ->
-            TrackRow(track = track, active = false, onClick = { onPlay(tracks, index) })
+            TrackRow(track = track, active = false, onClick = { onPlay(tracks, index) }, onDownload = { catalog.download(track) })
         }
     }
 }
@@ -101,7 +102,7 @@ fun MixesScreen(catalog: CatalogViewModel, onPlayMix: (MixLaunch) -> Unit) {
     CatalogColumn("Миксы и релизы") {
         if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
         items(mixes, key = { "${it.id}#${it.options}" }) { mix ->
-            Card(Modifier.fillMaxWidth().clickable { onPlayMix(catalog.playMix(mix)) }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+            Card(Modifier.fillMaxWidth().clickable(enabled = !loading) { catalog.playMix(mix, onPlayMix) }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     CoverArt(Modifier.size(48.dp))
                     Column(Modifier.padding(start = 12.dp)) {
@@ -113,7 +114,7 @@ fun MixesScreen(catalog: CatalogViewModel, onPlayMix: (MixLaunch) -> Unit) {
         }
         if (releases.isNotEmpty()) item { Text("Новые релизы", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 16.dp)) }
         items(releases, key = { "${it.owner_id}_${it.album_id}" }) { album ->
-            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant) {
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                 Column(Modifier.padding(16.dp)) {
                     Text(album.title, fontWeight = FontWeight.SemiBold)
                     Text(album.artists.joinToString { it.name }, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
@@ -151,6 +152,9 @@ fun LyricsScreen(track: Track?, catalog: CatalogViewModel) {
             if (lyrics == null) item { Text("Текст не найден", color = MaterialTheme.colorScheme.onSurfaceVariant) }
             lyrics?.lines?.forEach { line ->
                 item { Text(line.text, fontSize = 18.sp, modifier = Modifier.padding(vertical = 6.dp)) }
+            }
+            if (lyrics != null && lyrics?.lines.isNullOrEmpty()) {
+                item { Text(lyrics?.text.orEmpty(), fontSize = 18.sp, modifier = Modifier.padding(vertical = 6.dp)) }
             }
         }
     }

@@ -15,6 +15,9 @@ fun main() = singleWindowApplication(title = "Private Music") {
         viewModel = viewModel,
         sessionViewModel = session,
         onLogin = null,
-        onLogout = { session.refresh() },
+        onLogout = {
+            com.dec.privatemusic.player.platformSignOut()
+            session.refresh()
+        },
     )
 }
