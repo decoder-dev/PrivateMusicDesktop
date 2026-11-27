@@ -21,4 +21,4 @@ expect fun platformPlayerApi(): PlayerApi
 expect fun platformSignIn(session: Session)
 expect fun platformSignOut()
 expect fun platformSessionState(): SessionState
-expect fun platformCatalogApi(): RustPlayerApi
+expect fun platformCatalogApi(): CatalogApi

@@ -35,7 +35,13 @@ private class JnaTransport : RustTransport {
 actual fun platformPlayerApi(): PlayerApi =
     if (System.getProperty("pm.compose.demo") == "1") DemoPlayerApi() else sharedApi
 
-actual fun platformSignIn(session: Session) = sharedApi.signIn(session)
-actual fun platformSignOut() = sharedApi.signOut()
-actual fun platformSessionState(): SessionState = sharedApi.sessionState()
-actual fun platformCatalogApi(): RustPlayerApi = sharedApi
+actual fun platformSignIn(session: Session) {
+    if (System.getProperty("pm.compose.demo") != "1") sharedApi.signIn(session)
+}
+actual fun platformSignOut() {
+    if (System.getProperty("pm.compose.demo") != "1") sharedApi.signOut()
+}
+actual fun platformSessionState(): SessionState =
+    if (System.getProperty("pm.compose.demo") == "1") SessionState(signed_in = true, profile = Profile(first_name = "Demo")) else sharedApi.sessionState()
+actual fun platformCatalogApi(): CatalogApi =
+    if (System.getProperty("pm.compose.demo") == "1") DemoCatalogApi() else sharedApi

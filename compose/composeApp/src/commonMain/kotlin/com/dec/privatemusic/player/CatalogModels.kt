@@ -2,6 +2,26 @@ package com.dec.privatemusic.player
 
 import kotlinx.serialization.Serializable
 
+interface CatalogApi {
+    fun library(offset: Int = 0, count: Int = 200): TrackPage
+    fun search(query: String, offset: Int = 0, count: Int = 100): TrackPage
+    fun catalogMixes(): List<MusicMix>
+    fun streamMix(id: String, options: String? = null, offset: Int = 0): List<Track>
+    fun recommendations(): List<Track>
+    fun newReleases(): List<Album>
+    fun downloads(): List<OfflineTrack>
+    fun download(track: Track): OfflineTrack
+    fun removeDownload(trackId: String): Boolean
+    fun lyrics(track: Track): Lyrics?
+    fun addToLibrary(track: Track): Track
+    fun removeFromLibrary(track: Track)
+    fun setShuffle(on: Boolean)
+    fun setRepeat(repeat: String)
+    fun setEqualizer(gains: List<Float>)
+    fun outputDevices(): List<String>
+    fun setOutputDevice(name: String?)
+}
+
 @Serializable
 data class Session(
     val access_token: String,

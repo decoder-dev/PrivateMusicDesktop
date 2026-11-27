@@ -22,7 +22,7 @@ actual fun platformPlayerApi(): PlayerApi = sharedPlayer
 actual fun platformSignIn(session: Session) = sharedApi.signIn(session)
 actual fun platformSignOut() = sharedApi.signOut()
 actual fun platformSessionState(): SessionState = sharedApi.sessionState()
-actual fun platformCatalogApi(): RustPlayerApi = sharedApi
+actual fun platformCatalogApi(): CatalogApi = sharedApi
 
 object RustPlayerApiJni {
     init {

@@ -21,6 +21,7 @@ import kotlin.test.Test
 class ScreenshotTest {
     @Test
     fun homeAndFullPlayerRenderToPng() = runBlocking {
+        System.setProperty("pm.compose.demo", "1")
         val api = DemoPlayerApi()
         api.playTracks(demoTracks, 1)
         val viewModel = PlayerViewModel(api)
