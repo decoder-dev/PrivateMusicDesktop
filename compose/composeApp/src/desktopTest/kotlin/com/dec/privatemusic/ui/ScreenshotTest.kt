@@ -9,6 +9,7 @@ import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.use
 import com.dec.privatemusic.player.DemoPlayerApi
 import com.dec.privatemusic.player.PlayerViewModel
+import com.dec.privatemusic.player.SessionViewModel
 import com.dec.privatemusic.player.demoTracks
 import java.io.File
 import kotlinx.coroutines.runBlocking
@@ -23,8 +24,14 @@ class ScreenshotTest {
         val api = DemoPlayerApi()
         api.playTracks(demoTracks, 1)
         val viewModel = PlayerViewModel(api)
+        val session = SessionViewModel()
         ImageComposeScene(width = 360, height = 800) {
-            PrivateMusicApp(viewModel)
+            PrivateMusicApp(
+                viewModel = viewModel,
+                sessionViewModel = session,
+                onLogin = null,
+                onLogout = { session.refresh() },
+            )
         }.use { scene ->
             scene.render()
             save(scene.render(), "home")

@@ -1,17 +1,22 @@
-use pm_engine::app::{App, AppOptions};
-use pm_engine::audio::{CpalSink, Sink};
-use pm_engine::store::MemoryStore;
-use pm_engine::vk::{Track, VkClient};
+use pm_engine::app::{App, AppOptions, RadioSource};
+use pm_engine::audio::{output_devices, CpalSink, Sink};
+use pm_engine::queue::Repeat;
+use pm_engine::store::{MemoryStore, SecretStore};
+#[cfg(not(target_os = "android"))]
+use pm_engine::store::KeyringStore;
+use pm_engine::vk::{Session, Track, VkClient};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::VecDeque;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_void};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 struct Engine {
     app: App,
     events: Arc<Mutex<VecDeque<String>>>,
+    output_device: Arc<Mutex<Option<String>>>,
 }
 
 type Shared = Mutex<Engine>;
@@ -20,6 +25,7 @@ type Shared = Mutex<Engine>;
 #[serde(tag = "command", rename_all = "snake_case")]
 enum Command {
     PlayTracks { tracks: Vec<Track>, index: usize },
+    PlayRadio { source: RadioSource, tracks: Vec<Track>, index: usize, next_offset: Option<u32> },
     Toggle,
     Next,
     Previous,
@@ -27,31 +33,68 @@ enum Command {
     SetVolume { volume: f32 },
     Jump { index: usize },
     PlayerState,
+    SignIn { session: Session },
+    SignOut,
+    SessionState,
+    Library { offset: u32, count: u32 },
+    Search { query: String, offset: u32, count: u32 },
+    CatalogMixes,
+    StreamMix { mix_id: String, options: Option<String>, offset: u32 },
+    Recommendations,
+    NewReleases,
+    Downloads,
+    Download { track: Track },
+    RemoveDownload { track_id: String },
+    Lyrics { track: Track },
+    AddToLibrary { track: Track },
+    RemoveFromLibrary { track: Track },
+    SetShuffle { on: bool },
+    SetRepeat { repeat: Repeat },
+    SetEqualizer { gains: Vec<f32> },
+    OutputDevices,
+    SetOutputDevice { name: Option<String> },
 }
 
 fn new_engine() -> Box<Shared> {
     let events = Arc::new(Mutex::new(VecDeque::new()));
     let event_sink = events.clone();
+    let output_device = Arc::new(Mutex::new(None::<String>));
+    let device_for_sink = output_device.clone();
+    #[cfg(not(target_os = "android"))]
+    let store: Box<dyn SecretStore> = Box::new(KeyringStore::new("PrivateMusicDesktop"));
+    #[cfg(target_os = "android")]
+    let store: Box<dyn SecretStore> = Box::<MemoryStore>::default();
+    let data_dir = std::env::var_os("PM_DATA_DIR").map(PathBuf::from).unwrap_or_else(|| std::env::temp_dir().join("private-music"));
     let app = App::new(
         VkClient::new().expect("built-in VK endpoint"),
-        || CpalSink::open(None).map(|sink| Box::new(sink) as Box<dyn Sink>),
-        Box::<MemoryStore>::default(),
+        move || {
+            let name = device_for_sink.lock().unwrap_or_else(|poison| poison.into_inner()).clone();
+            CpalSink::open(name.as_deref()).map(|sink| Box::new(sink) as Box<dyn Sink>)
+        },
+        store,
         move |event| {
             if let Ok(raw) = serde_json::to_string(&event) {
                 event_sink.lock().unwrap_or_else(|poison| poison.into_inner()).push_back(raw);
             }
         },
-        AppOptions { watch_network: false, ..AppOptions::default() },
+        AppOptions {
+            offline_dir: Some(data_dir.join("downloads")),
+            history_dir: Some(data_dir.join("history")),
+            watch_network: false,
+            ..AppOptions::default()
+        },
     );
-    Box::new(Mutex::new(Engine { app, events }))
+    Box::new(Mutex::new(Engine { app, events, output_device }))
 }
 
 fn command(engine: &mut Engine, raw: &str) -> String {
     let result = (|| -> Result<Value, String> {
         let command: Command = serde_json::from_str(raw).map_err(|error| error.to_string())?;
-        let controller = engine.app.controller();
+        let app = &engine.app;
+        let controller = app.controller();
         match command {
             Command::PlayTracks { tracks, index } => controller.play_tracks(tracks, index),
+            Command::PlayRadio { source, tracks, index, next_offset } => app.play_radio_from(source, tracks, index, next_offset).map_err(|error| error.to_string())?,
             Command::Toggle => controller.toggle(),
             Command::Next => controller.next(),
             Command::Previous => controller.previous(),
@@ -59,6 +102,32 @@ fn command(engine: &mut Engine, raw: &str) -> String {
             Command::SetVolume { volume } => controller.set_volume(volume),
             Command::Jump { index } => controller.jump(index),
             Command::PlayerState => return serde_json::to_value(controller.state()).map_err(|error| error.to_string()),
+            Command::SignIn { session } => app.sign_in(session),
+            Command::SignOut => app.sign_out(),
+            Command::SessionState => return serde_json::to_value(app.session_state()).map_err(|error| error.to_string()),
+            Command::Library { offset, count } => return serde_json::to_value(app.library(offset, count).map_err(|error| error.to_string())?).map_err(|error| error.to_string()),
+            Command::Search { query, offset, count } => return serde_json::to_value(app.search(&query, offset, count).map_err(|error| error.to_string())?).map_err(|error| error.to_string()),
+            Command::CatalogMixes => return serde_json::to_value(app.catalog_mixes().map_err(|error| error.to_string())?).map_err(|error| error.to_string()),
+            Command::StreamMix { mix_id, options, offset } => return serde_json::to_value(app.stream_mix_at(&mix_id, options.as_deref(), offset).map_err(|error| error.to_string())?).map_err(|error| error.to_string()),
+            Command::Recommendations => return serde_json::to_value(app.recommendations().map_err(|error| error.to_string())?).map_err(|error| error.to_string()),
+            Command::NewReleases => return serde_json::to_value(app.new_releases().map_err(|error| error.to_string())?).map_err(|error| error.to_string()),
+            Command::Downloads => return serde_json::to_value(app.downloads()).map_err(|error| error.to_string()),
+            Command::Download { track } => return serde_json::to_value(app.download(&track).map_err(|error| error.to_string())?).map_err(|error| error.to_string()),
+            Command::RemoveDownload { track_id } => return serde_json::to_value(app.remove_download(&track_id).map_err(|error| error.to_string())?).map_err(|error| error.to_string()),
+            Command::Lyrics { track } => return serde_json::to_value(app.lyrics(&track).map_err(|error| error.to_string())?).map_err(|error| error.to_string()),
+            Command::AddToLibrary { track } => return serde_json::to_value(app.add_to_library(&track).map_err(|error| error.to_string())?).map_err(|error| error.to_string()),
+            Command::RemoveFromLibrary { track } => app.remove_from_library(&track).map_err(|error| error.to_string())?,
+            Command::SetShuffle { on } => controller.set_shuffle(on),
+            Command::SetRepeat { repeat } => controller.set_repeat(repeat),
+            Command::SetEqualizer { gains } => {
+                let gains: [f32; 10] = gains.try_into().map_err(|_| "equalizer needs exactly 10 gains".to_string())?;
+                controller.set_equalizer(Some(gains));
+            }
+            Command::OutputDevices => return serde_json::to_value(output_devices()).map_err(|error| error.to_string()),
+            Command::SetOutputDevice { name } => {
+                *engine.output_device.lock().unwrap_or_else(|poison| poison.into_inner()) = name;
+                controller.reopen_output();
+            }
         }
         Ok(Value::Null)
     })();
