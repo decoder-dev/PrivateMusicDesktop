@@ -80,7 +80,7 @@ fun SearchScreen(catalog: CatalogViewModel, onPlay: (List<Track>, Int) -> Unit) 
     var query by remember { mutableStateOf("") }
     val tracks by catalog.searchResults.collectAsState()
     LaunchedEffect(catalog) { catalog.search("") }
-    CatalogColumn("Поиск по VK") {
+    CatalogColumn("Поиск по VK", error = catalog.error.collectAsState().value) {
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("Трек или исполнитель") })
@@ -99,7 +99,7 @@ fun MixesScreen(catalog: CatalogViewModel, onPlayMix: (MixLaunch) -> Unit) {
     val releases by catalog.releases.collectAsState()
     val loading by catalog.loading.collectAsState()
     LaunchedEffect(catalog) { catalog.start() }
-    CatalogColumn("Миксы и релизы") {
+    CatalogColumn("Миксы и релизы", error = catalog.error.collectAsState().value) {
         if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
         items(mixes, key = { "${it.id}#${it.options}" }) { mix ->
             Card(Modifier.fillMaxWidth().clickable(enabled = !loading) { catalog.playMix(mix, onPlayMix) }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
@@ -128,7 +128,7 @@ fun MixesScreen(catalog: CatalogViewModel, onPlayMix: (MixLaunch) -> Unit) {
 fun DownloadsScreen(catalog: CatalogViewModel, onPlay: (List<Track>, Int) -> Unit) {
     val downloads by catalog.downloads.collectAsState()
     LaunchedEffect(catalog) { catalog.refreshDownloads() }
-    CatalogColumn("Загрузки") {
+    CatalogColumn("Загрузки", error = catalog.error.collectAsState().value) {
         if (downloads.isEmpty()) item { Text("Пока ничего не загружено", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         itemsIndexed(downloads, key = { _, item -> item.track.key }) { index, item ->
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -145,7 +145,7 @@ fun DownloadsScreen(catalog: CatalogViewModel, onPlay: (List<Track>, Int) -> Uni
 fun LyricsScreen(track: Track?, catalog: CatalogViewModel) {
     val lyrics by catalog.lyrics.collectAsState()
     LaunchedEffect(track?.key) { if (track != null) catalog.lyrics(track) }
-    CatalogColumn("Текст песни") {
+    CatalogColumn("Текст песни", error = catalog.error.collectAsState().value) {
         if (track == null) item { Text("Выберите трек") }
         else {
             item { Text("${track.artist} — ${track.title}", fontWeight = FontWeight.SemiBold, fontSize = 20.sp) }
@@ -161,13 +161,14 @@ fun LyricsScreen(track: Track?, catalog: CatalogViewModel) {
 }
 
 @Composable
-private fun CatalogColumn(title: String, content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit) {
+private fun CatalogColumn(title: String, error: String? = null, content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item { Text(title, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp)) }
+        if (error != null) item { Text(error, color = MaterialTheme.colorScheme.error) }
         content()
     }
 }

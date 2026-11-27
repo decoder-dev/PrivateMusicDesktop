@@ -71,7 +71,13 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "PrivateMusic"
-            packageVersion = "1.0.0"
+            packageVersion = "1.0.1"
+            windows {
+                menu = true
+                shortcut = true
+                menuGroup = "Private Music"
+                upgradeUuid = "7F2D5C36-2F6C-4F8D-9A4C-8D4A6E4C1001"
+            }
         }
     }
 }

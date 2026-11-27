@@ -3,6 +3,7 @@ package com.dec.privatemusic.player
 import kotlinx.serialization.Serializable
 
 interface CatalogApi {
+    val isDemo: Boolean get() = false
     fun library(offset: Int = 0, count: Int = 200): TrackPage
     fun search(query: String, offset: Int = 0, count: Int = 100): TrackPage
     fun catalogMixes(): List<MusicMix>
