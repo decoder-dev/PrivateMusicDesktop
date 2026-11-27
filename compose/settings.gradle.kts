@@ -17,3 +17,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "PrivateMusicCompose"
 include(":composeApp")
+include(":androidApp")

@@ -1,4 +1,4 @@
-package com.dec.privatemusic.compose
+package com.dec.privatemusic.compose.app
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
