@@ -11,7 +11,14 @@ private class JniTransport : RustTransport {
     override fun free() = RustPlayerApiJni.pm_engine_free(pointer)
 }
 
-actual fun platformPlayerApi(): PlayerApi = sharedApi
+private val sharedPlayer by lazy {
+    object : PlayerApi by sharedApi {
+        // The Android process shares one engine with PlaybackService and survives activity recreation.
+        override fun close() = Unit
+    }
+}
+
+actual fun platformPlayerApi(): PlayerApi = sharedPlayer
 actual fun platformSignIn(session: Session) = sharedApi.signIn(session)
 actual fun platformSignOut() = sharedApi.signOut()
 actual fun platformSessionState(): SessionState = sharedApi.sessionState()

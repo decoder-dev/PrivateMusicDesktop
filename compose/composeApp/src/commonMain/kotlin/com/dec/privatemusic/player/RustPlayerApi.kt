@@ -1,10 +1,15 @@
 package com.dec.privatemusic.player
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -90,14 +95,26 @@ class RustPlayerApi(
     fun outputDevices(): List<String> = decode(buildJsonObject { put("command", "output_devices") })
     fun setOutputDevice(name: String?) = unitCommand(buildJsonObject { put("command", "set_output_device"); put("name", name) })
 
-    override fun events(): Flow<String> = flow {
-        while (currentCoroutineContext().isActive) {
-            val raw = transport.poll()
-            if (raw != null) emit(raw) else delay(25)
+    private val eventScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val eventStream = MutableSharedFlow<String>(extraBufferCapacity = 64)
+    private val eventJob by lazy {
+        eventScope.launch {
+            while (isActive) {
+                val raw = transport.poll()
+                if (raw != null) eventStream.emit(raw) else delay(25)
+            }
         }
     }
 
-    override fun close() = transport.free()
+    override fun events(): Flow<String> {
+        eventJob // Start one native polling loop shared by every UI and media-session collector.
+        return eventStream.asSharedFlow()
+    }
+
+    override fun close() {
+        eventScope.cancel()
+        transport.free()
+    }
 }
 
 class PlayerException(message: String) : IllegalStateException(message)
