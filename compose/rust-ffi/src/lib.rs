@@ -56,6 +56,10 @@ enum Command {
 }
 
 fn new_engine() -> Box<Shared> {
+    new_engine_with_data_dir(None)
+}
+
+fn new_engine_with_data_dir(data_dir: Option<PathBuf>) -> Box<Shared> {
     let events = Arc::new(Mutex::new(VecDeque::new()));
     let event_sink = events.clone();
     let output_device = Arc::new(Mutex::new(None::<String>));
@@ -64,7 +68,11 @@ fn new_engine() -> Box<Shared> {
     let store: Box<dyn SecretStore> = Box::new(KeyringStore::new("PrivateMusicDesktop"));
     #[cfg(target_os = "android")]
     let store: Box<dyn SecretStore> = Box::<MemoryStore>::default();
-    let data_dir = std::env::var_os("PM_DATA_DIR").map(PathBuf::from).unwrap_or_else(|| std::env::temp_dir().join("private-music"));
+    let data_dir = data_dir
+        .or_else(|| std::env::var_os("PM_DATA_DIR").map(PathBuf::from))
+        .or_else(|| std::env::var_os("APPDATA").map(|path| PathBuf::from(path).join("PrivateMusicDesktop")))
+        .or_else(|| std::env::var_os("HOME").map(|path| PathBuf::from(path).join(".local/share/private-music")))
+        .unwrap_or_else(|| std::env::temp_dir().join("private-music"));
     let app = App::new(
         VkClient::new().expect("built-in VK endpoint"),
         move || {
@@ -186,10 +194,11 @@ pub unsafe extern "C" fn pm_string_free(pointer: *mut c_char) {
 
 #[cfg(target_os = "android")]
 mod android {
-    use super::{command, new_engine, Shared};
+    use super::{command, new_engine_with_data_dir, Shared};
     use jni::objects::{JClass, JString};
     use jni::sys::{jlong, jstring};
     use jni::JNIEnv;
+    use std::path::PathBuf;
     use std::sync::Mutex;
 
     fn pointer(engine: jlong) -> *mut super::c_void {
@@ -198,10 +207,12 @@ mod android {
 
     #[no_mangle]
     pub extern "system" fn Java_com_dec_privatemusic_player_RustPlayerApiJni_pm_1engine_1new(
-        _env: JNIEnv,
+        mut env: JNIEnv,
         _class: JClass,
+        data_dir: JString,
     ) -> jlong {
-        Box::into_raw(new_engine()) as usize as jlong
+        let path: String = env.get_string(&data_dir).expect("UTF-8 data directory").into();
+        Box::into_raw(new_engine_with_data_dir(Some(PathBuf::from(path)))) as usize as jlong
     }
 
     #[no_mangle]
