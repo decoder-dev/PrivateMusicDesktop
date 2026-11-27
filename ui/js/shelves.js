@@ -10,6 +10,7 @@ import { openAlbum } from "./navigation.js";
 import { errorText, t } from "./i18n.js";
 import { icon } from "./icons.js";
 import { mixName, mixColors, mixKey } from "./selena.js";
+import { loadMixTracks } from "./mix-playback.js";
 import { paintStatus } from "./ui-parts.js";
 
 /** Устойчивое семейство цветов для каждого микса, чтобы карточка выглядела одинаково между визитами. */
@@ -43,11 +44,11 @@ export function createMixShelf({ play, toast, heading = t("fy.catalog") }) {
     button.disabled = true;
     paintStatus(status, t("fy.mixLoading", { title: mix.title }), { extra: "inline" });
     try {
-      const tracks = await api.streamMix(mix.id, mix.options);
+      const { tracks, options } = await loadMixTracks(mix, (id, mixOptions) => api.streamMix(id, mixOptions));
       if (!tracks.length) throw new Error(t("fy.noCatalog"));
       // Обычный личный поток — то же радио, что и вкладка «Мой микс».
-      const personal = mix.id === "common" && !mix.options;
-      play(tracks, 0, { shuffle: false, radio: personal ? { kind: "personal", options: null } : { kind: "catalog", mix_id: mix.id, options: mix.options ?? null } });
+      const personal = mix.id === "common" && !options;
+      await play(tracks, 0, { shuffle: false, radio: personal ? { kind: "personal", options: null } : { kind: "catalog", mix_id: mix.id, options } });
       paintStatus(status, "");
     } catch (error) {
       paintStatus(status, errorText(error), { error: true, extra: "inline" });

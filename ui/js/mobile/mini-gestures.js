@@ -6,30 +6,13 @@
 
 import { motionOk } from "../motion.js";
 import { haptic, isPhone } from "./layout.js";
+import { gestureAction, isMiniGestureTarget } from "./mini-gesture-policy.js";
 
-const MIN_DISTANCE = 18;
-const HORIZONTAL = 58;
-const VERTICAL = 42;
-const DOMINANCE = 1.2;
+export { gestureAction } from "./mini-gesture-policy.js";
+
 const PARALLAX_X = 0.12;
 const PARALLAX_Y = 0.08;
 const PREDICT_MS = 160;
-
-/** The iOS policy: "next" | "previous" | "open" | null for a drag. */
-export function gestureAction(translation, predicted) {
-  const settled = Math.hypot(translation.x, translation.y);
-  const heading = Math.hypot(predicted.x, predicted.y);
-  const t = heading > settled ? predicted : translation;
-  const horizontal = Math.abs(t.x);
-  const vertical = Math.abs(t.y);
-  if (Math.max(horizontal, vertical) < MIN_DISTANCE) return null;
-  if (vertical >= horizontal * DOMINANCE) return t.y <= -VERTICAL ? "open" : null;
-  if (horizontal >= vertical * DOMINANCE) {
-    if (t.x <= -HORIZONTAL) return "next";
-    if (t.x >= HORIZONTAL) return "previous";
-  }
-  return null;
-}
 
 export function attachMiniGestures(element, { onNext, onPrevious, onOpen }) {
   let drag = null;
@@ -38,9 +21,9 @@ export function attachMiniGestures(element, { onNext, onPrevious, onOpen }) {
   element.addEventListener("pointerdown", (event) => {
     if (!isPhone() || (event.pointerType === "mouse" && event.button !== 0)) return;
     suppressClick = false;
-    // A finger can move slightly while pressing Pause/Next. Capturing that
-    // pointer on the card would retarget the button's click to its parent.
-    if (event.target.closest?.("button, input, a, [role=button]")) return;
+    // Transport buttons keep their taps. The cover also accepts swipes: it is
+    // the largest natural place to start the upward gesture on a phone.
+    if (!isMiniGestureTarget(event.target)) return;
     drag = { id: event.pointerId, x: event.clientX, y: event.clientY, samples: [{ x: event.clientX, y: event.clientY, t: performance.now() }], moved: false };
   });
   element.addEventListener("pointermove", (event) => {
@@ -75,9 +58,10 @@ export function attachMiniGestures(element, { onNext, onPrevious, onOpen }) {
       x: translation.x + ((last.x - first.x) / span) * PREDICT_MS,
       y: translation.y + ((last.y - first.y) / span) * PREDICT_MS,
     };
-    suppressClick = true;
     const action = gestureAction(translation, predicted);
+    // A small unrecognised movement must not eat the next genuine tap.
     if (!action) return;
+    suppressClick = true;
     haptic(8);
     if (action === "next") onNext();
     else if (action === "previous") onPrevious();
@@ -85,7 +69,7 @@ export function attachMiniGestures(element, { onNext, onPrevious, onOpen }) {
   }
   element.addEventListener("pointerup", (event) => finish(event, false));
   element.addEventListener("pointercancel", (event) => finish(event, true));
-  // A swipe is not a tap.
+  // A recognised swipe is not a tap.
   element.addEventListener("click", (event) => {
     if (suppressClick && event.detail > 0) {
       suppressClick = false;

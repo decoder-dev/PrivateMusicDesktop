@@ -11,10 +11,11 @@ import { artBox, bindRange, syncRange, swapArt } from "./ui-parts.js";
 import { coverPalette } from "./palette.js";
 import { isPhone } from "./mobile/layout.js";
 import { attachMiniGestures } from "./mobile/mini-gestures.js";
+import { createSeekGate } from "./seek-gate.js";
 
 /** Нижняя панель: что играет, транспорт, позиция и громкость. */
 export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
-  let dragging = false;
+  const seekGate = createSeekGate(() => render(store.player));
   let lastVolume = 1;
 
   const coverSlot = h("span", { class: "cover-slot" }, artBox(null, { size: 22 }));
@@ -37,8 +38,8 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
   const total = h("span", { text: remaining(0) });
   const seek = h("input", {
     class: "reveal", type: "range", min: "0", max: "0", step: "1", value: "0", "aria-label": t("seek"),
-    oninput: () => { dragging = true; elapsed.textContent = formatTime(Number(seek.value)); total.textContent = remaining(Number(seek.max) - Number(seek.value)); },
-    onchange: () => { playbackAction(() => api.seek(Number(seek.value))); dragging = false; },
+    oninput: () => { seekGate.preview(); elapsed.textContent = formatTime(Number(seek.value)); total.textContent = remaining(Number(seek.max) - Number(seek.value)); },
+    onchange: () => seekGate.commit(Number(seek.value), () => playbackAction(() => api.seek(Number(seek.value)))),
   });
   bindRange(seek);
   const buffering = h("div", { class: "buffering", hidden: true, role: "status", text: t("buffering") });
@@ -123,6 +124,8 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
 
   function render(player) {
     const track = player.track;
+    const currentSeekKey = track ? `${track.owner_id}_${track.track_id}` : null;
+    seekGate.track(currentSeekKey);
     const titleText=track ? track.title : t("nothing");
     if(title.textContent!==titleText) title.textContent=titleText;
     const artistText=track ? track.artist : "";
@@ -164,11 +167,12 @@ export function createPlayerBar({ onSettingsChange, onExpand, onLike }) {
     }
 
     const duration = Math.max(0, player.duration || 0);
+    const position = Math.min(Math.max(0, player.position || 0), duration);
     seek.max = String(Math.max(duration, 1));
-    if (!dragging) {
-      seek.value = String(Math.min(player.position || 0, duration || 0));
-      elapsed.textContent = formatTime(player.position || 0);
-      total.textContent = remaining(duration - (player.position || 0));
+    if (seekGate.shouldRender(player.position)) {
+      seek.value = String(position);
+      elapsed.textContent = formatTime(position);
+      total.textContent = remaining(duration - position);
     }
     syncRange(seek);
     seek.disabled = !track;

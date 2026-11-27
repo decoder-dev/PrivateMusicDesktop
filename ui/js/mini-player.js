@@ -8,6 +8,7 @@ import { artBox } from "./ui-parts.js";
 import { setWindowMode } from "./window-mode.js";
 import { toast } from "./toast.js";
 import { errorText } from "./i18n.js";
+import { createSeekGate } from "./seek-gate.js";
 export function createMiniPlayer(onLike) {
   const safe = (fn) => () =>
     Promise.resolve()
@@ -32,6 +33,7 @@ export function createMiniPlayer(onLike) {
   const previous = button(ft("Предыдущий"), "prev", () => api.previous());
   const next = button(ft("Следующий"), "next", () => api.next());
   const like = button(ft("Избранное"), "heart", () => onLike(store.player.track));
+  const seekGate = createSeekGate(() => render());
   const seek = h("input", {
     type: "range",
     min: 0,
@@ -39,7 +41,11 @@ export function createMiniPlayer(onLike) {
     step: 0.1,
     value: 0,
     "aria-label": ft("Позиция воспроизведения"),
-    onchange: (event) => safe(() => api.seek(Number(event.target.value)))(),
+    oninput: () => { seekGate.preview(); time.textContent = formatTime(Number(seek.value)); },
+    onchange: (event) => {
+      const value = Number(event.target.value);
+      safe(() => seekGate.commit(value, () => api.seek(value)))();
+    },
   });
   const time = h("span", { class: "mini-time" });
   const element = h(
@@ -68,6 +74,7 @@ export function createMiniPlayer(onLike) {
   function render() {
     const p = store.player;
     const key = p.track ? `${p.track.owner_id}_${p.track.track_id}` : null;
+    seekGate.track(key);
     if (key !== previousKey) {
       previousKey = key;
       art.replaceChildren(artBox(p.track?.artwork_url));
@@ -91,9 +98,13 @@ export function createMiniPlayer(onLike) {
     like.setAttribute("aria-pressed", String(liked));
     like.hidden = isLocalTrack(p.track);
     like.disabled = !p.track || isLocalTrack(p.track);
-    seek.max = String(p.duration || 1);
-    if (document.activeElement !== seek) seek.value = String(p.position || 0);
-    time.textContent = formatTime(p.position);
+    const duration = Math.max(0, p.duration || 0);
+    const position = Math.min(Math.max(0, p.position || 0), duration);
+    seek.max = String(duration || 1);
+    if (seekGate.shouldRender(p.position)) {
+      seek.value = String(position);
+      time.textContent = formatTime(position);
+    }
   }
   subscribe("player", render);
   subscribe("likes", render);

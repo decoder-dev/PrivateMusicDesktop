@@ -17,6 +17,7 @@ import { artBox, bindRange, syncRange } from "./ui-parts.js";
 import { isPhone, isAndroid, onLayoutChange } from "./mobile/layout.js";
 import {attachArtworkGestures} from "./mobile/artwork-gestures.js";
 import { attachSheetDrag } from "./mobile/np-sheet.js";
+import { createSeekGate } from "./seek-gate.js";
 
 const IDLE_MS = 3000;
 const QUEUE_ROWS = 100;
@@ -48,7 +49,7 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   let returnFocus = null;
   let queueOpen = false;
   let userChoseMode = MODES.includes(settings.visualizer);
-  let dragging = false;
+  const seekGate = createSeekGate(() => render(store.player));
   // A track without a cover: a note glyph the styles may show (the default design does; the classic look keeps
   // the cover area empty and centres the title instead).
   const placeholderArt = () => h("div", { class: "np-placeholder", "aria-hidden": "true" }, icon("note", 72));
@@ -112,9 +113,9 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   const total = h("span", { text: remaining(0) });
   const seek = h("input", {
     type: "range", min: "0", max: "0", step: "1", value: "0", "aria-label": t("seek"),
-    oninput: () => { dragging = true; elapsed.textContent = formatTime(Number(seek.value)); total.textContent = remaining(Number(seek.max) - Number(seek.value)); },
+    oninput: () => { seekGate.preview(); elapsed.textContent = formatTime(Number(seek.value)); total.textContent = remaining(Number(seek.max) - Number(seek.value)); },
     // Keyboard and mouse changes; touch commits its own seek (below) and must not seek twice.
-    onchange: () => { if (seekTouch !== null || performance.now() - seekTouchEnded < 600) return; playbackAction(() => api.seek(Number(seek.value))); dragging = false; lyrics.snap(Number(seek.value)); },
+    onchange: () => { if (seekTouch !== null || performance.now() - seekTouchEnded < 600) return; const value = Number(seek.value); lyrics.snap(value); seekGate.commit(value, () => playbackAction(() => api.seek(value))); },
   });
   bindRange(seek);
   // Touch seeking is handled here rather than by the native range: on Android System WebViews a tap or a drag
@@ -138,8 +139,8 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   seek.addEventListener("pointerdown", (event) => {
     if (event.pointerType === "mouse" || seek.disabled) return;
     event.preventDefault();
+    seekGate.preview();
     seekTouch = event.pointerId;
-    dragging = true;
     try { seek.setPointerCapture(event.pointerId); } catch { /* the pointer may already be gone */ }
     showSeek(seekValueAt(event.clientX));
   });
@@ -152,12 +153,15 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     if (event.pointerId !== seekTouch) return;
     seekTouch = null;
     seekTouchEnded = performance.now();
-    dragging = false;
-    if (!commit) return;
+    if (!commit) {
+      seekGate.cancel();
+      render(store.player);
+      return;
+    }
     const value = seekValueAt(event.clientX);
     showSeek(value);
-    playbackAction(() => api.seek(value));
     lyrics.snap(value);
+    seekGate.commit(value, () => playbackAction(() => api.seek(value)));
   };
   seek.addEventListener("pointerup", (event) => endSeekTouch(event, true));
   seek.addEventListener("pointercancel", (event) => endSeekTouch(event, false));
@@ -407,6 +411,8 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   function render(player) {
     renderVolume(player);
     const track = player.track;
+    const currentSeekKey = track ? `${track.owner_id}_${track.track_id}` : null;
+    seekGate.track(currentSeekKey);
     const titleText = track ? track.title : t("nothing");
     if (title.textContent !== titleText) { title.textContent = titleText; title.title = titleText; }
     const artistText = track ? track.artist : "";
@@ -449,11 +455,12 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
     quickMore.disabled = !track;
 
     const duration = Math.max(0, player.duration || 0);
+    const position = Math.min(Math.max(0, player.position || 0), duration);
     seek.max = String(Math.max(duration, 1));
-    if (!dragging) {
-      seek.value = String(Math.min(player.position || 0, duration || 0));
-      elapsed.textContent = formatTime(player.position || 0);
-      total.textContent = remaining(duration - (player.position || 0));
+    if (seekGate.shouldRender(player.position)) {
+      seek.value = String(position);
+      elapsed.textContent = formatTime(position);
+      total.textContent = remaining(duration - position);
     }
     syncRange(seek);
     seek.disabled = !track;
@@ -576,6 +583,8 @@ export function createNowPlaying({ settings, onSettingsChange, onLike, onMenu })
   function close() {
     if (!open) return;
     open = false;
+    seekGate.cancel();
+    seekTouch = null;
     clearTimeout(idleTimer);
     element.classList.remove("idle");
     visualizer.stop();
