@@ -29,6 +29,7 @@ kotlin {
             implementation("androidx.activity:activity-compose:1.10.1")
             implementation("androidx.core:core-ktx:1.16.0")
         }
+        val desktopMain by getting
         desktopMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation("net.java.dev.jna:jna:5.17.0")
@@ -37,6 +38,7 @@ kotlin {
             implementation(kotlin("test"))
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
         }
+        val desktopTest by getting
         desktopTest.dependencies {
             implementation(compose.desktop.currentOs)
         }
