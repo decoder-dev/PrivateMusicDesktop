@@ -59,7 +59,13 @@ compose.desktop {
     }
 }
 
+val cargoBuildDesktop by tasks.registering(Exec::class) {
+    workingDir = rootDir.resolve("rust-ffi")
+    commandLine("cargo", "build")
+}
+
 tasks.matching { it.name == "run" }.configureEach {
     val task = this as JavaExec
+    task.dependsOn(cargoBuildDesktop)
     task.environment("JNA_LIBRARY_PATH", rootDir.resolve("rust-ffi/target/debug").absolutePath)
 }
