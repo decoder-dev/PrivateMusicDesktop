@@ -69,9 +69,9 @@ jobs:
           rustup target add aarch64-linux-android
       - name: Build APK with Rust JNI library
         working-directory: compose
-        run: gradle --no-daemon :composeApp:assembleDebug -Dpm.rust.abi=arm64-v8a
+        run: gradle --no-daemon :androidApp:assembleDebug -Dpm.rust.abi=arm64-v8a
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: compose-android-debug
-          path: compose/composeApp/build/outputs/apk/debug/*.apk
+          path: compose/androidApp/build/outputs/apk/debug/*.apk
           if-no-files-found: error
