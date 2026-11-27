@@ -1,6 +1,7 @@
 pluginManagement {
     repositories {
         google()
+        maven("https://maven-central.storage-download.googleapis.com/maven2")
         mavenCentral()
         gradlePluginPortal()
         maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
@@ -10,6 +11,7 @@ pluginManagement {
 dependencyResolutionManagement {
     repositories {
         google()
+        maven("https://maven-central.storage-download.googleapis.com/maven2")
         mavenCentral()
         maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
     }
