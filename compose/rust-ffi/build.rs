@@ -6,5 +6,8 @@ fn main() {
         println!("cargo:rustc-link-arg-cdylib=-lc++_static");
         println!("cargo:rustc-link-arg-cdylib=-lc++abi");
         println!("cargo:rustc-link-arg-cdylib=-Wl,--no-undefined");
+        // Support 16 KB Android kernels with the pinned NDK r27.
+        println!("cargo:rustc-link-arg-cdylib=-Wl,-z,max-page-size=16384");
+        println!("cargo:rustc-link-arg-cdylib=-Wl,-z,common-page-size=16384");
     }
 }

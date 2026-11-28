@@ -256,7 +256,7 @@ mod android {
 
     #[no_mangle]
     pub unsafe extern "system" fn Java_com_dec_privatemusic_player_RustPlayerApiJni_pm_1engine_1poll_1event(
-        mut env: JNIEnv,
+        env: JNIEnv,
         _class: JClass,
         engine: jlong,
     ) -> jstring {

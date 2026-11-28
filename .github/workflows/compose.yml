@@ -107,7 +107,15 @@ jobs:
           cd compose
           gradle --no-daemon :androidApp:assembleDebug "-Dpm.rust.abi=$ABI"
       - name: Verify Rust JNI library is packaged
-        run: unzip -l compose/androidApp/build/outputs/apk/debug/androidApp-debug.apk | grep -F "lib/$ABI/libprivate_music_engine.so"
+        run: |
+          set -euo pipefail
+          apk=compose/androidApp/build/outputs/apk/debug/androidApp-debug.apk
+          unzip -l "$apk" | grep -F "lib/$ABI/libprivate_music_engine.so"
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 "$apk"
+          library=$(mktemp)
+          trap 'rm -f "$library"' EXIT
+          unzip -p "$apk" "lib/$ABI/libprivate_music_engine.so" > "$library"
+          readelf -Wl "$library" | awk '$1 == "LOAD" { found = 1; if ($NF != "0x4000") bad = 1 } END { exit (!found || bad) }'
       - name: Verify media service and permissions in APK
         run: |
           "$ANDROID_HOME/build-tools/36.0.0/aapt2" dump xmltree --file AndroidManifest.xml compose/androidApp/build/outputs/apk/debug/androidApp-debug.apk > compose/androidApp/build/outputs/apk/debug/manifest.txt

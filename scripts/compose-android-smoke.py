@@ -64,15 +64,21 @@ def tap(node):
     adb("shell", "input", "tap", str((left + right) // 2), str((top + bottom) // 2))
 
 
-def check_playing(output):
+def check_playback_state(output, label, code, require_progress=False):
     for _ in range(12):
         state = adb("shell", "dumpsys", "media_session").decode()
         (output / "media-session.txt").write_text(state, encoding="utf-8")
-        # This emulator only has one test app, but also verify the active metadata.
-        if TITLE in state and re.search(r"PlaybackState\s*\{state=3(?:,|\s)", state):
-            return
+        session = re.search(
+            rf"(?m)^ +package={re.escape(PACKAGE)}\s*\n(.*?)(?=\n {{4}}\S|\Z)", state, re.DOTALL,
+        )
+        if session and TITLE in session[1]:
+            playback = re.search(
+                rf"PlaybackState\s*\{{state=(?:{label}\({code}\)|{code}), position=(\d+)", session[1],
+            )
+            if playback and (not require_progress or int(playback[1]) > 0):
+                return
         time.sleep(1)
-    raise RuntimeError("The seeded offline track did not reach the playing state")
+    raise RuntimeError(f"The seeded offline track did not reach {label}")
 
 
 def main():
@@ -92,9 +98,13 @@ def main():
         (args.output / "home.png").write_bytes(adb("exec-out", "screencap", "-p"))
         tap(find_label(args.output, "Загрузки"))
         tap(find_label(args.output, TITLE))
-        check_playing(args.output)
+        check_playback_state(args.output, "PLAYING", 3, require_progress=True)
         (args.output / "offline-playback.png").write_bytes(adb("exec-out", "screencap", "-p"))
-        print("Android clean install, app launch and offline playback passed.")
+        adb("shell", "cmd", "media_session", "dispatch", "pause")
+        check_playback_state(args.output, "PAUSED", 2)
+        adb("shell", "cmd", "media_session", "dispatch", "play")
+        check_playback_state(args.output, "PLAYING", 3)
+        print("Android clean install, launch, offline playback, pause and resume passed.")
     finally:
         (args.output / "android-runtime.log").write_bytes(adb("logcat", "-d", "-s", "AndroidRuntime"))
 
