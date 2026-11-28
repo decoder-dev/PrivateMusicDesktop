@@ -47,6 +47,8 @@ kotlin {
             implementation(compose.ui)
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
             implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+            implementation("io.coil-kt.coil3:coil-compose:3.3.0")
+            implementation("io.coil-kt.coil3:coil-network-okhttp:3.3.0")
         }
         val desktopMain by getting
         desktopMain.dependencies {

@@ -16,22 +16,16 @@ Private Music — неофициальный клиент VK Музыки. Сл�
 навигацией, жестами и полноэкранным плеером.
 
 <p align="center">
-  <img src="docs/design/android/music-phone-home-dark.png" width="240" alt="Главный экран Android в тёмной теме">
-  <img src="docs/design/android/music-phone-player-dark.png" width="240" alt="Полноэкранный плеер Android">
+  <img src="docs/design/compose/mobile-home.png" width="240" alt="Главная с нижней навигацией">
+  <img src="docs/design/compose/mobile-player.png" width="240" alt="Полноэкранный плеер">
 </p>
 
-*Превью интерфейса версии 0.x на тестовых данных.*
+*Интерфейс Compose на тестовых данных.*
 
 <details>
-<summary>Светлая тема и интерфейс компьютера</summary>
+<summary>Интерфейс компьютера</summary>
 
-<p align="center">
-  <img src="docs/design/android/music-phone-home-light.png" width="240" alt="Главная в светлой теме">
-  <img src="docs/design/android/music-phone-library-light.png" width="240" alt="Медиатека в светлой теме">
-  <img src="docs/design/android/music-phone-player-light.png" width="240" alt="Плеер в светлой теме">
-</p>
-
-![Интерфейс компьютера](docs/design/android/music-desktop-home-dark.png)
+![Главная в широком окне с боковой навигацией](docs/design/compose/desktop-home.png)
 
 </details>
 

@@ -2,21 +2,21 @@ package com.dec.privatemusic.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -24,105 +24,211 @@ import androidx.compose.ui.unit.sp
 import com.dec.privatemusic.player.*
 import kotlinx.coroutines.launch
 
-private val Background = Color(0xFF101012)
-private val Surface = Color(0xFF1B1B1F)
-private val SurfaceRaised = Color(0xFF25252B)
-private val Accent = Color(0xFFE3C66B)
-private val TextPrimary = Color(0xFFF5F3F7)
-private val TextSecondary = Color(0xFFADA7B1)
+private enum class Screen(val title: String, val icon: MusicIcon) {
+    Home("Главная", MusicIcon.Home),
+    Search("Поиск", MusicIcon.Search),
+    Mixes("Миксы", MusicIcon.Mix),
+    Downloads("Загрузки", MusicIcon.Download),
+    Profile("Профиль", MusicIcon.Profile),
+    Player("Плеер", MusicIcon.Note),
+    Queue("Очередь", MusicIcon.Queue),
+    Lyrics("Текст песни", MusicIcon.Note),
+}
 
-private enum class Screen { Home, Player, Queue, Profile, Search, Mixes, Downloads, Lyrics }
+private val MainScreens = listOf(Screen.Home, Screen.Search, Screen.Mixes, Screen.Downloads, Screen.Profile)
 
 @Composable
-fun PrivateMusicApp(viewModel: PlayerViewModel, sessionViewModel: SessionViewModel, onLogin: (() -> Unit)?, onLogout: () -> Unit) {
+fun PrivateMusicApp(
+    viewModel: PlayerViewModel,
+    sessionViewModel: SessionViewModel,
+    onLogin: (() -> Unit)?,
+    onLogout: () -> Unit,
+    bindBackHandler: @Composable (Boolean, () -> Unit) -> Unit = { _, _ -> },
+) {
     val state by viewModel.state.collectAsState()
     val queue by viewModel.queue.collectAsState()
-    val error by viewModel.error.collectAsState()
+    val playerError by viewModel.error.collectAsState()
     val session by sessionViewModel.state.collectAsState()
     val catalog = remember(session.signed_in) { CatalogViewModel(platformCatalogApi()) }
     val library by catalog.library.collectAsState()
     val recommendations by catalog.recommendations.collectAsState()
     val catalogError by catalog.error.collectAsState()
-    val homeTracks = when {
+    val tracks = when {
         catalog.isDemo -> library.ifEmpty { recommendations.ifEmpty { demoTracks } }
         session.signed_in -> library.ifEmpty { recommendations }
         else -> emptyList()
     }
     var screen by remember { mutableStateOf(Screen.Home) }
-    val scope = rememberCoroutineScope()
+    var playerReturn by remember { mutableStateOf(Screen.Home) }
+    var queueReturn by remember { mutableStateOf(Screen.Home) }
 
     LaunchedEffect(viewModel) { viewModel.start(sessionViewModel::refresh) }
     LaunchedEffect(sessionViewModel) { sessionViewModel.start() }
     LaunchedEffect(session.signed_in) { if (session.signed_in) catalog.start() }
+    LaunchedEffect(session.signed_in, screen) {
+        if (!session.signed_in && !catalog.isDemo && (screen == Screen.Search || screen == Screen.Mixes)) {
+            screen = Screen.Profile
+        }
+    }
     DisposableEffect(viewModel) { onDispose { viewModel.close() } }
     DisposableEffect(sessionViewModel) { onDispose { sessionViewModel.close() } }
     DisposableEffect(catalog) { onDispose { catalog.close() } }
 
-    MaterialTheme(
-        colorScheme = darkColorScheme(
-            primary = Accent,
-            background = Background,
-            surface = Surface,
-            surfaceVariant = SurfaceRaised,
-            onPrimary = Background,
-            onBackground = TextPrimary,
-            onSurface = TextPrimary,
-            onSurfaceVariant = TextSecondary,
-        ),
+    fun navigate(destination: Screen) {
+        screen = when {
+            (destination == Screen.Search || destination == Screen.Mixes) && !session.signed_in && !catalog.isDemo -> Screen.Profile
+            else -> destination
+        }
+    }
+
+    fun openPlayer() {
+        if (screen != Screen.Player) playerReturn = screen
+        screen = Screen.Player
+    }
+
+    fun openQueue() {
+        if (screen != Screen.Queue) queueReturn = screen
+        screen = Screen.Queue
+    }
+
+    fun goBack() = navigate(
+        when (screen) {
+            Screen.Player -> playerReturn
+            Screen.Queue -> queueReturn
+            Screen.Lyrics -> Screen.Player
+            else -> Screen.Home
+        },
+    )
+
+    bindBackHandler(screen != Screen.Home, ::goBack)
+
+    MusicTheme {
+        BoxWithConstraints(Modifier.fillMaxSize().background(AppBackground)) {
+            val wide = maxWidth >= 820.dp
+            Row(Modifier.fillMaxSize()) {
+                if (wide) DesktopNavigation(screen, ::navigate)
+                Scaffold(
+                    modifier = Modifier.weight(1f),
+                    containerColor = AppBackground,
+                    bottomBar = {
+                        Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
+                            if (state.track != null && screen != Screen.Player) {
+                                MiniPlayer(
+                                    state = state,
+                                    roomForControls = wide,
+                                    onOpen = ::openPlayer,
+                                    onToggle = viewModel::toggle,
+                                    onNext = viewModel::next,
+                                    onPrevious = viewModel::previous,
+                                    onQueue = ::openQueue,
+                                    onVolume = viewModel::setVolume,
+                                )
+                            }
+                            if (!wide && screen != Screen.Player) MobileNavigation(screen, ::navigate)
+                        }
+                    },
+                ) { padding ->
+                    Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
+                        Box(Modifier.widthIn(max = 1180.dp).fillMaxSize()) {
+                            when (screen) {
+                                Screen.Home -> HomeScreen(
+                                    state = state,
+                                    signedIn = session.signed_in || catalog.isDemo,
+                                    tracks = tracks,
+                                    libraryShown = library.isNotEmpty(),
+                                    error = playerError ?: catalogError,
+                                    onPlay = { viewModel.play(tracks, it) },
+                                    onDownload = catalog::download,
+                                    onOpenPlayer = ::openPlayer,
+                                    onOpenQueue = ::openQueue,
+                                    onOpenProfile = { navigate(Screen.Profile) },
+                                )
+                                Screen.Player -> FullPlayer(
+                                    state = state,
+                                    viewModel = viewModel,
+                                    onClose = ::goBack,
+                                    onQueue = ::openQueue,
+                                    onLyrics = { navigate(Screen.Lyrics) },
+                                )
+                                Screen.Queue -> QueueScreen(
+                                    tracks = queue.ifEmpty { if (catalog.isDemo) demoTracks else emptyList() },
+                                    current = state.queue_index,
+                                    onBack = ::goBack,
+                                    onJump = viewModel::jump,
+                                )
+                                Screen.Profile -> ProfileScreen(session, onLogin, onLogout, sessionViewModel::refresh)
+                                Screen.Search -> SearchScreen(catalog, viewModel::play)
+                                Screen.Mixes -> MixesScreen(catalog) { mix -> viewModel.playRadio(mix.source, mix.tracks, 0, mix.nextOffset) }
+                                Screen.Downloads -> DownloadsScreen(catalog, viewModel::play)
+                                Screen.Lyrics -> LyricsScreen(state.track, catalog, state.position, ::goBack)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DesktopNavigation(screen: Screen, navigate: (Screen) -> Unit) {
+    Column(
+        Modifier.width(210.dp).fillMaxHeight().background(Panel).statusBarsPadding().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Scaffold(
-            containerColor = Background,
-            bottomBar = {
-                if (screen != Screen.Player && state.track != null) {
-                    MiniPlayer(
-                        state = state,
-                        onOpen = { screen = Screen.Player },
-                        onToggle = { scope.launch { viewModel.toggle() } },
-                        onNext = { scope.launch { viewModel.next() } },
-                    )
+        Row(
+            Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 26.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Highlight),
+                contentAlignment = Alignment.Center,
+            ) {
+                Glyph(MusicIcon.Note, Modifier.size(22.dp), MaterialTheme.colorScheme.onPrimary)
+            }
+            Text("Private Music", color = TextStrong, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        }
+        for (destination in MainScreens) {
+            val active = screen == destination
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 50.dp).clip(RoundedCornerShape(14.dp))
+                    .background(if (active) SelectedPanel else Panel)
+                    .selectable(active, role = Role.Tab) { navigate(destination) }.padding(horizontal = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val color = if (active) Highlight else TextMuted
+                Glyph(destination.icon, Modifier.size(20.dp), color)
+                Text(destination.title, color = color, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MobileNavigation(screen: Screen, navigate: (Screen) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().background(Panel).padding(horizontal = 4.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        for (destination in MainScreens) {
+            val active = screen == destination
+            val color = if (active) Highlight else TextMuted
+            Column(
+                Modifier.weight(1f).heightIn(min = 58.dp).clip(RoundedCornerShape(12.dp))
+                    .selectable(active, role = Role.Tab) { navigate(destination) }.padding(vertical = 5.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically),
+            ) {
+                Box(
+                    Modifier.width(39.dp).height(26.dp).clip(RoundedCornerShape(9.dp))
+                        .background(if (active) SelectedPanel else Panel),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Glyph(destination.icon, Modifier.size(18.dp), color)
                 }
-            },
-        ) { padding ->
-            Box(Modifier.fillMaxSize().padding(padding)) {
-                when (screen) {
-                    Screen.Home -> HomeScreen(
-                        state = state,
-                        tracks = homeTracks,
-                        error = error ?: catalogError,
-                        onPlay = { index -> scope.launch { viewModel.play(homeTracks, index) } },
-                        onDownload = { track -> catalog.download(track) },
-                        onOpenPlayer = { screen = if (state.track != null) Screen.Player else Screen.Profile },
-                        onOpenQueue = { screen = Screen.Queue },
-                        onOpenProfile = { screen = Screen.Profile },
-                        onOpenSearch = { screen = if (session.signed_in) Screen.Search else Screen.Profile },
-                        onOpenMixes = { screen = if (session.signed_in) Screen.Mixes else Screen.Profile },
-                        onOpenDownloads = { screen = Screen.Downloads },
-                    )
-                    Screen.Player -> FullPlayer(
-                        state = state,
-                        viewModel = viewModel,
-                        onClose = { screen = Screen.Home },
-                        onQueue = { screen = Screen.Queue },
-                        onLyrics = { screen = Screen.Lyrics },
-                    )
-                    Screen.Queue -> QueueScreen(
-                        tracks = queue.ifEmpty { if (catalog.isDemo) demoTracks else emptyList() },
-                        current = state.queue_index,
-                        onBack = { screen = if (state.track != null) Screen.Player else Screen.Home },
-                        onJump = { index -> scope.launch { viewModel.jump(index) } },
-                    )
-                    Screen.Profile -> ProfileScreen(session, onLogin, onLogout) { sessionViewModel.refresh() }
-                    Screen.Search -> SearchScreen(catalog) { tracks, index -> scope.launch { viewModel.play(tracks, index) } }
-                    Screen.Mixes -> MixesScreen(catalog) { launch -> scope.launch { viewModel.playRadio(launch.source, launch.tracks, 0, launch.nextOffset) } }
-                    Screen.Downloads -> DownloadsScreen(catalog) { tracks, index -> scope.launch { viewModel.play(tracks, index) } }
-                    Screen.Lyrics -> LyricsScreen(state.track, catalog)
-                }
-                if (screen !in setOf(Screen.Home, Screen.Player, Screen.Queue)) {
-                    FloatingActionButton(
-                        onClick = { screen = if (screen == Screen.Lyrics) Screen.Player else Screen.Home },
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp).semantics { contentDescription = "Назад" },
-                    ) { Text("‹", fontSize = 28.sp) }
-                }
+                Text(destination.title, color = color, fontSize = 10.sp, maxLines = 1, softWrap = false)
             }
         }
     }
@@ -131,221 +237,115 @@ fun PrivateMusicApp(viewModel: PlayerViewModel, sessionViewModel: SessionViewMod
 @Composable
 private fun HomeScreen(
     state: PlayerState,
+    signedIn: Boolean,
     tracks: List<Track>,
+    libraryShown: Boolean,
     error: String?,
     onPlay: (Int) -> Unit,
     onDownload: (Track) -> Unit,
     onOpenPlayer: () -> Unit,
     onOpenQueue: () -> Unit,
     onOpenProfile: () -> Unit,
-    onOpenSearch: () -> Unit,
-    onOpenMixes: () -> Unit,
-    onOpenDownloads: () -> Unit,
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, top = 28.dp, end = 20.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        item {
-            Text("Главная", color = TextPrimary, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-        }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = onOpenProfile) { Text("Профиль") }
-                TextButton(onClick = onOpenSearch) { Text("Поиск") }
-                TextButton(onClick = onOpenMixes) { Text("Миксы") }
-                TextButton(onClick = onOpenDownloads) { Text("Загрузки") }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val roomy = maxWidth >= 620.dp
+        val gutter = if (roomy) 34.dp else 20.dp
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = gutter, end = gutter, top = if (roomy) 36.dp else 22.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp),
+        ) {
+            item {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    PageTitle("Главная", Modifier.weight(1f))
+                    GlyphButton(MusicIcon.Queue, "Очередь", onOpenQueue)
+                }
             }
-        }
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenPlayer),
-                colors = CardDefaults.cardColors(containerColor = SurfaceRaised),
-                shape = RoundedCornerShape(24.dp),
-            ) {
-                Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                    CoverArt(Modifier.size(64.dp))
-                    Spacer(Modifier.width(16.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(if (state.track != null) "СЕЙЧАС ИГРАЕТ" else "ВАША МУЗЫКА", color = Accent, fontSize = 11.sp)
-                        Text(state.track?.artist ?: "Private Music", color = TextPrimary, fontSize = 21.sp, fontWeight = FontWeight.SemiBold)
-                        Text(state.track?.title ?: "Выберите трек из списка", color = TextSecondary, fontSize = 14.sp)
+            state.track?.let { track -> item { PlayingFeature(track, roomy, onOpenPlayer) } }
+            if (!signedIn) {
+                item {
+                    Column(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
+                            .background(Brush.horizontalGradient(listOf(SelectedPanel, Panel))).padding(24.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Glyph(MusicIcon.Note, Modifier.size(31.dp), Highlight)
+                        Text("Твоя музыка в VK", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text("Войди, чтобы открыть медиатеку, поиск и персональные миксы.", color = TextMuted)
+                        Button(onClick = onOpenProfile) { Text("Подключить VK") }
                     }
                 }
             }
-        }
-        if (error != null) item { Text(error, color = MaterialTheme.colorScheme.error) }
-        if (tracks.isEmpty() && error == null) item {
-            Text("Пока нет треков. Откройте «Профиль» и войдите в VK, чтобы загрузить свою музыку.", color = TextSecondary)
-        }
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Рекомендации", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                TextButton(onClick = onOpenQueue) { Text("Очередь") }
-            }
-        }
-        itemsIndexed(tracks, key = { _, track -> track.key }) { index, track ->
-            TrackRow(track = track, active = state.track?.key == track.key, onClick = { onPlay(index) }, onDownload = { onDownload(track) })
-        }
-    }
-}
-
-@Composable
-internal fun TrackRow(track: Track, active: Boolean, onClick: () -> Unit, onDownload: (() -> Unit)? = null) {
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = if (active) SurfaceRaised else Color.Transparent),
-        shape = RoundedCornerShape(16.dp),
-    ) {
-        Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            CoverArt(Modifier.size(46.dp))
-            Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                Text(track.title, color = if (active) Accent else TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(track.artist, color = TextSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            Text(formatTime(track.duration), color = TextSecondary, fontSize = 13.sp)
-            if (onDownload != null) {
-                IconButton(onClick = onDownload, modifier = Modifier.semantics { contentDescription = "Скачать ${track.title}" }) {
-                    Text("↓", color = TextPrimary, fontSize = 22.sp)
+            if (error != null) item { ErrorNotice(error) }
+            if (tracks.isNotEmpty()) {
+                item {
+                    Text(
+                        if (libraryShown) "Моя музыка" else "Рекомендации",
+                        Modifier.padding(top = 14.dp, bottom = 4.dp),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MiniPlayer(state: PlayerState, onOpen: () -> Unit, onToggle: () -> Unit, onNext: () -> Unit) {
-    var drag = 0f
-    Card(
-        modifier = Modifier
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-            .fillMaxWidth()
-            .pointerInput(Unit) {
-                detectVerticalDragGestures(
-                    onDragEnd = { if (drag < -40f) onOpen() },
-                    onVerticalDrag = { _, amount -> drag += amount },
-                )
-            }
-            .clickable(onClick = onOpen),
-        colors = CardDefaults.cardColors(containerColor = SurfaceRaised),
-        shape = RoundedCornerShape(18.dp),
-    ) {
-        Column {
-            Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                CoverArt(Modifier.size(44.dp))
-                Column(Modifier.padding(start = 10.dp).weight(1f)) {
-                    Text(state.track?.title.orEmpty(), color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(state.track?.artist.orEmpty(), color = TextSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                itemsIndexed(tracks) { index, track ->
+                    TrackRow(track, state.track?.key == track.key, { onPlay(index) }, { onDownload(track) })
                 }
-                TransportButton(if (state.status == "playing") "Ⅱ" else "▶", "Пауза / играть", onToggle)
-                TransportButton("⏭", "Следующий трек", onNext)
-            }
-            LinearProgressIndicator(
-                progress = { if (state.duration > 0) (state.position / state.duration).toFloat().coerceIn(0f, 1f) else 0f },
-                modifier = Modifier.fillMaxWidth().height(2.dp),
-                color = Accent,
-                trackColor = Color.Transparent,
-            )
-        }
-    }
-}
-
-@Composable
-private fun FullPlayer(state: PlayerState, viewModel: PlayerViewModel, onClose: () -> Unit, onQueue: () -> Unit, onLyrics: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    var seekVersion by remember { mutableStateOf(0) }
-    val seekGate = remember { SeekGate(scope, onSettle = { seekVersion += 1 }) }
-    var sliderValue by remember { mutableStateOf(0f) }
-    seekGate.track(state.track?.key)
-    val renderPosition = seekVersion >= 0 && seekGate.shouldRender(state.position)
-    if (renderPosition) sliderValue = state.position.toFloat()
-
-    BoxWithConstraints(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF30271B), Background)))) {
-        Column(
-            modifier = Modifier.widthIn(max = 620.dp).fillMaxWidth().align(Alignment.TopCenter)
-                .padding(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                TransportButton("⌄", "Закрыть плеер", onClose)
-                Text("СЕЙЧАС ИГРАЕТ", color = TextSecondary, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                TransportButton("≡", "Очередь", onQueue)
-            }
-            Spacer(Modifier.height(24.dp))
-            CoverArt(Modifier.size(240.dp))
-            Spacer(Modifier.height(24.dp))
-            Text(state.track?.title ?: "Ничего не играет", color = TextPrimary, fontSize = 26.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(state.track?.artist.orEmpty(), color = TextSecondary, fontSize = 17.sp)
-            Spacer(Modifier.height(24.dp))
-            Slider(
-                value = sliderValue,
-                onValueChange = {
-                    sliderValue = it
-                    seekGate.preview()
-                },
-                onValueChangeFinished = {
-                    val target = sliderValue.toDouble()
-                    seekGate.commit(target)
-                    scope.launch { viewModel.seek(target) }
-                },
-                valueRange = 0f..state.duration.toFloat().coerceAtLeast(1f),
-                modifier = Modifier.fillMaxWidth(),
-                colors = SliderDefaults.colors(thumbColor = TextPrimary, activeTrackColor = TextPrimary, inactiveTrackColor = SurfaceRaised),
-            )
-            Row(Modifier.fillMaxWidth()) {
-                Text(formatTime(sliderValue.toInt()), color = TextSecondary, fontSize = 12.sp)
-                Spacer(Modifier.weight(1f))
-                Text("-${formatTime((state.duration.toInt() - sliderValue.toInt()).coerceAtLeast(0))}", color = TextSecondary, fontSize = 12.sp)
-            }
-            Spacer(Modifier.height(16.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(28.dp), verticalAlignment = Alignment.CenterVertically) {
-                TransportButton("⏮", "Предыдущий трек") { scope.launch { viewModel.previous() } }
-                Button(
-                    onClick = { scope.launch { viewModel.toggle() } },
-                    modifier = Modifier.size(76.dp),
-                    shape = RoundedCornerShape(50),
-                    colors = ButtonDefaults.buttonColors(containerColor = TextPrimary, contentColor = Background),
-                    contentPadding = PaddingValues(0.dp),
-                ) { Text(if (state.status == "playing") "Ⅱ" else "▶", fontSize = 28.sp) }
-                TransportButton("⏭", "Следующий трек") { scope.launch { viewModel.next() } }
-            }
-            TextButton(onClick = onLyrics, enabled = state.track != null) { Text("Текст песни") }
-            Spacer(Modifier.height(4.dp))
-            Text("Потяните мини-плеер вверх, чтобы вернуться сюда", color = TextSecondary, fontSize = 12.sp)
-        }
-    }
-}
-
-@Composable
-private fun QueueScreen(tracks: List<Track>, current: Int?, onBack: () -> Unit, onJump: (Int) -> Unit) {
-    Column(Modifier.fillMaxSize().padding(20.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TransportButton("‹", "Назад", onBack)
-            Text("Очередь", color = TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-        }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(top = 20.dp)) {
-            itemsIndexed(tracks, key = { _, track -> track.key }) { index, track ->
-                TrackRow(track = track, active = index == current, onClick = { onJump(index) })
+            } else if (signedIn && error == null) {
+                item { EmptyState(MusicIcon.Note, "Пока нет треков", "Открой поиск или выбери микс, чтобы начать слушать.") }
             }
         }
     }
 }
 
 @Composable
-internal fun CoverArt(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier.clip(RoundedCornerShape(16.dp))
-            .background(Brush.linearGradient(listOf(Color(0xFFD9D3C3), Color(0xFF7F754E), Color(0xFF343129)))),
-        contentAlignment = Alignment.Center,
-    ) { Text("♪", color = TextPrimary, fontSize = 26.sp) }
-}
-
-@Composable
-private fun TransportButton(glyph: String, description: String, onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.semantics { contentDescription = description }) {
-        Text(glyph, color = TextPrimary, fontSize = 24.sp)
+private fun PlayingFeature(track: Track, roomy: Boolean, onOpen: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
+            .background(Brush.horizontalGradient(listOf(SelectedPanel, Panel))).clickable(onClick = onOpen)
+            .padding(if (roomy) 24.dp else 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(15.dp),
+    ) {
+        val coverSize = if (roomy) 106.dp else 68.dp
+        CoverArt(Modifier.size(coverSize), track.artwork_url, track.key)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Сейчас играет", color = Highlight, style = MaterialTheme.typography.labelMedium)
+            Text(track.title, style = if (roomy) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(track.artist, color = TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Glyph(MusicIcon.Expand, Modifier.size(20.dp), Highlight)
     }
 }
 
-internal fun formatTime(seconds: Int): String = "%d:%02d".format(seconds.coerceAtLeast(0) / 60, seconds.coerceAtLeast(0) % 60)
+@Composable
+internal fun TrackRow(
+    track: Track,
+    active: Boolean,
+    onClick: () -> Unit,
+    onDownload: (() -> Unit)? = null,
+    endAction: (@Composable () -> Unit)? = null,
+) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 64.dp).clip(RoundedCornerShape(13.dp))
+            .background(if (active) SelectedPanel else Panel).clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CoverArt(Modifier.size(43.dp), track.artwork_url, track.key, radius = 9)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(track.title, color = if (active) Highlight else TextStrong,
+                style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(track.artist, color = TextMuted,
+                style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Text(formatTime(track.duration), color = TextMuted, style = MaterialTheme.typography.bodySmall)
+        if (onDownload != null) GlyphButton(MusicIcon.Download, "Скачать ${track.title}", onDownload)
+        endAction?.invoke()
+    }
+}
+
+internal fun formatTime(seconds: Int): String {
+    val time = seconds.coerceAtLeast(0)
+    return "${time / 60}:${(time % 60).toString().padStart(2, '0')}"
+}

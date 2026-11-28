@@ -6,6 +6,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,6 +32,7 @@ class CatalogViewModel(
     private val mutableLyrics = MutableStateFlow<Lyrics?>(null)
     private val mutableError = MutableStateFlow<String?>(null)
     private val mutableLoading = MutableStateFlow(false)
+    private val mutableSearching = MutableStateFlow(false)
     private var searchJob: Job? = null
 
     val library: StateFlow<List<Track>> = mutableLibrary.asStateFlow()
@@ -42,6 +44,7 @@ class CatalogViewModel(
     val lyrics: StateFlow<Lyrics?> = mutableLyrics.asStateFlow()
     val error: StateFlow<String?> = mutableError.asStateFlow()
     val loading: StateFlow<Boolean> = mutableLoading.asStateFlow()
+    val searching: StateFlow<Boolean> = mutableSearching.asStateFlow()
 
     fun start() {
         run { mutableLibrary.value = api.library().items }
@@ -56,14 +59,20 @@ class CatalogViewModel(
 
     fun search(query: String) {
         searchJob?.cancel()
+        mutableSearching.value = true
+        mutableSearch.value = emptyList()
+        mutableError.value = null
         searchJob = scope.launch {
-            mutableError.value = null
-            val result = runCatching {
-                if (query.isBlank()) api.recommendations() else api.search(query).items
+            try {
+                val result = runCatching {
+                    if (query.isBlank()) api.recommendations() else api.search(query).items
+                }
+                ensureActive()
+                result.onSuccess { mutableSearch.value = it }
+                    .onFailure { mutableError.value = it.message }
+            } finally {
+                if (isActive) mutableSearching.value = false
             }
-            ensureActive()
-            result.onSuccess { mutableSearch.value = it }
-                .onFailure { mutableError.value = it.message }
         }
     }
 
