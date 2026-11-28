@@ -137,7 +137,8 @@ internal fun CoverArt(
 }
 
 internal enum class MusicIcon {
-    Home, Search, Mix, Download, Profile, Note, Play, Pause, Previous, Next, Queue, Back, Expand, Volume, Trash, Check,
+    Home, Search, Mix, Download, Profile, Note, Play, Pause, Previous, Next, Queue, Back, Expand,
+    Volume, Mute, Trash, Check, Shuffle, Repeat, RepeatOne, Heart, HeartFilled, More, Lyrics, Equalizer, Timer,
 }
 
 @Composable
@@ -147,9 +148,15 @@ internal fun GlyphButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    active: Boolean = false,
 ) {
     IconButton(onClick, modifier.semantics { contentDescription = label }, enabled = enabled) {
-        Glyph(icon, Modifier.size(22.dp), if (enabled) TextStrong else TextMuted.copy(alpha = 0.45f))
+        val color = when {
+            !enabled -> TextMuted.copy(alpha = 0.45f)
+            active -> Highlight
+            else -> TextStrong
+        }
+        Glyph(icon, Modifier.size(22.dp), color)
     }
 }
 
@@ -158,6 +165,59 @@ internal fun Glyph(icon: MusicIcon, modifier: Modifier, color: Color = TextStron
     Canvas(modifier) {
         scale(size.width / 24f, size.height / 24f, pivot = Offset.Zero) {
             when (icon) {
+                MusicIcon.Shuffle -> {
+                    outline(color, 3f, 6f, 7f, 6f, 16f, 18f, 21f, 18f)
+                    outline(color, 18f, 15f, 21f, 18f, 18f, 21f)
+                    outline(color, 3f, 18f, 7f, 18f, 10f, 14f)
+                    outline(color, 14f, 10f, 17f, 6f, 21f, 6f)
+                    outline(color, 18f, 3f, 21f, 6f, 18f, 9f)
+                }
+                MusicIcon.Repeat, MusicIcon.RepeatOne -> {
+                    outline(color, 4f, 10f, 4f, 6f, 20f, 6f)
+                    outline(color, 17f, 3f, 20f, 6f, 17f, 9f)
+                    outline(color, 20f, 14f, 20f, 18f, 4f, 18f)
+                    outline(color, 7f, 15f, 4f, 18f, 7f, 21f)
+                    if (icon == MusicIcon.RepeatOne) outline(color, 10f, 11f, 12.5f, 9f, 12.5f, 15f)
+                }
+                MusicIcon.Heart, MusicIcon.HeartFilled -> {
+                    val heart = Path().apply {
+                        moveTo(12f, 21f)
+                        cubicTo(10f, 19f, 2.5f, 14f, 2.5f, 8.9f)
+                        cubicTo(2.5f, 3.8f, 9f, 2f, 12f, 6.8f)
+                        cubicTo(15f, 2f, 21.5f, 3.8f, 21.5f, 8.9f)
+                        cubicTo(21.5f, 14f, 14f, 19f, 12f, 21f)
+                        close()
+                    }
+                    if (icon == MusicIcon.HeartFilled) drawPath(heart, color)
+                    else drawPath(heart, color, style = Stroke(1.75f, cap = StrokeCap.Round))
+                }
+                MusicIcon.More -> {
+                    for (x in listOf(5f, 12f, 19f)) drawCircle(color, 1.55f, Offset(x, 12f))
+                }
+                MusicIcon.Lyrics -> {
+                    outline(color, 7f, 4f, 18f, 4f, 18f, 21f, 5f, 21f, 5f, 6f, 7f, 4f)
+                    outline(color, 8f, 9f, 15f, 9f)
+                    outline(color, 8f, 13f, 15f, 13f)
+                    outline(color, 8f, 17f, 12f, 17f)
+                }
+                MusicIcon.Equalizer -> {
+                    outline(color, 5f, 4f, 5f, 20f)
+                    outline(color, 12f, 4f, 12f, 20f)
+                    outline(color, 19f, 4f, 19f, 20f)
+                    drawCircle(color, 2.4f, Offset(5f, 9f))
+                    drawCircle(color, 2.4f, Offset(12f, 15f))
+                    drawCircle(color, 2.4f, Offset(19f, 8f))
+                }
+                MusicIcon.Timer -> {
+                    drawCircle(color, 7.2f, Offset(12f, 13f), style = Stroke(1.75f))
+                    outline(color, 9f, 3f, 15f, 3f)
+                    outline(color, 12f, 8f, 12f, 13f, 15f, 15f)
+                }
+                MusicIcon.Mute -> {
+                    outline(color, 3f, 9f, 6f, 9f, 11f, 5f, 11f, 19f, 6f, 15f, 3f, 15f, 3f, 9f)
+                    outline(color, 15f, 9f, 21f, 15f)
+                    outline(color, 21f, 9f, 15f, 15f)
+                }
                 MusicIcon.Home -> outline(color, 3f, 10f, 12f, 3f, 21f, 10f, 21f, 20f, 15f, 20f, 15f, 14f, 9f, 14f, 9f, 20f, 3f, 20f, 3f, 10f)
                 MusicIcon.Search -> {
                     drawCircle(color, 6f, Offset(10.5f, 10.5f), style = Stroke(1.75f))

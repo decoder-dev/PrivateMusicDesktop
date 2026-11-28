@@ -16,9 +16,6 @@ interface CatalogApi {
     fun lyrics(track: Track): Lyrics?
     fun addToLibrary(track: Track): Track
     fun removeFromLibrary(track: Track)
-    fun setShuffle(on: Boolean)
-    fun setRepeat(repeat: String)
-    fun setEqualizer(gains: List<Float>)
     fun outputDevices(): List<String>
     fun setOutputDevice(name: String?)
 }

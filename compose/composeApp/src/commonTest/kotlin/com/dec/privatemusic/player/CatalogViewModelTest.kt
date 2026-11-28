@@ -1,5 +1,6 @@
 package com.dec.privatemusic.player
 
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -12,6 +13,27 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 
 class CatalogViewModelTest {
+    @Test
+    fun favoriteUsesTheLibraryCopyAssignedByTheService() = runTest {
+        val source = demoTracks.first().copy(track_id = 888)
+        val copy = source.copy(track_id = 999)
+        var removed: Track? = null
+        val api = object : CatalogApi by DemoCatalogApi() {
+            override fun addToLibrary(track: Track): Track = copy
+            override fun removeFromLibrary(track: Track) { removed = track }
+        }
+        val catalog = CatalogViewModel(api, backgroundScope)
+        catalog.start()
+        testScheduler.runCurrent()
+        catalog.toggleFavorite(source)
+        testScheduler.runCurrent()
+        assertEquals(copy, catalog.favoriteCopies.value[source.key])
+        catalog.toggleFavorite(source)
+        testScheduler.runCurrent()
+        assertEquals(copy, removed)
+        assertEquals(null, catalog.favoriteCopies.value[source.key])
+    }
+
     @Test
     fun downloadAndRemoveUpdateOfflineLibrary() {
         val viewModel = CatalogViewModel(DemoCatalogApi(), CoroutineScope(SupervisorJob() + Dispatchers.Unconfined))

@@ -12,6 +12,19 @@ interface PlayerApi {
     suspend fun seek(seconds: Double)
     suspend fun setVolume(volume: Float)
     suspend fun jump(index: Int)
+    suspend fun queueSnapshot(): QueueEvent
+    suspend fun playNext(track: Track)
+    suspend fun playLast(track: Track)
+    suspend fun moveUpcoming(from: Int, to: Int)
+    suspend fun removeFromQueue(index: Int)
+    suspend fun clearUpcoming()
+    fun setShuffle(on: Boolean)
+    fun setRepeat(repeat: String)
+    fun equalizer(): List<Float>?
+    fun setEqualizer(gains: List<Float>?)
+    fun sleepTimer(): SleepTimer
+    fun setSleepTimer(seconds: Long?, endOfTrack: Boolean)
+    fun setVisualizer(on: Boolean)
     suspend fun playRadio(source: JsonObject, tracks: List<Track>, index: Int, nextOffset: Int?)
     fun events(): Flow<String>
     fun close() {}

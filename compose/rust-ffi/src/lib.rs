@@ -19,6 +19,7 @@ struct Engine {
     app: App,
     events: Arc<Mutex<VecDeque<String>>>,
     output_device: Arc<Mutex<Option<String>>>,
+    equalizer: Option<[f32; 10]>,
 }
 
 type Shared = Mutex<Engine>;
@@ -35,6 +36,12 @@ enum Command {
     SetVolume { volume: f32 },
     Jump { index: usize },
     PlayerState,
+    QueueSnapshot,
+    PlayNext { track: Track },
+    PlayLast { track: Track },
+    MoveUpcoming { from: usize, to: usize },
+    RemoveFromQueue { index: usize },
+    ClearUpcoming,
     SignIn { session: Session },
     SignOut,
     SessionState,
@@ -52,7 +59,11 @@ enum Command {
     RemoveFromLibrary { track: Track },
     SetShuffle { on: bool },
     SetRepeat { repeat: Repeat },
-    SetEqualizer { gains: Vec<f32> },
+    Equalizer,
+    SetEqualizer { gains: Option<[f32; 10]> },
+    SleepTimer,
+    SetSleepTimer { seconds: Option<u64>, end_of_track: bool },
+    SetVisualizer { on: bool },
     OutputDevices,
     SetOutputDevice { name: Option<String> },
 }
@@ -94,7 +105,7 @@ fn new_engine_with_data_dir(data_dir: Option<PathBuf>) -> Box<Shared> {
             ..AppOptions::default()
         },
     );
-    Box::new(Mutex::new(Engine { app, events, output_device }))
+    Box::new(Mutex::new(Engine { app, events, output_device, equalizer: None }))
 }
 
 fn command(engine: &mut Engine, raw: &str) -> String {
@@ -112,6 +123,12 @@ fn command(engine: &mut Engine, raw: &str) -> String {
             Command::SetVolume { volume } => controller.set_volume(volume),
             Command::Jump { index } => controller.jump(index),
             Command::PlayerState => return serde_json::to_value(controller.state()).map_err(|error| error.to_string()),
+            Command::QueueSnapshot => return serde_json::to_value(controller.queue_snapshot()).map_err(|error| error.to_string()),
+            Command::PlayNext { track } => controller.play_next(track),
+            Command::PlayLast { track } => controller.play_last(track),
+            Command::MoveUpcoming { from, to } => controller.move_upcoming(from, to),
+            Command::RemoveFromQueue { index } => controller.remove_from_queue(index),
+            Command::ClearUpcoming => controller.clear_upcoming(),
             Command::SignIn { session } => app.sign_in(session),
             Command::SignOut => app.sign_out(),
             Command::SessionState => return serde_json::to_value(app.session_state()).map_err(|error| error.to_string()),
@@ -129,10 +146,19 @@ fn command(engine: &mut Engine, raw: &str) -> String {
             Command::RemoveFromLibrary { track } => app.remove_from_library(&track).map_err(|error| error.to_string())?,
             Command::SetShuffle { on } => controller.set_shuffle(on),
             Command::SetRepeat { repeat } => controller.set_repeat(repeat),
+            Command::Equalizer => return Ok(json!(engine.equalizer)),
             Command::SetEqualizer { gains } => {
-                let gains: [f32; 10] = gains.try_into().map_err(|_| "equalizer needs exactly 10 gains".to_string())?;
-                controller.set_equalizer(Some(gains));
+                controller.set_equalizer(gains);
+                engine.equalizer = gains;
             }
+            Command::SleepTimer => {
+                let (remaining, end_of_track) = controller.sleep_timer();
+                return Ok(json!({ "remaining": remaining, "end_of_track": end_of_track }));
+            }
+            Command::SetSleepTimer { seconds, end_of_track } => {
+                controller.set_sleep_timer(seconds, end_of_track).map_err(|error| error.to_string())?;
+            }
+            Command::SetVisualizer { on } => controller.set_visualizer(on),
             Command::OutputDevices => return serde_json::to_value(output_devices()).map_err(|error| error.to_string()),
             Command::SetOutputDevice { name } => {
                 *engine.output_device.lock().unwrap_or_else(|poison| poison.into_inner()) = name;

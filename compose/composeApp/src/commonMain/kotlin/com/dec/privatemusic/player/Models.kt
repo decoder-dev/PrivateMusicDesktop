@@ -48,7 +48,19 @@ data class PlayerState(
 data class QueueEvent(
     val tracks: List<Track> = emptyList(),
     val current: Int? = null,
-)
+    val order: List<Int> = emptyList(),
+) {
+    val playbackIndices: List<Int> get() = order.ifEmpty { tracks.indices.toList() }
+    val currentPosition: Int get() = playbackIndices.indexOf(current ?: -1)
+}
+
+@Serializable
+data class SleepTimer(
+    val remaining: Long? = null,
+    val end_of_track: Boolean = false,
+) {
+    val active: Boolean get() = remaining != null || end_of_track
+}
 
 val demoTracks = listOf(
     Track(101, 1, "Reise, Reise", "Rammstein", duration = 250),

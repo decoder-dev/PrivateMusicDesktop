@@ -32,7 +32,8 @@ private enum class Screen(val title: String, val icon: MusicIcon) {
     Profile("Профиль", MusicIcon.Profile),
     Player("Плеер", MusicIcon.Note),
     Queue("Очередь", MusicIcon.Queue),
-    Lyrics("Текст песни", MusicIcon.Note),
+    Lyrics("Текст песни", MusicIcon.Lyrics),
+    Equalizer("Эквалайзер", MusicIcon.Equalizer),
 }
 
 private val MainScreens = listOf(Screen.Home, Screen.Search, Screen.Mixes, Screen.Downloads, Screen.Profile)
@@ -59,8 +60,7 @@ fun PrivateMusicApp(
         else -> emptyList()
     }
     var screen by remember { mutableStateOf(Screen.Home) }
-    var playerReturn by remember { mutableStateOf(Screen.Home) }
-    var queueReturn by remember { mutableStateOf(Screen.Home) }
+    var history by remember { mutableStateOf<List<Screen>>(emptyList()) }
 
     LaunchedEffect(viewModel) { viewModel.start(sessionViewModel::refresh) }
     LaunchedEffect(sessionViewModel) { sessionViewModel.start() }
@@ -74,31 +74,30 @@ fun PrivateMusicApp(
     DisposableEffect(sessionViewModel) { onDispose { sessionViewModel.close() } }
     DisposableEffect(catalog) { onDispose { catalog.close() } }
 
+    fun available(destination: Screen): Screen = when {
+        (destination == Screen.Search || destination == Screen.Mixes) && !session.signed_in && !catalog.isDemo -> Screen.Profile
+        else -> destination
+    }
+
     fun navigate(destination: Screen) {
-        screen = when {
-            (destination == Screen.Search || destination == Screen.Mixes) && !session.signed_in && !catalog.isDemo -> Screen.Profile
-            else -> destination
-        }
+        history = emptyList()
+        screen = available(destination)
     }
 
-    fun openPlayer() {
-        if (screen != Screen.Player) playerReturn = screen
-        screen = Screen.Player
+    fun open(destination: Screen) {
+        if (screen == destination) return
+        val index = history.indexOfLast { it == destination }
+        history = if (index >= 0) history.take(index) else history + screen
+        screen = destination
     }
 
-    fun openQueue() {
-        if (screen != Screen.Queue) queueReturn = screen
-        screen = Screen.Queue
-    }
+    fun openPlayer() = open(Screen.Player)
+    fun openQueue() = open(Screen.Queue)
 
-    fun goBack() = navigate(
-        when (screen) {
-            Screen.Player -> playerReturn
-            Screen.Queue -> queueReturn
-            Screen.Lyrics -> Screen.Player
-            else -> Screen.Home
-        },
-    )
+    fun goBack() {
+        screen = available(history.lastOrNull() ?: Screen.Home)
+        history = history.dropLast(1)
+    }
 
     bindBackHandler(screen != Screen.Home, ::goBack)
 
@@ -139,28 +138,30 @@ fun PrivateMusicApp(
                                     error = playerError ?: catalogError,
                                     onPlay = { viewModel.play(tracks, it) },
                                     onDownload = catalog::download,
+                                    onPlayNext = viewModel::playNext,
+                                    onPlayLast = viewModel::playLast,
                                     onOpenPlayer = ::openPlayer,
                                     onOpenQueue = ::openQueue,
                                     onOpenProfile = { navigate(Screen.Profile) },
                                 )
                                 Screen.Player -> FullPlayer(
                                     state = state,
+                                    queue = queue,
                                     viewModel = viewModel,
+                                    catalog = catalog,
+                                    signedIn = session.signed_in || catalog.isDemo,
                                     onClose = ::goBack,
                                     onQueue = ::openQueue,
-                                    onLyrics = { navigate(Screen.Lyrics) },
+                                    onLyrics = { open(Screen.Lyrics) },
+                                    onEqualizer = { open(Screen.Equalizer) },
                                 )
-                                Screen.Queue -> QueueScreen(
-                                    tracks = queue.ifEmpty { if (catalog.isDemo) demoTracks else emptyList() },
-                                    current = state.queue_index,
-                                    onBack = ::goBack,
-                                    onJump = viewModel::jump,
-                                )
+                                Screen.Queue -> QueueScreen(queue, ::goBack, viewModel)
+                                Screen.Equalizer -> EqualizerScreen(viewModel, ::goBack)
                                 Screen.Profile -> ProfileScreen(session, onLogin, onLogout, sessionViewModel::refresh)
-                                Screen.Search -> SearchScreen(catalog, viewModel::play)
+                                Screen.Search -> SearchScreen(catalog, viewModel::playNext, viewModel::playLast, viewModel::play)
                                 Screen.Mixes -> MixesScreen(catalog) { mix -> viewModel.playRadio(mix.source, mix.tracks, 0, mix.nextOffset) }
-                                Screen.Downloads -> DownloadsScreen(catalog, viewModel::play)
-                                Screen.Lyrics -> LyricsScreen(state.track, catalog, state.position, ::goBack)
+                                Screen.Downloads -> DownloadsScreen(catalog, viewModel::playNext, viewModel::playLast, viewModel::play)
+                                Screen.Lyrics -> LyricsScreen(state.track, catalog, state.position, ::goBack, viewModel::seek)
                             }
                         }
                     }
@@ -243,6 +244,8 @@ private fun HomeScreen(
     error: String?,
     onPlay: (Int) -> Unit,
     onDownload: (Track) -> Unit,
+    onPlayNext: (Track) -> Unit,
+    onPlayLast: (Track) -> Unit,
     onOpenPlayer: () -> Unit,
     onOpenQueue: () -> Unit,
     onOpenProfile: () -> Unit,
@@ -287,7 +290,9 @@ private fun HomeScreen(
                     )
                 }
                 itemsIndexed(tracks) { index, track ->
-                    TrackRow(track, state.track?.key == track.key, { onPlay(index) }, { onDownload(track) })
+                    TrackRow(track, state.track?.key == track.key, { onPlay(index) }) {
+                        TrackActions(track, onPlayNext, onPlayLast, "Скачать трек", { onDownload(track) })
+                    }
                 }
             } else if (signedIn && error == null) {
                 item { EmptyState(MusicIcon.Note, "Пока нет треков", "Открой поиск или выбери микс, чтобы начать слушать.") }
@@ -322,7 +327,6 @@ internal fun TrackRow(
     track: Track,
     active: Boolean,
     onClick: () -> Unit,
-    onDownload: (() -> Unit)? = null,
     endAction: (@Composable () -> Unit)? = null,
 ) {
     Row(
@@ -340,7 +344,6 @@ internal fun TrackRow(
                 style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Text(formatTime(track.duration), color = TextMuted, style = MaterialTheme.typography.bodySmall)
-        if (onDownload != null) GlyphButton(MusicIcon.Download, "Скачать ${track.title}", onDownload)
         endAction?.invoke()
     }
 }

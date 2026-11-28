@@ -65,7 +65,7 @@ pub struct State {
 pub enum UiEvent {
     SleepTimer { remaining: Option<u64>, end_of_track: bool },
     State(State),
-    Queue { tracks: Vec<Track>, current: Option<usize> },
+    Queue { tracks: Vec<Track>, current: Option<usize>, order: Vec<usize> },
     Error { kind: String, message: String },
     /// Токен VK больше не работает: покажите экран входа.
     SessionExpired,
@@ -310,7 +310,11 @@ impl Inner {
     }
 
     fn queue_event(&self) -> UiEvent {
-        UiEvent::Queue { tracks: self.queue.tracks().to_vec(), current: self.queue.current_index() }
+        UiEvent::Queue {
+            tracks: self.queue.tracks().to_vec(),
+            current: self.queue.current_index(),
+            order: self.queue.playback_order().to_vec(),
+        }
     }
 }
 
@@ -1143,6 +1147,10 @@ impl Controller {
         self.shared.lock().state()
     }
 
+    pub fn queue_snapshot(&self) -> UiEvent {
+        self.shared.lock().queue_event()
+    }
+
     pub fn play_tracks(&self, tracks: Vec<Track>, index: usize) {
         self.shared.with(|inner, events| {
             let Inner { queue, rng, .. } = inner;
@@ -1477,6 +1485,7 @@ impl Controller {
         self.shared.with(|inner, events| {
             let Inner { queue, rng, .. } = inner;
             queue.set_shuffle(on, rng);
+            events.push(inner.queue_event());
             events.push(UiEvent::State(inner.state()));
         });
     }

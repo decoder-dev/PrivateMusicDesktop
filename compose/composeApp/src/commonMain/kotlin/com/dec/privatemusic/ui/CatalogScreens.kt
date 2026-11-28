@@ -123,7 +123,12 @@ private fun SessionLoginDialog(onDismiss: () -> Unit, onSessionChanged: () -> Un
 }
 
 @Composable
-fun SearchScreen(catalog: CatalogViewModel, onPlay: (List<Track>, Int) -> Unit) {
+fun SearchScreen(
+    catalog: CatalogViewModel,
+    onPlayNext: ((Track) -> Unit)? = null,
+    onPlayLast: ((Track) -> Unit)? = null,
+    onPlay: (List<Track>, Int) -> Unit,
+) {
     var query by remember { mutableStateOf("") }
     var submitted by remember { mutableStateOf("") }
     val tracks by catalog.searchResults.collectAsState()
@@ -162,7 +167,9 @@ fun SearchScreen(catalog: CatalogViewModel, onPlay: (List<Track>, Int) -> Unit) 
             item { EmptyState(MusicIcon.Search, "Совпадений нет", "Попробуй другой запрос.") }
         }
         itemsIndexed(tracks) { index, track ->
-            TrackRow(track, active = false, onClick = { onPlay(tracks, index) }, onDownload = { catalog.download(track) })
+            TrackRow(track, active = false, onClick = { onPlay(tracks, index) }) {
+                TrackActions(track, onPlayNext, onPlayLast, "Скачать трек", { catalog.download(track) })
+            }
         }
     }
 }
@@ -231,7 +238,12 @@ private fun CatalogTile(title: String, detail: String, artwork: String?, key: St
 }
 
 @Composable
-fun DownloadsScreen(catalog: CatalogViewModel, onPlay: (List<Track>, Int) -> Unit) {
+fun DownloadsScreen(
+    catalog: CatalogViewModel,
+    onPlayNext: ((Track) -> Unit)? = null,
+    onPlayLast: ((Track) -> Unit)? = null,
+    onPlay: (List<Track>, Int) -> Unit,
+) {
     val downloads by catalog.downloads.collectAsState()
     val error by catalog.error.collectAsState()
     val tracks = remember(downloads) { downloads.map { it.track } }
@@ -244,7 +256,9 @@ fun DownloadsScreen(catalog: CatalogViewModel, onPlay: (List<Track>, Int) -> Uni
         itemsIndexed(tracks) { index, track ->
             TrackRow(
                 track, active = false, onClick = { onPlay(tracks, index) },
-                endAction = { GlyphButton(MusicIcon.Trash, "Удалить ${track.title}", { pendingDelete = track }) },
+                endAction = {
+                    TrackActions(track, onPlayNext, onPlayLast, "Удалить загрузку", { pendingDelete = track })
+                },
             )
         }
     }
@@ -265,9 +279,17 @@ fun DownloadsScreen(catalog: CatalogViewModel, onPlay: (List<Track>, Int) -> Uni
 }
 
 @Composable
-fun LyricsScreen(track: Track?, catalog: CatalogViewModel, position: Double = 0.0, onBack: (() -> Unit)? = null) {
-    val lyrics by catalog.lyrics.collectAsState()
-    val error by catalog.error.collectAsState()
+fun LyricsScreen(
+    track: Track?,
+    catalog: CatalogViewModel,
+    position: Double = 0.0,
+    onBack: (() -> Unit)? = null,
+    onSeek: ((Double) -> Unit)? = null,
+) {
+    val result by catalog.lyrics.collectAsState()
+    val currentResult = result?.takeIf { it.trackKey == track?.key }
+    val lyrics = currentResult?.lyrics
+    val error = currentResult?.error
     LaunchedEffect(track?.key) { if (track != null) catalog.lyrics(track) }
     val lines = lyrics?.lines.orEmpty()
     val currentLine = lines.indexOfLast { it.time <= position }
@@ -284,18 +306,24 @@ fun LyricsScreen(track: Track?, catalog: CatalogViewModel, position: Double = 0.
                     }
                 }
             }
-            if (lyrics == null && error == null) item { Text("Текст пока недоступен", color = TextMuted) }
+            if (currentResult == null) {
+                item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+            } else if (lyrics == null && error == null) {
+                item { Text("Текст пока недоступен", color = TextMuted) }
+            }
             itemsIndexed(lines) { index, line ->
                 Text(
                     line.text,
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp))
-                        .background(if (index == currentLine) SelectedPanel else AppBackground).padding(12.dp),
+                        .background(if (index == currentLine) SelectedPanel else AppBackground)
+                        .then(if (onSeek == null) Modifier else Modifier.clickable(onClickLabel = "Перейти к строке") { onSeek(line.time) })
+                        .padding(12.dp),
                     color = if (index == currentLine) Highlight else TextMuted,
                     style = MaterialTheme.typography.titleMedium,
                 )
             }
             if (lyrics != null && lines.isEmpty()) {
-                item { Text(lyrics?.text.orEmpty(), color = TextStrong, style = MaterialTheme.typography.bodyLarge) }
+                item { Text(lyrics.text, color = TextStrong, style = MaterialTheme.typography.bodyLarge) }
             }
         }
     }

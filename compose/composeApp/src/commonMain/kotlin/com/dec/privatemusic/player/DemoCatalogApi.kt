@@ -4,8 +4,9 @@ package com.dec.privatemusic.player
 class DemoCatalogApi : CatalogApi {
     override val isDemo: Boolean = true
     private val offline = mutableListOf<OfflineTrack>()
+    private val library = demoTracks.toMutableList()
 
-    override fun library(offset: Int, count: Int): TrackPage = TrackPage(demoTracks.drop(offset).take(count), demoTracks.size)
+    override fun library(offset: Int, count: Int): TrackPage = TrackPage(library.drop(offset).take(count), library.size)
     override fun search(query: String, offset: Int, count: Int): TrackPage {
         val matches = demoTracks.filter { "${it.artist} ${it.title}".contains(query, ignoreCase = true) }
         return TrackPage(matches.drop(offset).take(count), matches.size)
@@ -29,11 +30,13 @@ class DemoCatalogApi : CatalogApi {
         text = "${track.artist} — ${track.title}\nДемонстрационный текст песни",
         lines = listOf(LyricsLine(0.0, "Демонстрационный текст песни")),
     )
-    override fun addToLibrary(track: Track): Track = track
-    override fun removeFromLibrary(track: Track) = Unit
-    override fun setShuffle(on: Boolean) = Unit
-    override fun setRepeat(repeat: String) = Unit
-    override fun setEqualizer(gains: List<Float>) = Unit
+    override fun addToLibrary(track: Track): Track {
+        if (library.none { it.key == track.key }) library.add(0, track)
+        return track
+    }
+    override fun removeFromLibrary(track: Track) {
+        library.removeAll { it.key == track.key }
+    }
     override fun outputDevices(): List<String> = listOf("Demo output")
     override fun setOutputDevice(name: String?) = Unit
 }

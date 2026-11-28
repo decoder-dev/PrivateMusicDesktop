@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
@@ -57,6 +58,25 @@ class RustPlayerApi(
         put("index", index)
     })
 
+    override suspend fun queueSnapshot(): QueueEvent = decode(buildJsonObject { put("command", "queue_snapshot") })
+    override suspend fun playNext(track: Track) = queueTrack("play_next", track)
+    override suspend fun playLast(track: Track) = queueTrack("play_last", track)
+    override suspend fun moveUpcoming(from: Int, to: Int) = unitCommand(buildJsonObject {
+        put("command", "move_upcoming")
+        put("from", from)
+        put("to", to)
+    })
+    override suspend fun removeFromQueue(index: Int) = unitCommand(buildJsonObject {
+        put("command", "remove_from_queue")
+        put("index", index)
+    })
+    override suspend fun clearUpcoming() = unitCommand(buildJsonObject { put("command", "clear_upcoming") })
+
+    private fun queueTrack(command: String, track: Track) = unitCommand(buildJsonObject {
+        put("command", command)
+        put("track", json.encodeToJsonElement(track))
+    })
+
     private fun unitCommand(command: JsonObject) {
         command(command)
     }
@@ -87,7 +107,21 @@ class RustPlayerApi(
     override fun removeFromLibrary(track: Track) = unitCommand(buildJsonObject { put("command", "remove_from_library"); put("track", json.encodeToJsonElement(track)) })
     override fun setShuffle(on: Boolean) = unitCommand(buildJsonObject { put("command", "set_shuffle"); put("on", on) })
     override fun setRepeat(repeat: String) = unitCommand(buildJsonObject { put("command", "set_repeat"); put("repeat", repeat) })
-    override fun setEqualizer(gains: List<Float>) = unitCommand(buildJsonObject { put("command", "set_equalizer"); putJsonArray("gains") { gains.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } } })
+    override fun equalizer(): List<Float>? = decode(buildJsonObject { put("command", "equalizer") })
+    override fun setEqualizer(gains: List<Float>?) = unitCommand(buildJsonObject {
+        put("command", "set_equalizer")
+        if (gains != null) putJsonArray("gains") { gains.forEach { add(JsonPrimitive(it)) } }
+    })
+    override fun sleepTimer(): SleepTimer = decode(buildJsonObject { put("command", "sleep_timer") })
+    override fun setSleepTimer(seconds: Long?, endOfTrack: Boolean) = unitCommand(buildJsonObject {
+        put("command", "set_sleep_timer")
+        put("seconds", seconds)
+        put("end_of_track", endOfTrack)
+    })
+    override fun setVisualizer(on: Boolean) = unitCommand(buildJsonObject {
+        put("command", "set_visualizer")
+        put("on", on)
+    })
     override fun outputDevices(): List<String> = decode(buildJsonObject { put("command", "output_devices") })
     override fun setOutputDevice(name: String?) = unitCommand(buildJsonObject { put("command", "set_output_device"); put("name", name) })
 

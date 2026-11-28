@@ -10,12 +10,15 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 data class MixLaunch(val source: JsonObject, val tracks: List<Track>, val nextOffset: Int?)
+data class TrackLyrics(val trackKey: String, val lyrics: Lyrics? = null, val error: String? = null)
 
 class CatalogViewModel(
     private val api: CatalogApi,
@@ -24,30 +27,39 @@ class CatalogViewModel(
     val isDemo: Boolean get() = api.isDemo
 
     private val mutableLibrary = MutableStateFlow<List<Track>>(emptyList())
+    private val mutableFavoriteCopies = MutableStateFlow<Map<String, Track>>(emptyMap())
+    private val mutableCanFavorite = MutableStateFlow(false)
+    private val favoriteOperation = Mutex()
     private val mutableRecommendations = MutableStateFlow<List<Track>>(emptyList())
     private val mutableSearch = MutableStateFlow<List<Track>>(emptyList())
     private val mutableMixes = MutableStateFlow<List<MusicMix>>(emptyList())
     private val mutableReleases = MutableStateFlow<List<Album>>(emptyList())
     private val mutableDownloads = MutableStateFlow<List<OfflineTrack>>(emptyList())
-    private val mutableLyrics = MutableStateFlow<Lyrics?>(null)
+    private val mutableLyrics = MutableStateFlow<TrackLyrics?>(null)
     private val mutableError = MutableStateFlow<String?>(null)
     private val mutableLoading = MutableStateFlow(false)
     private val mutableSearching = MutableStateFlow(false)
     private var searchJob: Job? = null
+    private var lyricsJob: Job? = null
 
     val library: StateFlow<List<Track>> = mutableLibrary.asStateFlow()
+    val favoriteCopies = mutableFavoriteCopies.asStateFlow()
+    val canFavorite = mutableCanFavorite.asStateFlow()
     val recommendations: StateFlow<List<Track>> = mutableRecommendations.asStateFlow()
     val searchResults: StateFlow<List<Track>> = mutableSearch.asStateFlow()
     val mixes: StateFlow<List<MusicMix>> = mutableMixes.asStateFlow()
     val releases: StateFlow<List<Album>> = mutableReleases.asStateFlow()
     val downloads: StateFlow<List<OfflineTrack>> = mutableDownloads.asStateFlow()
-    val lyrics: StateFlow<Lyrics?> = mutableLyrics.asStateFlow()
+    val lyrics: StateFlow<TrackLyrics?> = mutableLyrics.asStateFlow()
     val error: StateFlow<String?> = mutableError.asStateFlow()
     val loading: StateFlow<Boolean> = mutableLoading.asStateFlow()
     val searching: StateFlow<Boolean> = mutableSearching.asStateFlow()
 
     fun start() {
-        run { mutableLibrary.value = api.library().items }
+        run {
+            mutableLibrary.value = api.library().items
+            mutableCanFavorite.value = true
+        }
         run { mutableRecommendations.value = api.recommendations() }
         run { mutableReleases.value = api.newReleases() }
         refreshMixes()
@@ -120,6 +132,28 @@ class CatalogViewModel(
         return MixLaunch(source, tracks, 400)
     }
 
+    fun toggleFavorite(track: Track) = run {
+        if (!mutableCanFavorite.value || !favoriteOperation.tryLock()) return@run
+        mutableCanFavorite.value = false
+        mutableError.value = null
+        try {
+            val favorite = mutableLibrary.value.firstOrNull { it.key == track.key }
+                ?: mutableFavoriteCopies.value[track.key]
+            if (favorite != null) {
+                api.removeFromLibrary(favorite)
+                mutableLibrary.update { tracks -> tracks.filterNot { it.key == favorite.key } }
+                mutableFavoriteCopies.update { copies -> copies.filterValues { it.key != favorite.key } }
+            } else {
+                val added = api.addToLibrary(track)
+                mutableLibrary.update { tracks -> listOf(added) + tracks.filterNot { it.key == added.key } }
+                if (added.key != track.key) mutableFavoriteCopies.update { it + (track.key to added) }
+            }
+        } finally {
+            mutableCanFavorite.value = true
+            favoriteOperation.unlock()
+        }
+    }
+
     fun download(track: Track) = run {
         api.download(track)
         refreshDownloads()
@@ -130,9 +164,17 @@ class CatalogViewModel(
         refreshDownloads()
     }
 
-    fun lyrics(track: Track) = run {
+    fun lyrics(track: Track) {
+        lyricsJob?.cancel()
         mutableLyrics.value = null
-        mutableLyrics.value = api.lyrics(track)
+        lyricsJob = scope.launch {
+            val result = runCatching { api.lyrics(track) }
+            ensureActive()
+            mutableLyrics.value = result.fold(
+                onSuccess = { TrackLyrics(track.key, lyrics = it) },
+                onFailure = { TrackLyrics(track.key, error = it.message ?: "Не удалось загрузить текст") },
+            )
+        }
     }
 
     private fun run(action: () -> Unit) {

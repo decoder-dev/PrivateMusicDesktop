@@ -20,6 +20,8 @@ import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
 import kotlin.test.Test
 import kotlin.test.assertFalse
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
 
 @OptIn(ExperimentalComposeUiApi::class)
 class ScreenshotTest {
@@ -35,13 +37,19 @@ class ScreenshotTest {
     private suspend fun renderApp(width: Int, height: Int, layout: String, miniPlayer: Offset) {
         val api = DemoPlayerApi()
         api.playTracks(demoTracks, 1)
+        api.setRepeat("all")
         val viewModel = PlayerViewModel(api)
         val session = SessionViewModel()
         try {
             ImageComposeScene(width = width, height = height) {
                 PrivateMusicApp(viewModel, session, onLogin = null, onLogout = session::refresh)
             }.use { scene ->
-                scene.render()
+                withTimeout(3_000) {
+                    while (viewModel.state.value.track == null || !session.state.value.signed_in) {
+                        scene.render()
+                        delay(20)
+                    }
+                }
                 val home = save(scene.render(), "$layout-home")
                 scene.sendPointerEvent(PointerEventType.Press, miniPlayer, type = PointerType.Touch)
                 scene.sendPointerEvent(PointerEventType.Release, miniPlayer, type = PointerType.Touch)
@@ -52,6 +60,21 @@ class ScreenshotTest {
         } finally {
             viewModel.close()
             session.close()
+        }
+    }
+
+    @Test
+    fun playerOptionsAndQueueRenderToPng() = runBlocking {
+        val api = DemoPlayerApi()
+        api.playTracks(demoTracks, 1)
+        val viewModel = PlayerViewModel(api, CoroutineScope(SupervisorJob() + Dispatchers.Unconfined))
+        viewModel.start()
+        try {
+            viewModel.setEqualizer(listOf(4f, 3f, 2f, 0f, -1f, 1f, 3f, 4f, 4f, 3f))
+            renderScreen("player-queue") { QueueScreen(viewModel.queue.value, {}, viewModel) }
+            renderScreen("player-equalizer") { EqualizerScreen(viewModel, {}) }
+        } finally {
+            viewModel.close()
         }
     }
 
