@@ -6,6 +6,12 @@ plugins {
 
 val releaseKeystore = System.getenv("ANDROID_KEYSTORE_PATH").orEmpty()
 val hasReleaseSigning = releaseKeystore.isNotBlank()
+val rustAbi = System.getProperty("pm.rust.abi") ?: "arm64-v8a"
+val rustTarget = when (rustAbi) {
+    "arm64-v8a" -> "aarch64-linux-android"
+    "x86_64" -> "x86_64-linux-android"
+    else -> error("Unsupported Rust ABI: $rustAbi")
+}
 
 android {
     namespace = "com.dec.privatemusic.compose.app"
@@ -17,6 +23,7 @@ android {
         targetSdk = 35
         versionCode = 10002
         versionName = "1.0.2"
+        ndk { abiFilters.add(rustAbi) }
     }
     signingConfigs {
         if (hasReleaseSigning) {
@@ -60,12 +67,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
 }
 
-val rustAbi = System.getProperty("pm.rust.abi") ?: "arm64-v8a"
-val rustTarget = when (rustAbi) {
-    "arm64-v8a" -> "aarch64-linux-android"
-    "x86_64" -> "x86_64-linux-android"
-    else -> error("Unsupported Rust ABI: $rustAbi")
-}
 val rustRoot = rootDir.resolve("rust-ffi")
 val rustOutput = System.getenv("CARGO_TARGET_DIR")?.let { file(it) } ?: rustRoot.resolve("target")
 val nativeLibrary = rustOutput.resolve("$rustTarget/release/libprivate_music_engine.so")

@@ -1,10 +1,14 @@
 package com.dec.privatemusic.player
 
+import android.content.Context
+
 private val sharedTransport by lazy { JniTransport() }
 private val sharedApi by lazy { RustPlayerApi(sharedTransport) }
 
 private class JniTransport : RustTransport {
-    private val pointer = RustPlayerApiJni.pm_engine_new(AndroidPlayerRuntime.dataPath())
+    private val pointer = RustPlayerApiJni.pm_engine_new(
+        AndroidPlayerRuntime.applicationContext(), AndroidPlayerRuntime.dataPath(),
+    )
 
     override fun command(raw: String): String = RustPlayerApiJni.pm_engine_command(pointer, raw)
     override fun poll(): String? = RustPlayerApiJni.pm_engine_poll_event(pointer)
@@ -29,7 +33,7 @@ object RustPlayerApiJni {
         System.loadLibrary("private_music_engine")
     }
 
-    @JvmStatic external fun pm_engine_new(dataDir: String): Long
+    @JvmStatic external fun pm_engine_new(context: Context, dataDir: String): Long
     @JvmStatic external fun pm_engine_free(pointer: Long)
     @JvmStatic external fun pm_engine_command(pointer: Long, raw: String): String
     @JvmStatic external fun pm_engine_poll_event(pointer: Long): String?

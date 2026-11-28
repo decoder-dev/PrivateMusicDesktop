@@ -1,7 +1,9 @@
 use pm_engine::app::{App, AppOptions, RadioSource};
 use pm_engine::audio::{output_devices, CpalSink, Sink};
 use pm_engine::queue::Repeat;
-use pm_engine::store::{MemoryStore, SecretStore};
+use pm_engine::store::SecretStore;
+#[cfg(target_os = "android")]
+use pm_engine::store::MemoryStore;
 #[cfg(not(target_os = "android"))]
 use pm_engine::store::KeyringStore;
 use pm_engine::vk::{Session, Track, VkClient};
@@ -195,11 +197,15 @@ pub unsafe extern "C" fn pm_string_free(pointer: *mut c_char) {
 #[cfg(target_os = "android")]
 mod android {
     use super::{command, new_engine_with_data_dir, Shared};
-    use jni::objects::{JClass, JString};
+    use jni::objects::{GlobalRef, JClass, JObject, JString};
     use jni::sys::{jlong, jstring};
     use jni::JNIEnv;
     use std::path::PathBuf;
-    use std::sync::Mutex;
+    use std::sync::{Mutex, OnceLock};
+
+    // CPAL uses this application context to query the Android audio service.
+    // Keep its JNI global reference alive for the whole process.
+    static APPLICATION_CONTEXT: OnceLock<GlobalRef> = OnceLock::new();
 
     fn pointer(engine: jlong) -> *mut super::c_void {
         engine as usize as *mut super::c_void
@@ -209,8 +215,17 @@ mod android {
     pub extern "system" fn Java_com_dec_privatemusic_player_RustPlayerApiJni_pm_1engine_1new(
         mut env: JNIEnv,
         _class: JClass,
+        context: JObject,
         data_dir: JString,
     ) -> jlong {
+        APPLICATION_CONTEXT.get_or_init(|| {
+            let vm = env.get_java_vm().expect("Android Java VM");
+            let context = env.new_global_ref(context).expect("Android application context");
+            unsafe {
+                ndk_context::initialize_android_context(vm.get_java_vm_pointer().cast(), context.as_obj().as_raw().cast());
+            }
+            context
+        });
         let path: String = env.get_string(&data_dir).expect("UTF-8 data directory").into();
         Box::into_raw(new_engine_with_data_dir(Some(PathBuf::from(path)))) as usize as jlong
     }

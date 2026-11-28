@@ -133,28 +133,10 @@ jobs:
           scripts/android-ci-sdk.sh emulator platform-tools "$SYSTEM_IMAGE"
           scripts/android-emulator-pin.sh
           scripts/android-emulator-tests/boot-emulator.sh
-      - name: Install and launch Compose on Android
+      - name: Install, launch and play offline on Android
         if: matrix.abi == 'x86_64'
         timeout-minutes: 5
-        run: |
-          set -euo pipefail
-          package=com.dec.privatemusic2.android
-          activity=com.dec.privatemusic.compose.app.MainActivity
-          adb install -g compose/androidApp/build/outputs/apk/debug/androidApp-debug.apk
-          adb shell am start -W -n "$package/$activity" | tee "$PM_OUT/launch.txt"
-          grep -q 'Status: ok' "$PM_OUT/launch.txt"
-          for attempt in {1..5}; do
-            if adb shell uiautomator dump /sdcard/compose.xml &&
-               adb pull /sdcard/compose.xml "$PM_OUT/compose.xml" &&
-               grep -q 'Главная' "$PM_OUT/compose.xml"; then
-              adb exec-out screencap -p > "$PM_OUT/home.png"
-              exit 0
-            fi
-            sleep 2
-          done
-          adb logcat -d -s AndroidRuntime > "$PM_OUT/android-runtime.log"
-          echo 'Compose home screen did not open.' >&2
-          exit 1
+        run: python3 scripts/compose-android-smoke.py compose/androidApp/build/outputs/apk/debug/androidApp-debug.apk "$PM_OUT"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always() && matrix.abi == 'x86_64'
         with:
