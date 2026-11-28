@@ -13,6 +13,7 @@ REPO="${PM_REPO:-decoder-dev/PrivateMusicDesktop}"
 API="${PM_API:-https://api.github.com}"
 VERSION="${PM_VERSION:-latest}"
 APP_NAME="Private Music"
+COMPOSE_NAME="PrivateMusic"
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*" >&2; }
 die() { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -28,11 +29,15 @@ esac
 # ------------------------------------------------------------------ удалить
 if [ "${1:-}" = "--uninstall" ]; then
   if [ "$OS" = macos ]; then
-    rm -rf "/Applications/$APP_NAME.app" "$HOME/Applications/$APP_NAME.app"
+    rm -rf "/Applications/$COMPOSE_NAME.app" "$HOME/Applications/$COMPOSE_NAME.app" \
+      "/Applications/$APP_NAME.app" "$HOME/Applications/$APP_NAME.app"
   else
-    if command -v dpkg >/dev/null 2>&1 && dpkg -s private-music >/dev/null 2>&1; then
-      say "removing the package (needs administrator rights)"
-      if [ "$(id -u)" -eq 0 ]; then apt-get remove -y private-music; else sudo apt-get remove -y private-music; fi
+    if command -v dpkg-query >/dev/null 2>&1; then
+      for package in privatemusic private-music; do
+        if [ "$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null)" != 'install ok installed' ]; then continue; fi
+        say "removing $package (needs administrator rights)"
+        if [ "$(id -u)" -eq 0 ]; then apt-get remove -y "$package"; else need sudo; sudo apt-get remove -y "$package"; fi
+      done
     fi
     rm -f "$HOME/.local/bin/private-music" "$HOME/.local/share/applications/private-music.desktop"
     rm -rf "$HOME/.local/share/private-music"
@@ -80,7 +85,7 @@ fetch() { # шаблон -> загружает соответствующий р
   [ -n "$id" ] || die "the release has no file matching $1."
   say "downloading $name"
   curl -fSL --progress-bar "${AUTH[@]+"${AUTH[@]}"}" -H "Accept: application/octet-stream" \
-    -o "$TMP/$name" "$API/repos/$REPO/releases/assets/$id"
+    -o "$TMP/$name" "$API/repos/$REPO/releases/assets/$id" || die "could not download $name."
   printf '%s' "$TMP/$name"
 }
 
@@ -100,35 +105,45 @@ verify() { # путь
 
 # --------------------------------------------------------------------- macOS
 install_macos() {
-  local dmg mount dest app
-  dmg="$(fetch '\.dmg$')"; verify "$dmg"
+  local dmg mount dest app pattern
+  case "$(uname -m)" in
+    arm64|aarch64) pattern='_macos-arm64\.dmg$' ;;
+    x86_64|amd64) pattern='_macos-x64\.dmg$' ;;
+    *) die "no macOS build for $(uname -m)." ;;
+  esac
+  if [ -z "$(asset_id "$pattern")" ]; then pattern='_macos-universal\.dmg$'; fi
+  dmg="$(fetch "$pattern")"; verify "$dmg"
   mount="$TMP/mount"; mkdir -p "$mount"
   hdiutil attach -nobrowse -quiet -readonly -mountpoint "$mount" "$dmg"
-  app="$(find "$mount" -maxdepth 1 -name '*.app' | head -n1)"
+  app="$(find "$mount" -maxdepth 1 -type d -name '*.app' | head -n1)"
   [ -n "$app" ] || { hdiutil detach -quiet "$mount" || true; die "no application inside the disk image."; }
   dest="/Applications"
   [ -w "$dest" ] || { dest="$HOME/Applications"; mkdir -p "$dest"; }
   say "copying to $dest"
-  rm -rf "$dest/$APP_NAME.app"
-  cp -R "$app" "$dest/$APP_NAME.app"
+  local installed="$dest/$(basename "$app")"
+  if ! ditto "$app" "$installed"; then
+    hdiutil detach -quiet "$mount" || true
+    die "could not copy the application to $installed."
+  fi
   hdiutil detach -quiet "$mount" || true
   # Сборка не нотариально заверена; файлу, полученному этим скриптом, вы доверяете, поэтому отмените
   # флаг карантина, который в противном случае заблокировал бы первый запуск.
-  xattr -dr com.apple.quarantine "$dest/$APP_NAME.app" 2>/dev/null || true
-  say "installed: $dest/$APP_NAME.app"
+  xattr -dr com.apple.quarantine "$installed" 2>/dev/null || true
+  say "installed: $installed"
 }
 
 # --------------------------------------- Linux
 install_linux() {
   case "$(uname -m)" in x86_64 | amd64) ;; *) die "only x86-64 Linux builds are published." ;; esac
-  if [ -z "${PM_FORCE_APPIMAGE:-}" ] && command -v dpkg >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+  if [ -z "${PM_FORCE_APPIMAGE:-}" ] && [ -n "$(asset_id '\.deb$')" ] && command -v dpkg >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
     local deb
     deb="$(fetch '\.deb$')"; verify "$deb"
     say "installing the package (needs administrator rights)"
     if [ "$(id -u)" -eq 0 ]; then apt-get install -y "$deb"; else need sudo; sudo apt-get install -y "$deb"; fi
-    say "installed. Start it from the application menu or run: private-music-desktop"
+    say "installed. Start it from the application menu."
     return
   fi
+  [ -n "$(asset_id '\.AppImage$')" ] || die "this release only provides a DEB for Linux. It requires Debian, Ubuntu or a compatible distribution."
   local image bin share
   image="$(fetch '\.AppImage$')"; verify "$image"
   bin="$HOME/.local/bin"; share="$HOME/.local/share"

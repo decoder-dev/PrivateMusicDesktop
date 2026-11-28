@@ -1,6 +1,6 @@
 name: Service canary
 # Daily check of everything the app depends on that needs no account: VK API shape, lyrics service,
-# and the published update manifest. A red run means users may be affected before anyone reports it.
+# and the published installers. A red run can surface outages before users report them.
 on:
   schedule:
     - cron: '23 5 * * *'
@@ -12,24 +12,26 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Check external services and the update manifest
+      - name: Check external services and release installers
         env:
           REPO: ${{ github.repository }}
         run: |
           python3 - <<'PY'
           import json, os, re, sys, urllib.request, urllib.error
           failures = []
-          def fetch(url, method="GET"):
-              # Release assets redirect to a storage host that may reject HEAD: ask for the first byte instead.
+          def fetch(url, probe=False):
+              # Asset storage may reject HEAD. Read one byte even if it ignores Range.
               headers = {"User-Agent": "private-music-canary"}
-              if method == "HEAD":
-                  method, headers["Range"] = "GET", "bytes=0-0"
-              request = urllib.request.Request(url, method=method, headers=headers)
+              if probe:
+                  headers["Range"] = "bytes=0-0"
+              request = urllib.request.Request(url, headers=headers)
               try:
                   with urllib.request.urlopen(request, timeout=30) as response:
-                      return response.status, response.read()
+                      return response.status, response.read(1) if probe else response.read()
               except urllib.error.HTTPError as error:
-                  return error.code, error.read()
+                  return error.code, b""
+              except (urllib.error.URLError, TimeoutError) as error:
+                  return None, str(error).encode()
           def check(name, ok, detail=""):
               print(("ok   " if ok else "FAIL ") + name + (f" — {detail}" if detail and not ok else ""))
               if not ok: failures.append(name)
@@ -50,20 +52,27 @@ jobs:
 
           repo = os.environ["REPO"]
           base = f"https://github.com/{repo}/releases/latest/download/"
-          status, body = fetch(base + "latest.json")
-          if status != 200:
-              check("update manifest is published", False, f"status {status}")
-          else:
-              manifest = json.loads(body)
-              check("manifest version is semantic", bool(re.fullmatch(r"\d+\.\d+\.\d+", manifest.get("version", ""))))
-              expected = {"windows-x86_64-nsis", "darwin-aarch64-app", "darwin-x86_64-app", "linux-x86_64-appimage", "linux-x86_64-deb"}
-              check("manifest lists every desktop target", expected <= set(manifest.get("platforms", {})), str(sorted(manifest.get("platforms", {}))))
-              for target, entry in manifest.get("platforms", {}).items():
-                  check(f"{target} has a signature", bool(entry.get("signature", "").strip()))
-                  code, _ = fetch(entry["url"], "HEAD")
-                  check(f"{target} package is downloadable", code in (200, 206), f"status {code}")
-              code, _ = fetch(base + "SHA256SUMS.txt", "HEAD")
-              check("SHA256SUMS.txt is published", code in (200, 206), f"status {code}")
+          status, body = fetch(base + "SHA256SUMS.txt")
+          check("SHA256SUMS.txt is published", status == 200, f"status {status}")
+          if status == 200:
+              expected = {
+                  "windows-x64.msi", "linux-amd64.deb", "macos-arm64.dmg",
+                  "macos-x64.dmg", "android-arm64.apk",
+              }
+              packages = {}
+              for line in body.decode("utf-8", errors="replace").splitlines():
+                  entry = re.fullmatch(r"[0-9a-fA-F]{64}\s+\*?(PrivateMusic_(\d+\.\d+\.\d+)_(\S+))", line)
+                  if entry:
+                      name, version, target = entry.groups()
+                      packages.setdefault(version, {})[target] = name
+              check("checksums cover all installers for one version",
+                    len(packages) == 1 and expected <= set(next(iter(packages.values()))),
+                    str({version: sorted(targets) for version, targets in packages.items()}))
+              if len(packages) == 1:
+                  for target, name in sorted(next(iter(packages.values())).items()):
+                      if target in expected:
+                          code, first_byte = fetch(base + name, probe=True)
+                          check(f"{target} installer is downloadable", code in (200, 206) and bool(first_byte), f"status {code}")
           if failures:
               print("\nFailed checks:", *failures, sep="\n  ")
               sys.exit(1)
