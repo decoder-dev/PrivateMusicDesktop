@@ -1,4 +1,5 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 val hostOs = System.getProperty("os.name").lowercase()
@@ -101,4 +102,17 @@ tasks.matching { it.name == "run" }.configureEach {
     val task = this as JavaExec
     task.dependsOn(packageDesktopNative)
     task.environment("JNA_LIBRARY_PATH", rustOutput.resolve("release").absolutePath)
+}
+
+val prepareDebScript = rootDir.resolve("../scripts/prepare-compose-deb.sh")
+tasks.withType<AbstractJPackageTask>().matching { it.name == "packageDeb" }.configureEach {
+    val scriptPath = prepareDebScript.absolutePath
+    val packageDirectory = destinationDir
+    inputs.file(prepareDebScript)
+    doLast {
+        val process = ProcessBuilder(
+            "bash", scriptPath, packageDirectory.get().asFile.absolutePath,
+        ).inheritIO().start()
+        check(process.waitFor() == 0) { "Could not prepare the Debian package" }
+    }
 }

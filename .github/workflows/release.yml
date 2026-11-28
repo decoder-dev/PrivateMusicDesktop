@@ -91,6 +91,25 @@ jobs:
           name: compose-v1-${{ matrix.artifact }}
           path: dist/*
           if-no-files-found: error
+      - name: Install the DEB in a clean Ubuntu container
+        if: runner.os == 'Linux'
+        run: |
+          docker run --rm --volume "$PWD/dist:/packages:ro" ubuntu:24.04 bash -ec '
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get -o Acquire::Retries=2 update -qq
+            apt-get -o Acquire::Retries=2 install -y --no-install-recommends /packages/*.deb
+            test -x /opt/privatemusic/bin/PrivateMusic
+            test -f /usr/share/applications/privatemusic-PrivateMusic.desktop
+            dpkg-query -W privatemusic
+          '
+      - name: Verify DMG and test its packaged native engine
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          image=$(find dist -name '*.dmg' -type f -print -quit)
+          hdiutil verify "$image"
+          cd compose
+          gradle --no-daemon :composeApp:desktopTest --tests '*NativeEngineSmokeTest*'
       - name: Check Windows clean install and upgrade
         if: runner.os == 'Windows'
         shell: pwsh
