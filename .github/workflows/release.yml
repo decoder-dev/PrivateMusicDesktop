@@ -13,9 +13,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to build without publishing, for example v1.0.1"
-        default: "v1.0.1"
-        required: true
+        description: "Version to build without publishing. Defaults to the Compose package version."
+        required: false
 
 concurrency:
   group: compose-release-${{ github.ref }}
@@ -25,7 +24,7 @@ permissions:
   contents: read
 
 env:
-  RELEASE_VERSION: ${{ inputs.version || (startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v1.0.1') }}
+  RELEASE_VERSION: ${{ inputs.version || (startsWith(github.ref, 'refs/tags/') && github.ref_name || '') }}
 
 jobs:
   validate:
@@ -40,10 +39,11 @@ jobs:
           VERSION: ${{ env.RELEASE_VERSION }}
         run: |
           set -euo pipefail
-          [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          version="${VERSION#v}"
-          grep -q "packageVersion = \"$version\"" compose/composeApp/build.gradle.kts
-          grep -q "versionName = \"$version\"" compose/androidApp/build.gradle.kts
+          version=$(sed -nE 's/^[[:space:]]*packageVersion = "([^"]+)"$/\1/p' compose/composeApp/build.gradle.kts)
+          android_version=$(sed -nE 's/^[[:space:]]*versionName = "([^"]+)"$/\1/p' compose/androidApp/build.gradle.kts)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$android_version" == "$version" ]]
+          [[ -z "$VERSION" || "$VERSION" == "v$version" ]]
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
   desktop:
@@ -91,6 +91,23 @@ jobs:
           name: compose-v1-${{ matrix.artifact }}
           path: dist/*
           if-no-files-found: error
+      - name: Check Windows clean install and upgrade
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $baseline = Join-Path $env:RUNNER_TEMP 'previous-msi'
+          gh release download v1.0.1 --repo $env:GITHUB_REPOSITORY --pattern '*_windows-x64.msi' --pattern SHA256SUMS.txt --dir $baseline
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $old = Get-ChildItem -LiteralPath $baseline -Filter '*.msi' | Select-Object -First 1
+          $new = Get-ChildItem -LiteralPath dist -Filter '*.msi' | Select-Object -First 1
+          $pattern = '^([0-9a-f]{64})\s+\*?' + [regex]::Escape($old.Name) + '$'
+          $checksum = Get-Content -LiteralPath (Join-Path $baseline 'SHA256SUMS.txt') | Where-Object { $_ -match $pattern } | Select-Object -First 1
+          if (-not $checksum -or $checksum -notmatch $pattern -or (Get-FileHash -LiteralPath $old.FullName).Hash -ine $Matches[1]) {
+            throw 'Published Windows baseline checksum mismatch.'
+          }
+          ./scripts/compose-windows-install-test.ps1 -PreviousMsi $old.FullName -CurrentMsi $new.FullName
 
   android:
     name: Android release APK
