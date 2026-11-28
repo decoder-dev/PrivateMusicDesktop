@@ -2,6 +2,9 @@ package com.dec.privatemusic.player
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -58,7 +61,39 @@ class RustPlayerApiTest {
         api.close()
     }
 
-    private class FakeTransport : RustTransport {
+    @Test
+    fun catalogAndPlaybackAcceptNativeArraysPrimitivesAndNull() = runBlocking {
+        val api = RustPlayerApi(FakeTransport { raw ->
+            when {
+                raw.contains("\"downloads\"") -> "[]"
+                raw.contains("\"output_devices\"") -> """["Динамики"]"""
+                raw.contains("\"remove_download\"") -> "false"
+                else -> "null"
+            }
+        })
+        try {
+            api.toggle()
+            assertEquals(emptyList(), api.downloads())
+            assertEquals(listOf("Динамики"), api.outputDevices())
+            assertFalse(api.removeDownload("1_101"))
+            assertNull(api.lyrics(demoTracks.first()))
+        } finally {
+            api.close()
+        }
+    }
+
+    @Test
+    fun nativeErrorsReachCatalogAndPlaybackCallers() = runBlocking {
+        val api = RustPlayerApi(FakeTransport { """{"error":"test failure"}""" })
+        try {
+            assertEquals("test failure", assertFailsWith<PlayerException> { api.downloads() }.message)
+            assertEquals("test failure", assertFailsWith<PlayerException> { api.toggle() }.message)
+        } finally {
+            api.close()
+        }
+    }
+
+    private class FakeTransport(private val response: (String) -> String = { "{}" }) : RustTransport {
         val gate = Mutex(locked = true)
         var eventsSent = 0
         var commandCount = 0
@@ -67,7 +102,7 @@ class RustPlayerApiTest {
         override fun command(raw: String): String {
             commandCount += 1
             lastCommand = raw
-            return "{}"
+            return response(raw)
         }
 
         override fun poll(): String? {

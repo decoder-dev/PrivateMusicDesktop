@@ -31,8 +31,9 @@ class DesktopMediaKeys(private val api: PlayerApi) {
 
     private fun runNativeLoop() {
         val native = runCatching { Native.load("user32", HotkeyApi::class.java) }.getOrNull() ?: return
+        val kernel = runCatching { Native.load("kernel32", KernelApi::class.java) }.getOrNull() ?: return
         user32 = native
-        nativeThreadId = native.GetCurrentThreadId()
+        nativeThreadId = kernel.GetCurrentThreadId()
         val registered = HOTKEYS.filter { (id, key) -> native.RegisterHotKey(null, id, MOD_NOREPEAT, key) }.map { it.first }
         val message = HotkeyMessage()
         while (running) {
@@ -73,6 +74,9 @@ class DesktopMediaKeys(private val api: PlayerApi) {
         fun UnregisterHotKey(window: Pointer?, id: Int): Boolean
         fun GetMessageW(message: HotkeyMessage, window: Pointer?, min: Int, max: Int): Int
         fun PostThreadMessageW(thread: Int, message: Int, wParam: Pointer?, lParam: Pointer?): Boolean
+    }
+
+    private interface KernelApi : Library {
         fun GetCurrentThreadId(): Int
     }
 

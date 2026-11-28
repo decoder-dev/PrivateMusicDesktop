@@ -12,26 +12,41 @@ private interface NativeEngine : Library {
     fun pm_string_free(pointer: Pointer)
 }
 
-private object JnaEngine : NativeEngine by Native.load("private_music_engine", NativeEngine::class.java)
+private const val UTF_8 = "UTF-8"
+private object JnaEngine : NativeEngine by Native.load(
+    "private_music_engine", NativeEngine::class.java, mapOf(Library.OPTION_STRING_ENCODING to UTF_8),
+)
 private val sharedTransport by lazy { JnaTransport() }
 private val sharedApi by lazy { RustPlayerApi(sharedTransport) }
 
 private class JnaTransport : RustTransport {
-    private val pointer = JnaEngine.pm_engine_new()
+    private var engine: Pointer? = JnaEngine.pm_engine_new()
 
-    override fun command(raw: String): String = read { JnaEngine.pm_engine_command(pointer, raw) }.also { response ->
-        if (System.getProperty("pm.compose.trace") == "1") println("Native command: $raw; response: $response")
-    }
-    override fun poll(): String? = JnaEngine.pm_engine_poll_event(pointer)?.let { pointer ->
-        pointer.getString(0).also { JnaEngine.pm_string_free(pointer) }
-    }
-
-    private fun read(call: () -> Pointer?): String {
-        val result = call() ?: throw PlayerException("Null engine response")
-        return result.getString(0).also { JnaEngine.pm_string_free(result) }
+    @Synchronized
+    override fun command(raw: String): String {
+        val pointer = engine ?: throw PlayerException("Engine is closed")
+        val result = JnaEngine.pm_engine_command(pointer, raw) ?: throw PlayerException("Null engine response")
+        return read(result)
     }
 
-    override fun free() = JnaEngine.pm_engine_free(pointer)
+    @Synchronized
+    override fun poll(): String? {
+        val pointer = engine ?: return null
+        return JnaEngine.pm_engine_poll_event(pointer)?.let(::read)
+    }
+
+    private fun read(result: Pointer): String = try {
+        result.getString(0, UTF_8)
+    } finally {
+        JnaEngine.pm_string_free(result)
+    }
+
+    @Synchronized
+    override fun free() {
+        val pointer = engine ?: return
+        engine = null
+        JnaEngine.pm_engine_free(pointer)
+    }
 }
 
 actual fun platformPlayerApi(): PlayerApi =

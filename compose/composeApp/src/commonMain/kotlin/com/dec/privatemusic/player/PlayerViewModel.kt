@@ -11,7 +11,8 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
-import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 class PlayerViewModel(
     private val api: PlayerApi,
@@ -35,10 +36,16 @@ class PlayerViewModel(
                 runCatching {
                     val element = json.parseToJsonElement(raw)
                     val body = element as? JsonObject ?: return@runCatching
-                    when (body["type"]?.toString()?.trim('"')) {
+                    when (body["type"]?.jsonPrimitive?.contentOrNull) {
                         "queue" -> mutableQueue.value = json.decodeFromJsonElement(QueueEvent.serializer(), body).tracks
-                        else -> mutableState.value = json.decodeFromJsonElement(PlayerState.serializer(), body)
+                        "error" -> mutableError.value = body["message"]?.jsonPrimitive?.contentOrNull
+                        else -> {
+                            if (body.isPlayerStateEvent()) {
+                                mutableState.value = json.decodeFromJsonElement(PlayerState.serializer(), body)
+                            }
+                        }
                     }
+                    Unit
                 }.onFailure { mutableError.value = it.message }
             }
         }
@@ -62,14 +69,18 @@ class PlayerViewModel(
 
     private fun run(action: suspend () -> Unit) {
         scope.launch {
-            runCatching { action() }
-                .onSuccess { mutableState.value = api.state() }
+            mutableError.value = null
+            runCatching {
+                action()
+                api.state()
+            }
+                .onSuccess { mutableState.value = it }
                 .onFailure { mutableError.value = it.message }
         }
     }
 
     fun close() {
-        api.close()
         scope.cancel()
+        api.close()
     }
 }

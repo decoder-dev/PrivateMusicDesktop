@@ -1,7 +1,12 @@
 package com.dec.privatemusic.player
 
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.Serializable
+
+fun JsonObject.isPlayerStateEvent(): Boolean =
+    this["type"] == JsonPrimitive("state") || ("type" !in this && "status" in this)
 
 @Serializable
 data class Track(

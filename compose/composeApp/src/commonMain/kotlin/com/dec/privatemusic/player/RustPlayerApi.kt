@@ -11,13 +11,11 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
-import kotlinx.serialization.json.double
 import kotlinx.serialization.json.encodeToJsonElement
-import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
@@ -60,21 +58,16 @@ class RustPlayerApi(
     })
 
     private fun unitCommand(command: JsonObject) {
-        val response = command(command)
-        val error = response["error"]?.jsonPrimitive?.content
-        if (error != null) throw PlayerException(error)
+        command(command)
     }
 
-    private fun command(command: JsonObject): JsonObject {
+    private fun command(command: JsonObject): JsonElement {
         val response = json.parseToJsonElement(transport.command(command.toString()))
-        return response as? JsonObject ?: throw PlayerException("Invalid engine response")
+        (response as? JsonObject)?.get("error")?.jsonPrimitive?.content?.let { throw PlayerException(it) }
+        return response
     }
 
-    private inline fun <reified T> decode(command: JsonObject): T {
-        val response = command(command)
-        response["error"]?.jsonPrimitive?.content?.let { throw PlayerException(it) }
-        return json.decodeFromJsonElement(response)
-    }
+    private inline fun <reified T> decode(command: JsonObject): T = json.decodeFromJsonElement(command(command))
 
     fun signIn(session: Session) = unitCommand(buildJsonObject { put("command", "sign_in"); put("session", json.encodeToJsonElement(session)) })
     fun signOut() = unitCommand(buildJsonObject { put("command", "sign_out") })

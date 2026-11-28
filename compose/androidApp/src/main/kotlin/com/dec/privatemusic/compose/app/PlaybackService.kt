@@ -18,6 +18,7 @@ import androidx.core.app.ServiceCompat
 import com.dec.privatemusic.player.PlayerApi
 import com.dec.privatemusic.player.PlayerState
 import com.dec.privatemusic.player.Track
+import com.dec.privatemusic.player.isPlayerStateEvent
 import com.dec.privatemusic.player.platformPlayerApi
 import java.net.URL
 import kotlinx.coroutines.CoroutineScope
@@ -87,7 +88,7 @@ class PlaybackService : android.app.Service() {
 
     private fun decodeState(raw: String): PlayerState? {
         val body = runCatching { json.parseToJsonElement(raw) }.getOrNull() as? JsonObject ?: return null
-        if (body["type"] != null) return null
+        if (!body.isPlayerStateEvent()) return null
         return runCatching { json.decodeFromJsonElement(PlayerState.serializer(), body) }.getOrNull()
     }
 

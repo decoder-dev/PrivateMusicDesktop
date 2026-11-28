@@ -1,9 +1,18 @@
 name: Compose Multiplatform
 
 on:
+  push:
+    branches: ["main"]
+    paths:
+      - "compose/**"
+      - "engine/**"
+      - "native/**"
+      - ".github/workflows/compose.yml"
   pull_request:
     paths:
       - "compose/**"
+      - "engine/**"
+      - "native/**"
       - ".github/workflows/compose.yml"
   workflow_dispatch:
 
