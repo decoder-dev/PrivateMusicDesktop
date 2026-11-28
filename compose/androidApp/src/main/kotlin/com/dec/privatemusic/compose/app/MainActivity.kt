@@ -35,7 +35,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         sessions = SessionStore(this)
-        sessions.sync()
         sessionViewModel = SessionViewModel()
         ContextCompat.startForegroundService(this, Intent(this, PlaybackService::class.java))
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {

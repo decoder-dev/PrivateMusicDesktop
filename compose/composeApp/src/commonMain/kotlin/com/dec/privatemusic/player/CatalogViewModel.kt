@@ -2,8 +2,10 @@ package com.dec.privatemusic.player
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +23,7 @@ class CatalogViewModel(
     val isDemo: Boolean get() = api.isDemo
 
     private val mutableLibrary = MutableStateFlow<List<Track>>(emptyList())
+    private val mutableRecommendations = MutableStateFlow<List<Track>>(emptyList())
     private val mutableSearch = MutableStateFlow<List<Track>>(emptyList())
     private val mutableMixes = MutableStateFlow<List<MusicMix>>(emptyList())
     private val mutableReleases = MutableStateFlow<List<Album>>(emptyList())
@@ -28,8 +31,10 @@ class CatalogViewModel(
     private val mutableLyrics = MutableStateFlow<Lyrics?>(null)
     private val mutableError = MutableStateFlow<String?>(null)
     private val mutableLoading = MutableStateFlow(false)
+    private var searchJob: Job? = null
 
     val library: StateFlow<List<Track>> = mutableLibrary.asStateFlow()
+    val recommendations: StateFlow<List<Track>> = mutableRecommendations.asStateFlow()
     val searchResults: StateFlow<List<Track>> = mutableSearch.asStateFlow()
     val mixes: StateFlow<List<MusicMix>> = mutableMixes.asStateFlow()
     val releases: StateFlow<List<Album>> = mutableReleases.asStateFlow()
@@ -39,31 +44,40 @@ class CatalogViewModel(
     val loading: StateFlow<Boolean> = mutableLoading.asStateFlow()
 
     fun start() {
-        refreshLibrary()
+        run { mutableLibrary.value = api.library().items }
+        run { mutableRecommendations.value = api.recommendations() }
+        run { mutableReleases.value = api.newReleases() }
         refreshMixes()
         refreshDownloads()
-    }
-
-    fun refreshLibrary() = run {
-        mutableLibrary.value = api.library().items
-        mutableSearch.value = api.recommendations()
-        mutableReleases.value = api.newReleases()
     }
 
     fun refreshMixes() = run { mutableMixes.value = api.catalogMixes() }
     fun refreshDownloads() = run { mutableDownloads.value = api.downloads() }
 
-    fun search(query: String) = run {
-        mutableSearch.value = if (query.isBlank()) api.recommendations() else api.search(query).items
+    fun search(query: String) {
+        searchJob?.cancel()
+        searchJob = scope.launch {
+            mutableError.value = null
+            val result = runCatching {
+                if (query.isBlank()) api.recommendations() else api.search(query).items
+            }
+            ensureActive()
+            result.onSuccess { mutableSearch.value = it }
+                .onFailure { mutableError.value = it.message }
+        }
     }
 
     fun playMix(mix: MusicMix, onReady: (MixLaunch) -> Unit) {
         scope.launch {
             mutableLoading.value = true
-            runCatching { loadMix(mix) }
-                .onSuccess(onReady)
-                .onFailure { mutableError.value = it.message }
-            mutableLoading.value = false
+            mutableError.value = null
+            try {
+                val result = runCatching { loadMix(mix) }
+                ensureActive()
+                result.onSuccess(onReady).onFailure { mutableError.value = it.message }
+            } finally {
+                mutableLoading.value = false
+            }
         }
     }
 
@@ -72,7 +86,11 @@ class CatalogViewModel(
         var tracks = try {
             api.streamMix(mix.id, options)
         } catch (error: PlayerException) {
-            if (options == null || !error.message.orEmpty().contains("error 8", ignoreCase = true) && !error.message.orEmpty().contains("bad request", true)) throw error
+            val message = error.message.orEmpty()
+            val optionsRejected = message.equals("Invalid request.", ignoreCase = true) ||
+                message.contains("error 8:", ignoreCase = true) ||
+                message.contains("bad request", ignoreCase = true)
+            if (options == null || !optionsRejected) throw error
             options = null
             api.streamMix(mix.id, null)
         }
@@ -80,15 +98,15 @@ class CatalogViewModel(
             options = null
             tracks = api.streamMix(mix.id, null)
         }
+        if (tracks.isEmpty()) throw PlayerException("В этом миксе пока нет треков.")
         val source = buildJsonObject {
             if (mix.id == "common" && options == null) {
                 put("kind", "personal")
-                put("options", null)
             } else {
                 put("kind", "catalog")
                 put("mix_id", mix.id)
-                put("options", options)
             }
+            put("options", options)
         }
         return MixLaunch(source, tracks, 400)
     }
@@ -110,10 +128,8 @@ class CatalogViewModel(
 
     private fun run(action: () -> Unit) {
         scope.launch {
-            mutableLoading.value = true
             runCatching(action)
                 .onFailure { mutableError.value = it.message }
-            mutableLoading.value = false
         }
     }
 

@@ -28,7 +28,7 @@ class PlayerViewModel(
     val queue: StateFlow<List<Track>> = mutableQueue.asStateFlow()
     val error: StateFlow<String?> = mutableError.asStateFlow()
 
-    fun start() {
+    fun start(onSessionExpired: () -> Unit = {}) {
         if (started) return
         started = true
         scope.launch {
@@ -39,6 +39,7 @@ class PlayerViewModel(
                     when (body["type"]?.jsonPrimitive?.contentOrNull) {
                         "queue" -> mutableQueue.value = json.decodeFromJsonElement(QueueEvent.serializer(), body).tracks
                         "error" -> mutableError.value = body["message"]?.jsonPrimitive?.contentOrNull
+                        "session_expired" -> onSessionExpired()
                         else -> {
                             if (body.isPlayerStateEvent()) {
                                 mutableState.value = json.decodeFromJsonElement(PlayerState.serializer(), body)

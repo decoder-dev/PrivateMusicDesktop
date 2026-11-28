@@ -39,9 +39,9 @@ fun PrivateMusicApp(viewModel: PlayerViewModel, sessionViewModel: SessionViewMod
     val queue by viewModel.queue.collectAsState()
     val error by viewModel.error.collectAsState()
     val session by sessionViewModel.state.collectAsState()
-    val catalog = remember { CatalogViewModel(platformCatalogApi()) }
+    val catalog = remember(session.signed_in) { CatalogViewModel(platformCatalogApi()) }
     val library by catalog.library.collectAsState()
-    val recommendations by catalog.searchResults.collectAsState()
+    val recommendations by catalog.recommendations.collectAsState()
     val catalogError by catalog.error.collectAsState()
     val homeTracks = when {
         catalog.isDemo -> library.ifEmpty { recommendations.ifEmpty { demoTracks } }
@@ -51,7 +51,7 @@ fun PrivateMusicApp(viewModel: PlayerViewModel, sessionViewModel: SessionViewMod
     var screen by remember { mutableStateOf(Screen.Home) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(viewModel) { viewModel.start() }
+    LaunchedEffect(viewModel) { viewModel.start(sessionViewModel::refresh) }
     LaunchedEffect(sessionViewModel) { sessionViewModel.start() }
     LaunchedEffect(session.signed_in) { if (session.signed_in) catalog.start() }
     DisposableEffect(viewModel) { onDispose { viewModel.close() } }
@@ -94,8 +94,8 @@ fun PrivateMusicApp(viewModel: PlayerViewModel, sessionViewModel: SessionViewMod
                         onOpenPlayer = { screen = if (state.track != null) Screen.Player else Screen.Profile },
                         onOpenQueue = { screen = Screen.Queue },
                         onOpenProfile = { screen = Screen.Profile },
-                        onOpenSearch = { screen = Screen.Search },
-                        onOpenMixes = { screen = Screen.Mixes },
+                        onOpenSearch = { screen = if (session.signed_in) Screen.Search else Screen.Profile },
+                        onOpenMixes = { screen = if (session.signed_in) Screen.Mixes else Screen.Profile },
                         onOpenDownloads = { screen = Screen.Downloads },
                     )
                     Screen.Player -> FullPlayer(
